@@ -1,0 +1,56 @@
+# Unreal Engine generated data (matches the project and any plugins)
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+
+# IDE and generated project files
+.vs/
+.idea/
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.VC.db
+*.VC.opendb
+*.opensdf
+*.sdf
+*.ipch
+*.sln
+*.slnx
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.csproj
+*.xcodeproj/
+*.xcworkspace/
+*.xcuserstate
+
+# Operating system and editor temporary files
+.DS_Store
+Thumbs.db
+Desktop.ini
+.Spotlight-V100/
+.Trashes/
+*~
+*.swp
+*.swo
+*.bak
+
+# Logs, temporary files, and crash dumps
+*.log
+*.tmp
+*.temp
+*.dmp
+*.mdmp
+*.stackdump
+
+# Cooked and staged packaging output
+Cooked/
+StagedBuilds/
+LocalBuilds/
+PackagedBuilds/
+*.pak
+*.ucas
+*.utoc
