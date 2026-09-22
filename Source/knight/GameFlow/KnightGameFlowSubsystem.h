@@ -4,6 +4,7 @@
 #include "Engine/EngineBaseTypes.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "KnightFlowTypes.h"
+#include "KnightStageCatalog.h"
 #include "KnightGameFlowSubsystem.generated.h"
 
 class UWorld;
@@ -30,6 +31,20 @@ public:
 	UFUNCTION(BlueprintPure, Category="Knight|Flow")
 	bool IsTravelPending() const { return bTravelPending; }
 
+	/** Only a confirmed Gameplay arrival has an active stage. Direct test-map play has none. */
+	UFUNCTION(BlueprintPure, Category="Knight|Flow")
+	FName GetActiveStageId() const { return ActiveStageId; }
+
+	/** Returns copies of valid-ID definitions. Invalid and duplicate IDs are omitted. */
+	UFUNCTION(BlueprintCallable, Category="Knight|Stages")
+	bool GetStageDefinitions(TArray<FKnightStageDefinition>& OutStages) const;
+
+	UFUNCTION(BlueprintCallable, Category="Knight|Stages")
+	bool FindStageDefinition(FName StageId, FKnightStageDefinition& OutStage) const;
+
+	UFUNCTION(BlueprintCallable, Category="Knight|Stages")
+	bool CanLaunchStage(FName StageId, FText& OutReason) const;
+
 	/** True means the request was accepted, not that the destination was entered. */
 	UFUNCTION(BlueprintCallable, Category="Knight|Flow")
 	bool RequestOpenMainMenu();
@@ -37,6 +52,13 @@ public:
 	/** True means the request was accepted, not that the destination was entered. */
 	UFUNCTION(BlueprintCallable, Category="Knight|Flow")
 	bool RequestOpenTitle();
+
+	/** True means the stage travel request was accepted, not that Gameplay was entered. */
+	UFUNCTION(BlueprintCallable, Category="Knight|Flow")
+	bool RequestStartStage(FName StageId);
+
+	/** Native GameMode initialization hook; call from a Gameplay GameMode's InitGame. */
+	void RegisterEnteredGameplay(UWorld* EnteredWorld);
 
 	UPROPERTY(BlueprintAssignable, Category="Knight|Flow")
 	FKnightFlowStateChanged OnFlowStateChanged;
@@ -56,9 +78,13 @@ private:
 	/** Called only by the active menu GameMode during InitGame, before controllers initialize. */
 	void RegisterEnteredMenu(EKnightFlowState MenuState, UWorld* EnteredWorld);
 	bool RequestOpenMenu(EKnightFlowState Destination);
+	bool BeginTravel(EKnightFlowState Destination, const FString& MapPackage, UWorld* SourceWorld, FName StageId = NAME_None);
+	bool ResolveMapPackage(const TSoftObjectPtr<UWorld>& Map, FString& OutPackage) const;
+	const UKnightStageCatalog* GetStageCatalog() const;
 	bool RejectRequest(EKnightFlowState Destination, const FText& Reason);
 	void SetCurrentFlowState(EKnightFlowState NewState);
 	void SetTravelPending(bool bNewPending);
+	void ConfirmEnteredWorld(EKnightFlowState NewState);
 	void ResetPendingTravel();
 	void HandleTravelFailure(UWorld* FailedWorld, ETravelFailure::Type FailureType, const FString& ErrorString);
 	void HandlePostLoadMap(UWorld* LoadedWorld);
@@ -67,6 +93,8 @@ private:
 	EKnightFlowState PendingDestination = EKnightFlowState::Uninitialized;
 	bool bTravelPending = false;
 	FString PendingMapPackage;
+	FName PendingStageId;
+	FName ActiveStageId;
 	TWeakObjectPtr<UWorld> PendingSourceWorld;
 	TWeakObjectPtr<UWorld> RegisteredWorld;
 	FDelegateHandle TravelFailureHandle;

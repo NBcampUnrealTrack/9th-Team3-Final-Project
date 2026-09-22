@@ -43,6 +43,174 @@ bool UKnightGameFlowSubsystem::RequestOpenTitle()
 	return RequestOpenMenu(EKnightFlowState::Title);
 }
 
+const UKnightStageCatalog* UKnightGameFlowSubsystem::GetStageCatalog() const
+{
+	const TSoftObjectPtr<UKnightStageCatalog>& Catalog = GetDefault<UKnightFlowSettings>()->StageCatalog;
+	if (Catalog.IsNull())
+	{
+		UE_LOG(Logknight, Warning, TEXT("Knight Flow Settings has no StageCatalog."));
+		return nullptr;
+	}
+	const UKnightStageCatalog* const Loaded = Catalog.LoadSynchronous();
+	if (!Loaded)
+	{
+		UE_LOG(Logknight, Error, TEXT("Cannot load StageCatalog %s."), *Catalog.ToString());
+	}
+	return Loaded;
+}
+
+bool UKnightGameFlowSubsystem::GetStageDefinitions(TArray<FKnightStageDefinition>& OutStages) const
+{
+	OutStages.Reset();
+	const UKnightStageCatalog* const Catalog = GetStageCatalog();
+	if (!Catalog)
+	{
+		return false;
+	}
+	if (Catalog->Stages.IsEmpty())
+	{
+		UE_LOG(Logknight, Warning, TEXT("StageCatalog %s has no stages."), *Catalog->GetPathName());
+		return false;
+	}
+	TMap<FName, int32> IdCounts;
+	for (const FKnightStageDefinition& Stage : Catalog->Stages)
+	{
+		if (!Stage.StageId.IsNone())
+		{
+			IdCounts.FindOrAdd(Stage.StageId)++;
+		}
+	}
+	for (const FKnightStageDefinition& Stage : Catalog->Stages)
+	{
+		if (Stage.StageId.IsNone())
+		{
+			UE_LOG(Logknight, Error, TEXT("StageCatalog %s has a stage with an empty StageId."), *Catalog->GetPathName());
+		}
+		else if (IdCounts.FindChecked(Stage.StageId) != 1)
+		{
+			UE_LOG(Logknight, Error, TEXT("StageCatalog %s has duplicate StageId %s; all matching entries are excluded."),
+				*Catalog->GetPathName(), *Stage.StageId.ToString());
+		}
+		else
+		{
+			OutStages.Add(Stage);
+		}
+	}
+	return !OutStages.IsEmpty();
+}
+
+bool UKnightGameFlowSubsystem::FindStageDefinition(FName StageId, FKnightStageDefinition& OutStage) const
+{
+	OutStage = FKnightStageDefinition();
+	if (StageId.IsNone())
+	{
+		UE_LOG(Logknight, Warning, TEXT("A stage lookup used an empty StageId."));
+		return false;
+	}
+	const UKnightStageCatalog* const Catalog = GetStageCatalog();
+	if (!Catalog)
+	{
+		return false;
+	}
+	const FKnightStageDefinition* Found = nullptr;
+	for (const FKnightStageDefinition& Stage : Catalog->Stages)
+	{
+		if (Stage.StageId == StageId)
+		{
+			if (Found)
+			{
+				UE_LOG(Logknight, Error, TEXT("StageCatalog %s has duplicate StageId %s."), *Catalog->GetPathName(), *StageId.ToString());
+				return false;
+			}
+			Found = &Stage;
+		}
+	}
+	if (!Found)
+	{
+		UE_LOG(Logknight, Warning, TEXT("StageId %s was not found in StageCatalog %s."), *StageId.ToString(), *Catalog->GetPathName());
+		return false;
+	}
+	OutStage = *Found;
+	return true;
+}
+
+bool UKnightGameFlowSubsystem::CanLaunchStage(FName StageId, FText& OutReason) const
+{
+	FKnightStageDefinition Stage;
+	if (!FindStageDefinition(StageId, Stage))
+	{
+		OutReason = LOCTEXT("InvalidStage", "스테이지 정보를 확인할 수 없습니다.");
+		return false;
+	}
+	if (Stage.GameplayMap.IsNull())
+	{
+		OutReason = LOCTEXT("StageMapNotConfigured", "이 스테이지의 맵이 아직 지정되지 않았습니다.");
+		return false;
+	}
+	FString MapPackage;
+	if (!ResolveMapPackage(Stage.GameplayMap, MapPackage))
+	{
+		UE_LOG(Logknight, Error, TEXT("Stage %s has an invalid GameplayMap: %s."), *StageId.ToString(), *Stage.GameplayMap.ToString());
+		OutReason = LOCTEXT("StageMapInvalid", "스테이지 맵을 열 수 없습니다.");
+		return false;
+	}
+	OutReason = FText::GetEmpty();
+	return true;
+}
+
+bool UKnightGameFlowSubsystem::ResolveMapPackage(const TSoftObjectPtr<UWorld>& Map, FString& OutPackage) const
+{
+	OutPackage.Reset();
+	if (Map.IsNull())
+	{
+		return false;
+	}
+	const FSoftObjectPath MapPath = Map.ToSoftObjectPath();
+	const FString PackageName = MapPath.GetLongPackageName();
+	if (!FPackageName::IsValidLongPackageName(PackageName, true)
+		|| MapPath.GetAssetName() != FPackageName::GetShortName(PackageName)
+		|| !FPackageName::DoesPackageExist(PackageName))
+	{
+		return false;
+	}
+	OutPackage = PackageName;
+	return true;
+}
+
+bool UKnightGameFlowSubsystem::RequestStartStage(FName StageId)
+{
+	if (bTravelPending)
+	{
+		return RejectRequest(EKnightFlowState::Gameplay, LOCTEXT("TravelAlreadyPending", "A level transition is already in progress."));
+	}
+	if (CurrentFlowState != EKnightFlowState::MainMenu)
+	{
+		return RejectRequest(EKnightFlowState::Gameplay, LOCTEXT("NotInMainMenu", "Stages can only launch from the main menu."));
+	}
+	FText Reason;
+	if (!CanLaunchStage(StageId, Reason))
+	{
+		return RejectRequest(EKnightFlowState::Gameplay, Reason);
+	}
+	FKnightStageDefinition Stage;
+	if (!FindStageDefinition(StageId, Stage))
+	{
+		return RejectRequest(EKnightFlowState::Gameplay, LOCTEXT("StageChanged", "Stage definition is no longer available."));
+	}
+	UGameInstance* const GameInstance = GetGameInstance();
+	UWorld* const World = GameInstance ? GameInstance->GetWorld() : nullptr;
+	if (!GEngine || !World || !World->IsGameWorld() || World->GetGameInstance() != GameInstance || RegisteredWorld.Get() != World)
+	{
+		return RejectRequest(EKnightFlowState::Gameplay, LOCTEXT("NoMenuWorld", "No registered main menu world is available for stage travel."));
+	}
+	FString MapPackage;
+	if (!ResolveMapPackage(Stage.GameplayMap, MapPackage))
+	{
+		return RejectRequest(EKnightFlowState::Gameplay, LOCTEXT("StageMapChanged", "Stage map is no longer available."));
+	}
+	return BeginTravel(EKnightFlowState::Gameplay, MapPackage, World, StageId);
+}
+
 bool UKnightGameFlowSubsystem::RequestOpenMenu(EKnightFlowState Destination)
 {
 	if (bTravelPending)
@@ -69,22 +237,24 @@ bool UKnightGameFlowSubsystem::RequestOpenMenu(EKnightFlowState Destination)
 	}
 
 	// A valid soft map reference need not already be loaded into memory.
-	const FSoftObjectPath MapPath = TargetMap.ToSoftObjectPath();
-	const FString PackageName = MapPath.GetLongPackageName();
-	if (!FPackageName::IsValidLongPackageName(PackageName, true)
-		|| MapPath.GetAssetName() != FPackageName::GetShortName(PackageName)
-		|| !FPackageName::DoesPackageExist(PackageName))
+	FString PackageName;
+	if (!ResolveMapPackage(TargetMap, PackageName))
 	{
 		return RejectRequest(Destination, FText::Format(
 			LOCTEXT("InvalidMap", "The destination menu map is invalid or missing: {0}"),
-			FText::FromString(MapPath.ToString())));
+			FText::FromString(TargetMap.ToString())));
 	}
+	return BeginTravel(Destination, PackageName, World);
+}
 
+bool UKnightGameFlowSubsystem::BeginTravel(EKnightFlowState Destination, const FString& MapPackage, UWorld* SourceWorld, FName StageId)
+{
 	PendingDestination = Destination;
-	PendingMapPackage = PackageName;
-	PendingSourceWorld = World;
+	PendingMapPackage = MapPackage;
+	PendingSourceWorld = SourceWorld;
+	PendingStageId = StageId;
 	SetTravelPending(true);
-	UGameplayStatics::OpenLevel(World, FName(*PackageName));
+	UGameplayStatics::OpenLevel(SourceWorld, FName(*MapPackage));
 	return true;
 }
 
@@ -97,9 +267,10 @@ bool UKnightGameFlowSubsystem::RejectRequest(EKnightFlowState Destination, const
 
 void UKnightGameFlowSubsystem::RegisterEnteredMenu(EKnightFlowState MenuState, UWorld* EnteredWorld)
 {
-	if (!EnteredWorld || !EnteredWorld->IsGameWorld()
-		|| EnteredWorld->GetGameInstance() != GetGameInstance()
-		|| GetGameInstance()->GetWorld() != EnteredWorld)
+	UGameInstance* const GameInstance = GetGameInstance();
+	if (!GameInstance || !EnteredWorld || !EnteredWorld->IsGameWorld()
+		|| EnteredWorld->GetGameInstance() != GameInstance
+		|| GameInstance->GetWorld() != EnteredWorld)
 	{
 		return;
 	}
@@ -116,14 +287,42 @@ void UKnightGameFlowSubsystem::RegisterEnteredMenu(EKnightFlowState MenuState, U
 			&& UWorld::RemovePIEPrefix(EnteredWorld->GetOutermost()->GetName()) == PendingMapPackage);
 
 	RegisteredWorld = EnteredWorld;
-	ResetPendingTravel();
-	SetCurrentFlowState(MenuState);
+	ActiveStageId = NAME_None;
+	ConfirmEnteredWorld(MenuState);
 	if (bWasPending && !bMatchesRequest)
 	{
 		const FText Reason = LOCTEXT("UnexpectedMenu", "The loaded level did not register the requested menu type or map.");
 		UE_LOG(Logknight, Error, TEXT("Menu travel entered an unexpected menu level."));
 		OnTravelFailed.Broadcast(RequestedState, Reason);
 	}
+}
+
+void UKnightGameFlowSubsystem::RegisterEnteredGameplay(UWorld* EnteredWorld)
+{
+	UGameInstance* const GameInstance = GetGameInstance();
+	if (!GameInstance || !EnteredWorld || !EnteredWorld->IsGameWorld()
+		|| EnteredWorld->GetGameInstance() != GameInstance
+		|| GameInstance->GetWorld() != EnteredWorld)
+	{
+		return;
+	}
+	const bool bWasPending = bTravelPending;
+	const EKnightFlowState RequestedState = PendingDestination;
+	if (bWasPending && (RequestedState != EKnightFlowState::Gameplay || PendingStageId.IsNone()
+		|| UWorld::RemovePIEPrefix(EnteredWorld->GetOutermost()->GetName()) != PendingMapPackage))
+	{
+		ResetPendingTravel();
+		RegisteredWorld.Reset();
+		ActiveStageId = NAME_None;
+		SetCurrentFlowState(EKnightFlowState::Uninitialized);
+		const FText Reason = LOCTEXT("UnexpectedGameplay", "The loaded Gameplay level did not match the requested stage and map.");
+		UE_LOG(Logknight, Error, TEXT("Gameplay registration did not match pending stage travel in %s."), *EnteredWorld->GetPathName());
+		OnTravelFailed.Broadcast(RequestedState, Reason);
+		return;
+	}
+	RegisteredWorld = EnteredWorld;
+	ActiveStageId = bWasPending ? PendingStageId : NAME_None;
+	ConfirmEnteredWorld(EKnightFlowState::Gameplay);
 }
 
 void UKnightGameFlowSubsystem::HandleTravelFailure(UWorld* FailedWorld, ETravelFailure::Type FailureType, const FString& ErrorString)
@@ -142,6 +341,7 @@ void UKnightGameFlowSubsystem::HandleTravelFailure(UWorld* FailedWorld, ETravelF
 	if (RegisteredWorld.Get() != GetGameInstance()->GetWorld())
 	{
 		RegisteredWorld.Reset();
+		ActiveStageId = NAME_None;
 		SetCurrentFlowState(EKnightFlowState::Uninitialized);
 	}
 	const FText Reason = ErrorString.IsEmpty()
@@ -166,6 +366,7 @@ void UKnightGameFlowSubsystem::HandlePostLoadMap(UWorld* LoadedWorld)
 	const EKnightFlowState RequestedState = PendingDestination;
 	ResetPendingTravel();
 	RegisteredWorld.Reset();
+	ActiveStageId = NAME_None;
 	SetCurrentFlowState(EKnightFlowState::Uninitialized);
 	if (bWasPending)
 	{
@@ -194,11 +395,33 @@ void UKnightGameFlowSubsystem::SetTravelPending(bool bNewPending)
 	}
 }
 
+void UKnightGameFlowSubsystem::ConfirmEnteredWorld(EKnightFlowState NewState)
+{
+	// Publish an internally complete arrival before either delegate runs.
+	const EKnightFlowState PreviousState = CurrentFlowState;
+	const bool bWasPending = bTravelPending;
+	PendingDestination = EKnightFlowState::Uninitialized;
+	PendingMapPackage.Reset();
+	PendingSourceWorld.Reset();
+	PendingStageId = NAME_None;
+	bTravelPending = false;
+	CurrentFlowState = NewState;
+	if (bWasPending)
+	{
+		OnTravelPendingChanged.Broadcast(false);
+	}
+	if (PreviousState != NewState)
+	{
+		OnFlowStateChanged.Broadcast(PreviousState, NewState);
+	}
+}
+
 void UKnightGameFlowSubsystem::ResetPendingTravel()
 {
 	PendingDestination = EKnightFlowState::Uninitialized;
 	PendingMapPackage.Reset();
 	PendingSourceWorld.Reset();
+	PendingStageId = NAME_None;
 	SetTravelPending(false);
 }
 

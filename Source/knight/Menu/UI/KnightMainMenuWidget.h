@@ -6,12 +6,16 @@
 
 class UButton;
 class UPanelWidget;
+class UTextBlock;
+class UVerticalBox;
+class UKnightStageEntryWidget;
 
 UENUM(BlueprintType)
 enum class EKnightMainMenuPage : uint8
 {
 	Home,
 	Stage,
+	StageDetails,
 	Maintenance,
 	Settings,
 	Codex
@@ -30,6 +34,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|Menu")
 	bool ShowPage(EKnightMainMenuPage NewPage);
 
+	/** Shared entry point for list items and future globe markers. */
+	UFUNCTION(BlueprintCallable, Category="Knight|Stage")
+	bool SelectStage(FName StageId);
+
+	UFUNCTION(BlueprintCallable, Category="Knight|Stage")
+	bool RebuildStageEntries();
+
+	UFUNCTION(BlueprintPure, Category="Knight|Stage")
+	FName GetSelectedStageId() const { return SelectedStageId; }
+
 protected:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeConstruct() override;
@@ -43,6 +57,21 @@ protected:
 
 	UPROPERTY(meta=(BindWidget))
 	TObjectPtr<UPanelWidget> Panel_Stage;
+
+	UPROPERTY(meta=(BindWidget))
+	TObjectPtr<UPanelWidget> Panel_StageDetails;
+
+	UPROPERTY(meta=(BindWidget))
+	TObjectPtr<UVerticalBox> Box_StageEntries;
+
+	UPROPERTY(meta=(BindWidget))
+	TObjectPtr<UTextBlock> Text_StageTitle;
+
+	UPROPERTY(meta=(BindWidget))
+	TObjectPtr<UTextBlock> Text_StageDescription;
+
+	UPROPERTY(meta=(BindWidget))
+	TObjectPtr<UButton> Button_LaunchStage;
 
 	UPROPERTY(meta=(BindWidget))
 	TObjectPtr<UPanelWidget> Panel_Maintenance;
@@ -65,6 +94,12 @@ protected:
 	UPROPERTY(meta=(BindWidget))
 	TObjectPtr<UButton> Button_Codex;
 
+	/** Set to a WBP derived from UKnightStageEntryWidget on the main-menu WBP defaults. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Knight|Stage")
+	TSubclassOf<UKnightStageEntryWidget> StageEntryWidgetClass;
+
+	virtual void NativeDestruct() override;
+
 private:
 	UFUNCTION()
 	void HandleStageClicked();
@@ -78,7 +113,21 @@ private:
 	UFUNCTION()
 	void HandleCodexClicked();
 
+	UFUNCTION()
+	void HandleStageEntrySelected(FName StageId);
+
+	UFUNCTION()
+	void HandleLaunchStageClicked();
+
 	bool ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDuringTravel);
+	bool RefreshStageDetails();
+	void RemoveStageEntries();
 
 	EKnightMainMenuPage CurrentPage = EKnightMainMenuPage::Home;
+	FName SelectedStageId;
+	bool bStageEntriesBuilt = false;
+	bool bStageLaunchAvailable = false;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UKnightStageEntryWidget>> GeneratedStageEntries;
 };
