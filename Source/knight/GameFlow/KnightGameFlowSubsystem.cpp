@@ -80,10 +80,10 @@ bool UKnightGameFlowSubsystem::RequestOpenMenu(EKnightFlowState Destination)
 			FText::FromString(MapPath.ToString())));
 	}
 
-	bTravelPending = true;
 	PendingDestination = Destination;
 	PendingMapPackage = PackageName;
 	PendingSourceWorld = World;
+	SetTravelPending(true);
 	UGameplayStatics::OpenLevel(World, FName(*PackageName));
 	return true;
 }
@@ -185,12 +185,21 @@ void UKnightGameFlowSubsystem::SetCurrentFlowState(EKnightFlowState NewState)
 	}
 }
 
+void UKnightGameFlowSubsystem::SetTravelPending(bool bNewPending)
+{
+	if (bTravelPending != bNewPending)
+	{
+		bTravelPending = bNewPending;
+		OnTravelPendingChanged.Broadcast(bTravelPending);
+	}
+}
+
 void UKnightGameFlowSubsystem::ResetPendingTravel()
 {
-	bTravelPending = false;
 	PendingDestination = EKnightFlowState::Uninitialized;
 	PendingMapPackage.Reset();
 	PendingSourceWorld.Reset();
+	SetTravelPending(false);
 }
 
 #undef LOCTEXT_NAMESPACE

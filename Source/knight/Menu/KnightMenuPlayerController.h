@@ -4,7 +4,9 @@
 #include "GameFramework/PlayerController.h"
 #include "KnightMenuPlayerController.generated.h"
 
-/** Shared local controller for title and main menu; widget ownership follows in step 2. */
+class UKnightMenuWidgetBase;
+
+/** Owns one local root widget for the active title or main menu level. */
 UCLASS()
 class KNIGHT_API AKnightMenuPlayerController : public APlayerController
 {
@@ -12,4 +14,12 @@ class KNIGHT_API AKnightMenuPlayerController : public APlayerController
 
 public:
 	AKnightMenuPlayerController();
+
+protected:
+	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+private:
+	UPROPERTY(Transient)
+	TObjectPtr<UKnightMenuWidgetBase> MenuWidget;
 };

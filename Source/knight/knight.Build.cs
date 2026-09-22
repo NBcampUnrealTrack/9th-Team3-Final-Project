@@ -19,7 +19,8 @@ public class knight : ModuleRules
 			"GameplayStateTreeModule",
 			"DeveloperSettings",
 			"UMG",
-			"Slate"
+			"Slate",
+			"SlateCore"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });

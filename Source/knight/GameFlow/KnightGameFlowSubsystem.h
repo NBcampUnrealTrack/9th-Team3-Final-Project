@@ -12,6 +12,7 @@ class AKnightMenuGameMode;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FKnightFlowStateChanged, EKnightFlowState, PreviousState, EKnightFlowState, NewState);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FKnightFlowTravelRejected, EKnightFlowState, RequestedState, FText, Reason);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FKnightFlowTravelFailed, EKnightFlowState, RequestedState, FText, Reason);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FKnightFlowTravelPendingChanged, bool, bIsPending);
 
 /** Owns menu travel requests for one GameInstance. Menu pages are not flow states. */
 UCLASS()
@@ -46,6 +47,9 @@ public:
 	UPROPERTY(BlueprintAssignable, Category="Knight|Flow")
 	FKnightFlowTravelFailed OnTravelFailed;
 
+	UPROPERTY(BlueprintAssignable, Category="Knight|Flow")
+	FKnightFlowTravelPendingChanged OnTravelPendingChanged;
+
 private:
 	friend class AKnightMenuGameMode;
 
@@ -54,6 +58,7 @@ private:
 	bool RequestOpenMenu(EKnightFlowState Destination);
 	bool RejectRequest(EKnightFlowState Destination, const FText& Reason);
 	void SetCurrentFlowState(EKnightFlowState NewState);
+	void SetTravelPending(bool bNewPending);
 	void ResetPendingTravel();
 	void HandleTravelFailure(UWorld* FailedWorld, ETravelFailure::Type FailureType, const FString& ErrorString);
 	void HandlePostLoadMap(UWorld* LoadedWorld);
