@@ -17,8 +17,10 @@ public class knight : ModuleRules
 			"AIModule",
 			"StateTreeModule",
 			"GameplayStateTreeModule",
+			"DeveloperSettings",
 			"UMG",
-			"Slate"
+			"Slate",
+			"SlateCore"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });
