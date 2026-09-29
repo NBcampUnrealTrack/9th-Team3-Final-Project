@@ -3,6 +3,7 @@
 #include "knightCharacter.h"
 #include "Engine/LocalPlayer.h"
 #include "Camera/CameraComponent.h"
+#include "Camera/knightCameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "GameFramework/Controller.h"
@@ -47,7 +48,8 @@ AknightCharacter::AknightCharacter(const FObjectInitializer& ObjectInitializer)
 	CameraBoom->bUsePawnControlRotation = true;
 
 	// Create a follow camera
-	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
+	// Mode-driven camera. Until DefaultCameraMode is set it behaves like the template camera on the boom.
+	FollowCamera = CreateDefaultSubobject<UknightCameraComponent>(TEXT("FollowCamera"));
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
 

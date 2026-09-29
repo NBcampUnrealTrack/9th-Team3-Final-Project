@@ -32,8 +32,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Flow", meta=(ClampMin=0, Units="s"))
 	float ReturnToMainMenuDelay = 5.f;
 
-private:
-	void ReturnToMainMenu();
+	/** Requests travel to the main menu through UKnightGameFlowSubsystem. */
+	virtual void ReturnToMainMenu();
 
+private:
 	FTimerHandle ReturnToMainMenuTimer;
 };

@@ -5,6 +5,7 @@
 #include "KnightStageCatalog.generated.h"
 
 class UWorld;
+class UknightRaidDefinition;
 
 USTRUCT(BlueprintType)
 struct KNIGHT_API FKnightStageDefinition
@@ -22,6 +23,10 @@ struct KNIGHT_API FKnightStageDefinition
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stage")
 	TSoftObjectPtr<UWorld> GameplayMap;
+
+	/** Raid rules (target monster, time limit). Optional; loaded by the raid GameMode on arrival. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stage")
+	TSoftObjectPtr<UknightRaidDefinition> RaidDefinition;
 };
 
 /** Definitions only; referencing this asset does not load the gameplay maps. */

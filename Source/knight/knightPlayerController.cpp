@@ -12,6 +12,12 @@
 #include "AbilitySystemGlobals.h"
 #include "GameFramework/Pawn.h"
 #include "Input/knightInputBufferComponent.h"
+#include "Camera/knightPlayerCameraManager.h"
+
+AknightPlayerController::AknightPlayerController()
+{
+	PlayerCameraManagerClass = AknightPlayerCameraManager::StaticClass();
+}
 
 void AknightPlayerController::BeginPlay()
 {
