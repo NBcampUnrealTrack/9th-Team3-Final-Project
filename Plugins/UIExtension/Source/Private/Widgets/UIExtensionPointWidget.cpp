@@ -5,7 +5,7 @@
 #include "Widgets/Text/STextBlock.h"
 #include "Editor/WidgetCompilerLog.h"
 #include "Misc/UObjectToken.h"
-#include "CommonLocalPlayer.h"
+#include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
 
 #include UE_INLINE_GENERATED_CPP_BY_NAME(UIExtensionPointWidget)
@@ -35,9 +35,15 @@ TSharedRef<SWidget> UUIExtensionPointWidget::RebuildWidget()
 		ResetExtensionPoint();
 		RegisterExtensionPoint();
 
-		FDelegateHandle Handle = GetOwningLocalPlayer<UCommonLocalPlayer>()->CallAndRegister_OnPlayerStateSet(
-			UCommonLocalPlayer::FPlayerStateSetDelegate::FDelegate::CreateUObject(this, &UUIExtensionPointWidget::RegisterExtensionPointForPlayerState)
-		);
+		// Project Knight: Lyra waits for the PlayerState through UCommonLocalPlayer (CommonGame plugin).
+		// In a standalone solo game the PlayerState already exists when the HUD is built, so register directly.
+		if (const APlayerController* const PlayerController = GetOwningPlayer())
+		{
+			if (APlayerState* const PlayerState = PlayerController->GetPlayerState<APlayerState>())
+			{
+				RegisterExtensionPointForPlayerState(PlayerState);
+			}
+		}
 	}
 
 	if (IsDesignTime())
@@ -99,7 +105,7 @@ void UUIExtensionPointWidget::RegisterExtensionPoint()
 	}
 }
 
-void UUIExtensionPointWidget::RegisterExtensionPointForPlayerState(UCommonLocalPlayer* LocalPlayer, APlayerState* PlayerState)
+void UUIExtensionPointWidget::RegisterExtensionPointForPlayerState(APlayerState* PlayerState)
 {
 	if (UUIExtensionSubsystem* ExtensionSubsystem = GetWorld()->GetSubsystem<UUIExtensionSubsystem>())
 	{

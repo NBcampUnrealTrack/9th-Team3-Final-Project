@@ -1,6 +1,10 @@
 #include "Camera/knightPlayerCameraManager.h"
 
 #include "Camera/CameraShakeBase.h"
+#include "Engine/LocalPlayer.h"
+#include "GameFramework/PlayerController.h"
+#include "Settings/knightSettingsSubsystem.h"
+#include "Settings/knightSharedSettings.h"
 
 AknightPlayerCameraManager::AknightPlayerCameraManager()
 {
@@ -8,18 +12,28 @@ AknightPlayerCameraManager::AknightPlayerCameraManager()
 	ViewPitchMax = 60.f;
 }
 
+float AknightPlayerCameraManager::GetShakeScale() const
+{
+	const ULocalPlayer* const LocalPlayer = PCOwner ? PCOwner->GetLocalPlayer() : nullptr;
+	UknightSettingsSubsystem* const Settings = LocalPlayer ? LocalPlayer->GetSubsystem<UknightSettingsSubsystem>() : nullptr;
+	const UknightSharedSettings* const Shared = Settings ? Settings->GetSharedSettings() : nullptr;
+	return Shared ? Shared->CameraShakeScale : 1.f;
+}
+
 void AknightPlayerCameraManager::PlayHitShake(float Intensity)
 {
-	if (HitShake && Intensity > 0.f)
+	const float Scale = Intensity * GetShakeScale();
+	if (HitShake && Scale > 0.f)
 	{
-		StartCameraShake(HitShake, Intensity);
+		StartCameraShake(HitShake, Scale);
 	}
 }
 
 void AknightPlayerCameraManager::PlayHeavyImpactShake(float Intensity)
 {
-	if (HeavyImpactShake && Intensity > 0.f)
+	const float Scale = Intensity * GetShakeScale();
+	if (HeavyImpactShake && Scale > 0.f)
 	{
-		StartCameraShake(HeavyImpactShake, Intensity);
+		StartCameraShake(HeavyImpactShake, Scale);
 	}
 }

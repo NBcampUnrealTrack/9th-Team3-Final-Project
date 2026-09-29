@@ -7,6 +7,7 @@
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "GameFramework/Controller.h"
+#include "GameFramework/PlayerController.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
@@ -23,6 +24,8 @@
 #include "MotionWarpingComponent.h"
 #include "Input/knightInputBufferComponent.h"
 #include "Input/knightInputComponent.h"
+#include "Settings/knightSettingsSubsystem.h"
+#include "Settings/knightSharedSettings.h"
 #include "System/knightGameplayTags.h"
 #include "System/knightTeams.h"
 #include "knightGameMode.h"
@@ -140,7 +143,7 @@ void AknightCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 		KnightInput->BindNativeAction(InputConfig, knightGameplayTags::InputTag_Move, ETriggerEvent::Triggered, this, &ThisClass::Move);
 		KnightInput->BindNativeAction(InputConfig, knightGameplayTags::InputTag_Move_Vertical, ETriggerEvent::Triggered, this, &ThisClass::MoveVertical, false);
 		KnightInput->BindNativeAction(InputConfig, knightGameplayTags::InputTag_Look, ETriggerEvent::Triggered, this, &ThisClass::Look);
-		KnightInput->BindNativeAction(InputConfig, knightGameplayTags::InputTag_Look_Mouse, ETriggerEvent::Triggered, this, &ThisClass::Look, false);
+		KnightInput->BindNativeAction(InputConfig, knightGameplayTags::InputTag_Look_Mouse, ETriggerEvent::Triggered, this, &ThisClass::LookMouse, false);
 		KnightInput->BindNativeAction(InputConfig, knightGameplayTags::InputTag_LockOn, ETriggerEvent::Started, this, &ThisClass::Input_LockOn, false);
 		KnightInput->BindNativeAction(InputConfig, knightGameplayTags::InputTag_LockOn_SwitchLeft, ETriggerEvent::Started, this, &ThisClass::Input_LockOnSwitchLeft, false);
 		KnightInput->BindNativeAction(InputConfig, knightGameplayTags::InputTag_LockOn_SwitchRight, ETriggerEvent::Started, this, &ThisClass::Input_LockOnSwitchRight, false);
@@ -159,7 +162,7 @@ void AknightCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 
 		// Moving
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AknightCharacter::Move);
-		EnhancedInputComponent->BindAction(MouseLookAction, ETriggerEvent::Triggered, this, &AknightCharacter::Look);
+		EnhancedInputComponent->BindAction(MouseLookAction, ETriggerEvent::Triggered, this, &AknightCharacter::LookMouse);
 
 		// Looking
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AknightCharacter::Look);
@@ -221,8 +224,28 @@ void AknightCharacter::MoveVertical(const FInputActionValue& Value)
 
 void AknightCharacter::Look(const FInputActionValue& Value)
 {
-	// input is a Vector2D
-	FVector2D LookAxisVector = Value.Get<FVector2D>();
+	ApplyLookInput(Value.Get<FVector2D>(), false);
+}
+
+void AknightCharacter::LookMouse(const FInputActionValue& Value)
+{
+	ApplyLookInput(Value.Get<FVector2D>(), true);
+}
+
+void AknightCharacter::ApplyLookInput(FVector2D LookAxisVector, bool bFromMouse)
+{
+	// Personal settings: per-device sensitivity and Y inversion.
+	const APlayerController* const PC = Cast<APlayerController>(GetController());
+	const ULocalPlayer* const LocalPlayer = PC ? PC->GetLocalPlayer() : nullptr;
+	UknightSettingsSubsystem* const Settings = LocalPlayer ? LocalPlayer->GetSubsystem<UknightSettingsSubsystem>() : nullptr;
+	if (const UknightSharedSettings* const Shared = Settings ? Settings->GetSharedSettings() : nullptr)
+	{
+		LookAxisVector *= bFromMouse ? Shared->MouseSensitivity : Shared->GamepadSensitivity;
+		if (Shared->bInvertLookY)
+		{
+			LookAxisVector.Y = -LookAxisVector.Y;
+		}
+	}
 
 	// route the input
 	DoLook(LookAxisVector.X, LookAxisVector.Y);

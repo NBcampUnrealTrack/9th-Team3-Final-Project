@@ -11,7 +11,6 @@
 
 class IWidgetCompilerLog;
 
-class UCommonLocalPlayer;
 class APlayerState;
 
 /**
@@ -40,7 +39,7 @@ public:
 private:
 	void ResetExtensionPoint();
 	void RegisterExtensionPoint();
-	void RegisterExtensionPointForPlayerState(UCommonLocalPlayer* LocalPlayer, APlayerState* PlayerState);
+	void RegisterExtensionPointForPlayerState(APlayerState* PlayerState);
 	void OnAddOrRemoveExtension(EUIExtensionAction Action, const FUIExtensionRequest& Request);
 
 protected:

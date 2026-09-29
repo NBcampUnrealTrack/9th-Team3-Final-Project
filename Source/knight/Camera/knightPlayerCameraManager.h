@@ -32,4 +32,8 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Camera")
 	TSubclassOf<UCameraShakeBase> HeavyImpactShake;
+
+private:
+	/** The player's CameraShakeScale setting. */
+	float GetShakeScale() const;
 };

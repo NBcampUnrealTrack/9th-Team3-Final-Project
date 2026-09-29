@@ -150,6 +150,11 @@ protected:
 	/** Called for looking input */
 	void Look(const FInputActionValue& Value);
 
+	/** Mouse look: same as Look but uses the mouse sensitivity setting. */
+	void LookMouse(const FInputActionValue& Value);
+
+	void ApplyLookInput(FVector2D LookAxisVector, bool bFromMouse);
+
 	void MoveVertical(const FInputActionValue& Value);
 
 	void Input_AbilityInputTagPressed(FGameplayTag InputTag);
