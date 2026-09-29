@@ -22,6 +22,8 @@ public class knight : ModuleRules
 			"GameplayTasks",
 			"GameplayAbilities",
 			"MotionWarping",
+			"knightInventory",
+			"MechPartsWorkbenchRuntime",
 			"UMG",
 			"Slate",
 			"SlateCore"

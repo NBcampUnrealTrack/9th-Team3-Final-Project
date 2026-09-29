@@ -1,9 +1,12 @@
 #include "Progression/knightProgressionSubsystem.h"
 
 #include "Engine/GameInstance.h"
+#include "Item/knightItemDefinitions.h"
+#include "knightInventoryLibrary.h"
 #include "Progression/knightSaveGame.h"
 #include "Progression/knightSaveSubsystem.h"
 #include "Raid/knightRaidSubsystem.h"
+#include "knight.h"
 
 void UknightProgressionSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -58,6 +61,13 @@ void UknightProgressionSubsystem::HandleRaidResult(const FknightRaidResult& Resu
 			Record.BestClearTime = Result.ElapsedTime;
 		}
 	}
+	for (const FknightItemStack& Reward : Result.Rewards)
+	{
+		if (Reward.Item && Reward.Count > 0)
+		{
+			Save->ItemCounts.FindOrAdd(Reward.Item->GetPrimaryAssetId()) += Reward.Count;
+		}
+	}
 	CommitChange();
 }
 
@@ -75,28 +85,29 @@ float UknightProgressionSubsystem::GetBestClearTime(FName StageId) const
 	return Record ? Record->BestClearTime : 0.f;
 }
 
-int32 UknightProgressionSubsystem::GetMaterialCount(FName ItemId) const
+int32 UknightProgressionSubsystem::GetItemCount(const UknightItemDefinition* Item) const
 {
 	const UknightSaveGame* const Save = GetSave();
-	const int32* const Count = Save ? Save->Materials.Find(ItemId) : nullptr;
+	const int32* const Count = Save && Item ? Save->ItemCounts.Find(Item->GetPrimaryAssetId()) : nullptr;
 	return Count ? *Count : 0;
 }
 
-void UknightProgressionSubsystem::AddMaterial(FName ItemId, int32 Count)
+void UknightProgressionSubsystem::AddItem(const UknightItemDefinition* Item, int32 Count)
 {
 	UknightSaveGame* const Save = GetSave();
-	if (!Save || ItemId.IsNone() || Count <= 0)
+	if (!Save || !Item || Count <= 0)
 	{
 		return;
 	}
-	Save->Materials.FindOrAdd(ItemId) += Count;
+	Save->ItemCounts.FindOrAdd(Item->GetPrimaryAssetId()) += Count;
 	CommitChange();
 }
 
-bool UknightProgressionSubsystem::ConsumeMaterial(FName ItemId, int32 Count)
+bool UknightProgressionSubsystem::ConsumeItem(const UknightItemDefinition* Item, int32 Count)
 {
 	UknightSaveGame* const Save = GetSave();
-	int32* const Owned = Save ? Save->Materials.Find(ItemId) : nullptr;
+	const FPrimaryAssetId ItemId = Item ? Item->GetPrimaryAssetId() : FPrimaryAssetId();
+	int32* const Owned = Save ? Save->ItemCounts.Find(ItemId) : nullptr;
 	if (!Owned || Count <= 0 || *Owned < Count)
 	{
 		return false;
@@ -104,26 +115,111 @@ bool UknightProgressionSubsystem::ConsumeMaterial(FName ItemId, int32 Count)
 	*Owned -= Count;
 	if (*Owned == 0)
 	{
-		Save->Materials.Remove(ItemId);
+		Save->ItemCounts.Remove(ItemId);
 	}
 	CommitChange();
 	return true;
 }
 
-int32 UknightProgressionSubsystem::GetUpgradeLevel(FName ItemId) const
+void UknightProgressionSubsystem::GetOwnedItems(TArray<FknightItemStack>& OutItems) const
 {
+	OutItems.Reset();
 	const UknightSaveGame* const Save = GetSave();
-	const int32* const Level = Save ? Save->UpgradeLevels.Find(ItemId) : nullptr;
-	return Level ? *Level : 0;
-}
-
-void UknightProgressionSubsystem::SetUpgradeLevel(FName ItemId, int32 Level)
-{
-	UknightSaveGame* const Save = GetSave();
-	if (!Save || ItemId.IsNone())
+	if (!Save)
 	{
 		return;
 	}
-	Save->UpgradeLevels.Add(ItemId, FMath::Max(0, Level));
+	for (const TPair<FPrimaryAssetId, int32>& Entry : Save->ItemCounts)
+	{
+		if (const UknightItemDefinition* const Item = UknightInventoryLibrary::LoadItemDefinition(Entry.Key))
+		{
+			OutItems.Emplace(Item, Entry.Value);
+		}
+	}
+}
+
+int32 UknightProgressionSubsystem::GetUpgradeLevel(const UknightItemDefinition* Item) const
+{
+	const UknightSaveGame* const Save = GetSave();
+	const int32* const Level = Save && Item ? Save->ItemUpgradeLevels.Find(Item->GetPrimaryAssetId()) : nullptr;
+	return Level ? *Level : 0;
+}
+
+bool UknightProgressionSubsystem::CanUpgradePart(const UknightPartItemDefinition* Part) const
+{
+	if (!Part || GetItemCount(Part) <= 0)
+	{
+		return false;
+	}
+	const int32 Level = GetUpgradeLevel(Part);
+	if (!Part->UpgradeSteps.IsValidIndex(Level))
+	{
+		return false;
+	}
+	for (const FknightItemCost& Cost : Part->UpgradeSteps[Level].Costs)
+	{
+		if (!Cost.Item || GetItemCount(Cost.Item) < Cost.Count)
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+bool UknightProgressionSubsystem::UpgradePart(const UknightPartItemDefinition* Part)
+{
+	UknightSaveGame* const Save = GetSave();
+	if (!Save || !CanUpgradePart(Part))
+	{
+		return false;
+	}
+	const int32 Level = GetUpgradeLevel(Part);
+	// Every cost was checked above, so these removals cannot fail part-way.
+	for (const FknightItemCost& Cost : Part->UpgradeSteps[Level].Costs)
+	{
+		const FPrimaryAssetId CostId = Cost.Item->GetPrimaryAssetId();
+		int32& Owned = Save->ItemCounts.FindChecked(CostId);
+		Owned -= Cost.Count;
+		if (Owned == 0)
+		{
+			Save->ItemCounts.Remove(CostId);
+		}
+	}
+	Save->ItemUpgradeLevels.Add(Part->GetPrimaryAssetId(), Level + 1);
+	UE_LOG(Logknight, Log, TEXT("Upgraded %s to level %d."), *Part->GetName(), Level + 1);
 	CommitChange();
+	return true;
+}
+
+const UknightPartItemDefinition* UknightProgressionSubsystem::GetEquippedPart(FGameplayTag SlotTag) const
+{
+	const UknightSaveGame* const Save = GetSave();
+	const FPrimaryAssetId* const ItemId = Save ? Save->EquippedItems.Find(SlotTag) : nullptr;
+	return ItemId ? Cast<UknightPartItemDefinition>(UknightInventoryLibrary::LoadItemDefinition(*ItemId)) : nullptr;
+}
+
+bool UknightProgressionSubsystem::SetEquippedPart(const UknightPartItemDefinition* Part)
+{
+	UknightSaveGame* const Save = GetSave();
+	if (!Save || !Part || !Part->SlotTag.IsValid())
+	{
+		return false;
+	}
+	if (GetItemCount(Part) <= 0)
+	{
+		UE_LOG(Logknight, Warning, TEXT("Cannot equip %s: not owned."), *Part->GetName());
+		return false;
+	}
+	Save->EquippedItems.Add(Part->SlotTag, Part->GetPrimaryAssetId());
+	CommitChange();
+	return true;
+}
+
+void UknightProgressionSubsystem::ClearEquippedSlot(FGameplayTag SlotTag)
+{
+	UknightSaveGame* const Save = GetSave();
+	if (Save && Save->EquippedItems.Remove(SlotTag) > 0)
+	{
+		CommitChange();
+	}
 }

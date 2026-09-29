@@ -208,6 +208,10 @@ void AknightRaidGameMode::FinishRaid(bool bSuccess, EknightRaidFailReason FailRe
 	Result.FailReason = FailReason;
 	Result.ElapsedTime = RaidState ? RaidState->GetElapsedRaidTime() : 0.f;
 	Result.BrokenParts = BrokenParts;
+	if (bSuccess && RaidDefinition)
+	{
+		RaidDefinition->RollRewards(BrokenParts, Result.Rewards);
+	}
 	if (UknightRaidSubsystem* const RaidSubsystem = GameInstance ? GameInstance->GetSubsystem<UknightRaidSubsystem>() : nullptr)
 	{
 		RaidSubsystem->RecordResult(Result);

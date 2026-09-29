@@ -83,4 +83,14 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Message_Player_Died, "Message.Player.Died", "Broadcast when the player's Knight is destroyed.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Monster_Part, "Monster.Part", "Root for monster part tags. Add specific parts in Config/Tags.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Item_Type_Material, "Item.Type.Material", "Monster materials and other crafting stackables.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Item_Type_Part, "Item.Type.Part", "Mech armor and equipment parts.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Item_Type_Weapon, "Item.Type.Weapon", "Weapons (the greatsword and its variants).");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Equipment_Slot_Head, "Equipment.Slot.Head", "Head part slot.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Equipment_Slot_Torso, "Equipment.Slot.Torso", "Torso part slot.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Equipment_Slot_Arms, "Equipment.Slot.Arms", "Arms part slot.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Equipment_Slot_Legs, "Equipment.Slot.Legs", "Legs part slot.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Equipment_Slot_Backpack, "Equipment.Slot.Backpack", "Backpack / booster part slot.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Equipment_Slot_Weapon, "Equipment.Slot.Weapon", "Weapon slot.");
 }

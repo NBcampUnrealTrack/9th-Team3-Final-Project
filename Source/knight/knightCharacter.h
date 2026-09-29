@@ -27,6 +27,8 @@ class UknightMeleeTraceComponent;
 class UknightMovementComponent;
 class UknightTargetLockComponent;
 class UMotionWarpingComponent;
+class UknightDamageVisualComponent;
+class UknightPartsComponent;
 struct FGameplayEffectSpec;
 struct FInputActionValue;
 
@@ -77,6 +79,13 @@ class KNIGHT_API AknightCharacter : public ACharacter, public IAbilitySystemInte
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UMotionWarpingComponent> MotionWarping;
+
+	/** Mech parts and weapon: meshes and the stats/abilities they grant. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UknightPartsComponent> Parts;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UknightDamageVisualComponent> DamageVisual;
 
 	UPROPERTY()
 	TObjectPtr<UknightCoreAttributeSet> CoreAttributeSet;
