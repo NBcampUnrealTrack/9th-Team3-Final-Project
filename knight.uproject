@@ -13,6 +13,16 @@
 				"AIModule",
 				"UMG"
 			]
+		},
+		{
+			"Name": "knightUI",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "knightEditor",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
 		}
 	],
 	"Plugins": [

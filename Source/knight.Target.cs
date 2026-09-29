@@ -10,6 +10,6 @@ public class knightTarget : TargetRules
 		Type = TargetType.Game;
 		DefaultBuildSettings = BuildSettingsVersion.V7;
 		IncludeOrderVersion = EngineIncludeOrderVersion.Unreal5_8;
-		ExtraModuleNames.Add("knight");
+		ExtraModuleNames.AddRange(new string[] { "knight", "knightUI" });
 	}
 }
