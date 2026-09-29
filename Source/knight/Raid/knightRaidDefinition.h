@@ -6,8 +6,35 @@
 #include "knightInventoryTypes.h"
 #include "knightRaidDefinition.generated.h"
 
+class USoundBase;
 class UknightItemDefinition;
 class UknightMonsterDefinition;
+
+/**
+ * Values written to the music's state parameter (UknightAudioSettings::MusicStateParameter) as the raid
+ * progresses. The MetaSound maps them to layers or sections.
+ */
+USTRUCT(BlueprintType)
+struct KNIGHT_API FknightRaidMusicStates
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Music")
+	int32 Explore = 0;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Music")
+	int32 Combat = 1;
+
+	/** Combat while the target monster is enraged. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Music")
+	int32 Enraged = 2;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Music")
+	int32 Success = 3;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Music")
+	int32 Failed = 4;
+};
 
 /** One possible reward line. Each line is rolled independently on a successful raid. */
 USTRUCT(BlueprintType)
@@ -68,4 +95,15 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Rewards", meta=(TitleProperty="Item"))
 	TArray<FknightRaidReward> Rewards;
+
+	/** Looping raid music, usually a MetaSound reading the state parameter. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation")
+	TSoftObjectPtr<USoundBase> Music;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation")
+	FknightRaidMusicStates MusicStates;
+
+	/** Cues loaded when the raid starts so their first use shows (GameplayCue.Hit, GameplayCue.PartBreak, the monster's cues). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation", meta=(Categories="GameplayCue"))
+	FGameplayTagContainer PreloadGameplayCues;
 };
