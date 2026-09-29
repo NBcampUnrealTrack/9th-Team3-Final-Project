@@ -15,6 +15,11 @@
 #include "Abilities/GameplayAbilityTypes.h"
 #include "GameplayEffect.h"
 #include "Character/knightMovementComponent.h"
+#include "Combat/knightHitReactionComponent.h"
+#include "Combat/knightHitStopComponent.h"
+#include "Combat/knightMeleeTraceComponent.h"
+#include "Combat/knightTargetLockComponent.h"
+#include "MotionWarpingComponent.h"
 #include "Input/knightInputBufferComponent.h"
 #include "Input/knightInputComponent.h"
 #include "System/knightGameplayTags.h"
@@ -53,6 +58,11 @@ AknightCharacter::AknightCharacter(const FObjectInitializer& ObjectInitializer)
 	MechAttributeSet = CreateDefaultSubobject<UknightAttributeSet>(TEXT("MechAttributeSet"));
 
 	InputBuffer = CreateDefaultSubobject<UknightInputBufferComponent>(TEXT("InputBuffer"));
+	MeleeTrace = CreateDefaultSubobject<UknightMeleeTraceComponent>(TEXT("MeleeTrace"));
+	HitStop = CreateDefaultSubobject<UknightHitStopComponent>(TEXT("HitStop"));
+	HitReaction = CreateDefaultSubobject<UknightHitReactionComponent>(TEXT("HitReaction"));
+	TargetLock = CreateDefaultSubobject<UknightTargetLockComponent>(TEXT("TargetLock"));
+	MotionWarping = CreateDefaultSubobject<UMotionWarpingComponent>(TEXT("MotionWarping"));
 
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character)
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
@@ -88,7 +98,6 @@ void AknightCharacter::BeginPlay()
 	Super::BeginPlay();
 
 	CoreAttributeSet->OnOutOfHealth.AddUObject(this, &ThisClass::HandleOutOfHealth);
-	CoreAttributeSet->OnPoiseBroken.AddUObject(this, &ThisClass::HandlePoiseBroken);
 }
 
 void AknightCharacter::PossessedBy(AController* NewController)
@@ -130,6 +139,9 @@ void AknightCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 		KnightInput->BindNativeAction(InputConfig, knightGameplayTags::InputTag_Move_Vertical, ETriggerEvent::Triggered, this, &ThisClass::MoveVertical, false);
 		KnightInput->BindNativeAction(InputConfig, knightGameplayTags::InputTag_Look, ETriggerEvent::Triggered, this, &ThisClass::Look);
 		KnightInput->BindNativeAction(InputConfig, knightGameplayTags::InputTag_Look_Mouse, ETriggerEvent::Triggered, this, &ThisClass::Look, false);
+		KnightInput->BindNativeAction(InputConfig, knightGameplayTags::InputTag_LockOn, ETriggerEvent::Started, this, &ThisClass::Input_LockOn, false);
+		KnightInput->BindNativeAction(InputConfig, knightGameplayTags::InputTag_LockOn_SwitchLeft, ETriggerEvent::Started, this, &ThisClass::Input_LockOnSwitchLeft, false);
+		KnightInput->BindNativeAction(InputConfig, knightGameplayTags::InputTag_LockOn_SwitchRight, ETriggerEvent::Started, this, &ThisClass::Input_LockOnSwitchRight, false);
 
 		TArray<uint32> BindHandles;
 		KnightInput->BindAbilityActions(InputConfig, this, &ThisClass::Input_AbilityInputTagPressed, &ThisClass::Input_AbilityInputTagReleased, BindHandles);
@@ -165,6 +177,24 @@ void AknightCharacter::Input_AbilityInputTagPressed(FGameplayTag InputTag)
 void AknightCharacter::Input_AbilityInputTagReleased(FGameplayTag InputTag)
 {
 	AbilitySystemComponent->AbilityInputTagReleased(InputTag);
+}
+
+void AknightCharacter::Input_LockOn()
+{
+	if (!IsDead())
+	{
+		TargetLock->ToggleLockOn();
+	}
+}
+
+void AknightCharacter::Input_LockOnSwitchLeft()
+{
+	TargetLock->SwitchTarget(false);
+}
+
+void AknightCharacter::Input_LockOnSwitchRight()
+{
+	TargetLock->SwitchTarget(true);
 }
 
 void AknightCharacter::Move(const FInputActionValue& Value)
@@ -218,7 +248,8 @@ void AknightCharacter::DoMove(float Right, float Forward)
 
 void AknightCharacter::DoLook(float Yaw, float Pitch)
 {
-	if (GetController() != nullptr)
+	// While locked on, the lock drives the view; switching points uses the dedicated inputs.
+	if (GetController() != nullptr && !TargetLock->IsLockedOn())
 	{
 		// add yaw and pitch input to controller
 		AddControllerYawInput(Yaw);
@@ -251,6 +282,7 @@ void AknightCharacter::HandleOutOfHealth(AActor* DamageInstigator, AActor* Damag
 	AbilitySystemComponent->AddLooseGameplayTag(knightGameplayTags::State_InputBlocked);
 	AbilitySystemComponent->ClearAbilityInput();
 	InputBuffer->ClearBuffer();
+	TargetLock->ClearLockOn();
 	GetCharacterMovement()->StopMovementImmediately();
 
 	// A death ability triggered by Event.Death plays the presentation. Everything else is cancelled.
@@ -275,24 +307,4 @@ void AknightCharacter::HandleOutOfHealth(AActor* DamageInstigator, AActor* Damag
 	{
 		GameMode->HandlePlayerDeath(GetController());
 	}
-}
-
-void AknightCharacter::HandlePoiseBroken(AActor* DamageInstigator, AActor* DamageCauser, const FGameplayEffectSpec* DamageEffectSpec,
-	float DamageMagnitude, float OldValue, float NewValue)
-{
-	if (IsDead())
-	{
-		return;
-	}
-	// A stagger ability triggered by Event.PoiseBroken plays the reaction and restores Poise.
-	FGameplayEventData Payload;
-	Payload.EventTag = knightGameplayTags::Event_PoiseBroken;
-	Payload.Instigator = DamageInstigator;
-	Payload.Target = this;
-	Payload.EventMagnitude = DamageMagnitude;
-	if (DamageEffectSpec)
-	{
-		Payload.ContextHandle = DamageEffectSpec->GetEffectContext();
-	}
-	AbilitySystemComponent->HandleGameplayEvent(Payload.EventTag, &Payload);
 }

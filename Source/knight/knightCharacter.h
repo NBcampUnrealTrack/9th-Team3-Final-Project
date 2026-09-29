@@ -20,8 +20,13 @@ class UknightAbilityTagRelationshipMapping;
 class UknightAttributeSet;
 class UknightCoreAttributeSet;
 class UknightInputBufferComponent;
+class UknightHitReactionComponent;
+class UknightHitStopComponent;
 class UknightInputConfig;
+class UknightMeleeTraceComponent;
 class UknightMovementComponent;
+class UknightTargetLockComponent;
+class UMotionWarpingComponent;
 struct FGameplayEffectSpec;
 struct FInputActionValue;
 
@@ -57,6 +62,21 @@ class KNIGHT_API AknightCharacter : public ACharacter, public IAbilitySystemInte
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UknightInputBufferComponent> InputBuffer;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UknightMeleeTraceComponent> MeleeTrace;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UknightHitStopComponent> HitStop;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UknightHitReactionComponent> HitReaction;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UknightTargetLockComponent> TargetLock;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UMotionWarpingComponent> MotionWarping;
 
 	UPROPERTY()
 	TObjectPtr<UknightCoreAttributeSet> CoreAttributeSet;
@@ -109,6 +129,7 @@ public:
 
 	UknightAbilitySystemComponent* GetKnightAbilitySystemComponent() const { return AbilitySystemComponent; }
 	UknightInputBufferComponent* GetInputBuffer() const { return InputBuffer; }
+	UknightTargetLockComponent* GetTargetLock() const { return TargetLock; }
 	UknightMovementComponent* GetKnightMovementComponent() const;
 
 	/** Fires once when Health reaches zero, after State.Dead is applied and Event.Death is sent. */
@@ -134,11 +155,14 @@ protected:
 	void Input_AbilityInputTagPressed(FGameplayTag InputTag);
 	void Input_AbilityInputTagReleased(FGameplayTag InputTag);
 
+	void Input_LockOn();
+	void Input_LockOnSwitchLeft();
+	void Input_LockOnSwitchRight();
+
 	void InitializeAbilitySystem();
 
+	/** Poise breaks and ordinary hits are turned into reaction events by UknightHitReactionComponent. */
 	void HandleOutOfHealth(AActor* DamageInstigator, AActor* DamageCauser, const FGameplayEffectSpec* DamageEffectSpec,
-		float DamageMagnitude, float OldValue, float NewValue);
-	void HandlePoiseBroken(AActor* DamageInstigator, AActor* DamageCauser, const FGameplayEffectSpec* DamageEffectSpec,
 		float DamageMagnitude, float OldValue, float NewValue);
 
 public:

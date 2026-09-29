@@ -21,6 +21,7 @@ public class knight : ModuleRules
 			"GameplayTags",
 			"GameplayTasks",
 			"GameplayAbilities",
+			"MotionWarping",
 			"UMG",
 			"Slate",
 			"SlateCore"

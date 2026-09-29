@@ -42,6 +42,7 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Flying, "State.Flying", "Boost flight movement mode.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Airborne, "State.Airborne", "Not on the ground for any reason.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Overheated, "State.Overheated", "Boost gauge is depleted and recovering.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_HitReact, "State.HitReact", "Any hit reaction is playing.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_HitReact_Flinch, "State.HitReact.Flinch", "Light hit reaction.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_HitReact_Stagger, "State.HitReact.Stagger", "Poise broken.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_HitReact_Knockdown, "State.HitReact.Knockdown", "Knocked to the ground.");
