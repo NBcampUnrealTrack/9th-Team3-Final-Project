@@ -28,5 +28,8 @@ public:
 	/** Maps a trace hit to a part tag under Monster.Part. Returns an empty tag for actors without parts. */
 	virtual FGameplayTag ResolveHitPart(const FHitResult& Hit) const { return FGameplayTag(); }
 
+	/** Hitzone multiplier for a part from ResolveHitPart. Weak points are simply parts above 1. */
+	virtual float GetPartDamageMultiplier(const FGameplayTag& PartTag) const { return 1.f; }
+
 	virtual bool IsDead() const = 0;
 };
