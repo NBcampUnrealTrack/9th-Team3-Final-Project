@@ -33,8 +33,16 @@ public:
 	/** Activates the first inactive ability bound to InputTag immediately. Used by the input buffer. */
 	bool TryActivateAbilityByInputTag(const FGameplayTag& InputTag);
 
+	/** True if an ability bound to InputTag activated since the last ProcessAbilityInput. Read by the input buffer. */
+	bool WasInputTagActivatedThisFrame(const FGameplayTag& InputTag) const { return RecentlyActivatedInputTags.HasTagExact(InputTag); }
+
 	// Activation groups
-	bool IsActivationGroupBlocked(EknightAbilityActivationGroup Group) const;
+	/**
+	 * Exclusive_Blocking abilities block every other exclusive ability.
+	 * A running Exclusive_Replaceable ability can only be replaced inside Window.Cancel,
+	 * or inside Window.Combo when the new ability is an Ability.Attack.
+	 */
+	bool IsActivationGroupBlocked(EknightAbilityActivationGroup Group, const FGameplayTagContainer& AbilityTags) const;
 	void CancelActivationGroupAbilities(EknightAbilityActivationGroup Group, const UknightGameplayAbility* IgnoreAbility);
 
 	// Tag relationships
@@ -59,6 +67,9 @@ protected:
 	TArray<FGameplayAbilitySpecHandle> InputPressedSpecHandles;
 	TArray<FGameplayAbilitySpecHandle> InputReleasedSpecHandles;
 	TArray<FGameplayAbilitySpecHandle> InputHeldSpecHandles;
+
+	/** Input tags of abilities activated since ProcessAbilityInput last ran. */
+	FGameplayTagContainer RecentlyActivatedInputTags;
 
 	int32 ActivationGroupCounts[static_cast<uint8>(EknightAbilityActivationGroup::MAX)];
 };

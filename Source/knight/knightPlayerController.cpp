@@ -8,6 +8,10 @@
 #include "Blueprint/UserWidget.h"
 #include "knight.h"
 #include "Widgets/Input/SVirtualJoystick.h"
+#include "AbilitySystem/knightAbilitySystemComponent.h"
+#include "AbilitySystemGlobals.h"
+#include "GameFramework/Pawn.h"
+#include "Input/knightInputBufferComponent.h"
 
 void AknightPlayerController::BeginPlay()
 {
@@ -64,4 +68,19 @@ bool AknightPlayerController::ShouldUseTouchControls() const
 {
 	// are we on a mobile platform? Should we force touch?
 	return SVirtualJoystick::ShouldDisplayTouchInterface() || bForceTouchControls;
+}
+
+void AknightPlayerController::PostProcessInput(const float DeltaTime, const bool bGamePaused)
+{
+	APawn* const ControlledPawn = GetPawn();
+	if (UknightAbilitySystemComponent* const ASC = Cast<UknightAbilitySystemComponent>(UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(ControlledPawn)))
+	{
+		ASC->ProcessAbilityInput(DeltaTime, bGamePaused);
+		if (UknightInputBufferComponent* const InputBuffer = ControlledPawn->FindComponentByClass<UknightInputBufferComponent>())
+		{
+			InputBuffer->ProcessBuffer(ASC);
+		}
+	}
+
+	Super::PostProcessInput(DeltaTime, bGamePaused);
 }
