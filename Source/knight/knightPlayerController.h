@@ -17,7 +17,12 @@ UCLASS(abstract)
 class KNIGHT_API AknightPlayerController : public APlayerController
 {
 	GENERATED_BODY()
-	
+
+public:
+
+	/** Uses AknightPlayerCameraManager for pitch limits and combat shakes. */
+	AknightPlayerController();
+
 protected:
 
 	/** Input Mapping Contexts */

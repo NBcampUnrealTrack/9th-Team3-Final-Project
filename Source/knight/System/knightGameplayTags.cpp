@@ -41,6 +41,7 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Boosting, "State.Boosting", "Boost dash in progress.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Flying, "State.Flying", "Boost flight movement mode.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Airborne, "State.Airborne", "Not on the ground for any reason.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_LockedOn, "State.LockedOn", "The player has a lock-on target (drives the lock-on camera mode).");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Overheated, "State.Overheated", "Boost gauge is depleted and recovering.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_HitReact, "State.HitReact", "Any hit reaction is playing.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_HitReact_Flinch, "State.HitReact.Flinch", "Light hit reaction.");
