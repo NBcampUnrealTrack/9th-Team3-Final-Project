@@ -18,6 +18,7 @@ public class knight : ModuleRules
 			"StateTreeModule",
 			"GameplayStateTreeModule",
 			"DeveloperSettings",
+			"GameplayTags",
 			"UMG",
 			"Slate",
 			"SlateCore"
