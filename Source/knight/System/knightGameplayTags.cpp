@@ -3,7 +3,9 @@
 namespace knightGameplayTags
 {
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_Move, "InputTag.Move", "Movement input, handled natively.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_Move_Vertical, "InputTag.Move.Vertical", "Ascend and descend during boost flight, handled natively.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_Look, "InputTag.Look", "Camera input, handled natively.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_Look_Mouse, "InputTag.Look.Mouse", "Mouse camera input, handled natively.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_Attack_Primary, "InputTag.Attack.Primary", "Greatsword main attack. Hold to charge.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_Attack_Secondary, "InputTag.Attack.Secondary", "Greatsword secondary attack.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_Guard, "InputTag.Guard", "Guard. Pressing on an incoming hit is a parry.");

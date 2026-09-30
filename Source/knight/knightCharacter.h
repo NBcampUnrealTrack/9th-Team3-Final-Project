@@ -3,23 +3,44 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "AbilitySystemInterface.h"
 #include "GameFramework/Character.h"
+#include "GameplayTagContainer.h"
+#include "GenericTeamAgentInterface.h"
+#include "Interfaces/CombatInterface.h"
+#include "AbilitySystem/knightAbilitySet.h"
 #include "Logging/LogMacros.h"
 #include "knightCharacter.generated.h"
 
 class USpringArmComponent;
 class UCameraComponent;
 class UInputAction;
+class UknightAbilitySystemComponent;
+class UknightAbilityTagRelationshipMapping;
+class UknightAttributeSet;
+class UknightCoreAttributeSet;
+class UknightInputBufferComponent;
+class UknightInputConfig;
+class UknightMovementComponent;
+struct FGameplayEffectSpec;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
 
+class AknightCharacter;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FknightCharacterDeathEvent, AknightCharacter*, DeadCharacter);
+
 /**
- *  A simple player-controllable third person character
- *  Implements a controllable orbiting camera
+ * The player's Knight mech.
+ *
+ * Owns its AbilitySystemComponent (solo game, so no PlayerState indirection) with the Core and mech
+ * attribute sets. Abilities come from DefaultAbilitySets on possession; parts and weapons add more later.
+ * Input is bound by tag through InputConfig. Without an InputConfig, the template's direct input
+ * actions still work, so existing template maps stay playable during the transition.
  */
 UCLASS(abstract)
-class AknightCharacter : public ACharacter
+class KNIGHT_API AknightCharacter : public ACharacter, public IAbilitySystemInterface, public ICombatInterface, public IGenericTeamAgentInterface
 {
 	GENERATED_BODY()
 
@@ -30,42 +51,95 @@ class AknightCharacter : public ACharacter
 	/** Follow camera */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	UCameraComponent* FollowCamera;
-	
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UknightAbilitySystemComponent> AbilitySystemComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UknightInputBufferComponent> InputBuffer;
+
+	UPROPERTY()
+	TObjectPtr<UknightCoreAttributeSet> CoreAttributeSet;
+
+	UPROPERTY()
+	TObjectPtr<UknightAttributeSet> MechAttributeSet;
+
 protected:
 
-	/** Jump Input Action */
+	/** Tag-based input. When set, it replaces the legacy template input actions below. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Input")
+	TObjectPtr<const UknightInputConfig> InputConfig;
+
+	/** Granted once on first possession. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Abilities")
+	TArray<TObjectPtr<const UknightAbilitySet>> DefaultAbilitySets;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Abilities")
+	TObjectPtr<UknightAbilityTagRelationshipMapping> TagRelationshipMapping;
+
+	/** Legacy template input. Used only when InputConfig is empty. */
 	UPROPERTY(EditAnywhere, Category="Input")
 	UInputAction* JumpAction;
 
-	/** Move Input Action */
+	/** Legacy template input. Used only when InputConfig is empty. */
 	UPROPERTY(EditAnywhere, Category="Input")
 	UInputAction* MoveAction;
 
-	/** Look Input Action */
+	/** Legacy template input. Used only when InputConfig is empty. */
 	UPROPERTY(EditAnywhere, Category="Input")
 	UInputAction* LookAction;
 
-	/** Mouse Look Input Action */
+	/** Legacy template input. Used only when InputConfig is empty. */
 	UPROPERTY(EditAnywhere, Category="Input")
 	UInputAction* MouseLookAction;
 
 public:
 
-	/** Constructor */
-	AknightCharacter();	
+	AknightCharacter(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
+
+	//~ IAbilitySystemInterface
+	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+
+	//~ ICombatInterface
+	virtual bool CanReceiveHit(const AActor* Attacker) const override;
+	virtual bool IsDead() const override;
+
+	//~ IGenericTeamAgentInterface
+	virtual FGenericTeamId GetGenericTeamId() const override;
+
+	UknightAbilitySystemComponent* GetKnightAbilitySystemComponent() const { return AbilitySystemComponent; }
+	UknightInputBufferComponent* GetInputBuffer() const { return InputBuffer; }
+	UknightMovementComponent* GetKnightMovementComponent() const;
+
+	/** Fires once when Health reaches zero, after State.Dead is applied and Event.Death is sent. */
+	UPROPERTY(BlueprintAssignable, Category="Knight|Health")
+	FknightCharacterDeathEvent OnDeathStarted;
 
 protected:
+
+	virtual void BeginPlay() override;
+	virtual void PossessedBy(AController* NewController) override;
 
 	/** Initialize input action bindings */
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
-
-protected:
 
 	/** Called for movement input */
 	void Move(const FInputActionValue& Value);
 
 	/** Called for looking input */
 	void Look(const FInputActionValue& Value);
+
+	void MoveVertical(const FInputActionValue& Value);
+
+	void Input_AbilityInputTagPressed(FGameplayTag InputTag);
+	void Input_AbilityInputTagReleased(FGameplayTag InputTag);
+
+	void InitializeAbilitySystem();
+
+	void HandleOutOfHealth(AActor* DamageInstigator, AActor* DamageCauser, const FGameplayEffectSpec* DamageEffectSpec,
+		float DamageMagnitude, float OldValue, float NewValue);
+	void HandlePoiseBroken(AActor* DamageInstigator, AActor* DamageCauser, const FGameplayEffectSpec* DamageEffectSpec,
+		float DamageMagnitude, float OldValue, float NewValue);
 
 public:
 
@@ -92,5 +166,11 @@ public:
 
 	/** Returns FollowCamera subobject **/
 	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return FollowCamera; }
-};
 
+private:
+	UPROPERTY()
+	FknightAbilitySet_GrantedHandles DefaultAbilityHandles;
+
+	bool bAbilitySystemInitialized = false;
+	bool bIsDying = false;
+};

@@ -22,11 +22,15 @@ enum class EknightAbilityActivationPolicy : uint8
 UENUM(BlueprintType)
 enum class EknightAbilityActivationGroup : uint8
 {
-	/** Runs alongside anything. */
+	/** Runs alongside anything. Death uses this and cancels the rest through its cancel tags. */
 	Independent,
-	/** Exclusive, but a newer exclusive ability cancels it (most attacks, boost dash). */
+	/**
+	 * Exclusive. A newer exclusive ability replaces it only inside Window.Cancel, or inside Window.Combo
+	 * when the newer ability is an attack. Outside the windows, the press waits in the input buffer.
+	 * Attacks, guard, boost dash.
+	 */
 	Exclusive_Replaceable,
-	/** Exclusive, and blocks every other exclusive ability until it ends (hit reactions, death). */
+	/** Exclusive. Cancels running replaceable abilities and blocks every other exclusive ability (hit reactions). */
 	Exclusive_Blocking,
 
 	MAX UMETA(Hidden)

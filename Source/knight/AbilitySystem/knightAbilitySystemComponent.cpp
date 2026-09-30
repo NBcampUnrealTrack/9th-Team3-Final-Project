@@ -75,6 +75,7 @@ void UknightAbilitySystemComponent::ProcessAbilityInput(float DeltaTime, bool bG
 		return;
 	}
 
+	RecentlyActivatedInputTags.Reset();
 	TArray<FGameplayAbilitySpecHandle, TInlineAllocator<8>> AbilitiesToActivate;
 
 	// Held input: WhileInputActive abilities retry every frame until they activate.
@@ -198,15 +199,28 @@ void UknightAbilitySystemComponent::AbilitySpecInputReleased(FGameplayAbilitySpe
 	}
 }
 
-bool UknightAbilitySystemComponent::IsActivationGroupBlocked(EknightAbilityActivationGroup Group) const
+bool UknightAbilitySystemComponent::IsActivationGroupBlocked(EknightAbilityActivationGroup Group, const FGameplayTagContainer& AbilityTags) const
 {
+	const int32 BlockingCount = ActivationGroupCounts[static_cast<uint8>(EknightAbilityActivationGroup::Exclusive_Blocking)];
+	const int32 ReplaceableCount = ActivationGroupCounts[static_cast<uint8>(EknightAbilityActivationGroup::Exclusive_Replaceable)];
+
 	switch (Group)
 	{
 	case EknightAbilityActivationGroup::Independent:
 		return false;
-	case EknightAbilityActivationGroup::Exclusive_Replaceable:
 	case EknightAbilityActivationGroup::Exclusive_Blocking:
-		return ActivationGroupCounts[static_cast<uint8>(EknightAbilityActivationGroup::Exclusive_Blocking)] > 0;
+		return BlockingCount > 0;
+	case EknightAbilityActivationGroup::Exclusive_Replaceable:
+		if (BlockingCount > 0)
+		{
+			return true;
+		}
+		if (ReplaceableCount == 0 || HasMatchingGameplayTag(knightGameplayTags::Window_Cancel))
+		{
+			return false;
+		}
+		// Combo window: only attacks may chain. Everything else waits for the cancel window.
+		return !(HasMatchingGameplayTag(knightGameplayTags::Window_Combo) && AbilityTags.HasTag(knightGameplayTags::Ability_Attack));
 	default:
 		checkf(false, TEXT("Invalid activation group %d"), static_cast<int32>(Group));
 		return true;
@@ -243,6 +257,12 @@ void UknightAbilitySystemComponent::NotifyAbilityActivated(const FGameplayAbilit
 	{
 		return;
 	}
+	if (const FGameplayAbilitySpec* const Spec = FindAbilitySpecFromHandle(Handle))
+	{
+		// Only InputTags live in the dynamic source tags (see UknightAbilitySet).
+		RecentlyActivatedInputTags.AppendTags(Spec->GetDynamicSpecSourceTags());
+	}
+
 	const EknightAbilityActivationGroup Group = KnightAbility->GetActivationGroup();
 	ActivationGroupCounts[static_cast<uint8>(Group)]++;
 

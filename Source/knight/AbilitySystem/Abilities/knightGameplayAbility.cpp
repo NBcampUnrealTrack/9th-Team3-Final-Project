@@ -40,7 +40,7 @@ bool UknightGameplayAbility::CanActivateAbility(const FGameplayAbilitySpecHandle
 		return false;
 	}
 	const UknightAbilitySystemComponent* const ASC = Cast<UknightAbilitySystemComponent>(ActorInfo->AbilitySystemComponent.Get());
-	if (ASC && ASC->IsActivationGroupBlocked(ActivationGroup))
+	if (ASC && ASC->IsActivationGroupBlocked(ActivationGroup, GetAssetTags()))
 	{
 		if (OptionalRelevantTags)
 		{
