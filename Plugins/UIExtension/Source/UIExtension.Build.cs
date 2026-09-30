@@ -16,7 +16,7 @@ public class UIExtension : ModuleRules
 				"Slate",
 				"UMG",
 				"CommonUI",
-				"CommonGame",
+				// Project Knight: CommonGame removed (see UIExtensionPointWidget.cpp).
 				"GameplayTags"
 			}
 		);

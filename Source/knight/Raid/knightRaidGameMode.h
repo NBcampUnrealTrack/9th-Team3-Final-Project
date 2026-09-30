@@ -40,6 +40,9 @@ public:
 
 	const UknightRaidDefinition* GetRaidDefinition() const { return RaidDefinition; }
 
+	/** Monsters that must be defeated. Filled in StartPlay, after actors begin play. */
+	const TArray<TWeakObjectPtr<AknightMonsterCharacterBase>>& GetTargetMonsters() const { return TargetMonsters; }
+
 protected:
 	/** Raid rules for direct play in the editor, when no stage was launched from the menu. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Raid")
