@@ -14,10 +14,15 @@ class UUserWidget;
  *  Manages input mappings
  */
 UCLASS(abstract)
-class AknightPlayerController : public APlayerController
+class KNIGHT_API AknightPlayerController : public APlayerController
 {
 	GENERATED_BODY()
-	
+
+public:
+
+	/** Uses AknightPlayerCameraManager for pitch limits and combat shakes. */
+	AknightPlayerController();
+
 protected:
 
 	/** Input Mapping Contexts */
@@ -45,6 +50,9 @@ protected:
 
 	/** Input mapping context setup */
 	virtual void SetupInputComponent() override;
+
+	/** Runs ability input and the input buffer once per frame, after all input for the frame is processed. */
+	virtual void PostProcessInput(const float DeltaTime, const bool bGamePaused) override;
 
 	/** Returns true if the player should use UMG touch controls */
 	bool ShouldUseTouchControls() const;
