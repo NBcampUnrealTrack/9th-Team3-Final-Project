@@ -23,6 +23,8 @@
 #include "Combat/knightTargetLockComponent.h"
 #include "MotionWarpingComponent.h"
 #include "Input/knightInputBufferComponent.h"
+#include "Item/knightDamageVisualComponent.h"
+#include "Item/knightPartsComponent.h"
 #include "Input/knightInputComponent.h"
 #include "Settings/knightSettingsSubsystem.h"
 #include "Settings/knightSharedSettings.h"
@@ -68,6 +70,8 @@ AknightCharacter::AknightCharacter(const FObjectInitializer& ObjectInitializer)
 	HitReaction = CreateDefaultSubobject<UknightHitReactionComponent>(TEXT("HitReaction"));
 	TargetLock = CreateDefaultSubobject<UknightTargetLockComponent>(TEXT("TargetLock"));
 	MotionWarping = CreateDefaultSubobject<UMotionWarpingComponent>(TEXT("MotionWarping"));
+	Parts = CreateDefaultSubobject<UknightPartsComponent>(TEXT("Parts"));
+	DamageVisual = CreateDefaultSubobject<UknightDamageVisualComponent>(TEXT("DamageVisual"));
 
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character)
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
@@ -128,6 +132,9 @@ void AknightCharacter::InitializeAbilitySystem()
 			AbilitySet->GiveToAbilitySystem(AbilitySystemComponent, &DefaultAbilityHandles, this);
 		}
 	}
+
+	// Parts grant their stats through the ASC, so they equip after it is ready.
+	Parts->ApplyLoadout();
 }
 
 void AknightCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)

@@ -84,8 +84,12 @@ class KNIGHT_API UknightAbilitySet : public UPrimaryDataAsset
 	GENERATED_BODY()
 
 public:
-	/** SourceObject is stored on each ability spec (for example the part item that granted it). */
-	void GiveToAbilitySystem(UknightAbilitySystemComponent* ASC, FknightAbilitySet_GrantedHandles* OutGrantedHandles, UObject* SourceObject = nullptr) const;
+	/**
+	 * SourceObject is stored on each ability spec (for example the part item that granted it).
+	 * LevelOffset is added to every ability and effect level (a part's upgrade level).
+	 */
+	void GiveToAbilitySystem(UknightAbilitySystemComponent* ASC, FknightAbilitySet_GrantedHandles* OutGrantedHandles,
+		UObject* SourceObject = nullptr, int32 LevelOffset = 0) const;
 
 #if WITH_EDITOR
 	virtual EDataValidationResult IsDataValid(class FDataValidationContext& Context) const override;

@@ -40,8 +40,28 @@ void UknightSaveSubsystem::MigrateSave(UknightSaveGame& Save) const
 		UE_LOG(Logknight, Warning, TEXT("Save version %d is newer than this build (%d)."), Save.SaveVersion, UknightSaveGame::CurrentVersion);
 		return;
 	}
-	// Add one block per version bump, oldest first:
-	// if (Save.SaveVersion < 2) { ...convert...; Save.SaveVersion = 2; }
+	// One block per version bump, oldest first.
+	if (Save.SaveVersion < 2)
+	{
+		// Version 1 keyed items by bare FName. Accept "Item:Name" strings and plain asset names.
+		auto ToItemId = [](FName Name)
+		{
+			const FPrimaryAssetId Parsed = FPrimaryAssetId::FromString(Name.ToString());
+			return Parsed.IsValid() ? Parsed : FPrimaryAssetId(TEXT("Item"), Name);
+		};
+		for (const TPair<FName, int32>& Entry : Save.Materials)
+		{
+			Save.ItemCounts.FindOrAdd(ToItemId(Entry.Key)) += Entry.Value;
+		}
+		for (const TPair<FName, int32>& Entry : Save.UpgradeLevels)
+		{
+			Save.ItemUpgradeLevels.Add(ToItemId(Entry.Key), Entry.Value);
+		}
+		Save.Materials.Reset();
+		Save.UpgradeLevels.Reset();
+		UE_LOG(Logknight, Log, TEXT("Migrated save from version 1 to 2."));
+		Save.SaveVersion = 2;
+	}
 	Save.SaveVersion = UknightSaveGame::CurrentVersion;
 }
 

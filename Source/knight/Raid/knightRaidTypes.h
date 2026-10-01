@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameplayTagContainer.h"
+#include "knightInventoryTypes.h"
 #include "knightRaidTypes.generated.h"
 
 /** Where a raid is. Explore and Combat alternate as the monster finds and loses the Knight. */
@@ -50,7 +51,11 @@ struct KNIGHT_API FknightRaidResult
 	UPROPERTY(BlueprintReadOnly, Category="Raid")
 	float ElapsedTime = 0.f;
 
-	/** Parts broken during the raid. Reward rolls use these later. */
+	/** Parts broken during the raid. Part-break rewards require these. */
 	UPROPERTY(BlueprintReadOnly, Category="Raid")
 	FGameplayTagContainer BrokenParts;
+
+	/** Items won. Added to the item box by UknightProgressionSubsystem. */
+	UPROPERTY(BlueprintReadOnly, Category="Raid")
+	TArray<FknightItemStack> Rewards;
 };

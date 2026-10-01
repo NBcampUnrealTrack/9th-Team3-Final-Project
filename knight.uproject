@@ -72,6 +72,14 @@
 		{
 			"Name": "GameSettings",
 			"Enabled": true
+		},
+		{
+			"Name": "knightInventory",
+			"Enabled": true
+		},
+		{
+			"Name": "MechPartsWorkbench",
+			"Enabled": true
 		}
 	]
 }

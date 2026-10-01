@@ -2,6 +2,8 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/SaveGame.h"
+#include "GameplayTagContainer.h"
+#include "UObject/PrimaryAssetId.h"
 #include "knightSaveGame.generated.h"
 
 /** Per-stage record. */
@@ -22,8 +24,7 @@ struct KNIGHT_API FknightStageRecord
  * Game progress (one slot). Personal settings are not here: they live in UknightSharedSettings, and
  * hardware settings in UknightGameUserSettings.
  *
- * Item ids are FNames for now; the item phase replaces them with primary asset ids of item definitions,
- * bumping SaveVersion and migrating in UknightSaveSubsystem.
+ * Items are stored by FPrimaryAssetId ("Item:AssetName") so saves survive asset moves and class changes.
  */
 UCLASS()
 class KNIGHT_API UknightSaveGame : public USaveGame
@@ -31,8 +32,11 @@ class KNIGHT_API UknightSaveGame : public USaveGame
 	GENERATED_BODY()
 
 public:
-	/** Bump when the layout changes, and handle the old version in UknightSaveSubsystem::MigrateSave. */
-	static constexpr int32 CurrentVersion = 1;
+	/**
+	 * Bump when the layout changes, and handle the old version in UknightSaveSubsystem::MigrateSave.
+	 * 1: items keyed by FName. 2: items keyed by primary asset id, equipment loadout.
+	 */
+	static constexpr int32 CurrentVersion = 2;
 
 	UPROPERTY(SaveGame)
 	int32 SaveVersion = CurrentVersion;
@@ -40,14 +44,26 @@ public:
 	UPROPERTY(SaveGame)
 	TMap<FName, FknightStageRecord> StageRecords;
 
-	/** Monster materials and other stackables by item id. */
+	/** The item box: owned count per item. */
 	UPROPERTY(SaveGame)
-	TMap<FName, int32> Materials;
+	TMap<FPrimaryAssetId, int32> ItemCounts;
 
-	/** Upgrade level by part or weapon item id. */
+	/** Upgrade level per part or weapon. */
 	UPROPERTY(SaveGame)
-	TMap<FName, int32> UpgradeLevels;
+	TMap<FPrimaryAssetId, int32> ItemUpgradeLevels;
+
+	/** Equipped part per Equipment.Slot tag. */
+	UPROPERTY(SaveGame)
+	TMap<FGameplayTag, FPrimaryAssetId> EquippedItems;
 
 	UPROPERTY(SaveGame)
 	float TotalPlayTime = 0.f;
+
+	/** Version 1 data, read only for migration. Names and types must not change. */
+	UPROPERTY(SaveGame)
+	TMap<FName, int32> Materials;
+
+	/** Version 1 data, read only for migration. Names and types must not change. */
+	UPROPERTY(SaveGame)
+	TMap<FName, int32> UpgradeLevels;
 };
