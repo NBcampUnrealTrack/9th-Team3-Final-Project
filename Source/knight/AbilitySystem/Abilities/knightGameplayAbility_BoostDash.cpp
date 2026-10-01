@@ -7,6 +7,7 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/RootMotionSource.h"
+#include "Perception/AISense_Hearing.h"
 #include "System/knightGameplayTags.h"
 
 UknightGameplayAbility_BoostDash::UknightGameplayAbility_BoostDash(const FObjectInitializer& ObjectInitializer)
@@ -73,6 +74,9 @@ void UknightGameplayAbility_BoostDash::ActivateAbility(const FGameplayAbilitySpe
 		CueParams.Instigator = Character;
 		ASC->ExecuteGameplayCue(knightGameplayTags::GameplayCue_Boost_Dash, CueParams);
 	}
+
+	// Thrusters are loud: monsters that have not seen the Knight can hear it (AI hearing sense).
+	UAISense_Hearing::ReportNoiseEvent(Character, Character->GetActorLocation(), NoiseLoudness, Character, NoiseRange, TEXT("Boost"));
 }
 
 void UknightGameplayAbility_BoostDash::OnDashFinished()

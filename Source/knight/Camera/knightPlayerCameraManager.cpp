@@ -1,5 +1,6 @@
 #include "Camera/knightPlayerCameraManager.h"
 
+#include "Camera/CameraModifier_CameraShake.h"
 #include "Camera/CameraShakeBase.h"
 #include "Engine/LocalPlayer.h"
 #include "GameFramework/PlayerController.h"
@@ -20,20 +21,30 @@ float AknightPlayerCameraManager::GetShakeScale() const
 	return Shared ? Shared->CameraShakeScale : 1.f;
 }
 
+UCameraShakeBase* AknightPlayerCameraManager::StartCameraShake(TSubclassOf<UCameraShakeBase> ShakeClass, const FAddCameraShakeParams& Params)
+{
+	// Every shake (gameplay cues, abilities, the helpers below) passes through here.
+	FAddCameraShakeParams Scaled = Params;
+	Scaled.Scale *= GetShakeScale();
+	if (Scaled.Scale <= 0.f)
+	{
+		return nullptr;
+	}
+	return Super::StartCameraShake(ShakeClass, Scaled);
+}
+
 void AknightPlayerCameraManager::PlayHitShake(float Intensity)
 {
-	const float Scale = Intensity * GetShakeScale();
-	if (HitShake && Scale > 0.f)
+	if (HitShake && Intensity > 0.f)
 	{
-		StartCameraShake(HitShake, Scale);
+		StartCameraShake(HitShake, Intensity);
 	}
 }
 
 void AknightPlayerCameraManager::PlayHeavyImpactShake(float Intensity)
 {
-	const float Scale = Intensity * GetShakeScale();
-	if (HeavyImpactShake && Scale > 0.f)
+	if (HeavyImpactShake && Intensity > 0.f)
 	{
-		StartCameraShake(HeavyImpactShake, Scale);
+		StartCameraShake(HeavyImpactShake, Intensity);
 	}
 }

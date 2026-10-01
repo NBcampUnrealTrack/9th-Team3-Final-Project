@@ -18,6 +18,10 @@ class KNIGHT_API AknightPlayerCameraManager : public APlayerCameraManager
 public:
 	AknightPlayerCameraManager();
 
+	/** Applies the player's CameraShakeScale setting to every shake. */
+	virtual UCameraShakeBase* StartCameraShake(TSubclassOf<UCameraShakeBase> ShakeClass, const FAddCameraShakeParams& Params) override;
+	using Super::StartCameraShake;
+
 	/** Plays HitShake scaled by Intensity (0..1 typical). Used by hit, guard and parry feedback. */
 	UFUNCTION(BlueprintCallable, Category="Knight|Camera")
 	void PlayHitShake(float Intensity = 1.f);

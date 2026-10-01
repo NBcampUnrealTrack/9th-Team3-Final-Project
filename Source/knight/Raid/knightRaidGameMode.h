@@ -67,7 +67,13 @@ private:
 	UFUNCTION()
 	void HandlePartBroken(FGameplayTag PartTag, AActor* BreakInstigator);
 
+	void HandleMonsterEnragedChanged(const FGameplayTag Tag, int32 NewCount);
+
+	/** Picks the music state from the raid phase and the target monsters' rage. */
+	void UpdateMusic();
+
 	virtual void ReturnToMainMenu() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	UPROPERTY()
 	TObjectPtr<const UknightRaidDefinition> RaidDefinition;

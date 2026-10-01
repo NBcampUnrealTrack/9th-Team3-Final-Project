@@ -7,6 +7,7 @@
 #include "GameplayEffect.h"
 #include "Interfaces/CombatInterface.h"
 #include "MotionWarpingComponent.h"
+#include "Perception/AISense_Hearing.h"
 #include "System/knightGameplayTags.h"
 #include "knight.h"
 
@@ -88,6 +89,8 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 	CueParams.RawMagnitude = PartMultiplier;
 	TargetASC->ExecuteGameplayCue(CueTag, CueParams);
 	ApplyHitStopPair(Attacker, Target, Params.HitStopDuration);
+	// Combat is audible: a monster that has not noticed the fight yet can hear it.
+	UAISense_Hearing::ReportNoiseEvent(Attacker, Hit.ImpactPoint, 1.f, Attacker, 0.f, TEXT("Hit"));
 	return EknightHitOutcome::Hit;
 }
 
