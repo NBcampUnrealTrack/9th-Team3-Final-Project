@@ -24,6 +24,8 @@ public class knight : ModuleRules
 			"MotionWarping",
 			"knightInventory",
 			"MechPartsWorkbenchRuntime",
+			"knightAudio",
+			"CommonLoadingScreen",
 			"UMG",
 			"Slate",
 			"SlateCore"

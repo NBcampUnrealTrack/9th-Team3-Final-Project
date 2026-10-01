@@ -47,6 +47,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Dash")
 	TObjectPtr<UAnimMontage> DashMontage;
 
+	/** AI hearing loudness of the dash. */
+	UPROPERTY(EditDefaultsOnly, Category="Dash|Noise", meta=(ClampMin=0))
+	float NoiseLoudness = 1.f;
+
+	/** Maximum hearing distance of the dash. Zero uses the listener's hearing range. */
+	UPROPERTY(EditDefaultsOnly, Category="Dash|Noise", meta=(ClampMin=0, Units="cm"))
+	float NoiseRange = 0.f;
+
 private:
 	UFUNCTION()
 	void OnDashFinished();

@@ -34,4 +34,17 @@ public:
 
 	UPROPERTY(SaveGame, BlueprintReadWrite, Category="Knight|Settings|Accessibility")
 	bool bSubtitlesEnabled = true;
+
+	/** Volume categories, applied to the Knight Audio control buses of the same names. */
+	UPROPERTY(SaveGame, BlueprintReadWrite, Category="Knight|Settings|Audio", meta=(ClampMin=0, ClampMax=1))
+	float MasterVolume = 1.f;
+
+	UPROPERTY(SaveGame, BlueprintReadWrite, Category="Knight|Settings|Audio", meta=(ClampMin=0, ClampMax=1))
+	float MusicVolume = 0.8f;
+
+	UPROPERTY(SaveGame, BlueprintReadWrite, Category="Knight|Settings|Audio", meta=(ClampMin=0, ClampMax=1))
+	float SFXVolume = 1.f;
+
+	UPROPERTY(SaveGame, BlueprintReadWrite, Category="Knight|Settings|Audio", meta=(ClampMin=0, ClampMax=1))
+	float VoiceVolume = 1.f;
 };

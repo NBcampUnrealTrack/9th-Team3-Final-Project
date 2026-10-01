@@ -1,6 +1,12 @@
 #include "Raid/knightRaidGameMode.h"
 
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemGlobals.h"
+#include "AbilitySystem/knightGameplayCueManager.h"
 #include "Engine/GameInstance.h"
+#include "knightAudioSubsystem.h"
+#include "Sound/SoundBase.h"
+#include "System/knightGameplayTags.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFlow/KnightGameFlowSubsystem.h"
@@ -57,6 +63,19 @@ void AknightRaidGameMode::StartPlay()
 	}
 	BindPlacedTargetMonsters();
 
+	if (RaidDefinition)
+	{
+		if (UknightGameplayCueManager* const CueManager = UknightGameplayCueManager::Get())
+		{
+			CueManager->PreloadCues(RaidDefinition->PreloadGameplayCues);
+		}
+		if (UknightAudioSubsystem* const Audio = GetGameInstance()->GetSubsystem<UknightAudioSubsystem>())
+		{
+			Audio->SetMusicState(RaidDefinition->MusicStates.Explore);
+			Audio->PlayMusic(UknightAssetManager::GetAsset(RaidDefinition->Music));
+		}
+	}
+
 	SetPhase(EknightRaidPhase::Deploy);
 	const float DeployDuration = RaidDefinition ? RaidDefinition->DeployDuration : 0.f;
 	if (DeployDuration > 0.f)
@@ -109,6 +128,66 @@ void AknightRaidGameMode::RegisterTargetMonster(AknightMonsterCharacterBase* Mon
 	{
 		Parts->OnPartBroken.AddUniqueDynamic(this, &ThisClass::HandlePartBroken);
 	}
+	if (UAbilitySystemComponent* const ASC = Monster->GetAbilitySystemComponent())
+	{
+		ASC->RegisterGameplayTagEvent(knightGameplayTags::State_Monster_Enraged, EGameplayTagEventType::NewOrRemoved)
+			.AddUObject(this, &ThisClass::HandleMonsterEnragedChanged);
+	}
+}
+
+void AknightRaidGameMode::HandleMonsterEnragedChanged(const FGameplayTag Tag, int32 NewCount)
+{
+	UpdateMusic();
+}
+
+void AknightRaidGameMode::UpdateMusic()
+{
+	UknightAudioSubsystem* const Audio = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightAudioSubsystem>() : nullptr;
+	const AknightRaidGameState* const RaidState = GetRaidGameState();
+	if (!Audio || !RaidDefinition || !RaidState)
+	{
+		return;
+	}
+	const FknightRaidMusicStates& States = RaidDefinition->MusicStates;
+	switch (RaidState->GetRaidPhase())
+	{
+	case EknightRaidPhase::Combat:
+	{
+		bool bEnraged = false;
+		for (const TWeakObjectPtr<AActor>& Fighting : MonstersFightingPlayer)
+		{
+			const UAbilitySystemComponent* const ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Fighting.Get());
+			bEnraged |= ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Enraged);
+		}
+		Audio->SetMusicState(bEnraged ? States.Enraged : States.Combat);
+		break;
+	}
+	case EknightRaidPhase::Success:
+		Audio->SetMusicState(States.Success);
+		break;
+	case EknightRaidPhase::Returning:
+		// Keep the result music playing until the map changes.
+		break;
+	case EknightRaidPhase::Failed:
+		Audio->SetMusicState(States.Failed);
+		break;
+	default:
+		Audio->SetMusicState(States.Explore);
+		break;
+	}
+}
+
+void AknightRaidGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (UknightGameplayCueManager* const CueManager = UknightGameplayCueManager::Get())
+	{
+		CueManager->ReleasePreloadedCues();
+	}
+	if (UknightAudioSubsystem* const Audio = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightAudioSubsystem>() : nullptr)
+	{
+		Audio->StopMusic(0.5f);
+	}
+	Super::EndPlay(EndPlayReason);
 }
 
 void AknightRaidGameMode::BeginExploration()
@@ -250,6 +329,8 @@ void AknightRaidGameMode::SetPhase(EknightRaidPhase NewPhase)
 	{
 		RaidState->SetRaidPhase(NewPhase);
 	}
+	// Also runs when the phase is unchanged: which monsters are fighting may have changed.
+	UpdateMusic();
 }
 
 AknightRaidGameState* AknightRaidGameMode::GetRaidGameState() const

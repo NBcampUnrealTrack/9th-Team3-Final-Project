@@ -4,6 +4,16 @@
 #include "Raid/knightRaidDefinition.h"
 #include "knight.h"
 
+bool AknightRaidGameState::ShouldShowLoadingScreen(FString& OutReason) const
+{
+	if (RaidPhase == EknightRaidPhase::None)
+	{
+		OutReason = TEXT("Raid is starting");
+		return true;
+	}
+	return false;
+}
+
 float AknightRaidGameState::GetElapsedRaidTime() const
 {
 	if (RaidClockStartTime < 0.0 || !GetWorld())
