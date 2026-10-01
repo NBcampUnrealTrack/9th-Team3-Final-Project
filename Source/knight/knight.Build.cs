@@ -19,12 +19,20 @@ public class knight : ModuleRules
 			"GameplayStateTreeModule",
 			"DeveloperSettings",
 			"GameplayTags",
+			"GameplayTasks",
+			"GameplayAbilities",
+			"MotionWarping",
+			"knightInventory",
+			"MechPartsWorkbenchRuntime",
 			"UMG",
 			"Slate",
 			"SlateCore"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });
+
+		// Defines WITH_GAMEPLAY_DEBUGGER and adds the debugger modules in builds that include it.
+		SetupGameplayDebuggerSupport(Target);
 
 		PublicIncludePaths.AddRange(new string[] {
 			"knight",

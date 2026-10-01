@@ -3,7 +3,9 @@
 namespace knightGameplayTags
 {
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_Move, "InputTag.Move", "Movement input, handled natively.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_Move_Vertical, "InputTag.Move.Vertical", "Ascend and descend during boost flight, handled natively.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_Look, "InputTag.Look", "Camera input, handled natively.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_Look_Mouse, "InputTag.Look.Mouse", "Mouse camera input, handled natively.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_Attack_Primary, "InputTag.Attack.Primary", "Greatsword main attack. Hold to charge.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_Attack_Secondary, "InputTag.Attack.Secondary", "Greatsword secondary attack.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_Guard, "InputTag.Guard", "Guard. Pressing on an incoming hit is a parry.");
@@ -26,8 +28,10 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_ActivateFail_Cost, "Ability.ActivateFail.Cost", "Activation failed: cost not met.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_ActivateFail_Cooldown, "Ability.ActivateFail.Cooldown", "Activation failed: on cooldown.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_ActivateFail_TagsBlocked, "Ability.ActivateFail.TagsBlocked", "Activation failed: blocked by tags.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_ActivateFail_TagsMissing, "Ability.ActivateFail.TagsMissing", "Activation failed: required tags missing.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_ActivateFail_ActivationGroup, "Ability.ActivateFail.ActivationGroup", "Activation failed: an exclusive ability is running.");
 
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_InputBlocked, "State.InputBlocked", "Ability input is ignored and cleared (death, cinematics, menus).");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Dead, "State.Dead", "Health reached zero.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Invulnerable, "State.Invulnerable", "Hits are ignored (evasion frames, cinematics).");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_SuperArmor, "State.SuperArmor", "Damage applies but no hit reaction plays.");
@@ -37,7 +41,9 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Boosting, "State.Boosting", "Boost dash in progress.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Flying, "State.Flying", "Boost flight movement mode.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Airborne, "State.Airborne", "Not on the ground for any reason.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_LockedOn, "State.LockedOn", "The player has a lock-on target (drives the lock-on camera mode).");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Overheated, "State.Overheated", "Boost gauge is depleted and recovering.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_HitReact, "State.HitReact", "Any hit reaction is playing.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_HitReact_Flinch, "State.HitReact.Flinch", "Light hit reaction.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_HitReact_Stagger, "State.HitReact.Stagger", "Poise broken.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_HitReact_Knockdown, "State.HitReact.Knockdown", "Knocked to the ground.");
@@ -77,4 +83,14 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Message_Player_Died, "Message.Player.Died", "Broadcast when the player's Knight is destroyed.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Monster_Part, "Monster.Part", "Root for monster part tags. Add specific parts in Config/Tags.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Item_Type_Material, "Item.Type.Material", "Monster materials and other crafting stackables.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Item_Type_Part, "Item.Type.Part", "Mech armor and equipment parts.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Item_Type_Weapon, "Item.Type.Weapon", "Weapons (the greatsword and its variants).");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Equipment_Slot_Head, "Equipment.Slot.Head", "Head part slot.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Equipment_Slot_Torso, "Equipment.Slot.Torso", "Torso part slot.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Equipment_Slot_Arms, "Equipment.Slot.Arms", "Arms part slot.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Equipment_Slot_Legs, "Equipment.Slot.Legs", "Legs part slot.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Equipment_Slot_Backpack, "Equipment.Slot.Backpack", "Backpack / booster part slot.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Equipment_Slot_Weapon, "Equipment.Slot.Weapon", "Weapon slot.");
 }
