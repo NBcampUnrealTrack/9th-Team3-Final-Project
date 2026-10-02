@@ -7,6 +7,7 @@
 #include "Interfaces/CombatInterface.h"
 #include "TimerManager.h"
 #include "knight.h"
+#include "knightPerfCounters.h"
 
 UknightMonsterTargetingComponent::UknightMonsterTargetingComponent()
 {
@@ -120,6 +121,7 @@ void UknightMonsterTargetingComponent::HandleDamaged(AActor* DamageInstigator, A
 
 void UknightMonsterTargetingComponent::EvaluateTarget()
 {
+	KNIGHT_PERF_SCOPE("Monster.Targeting");
 	const double Now = GetWorld()->GetTimeSeconds();
 	const float Elapsed = static_cast<float>(Now - LastEvaluationTime);
 	LastEvaluationTime = Now;
@@ -190,6 +192,7 @@ void UknightMonsterTargetingComponent::SetCurrentTarget(AActor* NewTarget)
 		return;
 	}
 	CurrentTarget = NewTarget;
+	KNIGHT_PERF_COUNT("Monster.TargetChanges", 1);
 	UE_LOG(LogknightAI, Log, TEXT("%s target: %s -> %s"), *GetNameSafe(GetOwner()), *GetNameSafe(OldTarget), *GetNameSafe(NewTarget));
 	OnTargetChanged.Broadcast(OldTarget, NewTarget);
 }

@@ -2,12 +2,14 @@
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
+#include "Components/PrimitiveComponent.h"
 #include "Components/SkinnedMeshComponent.h"
 #include "GameFramework/Character.h"
 #include "GameplayEffect.h"
 #include "Monster/knightMonsterPartData.h"
 #include "System/knightGameplayTags.h"
 #include "knight.h"
+#include "knightPerfCounters.h"
 
 UknightMonsterPartComponent::UknightMonsterPartComponent()
 {
@@ -19,6 +21,7 @@ void UknightMonsterPartComponent::InitializeParts(const UknightMonsterPartData* 
 	PartData = InPartData;
 	PartStates.Reset();
 	BoneToPart.Reset();
+	ComponentTagToPart.Reset();
 	if (PartData)
 	{
 		for (int32 Index = 0; Index < PartData->Parts.Num(); ++Index)
@@ -29,6 +32,10 @@ void UknightMonsterPartComponent::InitializeParts(const UknightMonsterPartData* 
 			for (const FName& Bone : Definition.Bones)
 			{
 				BoneToPart.Add(Bone, Index);
+			}
+			for (const FName& ComponentTag : Definition.ComponentTags)
+			{
+				ComponentTagToPart.Add(ComponentTag, Index);
 			}
 		}
 	}
@@ -66,11 +73,22 @@ void UknightMonsterPartComponent::EndPlay(const EEndPlayReason::Type EndPlayReas
 
 FGameplayTag UknightMonsterPartComponent::ResolvePart(const FHitResult& Hit) const
 {
-	if (const int32* const Index = BoneToPart.Find(Hit.BoneName))
+	const int32* Index = Hit.BoneName.IsNone() ? nullptr : BoneToPart.Find(Hit.BoneName);
+	if (!Index && !ComponentTagToPart.IsEmpty())
 	{
-		return PartStates.IsValidIndex(*Index) ? PartStates[*Index].PartTag : FGameplayTag();
+		if (const UPrimitiveComponent* const Component = Hit.GetComponent())
+		{
+			for (const FName& ComponentTag : Component->ComponentTags)
+			{
+				Index = ComponentTagToPart.Find(ComponentTag);
+				if (Index)
+				{
+					break;
+				}
+			}
+		}
 	}
-	return FGameplayTag();
+	return Index && PartStates.IsValidIndex(*Index) ? PartStates[*Index].PartTag : FGameplayTag();
 }
 
 float UknightMonsterPartComponent::GetDamageMultiplier(const FGameplayTag& PartTag) const
@@ -94,25 +112,40 @@ void UknightMonsterPartComponent::GetTargetPoints(TArray<FknightTargetPoint>& Ou
 {
 	const ACharacter* const Character = Cast<ACharacter>(GetOwner());
 	USkinnedMeshComponent* const Mesh = Character ? Character->GetMesh() : nullptr;
-	if (!Mesh)
-	{
-		return;
-	}
+	TArray<UPrimitiveComponent*> PartComponents;
 	for (int32 Index = 0; Index < PartStates.Num(); ++Index)
 	{
 		const FknightMonsterPartDefinition* const Definition = GetDefinition(Index);
-		if (!Definition || Definition->LockOnSocket.IsNone())
+		if (!Definition)
 		{
 			continue;
 		}
-		// A severed part (hidden bone) is no longer something to lock onto.
-		if (PartStates[Index].bBroken && !Definition->HideBoneOnBreak.IsNone())
+		// A severed part (hidden bone or components) is no longer something to lock onto.
+		if (PartStates[Index].bBroken && (!Definition->HideBoneOnBreak.IsNone() || Definition->bHideComponentsOnBreak))
+		{
+			continue;
+		}
+
+		USceneComponent* PointComponent = nullptr;
+		FName PointSocket = NAME_None;
+		if (Definition->bLockOnComponent)
+		{
+			PartComponents.Reset();
+			GetPartComponents(Index, PartComponents);
+			PointComponent = PartComponents.Num() > 0 ? PartComponents[0] : nullptr;
+		}
+		else if (!Definition->LockOnSocket.IsNone())
+		{
+			PointComponent = Mesh;
+			PointSocket = Definition->LockOnSocket;
+		}
+		if (!PointComponent)
 		{
 			continue;
 		}
 		FknightTargetPoint& Point = OutPoints.AddDefaulted_GetRef();
-		Point.Component = Mesh;
-		Point.SocketName = Definition->LockOnSocket;
+		Point.Component = PointComponent;
+		Point.SocketName = PointSocket;
 		Point.PartTag = Definition->PartTag;
 	}
 }
@@ -144,7 +177,13 @@ void UknightMonsterPartComponent::HandleDamaged(AActor* DamageInstigator, AActor
 	const FGameplayTag PartTag = ResolvePart(*Hit);
 	if (PartTag.IsValid())
 	{
+		KNIGHT_PERF_COUNT("Combat.PartHits", 1);
 		ApplyPartDamage(PartTag, Magnitude, DamageInstigator);
+	}
+	else
+	{
+		// Hits that landed on something outside every part (often the movement capsule).
+		KNIGHT_PERF_COUNT("Combat.UnresolvedPartHits", 1);
 	}
 }
 
@@ -161,6 +200,22 @@ void UknightMonsterPartComponent::BreakPart(int32 PartIndex, AActor* BreakInstig
 	const ACharacter* const Character = Cast<ACharacter>(GetOwner());
 	USkinnedMeshComponent* const Mesh = Character ? Character->GetMesh() : nullptr;
 	FVector BreakLocation = GetOwner()->GetActorLocation();
+
+	TArray<UPrimitiveComponent*> PartComponents;
+	GetPartComponents(PartIndex, PartComponents);
+	if (PartComponents.Num() > 0)
+	{
+		BreakLocation = PartComponents[0]->GetComponentLocation();
+	}
+	if (Definition->bHideComponentsOnBreak)
+	{
+		for (UPrimitiveComponent* const Component : PartComponents)
+		{
+			Component->SetVisibility(false, true);
+			Component->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		}
+	}
+
 	if (Mesh)
 	{
 		const FName LocationBone = !Definition->HideBoneOnBreak.IsNone() ? Definition->HideBoneOnBreak
@@ -211,4 +266,26 @@ int32 UknightMonsterPartComponent::FindPartIndex(const FGameplayTag& PartTag) co
 const FknightMonsterPartDefinition* UknightMonsterPartComponent::GetDefinition(int32 PartIndex) const
 {
 	return PartData && PartData->Parts.IsValidIndex(PartIndex) && PartStates.IsValidIndex(PartIndex) ? &PartData->Parts[PartIndex] : nullptr;
+}
+
+void UknightMonsterPartComponent::GetPartComponents(int32 PartIndex, TArray<UPrimitiveComponent*>& OutComponents) const
+{
+	const FknightMonsterPartDefinition* const Definition = GetDefinition(PartIndex);
+	if (!Definition || Definition->ComponentTags.IsEmpty() || !GetOwner())
+	{
+		return;
+	}
+	TArray<UPrimitiveComponent*> Components;
+	GetOwner()->GetComponents<UPrimitiveComponent>(Components);
+	for (UPrimitiveComponent* const Component : Components)
+	{
+		for (const FName& ComponentTag : Definition->ComponentTags)
+		{
+			if (Component->ComponentHasTag(ComponentTag))
+			{
+				OutComponents.Add(Component);
+				break;
+			}
+		}
+	}
 }

@@ -20,6 +20,7 @@
 #include "System/knightGameplayTags.h"
 #include "System/knightTeams.h"
 #include "knight.h"
+#include "knightPerfCounters.h"
 
 AknightMonsterCharacterBase::AknightMonsterCharacterBase(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UknightMonsterMovementComponent>(ACharacter::CharacterMovementComponentName))
@@ -69,6 +70,25 @@ void AknightMonsterCharacterBase::BeginPlay()
 
 	// Placed monsters may begin play before possession; parts and threat work either way.
 	InitializeAbilitySystem();
+	SetCountedAlive(true);
+}
+
+void AknightMonsterCharacterBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	SetCountedAlive(false);
+	Super::EndPlay(EndPlayReason);
+}
+
+void AknightMonsterCharacterBase::SetCountedAlive(bool bAlive)
+{
+	static int32 AliveMonsters = 0;
+	if (bCountedAlive == bAlive)
+	{
+		return;
+	}
+	bCountedAlive = bAlive;
+	AliveMonsters += bAlive ? 1 : -1;
+	KNIGHT_PERF_GAUGE("Monster.Alive", AliveMonsters);
 }
 
 void AknightMonsterCharacterBase::PossessedBy(AController* NewController)
@@ -159,6 +179,7 @@ void AknightMonsterCharacterBase::HandleOutOfHealth(AActor* DamageInstigator, AA
 		return;
 	}
 	bIsDying = true;
+	SetCountedAlive(false);
 
 	AbilitySystemComponent->AddLooseGameplayTag(knightGameplayTags::State_Dead);
 

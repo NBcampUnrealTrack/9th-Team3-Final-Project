@@ -31,7 +31,8 @@ public class knight : ModuleRules
 			"SlateCore"
 		});
 
-		PrivateDependencyModuleNames.AddRange(new string[] { });
+		// knightPerfTracker: KNIGHT_PERF_* counters for test captures; compiled out in Shipping.
+		PrivateDependencyModuleNames.AddRange(new string[] { "knightPerfTracker" });
 
 		// Defines WITH_GAMEPLAY_DEBUGGER and adds the debugger modules in builds that include it.
 		SetupGameplayDebuggerSupport(Target);

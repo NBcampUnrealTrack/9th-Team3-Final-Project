@@ -8,6 +8,7 @@
 
 class UAbilitySystemComponent;
 class UknightMonsterPartData;
+class UPrimitiveComponent;
 struct FGameplayEffectSpec;
 struct FknightMonsterPartDefinition;
 
@@ -33,9 +34,12 @@ struct FknightMonsterPartState
 /**
  * Monster parts: resolves hits to parts, provides hitzone multipliers, tracks part damage and breaks parts.
  *
+ * A hit resolves to a part by the hit bone (skeletal monsters) or by the hit component's tags (separate
+ * primitives, such as cube stand-ins in test maps).
+ *
  * Part damage is the Health the monster actually lost from a hit, attributed to the part found from the
  * hit result in the damage effect's context. On break: the part's BreakEffect is applied to the monster,
- * HideBoneOnBreak is hidden, GameplayCue.PartBreak runs at the part (the part tag is in the cue's
+ * HideBoneOnBreak (or the part's components) is hidden, GameplayCue.PartBreak runs at the part (the part tag is in the cue's
  * AggregatedSourceTags), Event.PartBroken is sent to the monster's ASC and OnPartBroken is broadcast.
  */
 UCLASS(ClassGroup=(Knight), meta=(BlueprintSpawnableComponent))
@@ -77,6 +81,8 @@ private:
 	void BreakPart(int32 PartIndex, AActor* BreakInstigator);
 	int32 FindPartIndex(const FGameplayTag& PartTag) const;
 	const FknightMonsterPartDefinition* GetDefinition(int32 PartIndex) const;
+	/** Owner components carrying one of the part's ComponentTags. */
+	void GetPartComponents(int32 PartIndex, TArray<UPrimitiveComponent*>& OutComponents) const;
 
 	UPROPERTY()
 	TObjectPtr<const UknightMonsterPartData> PartData;
@@ -85,5 +91,6 @@ private:
 	TArray<FknightMonsterPartState> PartStates;
 
 	TMap<FName, int32> BoneToPart;
+	TMap<FName, int32> ComponentTagToPart;
 	TWeakObjectPtr<UAbilitySystemComponent> BoundASC;
 };
