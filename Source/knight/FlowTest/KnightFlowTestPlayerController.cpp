@@ -5,6 +5,13 @@
 #include "GameFlow/KnightGameFlowSubsystem.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
+#include "Dev/KnightCoreInterfaceProbe.h"
+#include "Progression/knightSaveGame.h"
+#include "Progression/knightSaveSubsystem.h"
+#include "Raid/knightRaidGameMode.h"
+#include "Raid/knightRaidGameState.h"
+#include "Raid/knightRaidSubsystem.h"
 #include "knight.h"
 
 AKnightFlowTestPlayerController::AKnightFlowTestPlayerController()
@@ -18,6 +25,13 @@ void AKnightFlowTestPlayerController::BeginPlay()
 	Super::BeginPlay();
 	if (!IsLocalController() || ReturnWidget)
 	{
+		return;
+	}
+	if (GetWorld() && GetWorld()->GetAuthGameMode<AknightRaidGameMode>())
+	{
+		FInputModeGameOnly InputMode;
+		SetInputMode(InputMode);
+		bShowMouseCursor = false;
 		return;
 	}
 	const AKnightFlowTestGameMode* const TestMode = GetWorld() ? Cast<AKnightFlowTestGameMode>(GetWorld()->GetAuthGameMode()) : nullptr;
@@ -56,4 +70,59 @@ void AKnightFlowTestPlayerController::EndPlay(const EEndPlayReason::Type EndPlay
 		ReturnWidget = nullptr;
 	}
 	Super::EndPlay(EndPlayReason);
+}
+
+void AKnightFlowTestPlayerController::KnightCoreSelectTestSlot(const FString& SlotId)
+{
+	UknightSaveSubsystem* const Save = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	UE_LOG(Logknight, Log, TEXT("KnightCoreSelectTestSlot %s: %s"), *SlotId,
+		Save && Save->SelectSlot(SlotId) ? TEXT("loaded") : TEXT("failed"));
+}
+
+void AKnightFlowTestPlayerController::KnightCoreSuccess()
+{
+	if (AknightRaidGameMode* const Raid = GetWorld()->GetAuthGameMode<AknightRaidGameMode>())
+	{
+		Raid->DebugFinishRaid(true);
+	}
+}
+
+void AKnightFlowTestPlayerController::KnightCoreFailure()
+{
+	if (AknightRaidGameMode* const Raid = GetWorld()->GetAuthGameMode<AknightRaidGameMode>())
+	{
+		Raid->DebugFinishRaid(false);
+	}
+}
+
+void AKnightFlowTestPlayerController::KnightCoreStatus()
+{
+	const UknightSaveSubsystem* const Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	const UknightSaveGame* const Save = Saves ? Saves->GetSaveGame() : nullptr;
+	const UknightRaidSubsystem* const Session = GetGameInstance()->GetSubsystem<UknightRaidSubsystem>();
+	const AknightRaidGameState* const State = GetWorld()->GetGameState<AknightRaidGameState>();
+	FknightRaidResult Last;
+	const bool bHasResult = Session && Session->GetLastResult(Last);
+	const int32 MaterialCount = Save ? Save->ItemCounts.FindRef(FPrimaryAssetId(TEXT("Item"), TEXT("DA_CoreTestMaterial"))) : -1;
+	UE_LOG(Logknight, Log, TEXT("KnightCoreStatus slot=%s loadFailed=%d phase=%d run=%s result=%d success=%d materials=%d appliedRuns=%d"),
+		Saves ? *Saves->GetActiveSlotId() : TEXT("None"), Saves && Saves->DidLoadFail(),
+		State ? static_cast<int32>(State->GetRaidPhase()) : -1,
+		Session ? *Session->GetCurrentRunId().ToString() : TEXT("None"), bHasResult,
+		bHasResult && Last.bSuccess, MaterialCount, Save ? Save->AppliedRaidRuns.Num() : -1);
+}
+
+void AKnightFlowTestPlayerController::KnightCoreProbeInterfaces()
+{
+	for (TActorIterator<AKnightCoreInterfaceProbe> It(GetWorld()); It; ++It)
+	{
+		AActor* const Probe = *It;
+		const bool bCombat = ICombatInterface::Execute_CanReceiveHitBP(Probe, GetPawn());
+		const bool bTarget = ITargetableInterface::Execute_CanBeTargeted(Probe);
+		const int32 Points = ITargetableInterface::Execute_QueryTargetPoints(Probe).Num();
+		const bool bInteract = IInteractableInterface::Execute_CanInteract(Probe, GetPawn());
+		UE_LOG(Logknight, Log, TEXT("KnightCoreProbeInterfaces class=%s combat=%d target=%d points=%d interact=%d"),
+			*Probe->GetClass()->GetName(), bCombat, bTarget, Points, bInteract);
+		return;
+	}
+	UE_LOG(Logknight, Warning, TEXT("KnightCoreProbeInterfaces: no probe actor in the level."));
 }

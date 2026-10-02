@@ -16,8 +16,8 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 	AActor* const Target = Hit.GetActor();
 	UAbilitySystemComponent* const SourceASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Attacker);
 	UAbilitySystemComponent* const TargetASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Target);
-	const ICombatInterface* const TargetCombat = Cast<ICombatInterface>(Target);
-	if (!SourceASC || !TargetASC || !TargetCombat || !TargetCombat->CanReceiveHit(Attacker))
+	if (!SourceASC || !TargetASC || !Target || !Target->GetClass()->ImplementsInterface(UCombatInterface::StaticClass())
+		|| !ICombatInterface::Execute_CanReceiveHitBP(Target, Attacker))
 	{
 		return EknightHitOutcome::Ignored;
 	}
@@ -82,7 +82,8 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 		return EknightHitOutcome::Guarded;
 	}
 
-	const float PartMultiplier = TargetCombat->GetPartDamageMultiplier(TargetCombat->ResolveHitPart(Hit));
+	const float PartMultiplier = ICombatInterface::Execute_GetPartDamageMultiplierBP(
+		Target, ICombatInterface::Execute_ResolveHitPartBP(Target, Hit));
 	const FGameplayTag CueTag = PartMultiplier >= Params.WeakpointMultiplierThreshold
 		? knightGameplayTags::GameplayCue_Hit_Weakpoint.GetTag()
 		: knightGameplayTags::GameplayCue_Hit_Melee.GetTag();

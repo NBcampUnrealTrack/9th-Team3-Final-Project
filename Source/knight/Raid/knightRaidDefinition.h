@@ -73,6 +73,10 @@ public:
 	/** Rolls every reward line against the broken parts. Returns merged stacks. */
 	void RollRewards(const FGameplayTagContainer& BrokenParts, TArray<FknightItemStack>& OutRewards) const;
 
+	/** The catalog owns the raid ID, display name and map. Clearing this stage unlocks it. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Raid")
+	FName RequiredClearedStageId;
+
 	/** Monster that must be defeated. Monsters placed in the map with this definition are the targets. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Raid")
 	TObjectPtr<const UknightMonsterDefinition> TargetMonster;

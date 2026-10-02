@@ -22,9 +22,19 @@ class KNIGHT_API UknightSaveSubsystem : public UGameInstanceSubsystem
 public:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 
-	/** Always valid after Initialize (a fresh save when none exists). */
+	/** Null when the selected slot exists but cannot be safely loaded. */
 	UFUNCTION(BlueprintPure, Category="Knight|Save")
 	UknightSaveGame* GetSaveGame() const { return SaveGame; }
+
+	/** Use before gameplay starts. IDs contain letters, digits, underscores or hyphens. */
+	UFUNCTION(BlueprintCallable, Category="Knight|Save")
+	bool SelectSlot(const FString& SlotId);
+
+	UFUNCTION(BlueprintPure, Category="Knight|Save")
+	FString GetActiveSlotId() const { return ActiveSlotId; }
+
+	UFUNCTION(BlueprintPure, Category="Knight|Save")
+	bool DidLoadFail() const { return bLoadFailed; }
 
 	UFUNCTION(BlueprintCallable, Category="Knight|Save")
 	void RequestSave();
@@ -40,13 +50,21 @@ public:
 	static constexpr int32 UserIndex = 0;
 
 private:
-	void LoadOrCreate();
-	void MigrateSave(UknightSaveGame& Save) const;
+	bool LoadSlot(const FString& Slot);
+	bool MigrateSave(UknightSaveGame& Save) const;
 	void StartAsyncSave();
 	void HandleAsyncSaveFinished(const FString& Slot, int32 User, bool bSuccess);
 
 	UPROPERTY(Transient)
 	TObjectPtr<UknightSaveGame> SaveGame;
+
+	/** Holds the immutable serialized version until completion. */
+	UPROPERTY(Transient)
+	TObjectPtr<UknightSaveGame> SaveSnapshot;
+
+	FString ActiveSlotId = TEXT("Default");
+	FString ActiveSlotName = SlotName;
+	bool bLoadFailed = false;
 
 	bool bSaveInFlight = false;
 	bool bSavePending = false;

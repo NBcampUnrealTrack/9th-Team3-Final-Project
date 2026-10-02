@@ -36,13 +36,21 @@ public:
 	 * Bump when the layout changes, and handle the old version in UknightSaveSubsystem::MigrateSave.
 	 * 1: items keyed by FName. 2: items keyed by primary asset id, equipment loadout.
 	 */
-	static constexpr int32 CurrentVersion = 2;
+	static constexpr int32 CurrentVersion = 3;
 
 	UPROPERTY(SaveGame)
 	int32 SaveVersion = CurrentVersion;
 
 	UPROPERTY(SaveGame)
 	TMap<FName, FknightStageRecord> StageRecords;
+
+	/** Explicit unlocks; stages without prerequisites are available by default. */
+	UPROPERTY(SaveGame)
+	TSet<FName> UnlockedStages;
+
+	/** Written together with rewards, so a repeated result cannot pay twice after loading. */
+	UPROPERTY(SaveGame)
+	TSet<FGuid> AppliedRaidRuns;
 
 	/** The item box: owned count per item. */
 	UPROPERTY(SaveGame)

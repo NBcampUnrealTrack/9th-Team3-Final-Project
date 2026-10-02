@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/AssetManager.h"
+#include "Engine/StreamableManager.h"
 #include "knightAssetManager.generated.h"
 
 /**
@@ -18,6 +19,10 @@ class KNIGHT_API UknightAssetManager : public UAssetManager
 
 public:
 	static UknightAssetManager& Get();
+
+	/** The stage catalog owns the ID and map; this streams its optional raid rules before travel. */
+	static TSharedPtr<FStreamableHandle> LoadRaidDefinitionAsync(
+		const TSoftObjectPtr<class UknightRaidDefinition>& Definition, FStreamableDelegate Completion);
 
 	/** Synchronously loads a soft object. Logs the load so hitches are visible, and can pin the result. */
 	template<typename AssetType>

@@ -2,10 +2,15 @@
 
 #include "KnightFlowSettings.h"
 #include "Engine/Engine.h"
+#include "Engine/StreamableManager.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/PackageName.h"
+#include "Progression/knightProgressionSubsystem.h"
+#include "Raid/knightRaidDefinition.h"
+#include "Raid/knightRaidSubsystem.h"
+#include "System/knightAssetManager.h"
 #include "UObject/UObjectGlobals.h"
 #include "knight.h"
 
@@ -154,6 +159,19 @@ bool UKnightGameFlowSubsystem::CanLaunchStage(FName StageId, FText& OutReason) c
 		OutReason = LOCTEXT("StageMapInvalid", "스테이지 맵을 열 수 없습니다.");
 		return false;
 	}
+	const UknightProgressionSubsystem* const Progress = GetGameInstance()
+		? GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>() : nullptr;
+	if (!Progress || !Progress->IsStageUnlocked(StageId))
+	{
+		OutReason = LOCTEXT("StageLocked", "This raid is not unlocked or the profile could not be loaded.");
+		return false;
+	}
+	if (!Stage.RaidDefinition.IsNull()
+		&& !FPackageName::DoesPackageExist(Stage.RaidDefinition.ToSoftObjectPath().GetLongPackageName()))
+	{
+		OutReason = LOCTEXT("RaidDefinitionMissing", "The raid definition is missing.");
+		return false;
+	}
 	OutReason = FText::GetEmpty();
 	return true;
 }
@@ -208,7 +226,43 @@ bool UKnightGameFlowSubsystem::RequestStartStage(FName StageId)
 	{
 		return RejectRequest(EKnightFlowState::Gameplay, LOCTEXT("StageMapChanged", "Stage map is no longer available."));
 	}
-	return BeginTravel(EKnightFlowState::Gameplay, MapPackage, World, StageId);
+	if (Stage.RaidDefinition.IsNull())
+	{
+		return BeginTravel(EKnightFlowState::Gameplay, MapPackage, World, StageId);
+	}
+	PendingDestination = EKnightFlowState::Gameplay;
+	PendingMapPackage = MapPackage;
+	PendingSourceWorld = World;
+	PendingStageId = StageId;
+	PendingRaidDefinitionPath = Stage.RaidDefinition.ToSoftObjectPath();
+	SetTravelPending(true);
+	PendingLoadHandle = UknightAssetManager::LoadRaidDefinitionAsync(
+		Stage.RaidDefinition, FStreamableDelegate::CreateUObject(this, &ThisClass::HandleRaidDefinitionLoaded));
+	if (!PendingLoadHandle)
+	{
+		ResetPendingTravel();
+		return RejectRequest(EKnightFlowState::Gameplay, LOCTEXT("RaidLoadCouldNotStart", "Could not start loading the raid definition."));
+	}
+	return true;
+}
+
+void UKnightGameFlowSubsystem::HandleRaidDefinitionLoaded()
+{
+	if (!bTravelPending || PendingDestination != EKnightFlowState::Gameplay) return;
+	const FSoftObjectPath DefinitionPath = PendingRaidDefinitionPath;
+	UWorld* const Source = PendingSourceWorld.Get();
+	const FString MapPackage = PendingMapPackage;
+	const FName StageId = PendingStageId;
+	PendingLoadHandle.Reset();
+	PendingRaidDefinitionPath.Reset();
+	if (!Cast<UknightRaidDefinition>(DefinitionPath.ResolveObject()) || !Source
+		|| Source != GetGameInstance()->GetWorld())
+	{
+		ResetPendingTravel();
+		OnTravelFailed.Broadcast(EKnightFlowState::Gameplay, LOCTEXT("RaidLoadFailed", "The raid definition could not be loaded."));
+		return;
+	}
+	BeginTravel(EKnightFlowState::Gameplay, MapPackage, Source, StageId);
 }
 
 bool UKnightGameFlowSubsystem::RequestOpenMenu(EKnightFlowState Destination)
@@ -253,6 +307,13 @@ bool UKnightGameFlowSubsystem::BeginTravel(EKnightFlowState Destination, const F
 	PendingMapPackage = MapPackage;
 	PendingSourceWorld = SourceWorld;
 	PendingStageId = StageId;
+	if (Destination == EKnightFlowState::Gameplay)
+	{
+		if (UknightRaidSubsystem* const Session = GetGameInstance()->GetSubsystem<UknightRaidSubsystem>())
+		{
+			PendingRunId = Session->BeginRun(StageId);
+		}
+	}
 	SetTravelPending(true);
 	UGameplayStatics::OpenLevel(SourceWorld, FName(*MapPackage));
 	return true;
@@ -404,6 +465,9 @@ void UKnightGameFlowSubsystem::ConfirmEnteredWorld(EKnightFlowState NewState)
 	PendingMapPackage.Reset();
 	PendingSourceWorld.Reset();
 	PendingStageId = NAME_None;
+	PendingRaidDefinitionPath.Reset();
+	PendingLoadHandle.Reset();
+	PendingRunId.Invalidate();
 	bTravelPending = false;
 	CurrentFlowState = NewState;
 	if (bWasPending)
@@ -418,6 +482,17 @@ void UKnightGameFlowSubsystem::ConfirmEnteredWorld(EKnightFlowState NewState)
 
 void UKnightGameFlowSubsystem::ResetPendingTravel()
 {
+	if (PendingLoadHandle) PendingLoadHandle->CancelHandle();
+	PendingLoadHandle.Reset();
+	PendingRaidDefinitionPath.Reset();
+	if (PendingRunId.IsValid())
+	{
+		if (UknightRaidSubsystem* const Session = GetGameInstance()->GetSubsystem<UknightRaidSubsystem>())
+		{
+			Session->CancelRun(PendingRunId);
+		}
+		PendingRunId.Invalidate();
+	}
 	PendingDestination = EKnightFlowState::Uninitialized;
 	PendingMapPackage.Reset();
 	PendingSourceWorld.Reset();

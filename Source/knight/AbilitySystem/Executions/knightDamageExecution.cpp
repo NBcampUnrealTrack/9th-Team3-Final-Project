@@ -78,9 +78,11 @@ void UknightDamageExecution::Execute_Implementation(const FGameplayEffectCustomE
 	float PartMultiplier = 1.f;
 	if (const FHitResult* const Hit = Context.GetHitResult())
 	{
-		if (const ICombatInterface* const Combat = Cast<ICombatInterface>(TargetActor))
+		if (TargetActor && TargetActor->GetClass()->ImplementsInterface(UCombatInterface::StaticClass()))
 		{
-			PartMultiplier = FMath::Max(0.f, Combat->GetPartDamageMultiplier(Combat->ResolveHitPart(*Hit)));
+			AActor* const MutableTarget = const_cast<AActor*>(TargetActor);
+			PartMultiplier = FMath::Max(0.f, ICombatInterface::Execute_GetPartDamageMultiplierBP(
+				MutableTarget, ICombatInterface::Execute_ResolveHitPartBP(MutableTarget, *Hit)));
 		}
 	}
 

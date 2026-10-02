@@ -9,6 +9,7 @@
 
 class UWorld;
 class AKnightMenuGameMode;
+struct FStreamableHandle;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FKnightFlowStateChanged, EKnightFlowState, PreviousState, EKnightFlowState, NewState);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FKnightFlowTravelRejected, EKnightFlowState, RequestedState, FText, Reason);
@@ -88,6 +89,7 @@ private:
 	void ResetPendingTravel();
 	void HandleTravelFailure(UWorld* FailedWorld, ETravelFailure::Type FailureType, const FString& ErrorString);
 	void HandlePostLoadMap(UWorld* LoadedWorld);
+	void HandleRaidDefinitionLoaded();
 
 	EKnightFlowState CurrentFlowState = EKnightFlowState::Uninitialized;
 	EKnightFlowState PendingDestination = EKnightFlowState::Uninitialized;
@@ -95,6 +97,9 @@ private:
 	FString PendingMapPackage;
 	FName PendingStageId;
 	FName ActiveStageId;
+	FSoftObjectPath PendingRaidDefinitionPath;
+	TSharedPtr<FStreamableHandle> PendingLoadHandle;
+	FGuid PendingRunId;
 	TWeakObjectPtr<UWorld> PendingSourceWorld;
 	TWeakObjectPtr<UWorld> RegisteredWorld;
 	FDelegateHandle TravelFailureHandle;

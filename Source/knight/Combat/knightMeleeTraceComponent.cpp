@@ -213,8 +213,8 @@ void UknightMeleeTraceComponent::HandleHit(const FHitResult& Hit)
 
 bool UknightMeleeTraceComponent::IsValidTarget(AActor* Target) const
 {
-	const ICombatInterface* const Combat = Cast<ICombatInterface>(Target);
-	if (!Combat || !Combat->CanReceiveHit(GetOwner()))
+	if (!Target || !Target->GetClass()->ImplementsInterface(UCombatInterface::StaticClass())
+		|| !ICombatInterface::Execute_CanReceiveHitBP(Target, GetOwner()))
 	{
 		return false;
 	}

@@ -169,17 +169,19 @@ bool UknightTargetLockComponent::GetLockedTargetLocation(FVector& OutLocation) c
 
 float UknightTargetLockComponent::GetLockedTargetRadius() const
 {
-	const ITargetableInterface* const Targetable = Cast<ITargetableInterface>(LockedActor.Get());
-	return Targetable ? Targetable->GetTargetRadius() : 0.f;
+	AActor* const Target = LockedActor.Get();
+	return Target && Target->GetClass()->ImplementsInterface(UTargetableInterface::StaticClass())
+		? ITargetableInterface::Execute_QueryTargetRadius(Target) : 0.f;
 }
 
 void UknightTargetLockComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	const ITargetableInterface* const Targetable = Cast<ITargetableInterface>(LockedActor.Get());
+	AActor* const Target = LockedActor.Get();
 	FVector TargetLocation;
-	if (!Targetable || !Targetable->IsTargetable() || !GetLockedTargetLocation(TargetLocation))
+	if (!Target || !Target->GetClass()->ImplementsInterface(UTargetableInterface::StaticClass())
+		|| !ITargetableInterface::Execute_CanBeTargeted(Target) || !GetLockedTargetLocation(TargetLocation))
 	{
 		ClearLockOn();
 		return;
@@ -249,13 +251,13 @@ void UknightTargetLockComponent::GatherCandidates(TArray<FCandidate>& OutCandida
 		}
 		SeenActors.Add(Actor);
 
-		const ITargetableInterface* const Targetable = Cast<ITargetableInterface>(Actor);
-		if (!Targetable || !Targetable->IsTargetable() || FGenericTeamId::GetAttitude(Owner, Actor) != ETeamAttitude::Hostile)
+		if (!Actor->GetClass()->ImplementsInterface(UTargetableInterface::StaticClass())
+			|| !ITargetableInterface::Execute_CanBeTargeted(Actor)
+			|| FGenericTeamId::GetAttitude(Owner, Actor) != ETeamAttitude::Hostile)
 		{
 			continue;
 		}
-		Points.Reset();
-		Targetable->GetTargetPoints(Points);
+		Points = ITargetableInterface::Execute_QueryTargetPoints(Actor);
 		for (const FknightTargetPoint& Point : Points)
 		{
 			if (Point.Component)

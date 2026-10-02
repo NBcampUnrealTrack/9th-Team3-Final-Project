@@ -1,7 +1,9 @@
 #include "KnightMainMenuWidget.h"
 
 #include "GameFlow/KnightGameFlowSubsystem.h"
+#include "Engine/GameInstance.h"
 #include "KnightStageEntryWidget.h"
+#include "Raid/knightRaidSubsystem.h"
 #include "Components/Button.h"
 #include "Components/PanelWidget.h"
 #include "Components/TextBlock.h"
@@ -38,6 +40,21 @@ void UKnightMainMenuWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 	ApplyPage(EKnightMainMenuPage::Home, true);
+	UknightRaidSubsystem* const Session = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightRaidSubsystem>() : nullptr;
+	FknightRaidResult Result;
+	if (Session && Session->GetLastResult(Result))
+	{
+		int32 RewardCount = 0;
+		for (const FknightItemStack& Reward : Result.Rewards)
+		{
+			RewardCount += FMath::Max(0, Reward.Count);
+		}
+		SetStatusText(Result.bSuccess
+			? FText::Format(LOCTEXT("RaidSuccessResult", "레이드 성공: {0} | 보상 {1}개"),
+				FText::FromName(Result.StageId), FText::AsNumber(RewardCount))
+			: FText::Format(LOCTEXT("RaidFailedResult", "레이드 실패: {0}"), FText::FromName(Result.StageId)));
+		Session->ClearLastResult();
+	}
 }
 
 void UKnightMainMenuWidget::NativeDestruct()

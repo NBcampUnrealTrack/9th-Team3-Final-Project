@@ -9,36 +9,47 @@ const FString UknightSaveSubsystem::SlotName = TEXT("KnightProgress");
 void UknightSaveSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
-	LoadOrCreate();
+	LoadSlot(ActiveSlotName);
 }
 
-void UknightSaveSubsystem::LoadOrCreate()
+bool UknightSaveSubsystem::LoadSlot(const FString& Slot)
 {
-	SaveGame = nullptr;
-	if (UGameplayStatics::DoesSaveGameExist(SlotName, UserIndex))
+	UknightSaveGame* Loaded = nullptr;
+	if (UGameplayStatics::DoesSaveGameExist(Slot, UserIndex))
 	{
-		SaveGame = Cast<UknightSaveGame>(UGameplayStatics::LoadGameFromSlot(SlotName, UserIndex));
-		if (!SaveGame)
+		TArray<uint8> RawSave;
+		const bool bReadable = UGameplayStatics::LoadDataFromSlot(RawSave, Slot, UserIndex);
+		// UE's legacy/no-header path tries to deserialize arbitrary bytes and can assert on an invalid FName.
+		// This project only writes the versioned GVAS format used by UE 5.8.
+		const bool bValidHeader = bReadable && RawSave.Num() >= 64 && RawSave.Num() <= 32 * 1024 * 1024
+			&& RawSave[0] == 'G' && RawSave[1] == 'V' && RawSave[2] == 'A' && RawSave[3] == 'S';
+		if (bValidHeader)
 		{
-			UE_LOG(Logknight, Error, TEXT("Save slot %s exists but could not be read; starting a fresh save. The unreadable file is overwritten by the next save."), *SlotName);
+			Loaded = Cast<UknightSaveGame>(UGameplayStatics::LoadGameFromMemory(RawSave));
+		}
+		if (!Loaded || !MigrateSave(*Loaded))
+		{
+			UE_LOG(Logknight, Error, TEXT("Save slot %s exists but is unreadable or invalid; writes are blocked."), *Slot);
+			bLoadFailed = true;
+			SaveGame = nullptr;
+			return false;
 		}
 	}
-	if (SaveGame)
+	if (!Loaded)
 	{
-		MigrateSave(*SaveGame);
+		Loaded = Cast<UknightSaveGame>(UGameplayStatics::CreateSaveGameObject(UknightSaveGame::StaticClass()));
 	}
-	else
-	{
-		SaveGame = Cast<UknightSaveGame>(UGameplayStatics::CreateSaveGameObject(UknightSaveGame::StaticClass()));
-	}
+	SaveGame = Loaded;
+	bLoadFailed = false;
+	return SaveGame != nullptr;
 }
 
-void UknightSaveSubsystem::MigrateSave(UknightSaveGame& Save) const
+bool UknightSaveSubsystem::MigrateSave(UknightSaveGame& Save) const
 {
-	if (Save.SaveVersion > UknightSaveGame::CurrentVersion)
+	if (Save.SaveVersion < 1 || Save.SaveVersion > UknightSaveGame::CurrentVersion)
 	{
-		UE_LOG(Logknight, Warning, TEXT("Save version %d is newer than this build (%d)."), Save.SaveVersion, UknightSaveGame::CurrentVersion);
-		return;
+		UE_LOG(Logknight, Error, TEXT("Unsupported save version %d (current %d)."), Save.SaveVersion, UknightSaveGame::CurrentVersion);
+		return false;
 	}
 	// One block per version bump, oldest first.
 	if (Save.SaveVersion < 2)
@@ -62,13 +73,39 @@ void UknightSaveSubsystem::MigrateSave(UknightSaveGame& Save) const
 		UE_LOG(Logknight, Log, TEXT("Migrated save from version 1 to 2."));
 		Save.SaveVersion = 2;
 	}
+	for (const TPair<FPrimaryAssetId, int32>& Entry : Save.ItemCounts)
+	{
+		if (!Entry.Key.IsValid() || Entry.Value < 0) return false;
+	}
+	for (const TPair<FPrimaryAssetId, int32>& Entry : Save.ItemUpgradeLevels)
+	{
+		if (!Entry.Key.IsValid() || Entry.Value < 0) return false;
+	}
+	if (!FMath::IsFinite(Save.TotalPlayTime) || Save.TotalPlayTime < 0.f) return false;
 	Save.SaveVersion = UknightSaveGame::CurrentVersion;
+	return true;
+}
+
+bool UknightSaveSubsystem::SelectSlot(const FString& SlotId)
+{
+	if (bSaveInFlight || SlotId.IsEmpty() || SlotId.Len() > 48) return false;
+	for (const TCHAR Character : SlotId)
+	{
+		if (!FChar::IsAlnum(Character) && Character != TEXT('_') && Character != TEXT('-')) return false;
+	}
+	const FString NewSlot = SlotId == TEXT("Default") ? SlotName : TEXT("KnightProgress_") + SlotId;
+	if (NewSlot == ActiveSlotName) return !bLoadFailed && SaveGame != nullptr;
+	ActiveSlotId = SlotId;
+	ActiveSlotName = NewSlot;
+	bSavePending = false;
+	return LoadSlot(NewSlot);
 }
 
 void UknightSaveSubsystem::RequestSave()
 {
-	if (!SaveGame)
+	if (!SaveGame || bLoadFailed)
 	{
+		OnSaveFinished.Broadcast(false);
 		return;
 	}
 	if (bSaveInFlight)
@@ -83,27 +120,41 @@ void UknightSaveSubsystem::StartAsyncSave()
 {
 	bSaveInFlight = true;
 	bSavePending = false;
-	UGameplayStatics::AsyncSaveGameToSlot(SaveGame, SlotName, UserIndex,
+	SaveSnapshot = DuplicateObject<UknightSaveGame>(SaveGame, this);
+	if (!SaveSnapshot)
+	{
+		bSaveInFlight = false;
+		OnSaveFinished.Broadcast(false);
+		return;
+	}
+	UGameplayStatics::AsyncSaveGameToSlot(SaveSnapshot, ActiveSlotName, UserIndex,
 		FAsyncSaveGameToSlotDelegate::CreateUObject(this, &ThisClass::HandleAsyncSaveFinished));
 }
 
 void UknightSaveSubsystem::HandleAsyncSaveFinished(const FString& Slot, int32 User, bool bSuccess)
 {
 	bSaveInFlight = false;
+	SaveSnapshot = nullptr;
 	if (!bSuccess)
 	{
 		UE_LOG(Logknight, Error, TEXT("Saving slot %s failed."), *Slot);
 	}
-	OnSaveFinished.Broadcast(bSuccess);
 	if (bSavePending)
 	{
 		StartAsyncSave();
 	}
+	OnSaveFinished.Broadcast(bSuccess);
 }
 
 void UknightSaveSubsystem::ResetSave()
 {
-	UGameplayStatics::DeleteGameInSlot(SlotName, UserIndex);
+	if (bSaveInFlight || (UGameplayStatics::DoesSaveGameExist(ActiveSlotName, UserIndex)
+		&& !UGameplayStatics::DeleteGameInSlot(ActiveSlotName, UserIndex)))
+	{
+		OnSaveFinished.Broadcast(false);
+		return;
+	}
+	bLoadFailed = false;
 	SaveGame = Cast<UknightSaveGame>(UGameplayStatics::CreateSaveGameObject(UknightSaveGame::StaticClass()));
 	RequestSave();
 }
