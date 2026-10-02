@@ -1,6 +1,8 @@
 # Knight
 
-Knight는 Unreal Engine 5 C++ 프로젝트입니다. 팀에서 사용할 정확한 엔진 버전은 **미정**입니다. 현재 `knight.uproject`에는 `EngineAssociation: 5.8`이 기록되어 있습니다.
+Knight는 NBcamp Unreal Track 9기 Team 3의 Unreal Engine 5 C++ 프로젝트입니다. 팀에서 사용할 정확한 엔진 버전은 **미정**입니다. 현재 `knight.uproject`에는 `EngineAssociation: 5.8`이 기록되어 있습니다.
+
+팀 저장소: [NBcampUnrealTrack/9th-Team3-Final-Project](https://github.com/NBcampUnrealTrack/9th-Team3-Final-Project)
 
 ## 저장소 받기
 
@@ -8,7 +10,7 @@ Git과 Git LFS를 설치한 뒤 다음 명령을 실행합니다.
 
 ```sh
 git lfs install
-git clone https://github.com/baggu4402/knight.git
+git clone https://github.com/NBcampUnrealTrack/9th-Team3-Final-Project.git knight
 cd knight
 git lfs pull
 ```

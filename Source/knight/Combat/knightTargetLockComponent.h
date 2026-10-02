@@ -110,6 +110,8 @@ private:
 	bool HasLineOfSight(const FVector& ViewLocation, const FVector& PointLocation, const AActor* Target) const;
 	void SetLock(const FCandidate& Candidate);
 	void UpdateControlRotation(float DeltaTime) const;
+	/** Mirrors the lock onto the owner's ASC as State.LockedOn, which selects the lock-on camera mode. */
+	void SetLockedOnTag(bool bLocked) const;
 
 	TWeakObjectPtr<AActor> LockedActor;
 	TWeakObjectPtr<USceneComponent> LockedComponent;

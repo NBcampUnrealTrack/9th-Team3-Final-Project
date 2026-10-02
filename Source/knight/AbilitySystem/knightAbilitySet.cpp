@@ -58,7 +58,8 @@ void FknightAbilitySet_GrantedHandles::TakeFromAbilitySystem(UknightAbilitySyste
 	GrantedAttributeSets.Reset();
 }
 
-void UknightAbilitySet::GiveToAbilitySystem(UknightAbilitySystemComponent* ASC, FknightAbilitySet_GrantedHandles* OutGrantedHandles, UObject* SourceObject) const
+void UknightAbilitySet::GiveToAbilitySystem(UknightAbilitySystemComponent* ASC, FknightAbilitySet_GrantedHandles* OutGrantedHandles,
+	UObject* SourceObject, int32 LevelOffset) const
 {
 	if (!ASC)
 	{
@@ -91,7 +92,7 @@ void UknightAbilitySet::GiveToAbilitySystem(UknightAbilitySystemComponent* ASC, 
 			UE_LOG(LogknightAbility, Error, TEXT("%s: GrantedGameplayAbilities[%d] is empty."), *GetName(), Index);
 			continue;
 		}
-		FGameplayAbilitySpec Spec(Entry.Ability, Entry.AbilityLevel, INDEX_NONE, SourceObject);
+		FGameplayAbilitySpec Spec(Entry.Ability, Entry.AbilityLevel + LevelOffset, INDEX_NONE, SourceObject);
 		if (Entry.InputTag.IsValid())
 		{
 			Spec.GetDynamicSpecSourceTags().AddTag(Entry.InputTag);
@@ -112,7 +113,7 @@ void UknightAbilitySet::GiveToAbilitySystem(UknightAbilitySystemComponent* ASC, 
 			continue;
 		}
 		const UGameplayEffect* const EffectCDO = Entry.GameplayEffect->GetDefaultObject<UGameplayEffect>();
-		const FActiveGameplayEffectHandle Handle = ASC->ApplyGameplayEffectToSelf(EffectCDO, Entry.EffectLevel, ASC->MakeEffectContext());
+		const FActiveGameplayEffectHandle Handle = ASC->ApplyGameplayEffectToSelf(EffectCDO, Entry.EffectLevel + LevelOffset, ASC->MakeEffectContext());
 		if (OutGrantedHandles)
 		{
 			OutGrantedHandles->AddGameplayEffectHandle(Handle);

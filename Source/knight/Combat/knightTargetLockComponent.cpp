@@ -1,5 +1,7 @@
 #include "Combat/knightTargetLockComponent.h"
 
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemGlobals.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/OverlapResult.h"
 #include "Engine/World.h"
@@ -8,6 +10,7 @@
 #include "GameFramework/PlayerController.h"
 #include "GenericTeamAgentInterface.h"
 #include "HAL/IConsoleManager.h"
+#include "System/knightGameplayTags.h"
 #include "knight.h"
 
 namespace knightTargetLockCVars
@@ -94,6 +97,7 @@ void UknightTargetLockComponent::ClearLockOn()
 	LockedPartTag = FGameplayTag();
 	TimeOutOfSight = 0.f;
 	SetComponentTickEnabled(false);
+	SetLockedOnTag(false);
 	OnLockOnTargetChanged.Broadcast(nullptr, FGameplayTag());
 }
 
@@ -304,6 +308,7 @@ void UknightTargetLockComponent::SetLock(const FCandidate& Candidate)
 	LockedPartTag = Candidate.Point.PartTag;
 	TimeOutOfSight = 0.f;
 	SetComponentTickEnabled(true);
+	SetLockedOnTag(true);
 	if (bChanged)
 	{
 		UE_LOG(LogknightCombat, Verbose, TEXT("Locked on %s (%s)."), *GetNameSafe(LockedActor.Get()), *LockedPartTag.ToString());
@@ -327,4 +332,12 @@ void UknightTargetLockComponent::UpdateControlRotation(float DeltaTime) const
 	Desired.Roll = 0.f;
 	const FRotator Current = Controller->GetControlRotation();
 	Controller->SetControlRotation(FMath::RInterpTo(Current, Desired, DeltaTime, ControlRotationInterpSpeed));
+}
+
+void UknightTargetLockComponent::SetLockedOnTag(bool bLocked) const
+{
+	if (UAbilitySystemComponent* const ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner()))
+	{
+		ASC->SetLooseGameplayTagCount(knightGameplayTags::State_LockedOn, bLocked ? 1 : 0);
+	}
 }
