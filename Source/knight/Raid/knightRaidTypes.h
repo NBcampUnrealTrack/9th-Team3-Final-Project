@@ -38,6 +38,10 @@ struct KNIGHT_API FknightRaidResult
 {
 	GENERATED_BODY()
 
+	/** Unique across launches and persisted with reward application. */
+	UPROPERTY(BlueprintReadOnly, Category="Raid")
+	FGuid RunId;
+
 	UPROPERTY(BlueprintReadOnly, Category="Raid")
 	FName StageId;
 

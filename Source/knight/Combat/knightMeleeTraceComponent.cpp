@@ -13,6 +13,7 @@
 #include "Interfaces/CombatInterface.h"
 #include "System/knightGameplayTags.h"
 #include "knight.h"
+#include "knightPerfCounters.h"
 
 namespace knightMeleeTraceCVars
 {
@@ -147,6 +148,7 @@ void UknightMeleeTraceComponent::SampleBlade(TArray<FVector>& OutPoints) const
 
 void UknightMeleeTraceComponent::SweepFrame()
 {
+	KNIGHT_PERF_SCOPE("Combat.MeleeSweep");
 	UWorld* const World = GetWorld();
 	if (!World)
 	{
@@ -213,8 +215,8 @@ void UknightMeleeTraceComponent::HandleHit(const FHitResult& Hit)
 
 bool UknightMeleeTraceComponent::IsValidTarget(AActor* Target) const
 {
-	const ICombatInterface* const Combat = Cast<ICombatInterface>(Target);
-	if (!Combat || !Combat->CanReceiveHit(GetOwner()))
+	if (!Target || !Target->GetClass()->ImplementsInterface(UCombatInterface::StaticClass())
+		|| !ICombatInterface::Execute_CanReceiveHitBP(Target, GetOwner()))
 	{
 		return false;
 	}

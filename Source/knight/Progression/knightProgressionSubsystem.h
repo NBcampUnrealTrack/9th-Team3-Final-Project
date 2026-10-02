@@ -30,6 +30,12 @@ public:
 	UFUNCTION(BlueprintPure, Category="Knight|Progression")
 	bool IsStageCleared(FName StageId) const;
 
+	UFUNCTION(BlueprintPure, Category="Knight|Progression")
+	bool IsStageUnlocked(FName StageId) const;
+
+	UFUNCTION(BlueprintCallable, Category="Knight|Progression")
+	bool UnlockStage(FName StageId);
+
 	/** Zero if never cleared. */
 	UFUNCTION(BlueprintPure, Category="Knight|Progression")
 	float GetBestClearTime(FName StageId) const;

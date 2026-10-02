@@ -11,6 +11,7 @@
 #include "StateTreeExecutionContext.h"
 #include "System/knightGameplayTags.h"
 #include "knight.h"
+#include "knightPerfCounters.h"
 
 // Knight Monster Target
 
@@ -21,6 +22,8 @@ void FknightStateTreeMonsterTargetEvaluator::TreeStart(FStateTreeExecutionContex
 
 void FknightStateTreeMonsterTargetEvaluator::Tick(FStateTreeExecutionContext& Context, const float DeltaTime) const
 {
+	KNIGHT_PERF_SCOPE("Monster.Evaluator");
+	KNIGHT_PERF_COUNT("Monster.EvaluatorUpdates", 1);
 	Update(Context.GetInstanceData(*this));
 }
 
@@ -66,6 +69,7 @@ void FknightStateTreeMonsterTargetEvaluator::Update(FInstanceDataType& InstanceD
 
 EStateTreeRunStatus FknightStateTreeActivateAbilityTask::EnterState(FStateTreeExecutionContext& Context, const FStateTreeTransitionResult& Transition) const
 {
+	KNIGHT_PERF_SCOPE("Monster.SelectAbility");
 	FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
 	InstanceData.ActiveHandle = FGameplayAbilitySpecHandle();
 	InstanceData.EndedDelegateHandle.Reset();
@@ -99,6 +103,7 @@ EStateTreeRunStatus FknightStateTreeActivateAbilityTask::EnterState(FStateTreeEx
 		{
 			continue;
 		}
+		KNIGHT_PERF_COUNT("Monster.AbilitiesActivated", 1);
 		const FGameplayAbilitySpec* const Spec = ASC->FindAbilitySpecFromHandle(Handle);
 		if (!Spec || !Spec->IsActive())
 		{
@@ -118,6 +123,7 @@ EStateTreeRunStatus FknightStateTreeActivateAbilityTask::EnterState(FStateTreeEx
 		return EStateTreeRunStatus::Running;
 	}
 
+	KNIGHT_PERF_COUNT("Monster.AbilitySelectFailed", 1);
 	UE_LOG(LogknightAI, Verbose, TEXT("%s: no activatable ability for %s."), *GetNameSafe(InstanceData.Actor), *InstanceData.AbilityTags.ToStringSimple());
 	return EStateTreeRunStatus::Failed;
 }

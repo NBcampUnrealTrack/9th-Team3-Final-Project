@@ -6,6 +6,7 @@
 
 class UButton;
 class UPanelWidget;
+class UTextBlock;
 
 UENUM(BlueprintType)
 enum class EKnightTitlePage : uint8
@@ -28,9 +29,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|Menu")
 	bool ShowPage(EKnightTitlePage NewPage);
 
+	/** Same path as a fixed slot button; useful for UI automation. */
+	void SelectFixedSlot(int32 SlotNumber);
+
 protected:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeConstruct() override;
+	virtual void NativeDestruct() override;
 	virtual EKnightFlowState GetExpectedFlowState() const override { return EKnightFlowState::Title; }
 	virtual bool HandleBackRequested() override;
 	virtual UWidget* GetPreferredFocusTarget() const override;
@@ -52,6 +57,24 @@ protected:
 	TObjectPtr<UButton> Button_SaveSelect;
 
 	UPROPERTY(meta=(BindWidget))
+	TObjectPtr<UButton> Button_Slot1;
+
+	UPROPERTY(meta=(BindWidget))
+	TObjectPtr<UButton> Button_Slot2;
+
+	UPROPERTY(meta=(BindWidget))
+	TObjectPtr<UButton> Button_Slot3;
+
+	UPROPERTY(meta=(BindWidget))
+	TObjectPtr<UTextBlock> Text_Slot1;
+
+	UPROPERTY(meta=(BindWidget))
+	TObjectPtr<UTextBlock> Text_Slot2;
+
+	UPROPERTY(meta=(BindWidget))
+	TObjectPtr<UTextBlock> Text_Slot3;
+
+	UPROPERTY(meta=(BindWidget))
 	TObjectPtr<UButton> Button_Settings;
 
 	UPROPERTY(meta=(BindWidget))
@@ -65,12 +88,27 @@ private:
 	void HandleSaveSelectClicked();
 
 	UFUNCTION()
+	void HandleSlot1Clicked();
+
+	UFUNCTION()
+	void HandleSlot2Clicked();
+
+	UFUNCTION()
+	void HandleSlot3Clicked();
+
+	UFUNCTION()
+	void HandleSaveFinished(bool bSuccess);
+
+	UFUNCTION()
 	void HandleSettingsClicked();
 
 	UFUNCTION()
 	void HandleQuitClicked();
 
 	bool ApplyPage(EKnightTitlePage NewPage, bool bAllowDuringTravel);
+	void RefreshSlots();
+	void OpenLobby();
 
 	EKnightTitlePage CurrentPage = EKnightTitlePage::Home;
+	bool bAwaitingInitialSave = false;
 };

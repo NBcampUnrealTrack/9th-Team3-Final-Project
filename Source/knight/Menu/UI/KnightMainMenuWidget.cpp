@@ -1,7 +1,10 @@
 #include "KnightMainMenuWidget.h"
 
 #include "GameFlow/KnightGameFlowSubsystem.h"
+#include "Engine/GameInstance.h"
 #include "KnightStageEntryWidget.h"
+#include "Raid/knightRaidSubsystem.h"
+#include "Progression/knightSaveSubsystem.h"
 #include "Components/Button.h"
 #include "Components/PanelWidget.h"
 #include "Components/TextBlock.h"
@@ -24,10 +27,13 @@ void UKnightMainMenuWidget::NativeOnInitialized()
 	ValidateRequiredWidget(Panel_Settings, TEXT("Panel_Settings"));
 	ValidateRequiredWidget(Panel_Codex, TEXT("Panel_Codex"));
 	ValidateRequiredWidget(Button_Stage, TEXT("Button_Stage"));
+	ValidateRequiredWidget(Text_ActiveProfile, TEXT("Text_ActiveProfile"));
+	ValidateRequiredWidget(Button_ReturnToTitle, TEXT("Button_ReturnToTitle"));
 	ValidateRequiredWidget(Button_Maintenance, TEXT("Button_Maintenance"));
 	ValidateRequiredWidget(Button_Settings, TEXT("Button_Settings"));
 	ValidateRequiredWidget(Button_Codex, TEXT("Button_Codex"));
 	if (Button_Stage) Button_Stage->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleStageClicked);
+	if (Button_ReturnToTitle) Button_ReturnToTitle->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleReturnToTitleClicked);
 	if (Button_Maintenance) Button_Maintenance->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleMaintenanceClicked);
 	if (Button_Settings) Button_Settings->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleSettingsClicked);
 	if (Button_Codex) Button_Codex->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleCodexClicked);
@@ -38,6 +44,29 @@ void UKnightMainMenuWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 	ApplyPage(EKnightMainMenuPage::Home, true);
+	const UknightSaveSubsystem* const Save = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
+	if (Text_ActiveProfile)
+	{
+		const int32 SlotNumber = Save ? Save->GetActiveFixedSlotNumber() : 0;
+		Text_ActiveProfile->SetText(SlotNumber > 0
+			? FText::Format(LOCTEXT("ActiveSlot", "세이브 {0}"), FText::AsNumber(SlotNumber))
+			: LOCTEXT("NoActiveSlot", "세이브 없음"));
+	}
+	UknightRaidSubsystem* const Session = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightRaidSubsystem>() : nullptr;
+	FknightRaidResult Result;
+	if (Session && Session->GetLastResult(Result))
+	{
+		int32 RewardCount = 0;
+		for (const FknightItemStack& Reward : Result.Rewards)
+		{
+			RewardCount += FMath::Max(0, Reward.Count);
+		}
+		SetStatusText(Result.bSuccess
+			? FText::Format(LOCTEXT("RaidSuccessResult", "레이드 성공: {0} | 보상 {1}개"),
+				FText::FromName(Result.StageId), FText::AsNumber(RewardCount))
+			: FText::Format(LOCTEXT("RaidFailedResult", "레이드 실패: {0}"), FText::FromName(Result.StageId)));
+		Session->ClearLastResult();
+	}
 }
 
 void UKnightMainMenuWidget::NativeDestruct()
@@ -132,7 +161,7 @@ UWidget* UKnightMainMenuWidget::GetPreferredFocusTarget() const
 	{
 		return Button_Back;
 	}
-	for (UButton* Button : { Button_Stage.Get(), Button_Maintenance.Get(), Button_Settings.Get(), Button_Codex.Get() })
+	for (UButton* Button : { Button_Stage.Get(), Button_Maintenance.Get(), Button_Settings.Get(), Button_Codex.Get(), Button_ReturnToTitle.Get() })
 	{
 		if (Button && Button->GetIsFocusable() && Button->IsVisible() && Button->GetIsEnabled())
 		{
@@ -146,6 +175,7 @@ void UKnightMainMenuWidget::SetTravelControlsEnabled(bool bEnabled)
 {
 	Super::SetTravelControlsEnabled(bEnabled);
 	if (Button_Stage) Button_Stage->SetIsEnabled(bEnabled);
+	if (Button_ReturnToTitle) Button_ReturnToTitle->SetIsEnabled(bEnabled);
 	if (Button_Maintenance) Button_Maintenance->SetIsEnabled(bEnabled);
 	if (Button_Settings) Button_Settings->SetIsEnabled(bEnabled);
 	if (Button_Codex) Button_Codex->SetIsEnabled(bEnabled);
@@ -159,6 +189,11 @@ void UKnightMainMenuWidget::SetTravelControlsEnabled(bool bEnabled)
 void UKnightMainMenuWidget::HandleStageClicked()
 {
 	ShowPage(EKnightMainMenuPage::Stage);
+}
+
+void UKnightMainMenuWidget::HandleReturnToTitleClicked()
+{
+	if (UKnightGameFlowSubsystem* const Flow = GetFlow()) Flow->RequestOpenTitle();
 }
 
 void UKnightMainMenuWidget::HandleMaintenanceClicked()
@@ -226,7 +261,8 @@ bool UKnightMainMenuWidget::RebuildStageEntries()
 			UE_LOG(Logknight, Error, TEXT("Could not create stage entry for %s using %s."), *Stage.StageId.ToString(), *StageEntryWidgetClass->GetName());
 			continue;
 		}
-		Entry->SetStage(Stage.StageId, Stage.DisplayName);
+		Entry->SetStage(Stage.StageId, Stage.bDevelopmentOnly
+			? FText::Format(LOCTEXT("DevStageName", "[DEV] {0}"), Stage.DisplayName) : Stage.DisplayName);
 		Entry->OnStageSelected.AddUniqueDynamic(this, &ThisClass::HandleStageEntrySelected);
 		if (!Box_StageEntries->AddChildToVerticalBox(Entry))
 		{

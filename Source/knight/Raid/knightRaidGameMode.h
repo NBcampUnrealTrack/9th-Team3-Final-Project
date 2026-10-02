@@ -30,6 +30,23 @@ public:
 	virtual void StartPlay() override;
 	virtual void HandlePlayerDeath(AController* PlayerController) override;
 
+	/** Explicit hooks for objectives and the player system. No monster dependency is required. */
+	UFUNCTION(BlueprintCallable, Category="Knight|Raid")
+	bool RequestStartRaid();
+
+	UFUNCTION(BlueprintCallable, Category="Knight|Raid")
+	void NotifyObjectiveCompleted();
+
+	UFUNCTION(BlueprintCallable, Category="Knight|Raid")
+	void NotifyPlayerDefeated();
+
+	UFUNCTION(BlueprintCallable, Category="Knight|Raid")
+	void RequestReturnToLobby();
+
+	/** Test hook; expose only in development builds and test content. */
+	UFUNCTION(BlueprintCallable, Category="Knight|Raid|Development", meta=(DevelopmentOnly))
+	void DebugFinishRaid(bool bSuccess);
+
 	/** Gives up the raid (pause menu "return to base"). */
 	UFUNCTION(BlueprintCallable, Category="Knight|Raid")
 	void AbandonRaid();

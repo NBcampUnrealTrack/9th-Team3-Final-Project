@@ -17,7 +17,12 @@ class KNIGHT_API UknightRaidSubsystem : public UGameInstanceSubsystem
 	GENERATED_BODY()
 
 public:
-	void RecordResult(const FknightRaidResult& Result);
+	/** Runtime context survives map travel. A new request replaces an unfinished run. */
+	FGuid BeginRun(FName StageId);
+	void CancelRun(FGuid RunId);
+	FGuid GetCurrentRunId() const { return CurrentRunId; }
+	FName GetSelectedStageId() const { return SelectedStageId; }
+	bool RecordResult(const FknightRaidResult& Result);
 
 	/** False if no raid has finished since the last ClearLastResult. */
 	UFUNCTION(BlueprintCallable, Category="Knight|Raid")
@@ -31,6 +36,8 @@ public:
 	FknightRaidResultRecorded OnRaidResultRecorded;
 
 private:
+	FGuid CurrentRunId;
+	FName SelectedStageId;
 	FknightRaidResult LastResult;
 	bool bHasResult = false;
 };

@@ -27,6 +27,10 @@ struct KNIGHT_API FKnightStageDefinition
 	/** Raid rules (target monster, time limit). Optional; loaded by the raid GameMode on arrival. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stage")
 	TSoftObjectPtr<UknightRaidDefinition> RaidDefinition;
+
+	/** Listed only in editor PIE for isolated developer validation. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stage")
+	bool bDevelopmentOnly = false;
 };
 
 /** Definitions only; referencing this asset does not load the gameplay maps. */
