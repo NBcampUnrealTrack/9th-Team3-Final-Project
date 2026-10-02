@@ -4,7 +4,7 @@
 #include "UObject/Interface.h"
 #include "InteractableInterface.generated.h"
 
-UINTERFACE(MinimalAPI, meta=(CannotImplementInterfaceInBlueprint))
+UINTERFACE(MinimalAPI, BlueprintType)
 class UInteractableInterface : public UInterface
 {
 	GENERATED_BODY()
@@ -16,13 +16,21 @@ class KNIGHT_API IInteractableInterface
 	GENERATED_BODY()
 
 public:
-	virtual bool CanInteract(const AActor* Interactor) const = 0;
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category="Knight|Interaction")
+	bool CanInteract(AActor* Interactor) const;
+	virtual bool CanInteract_Implementation(AActor* Interactor) const { return false; }
 
 	/** Prompt text shown by the interaction UI. */
-	virtual FText GetInteractionPrompt() const = 0;
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category="Knight|Interaction")
+	FText GetInteractionPrompt() const;
+	virtual FText GetInteractionPrompt_Implementation() const { return FText::GetEmpty(); }
 
 	/** Seconds the input must be held. Zero means a single press. */
-	virtual float GetInteractionDuration() const { return 0.f; }
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category="Knight|Interaction")
+	float GetInteractionDuration() const;
+	virtual float GetInteractionDuration_Implementation() const { return 0.f; }
 
-	virtual void Interact(AActor* Interactor) = 0;
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category="Knight|Interaction")
+	void Interact(AActor* Interactor);
+	virtual void Interact_Implementation(AActor* Interactor) {}
 };

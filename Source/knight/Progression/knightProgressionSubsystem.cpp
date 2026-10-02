@@ -1,11 +1,14 @@
 #include "Progression/knightProgressionSubsystem.h"
 
 #include "Engine/GameInstance.h"
+#include "GameFlow/KnightGameFlowSubsystem.h"
+#include "GameFlow/KnightStageCatalog.h"
 #include "Item/knightItemDefinitions.h"
 #include "knightInventoryLibrary.h"
 #include "Progression/knightSaveGame.h"
 #include "Progression/knightSaveSubsystem.h"
 #include "Raid/knightRaidSubsystem.h"
+#include "Raid/knightRaidDefinition.h"
 #include "knight.h"
 
 void UknightProgressionSubsystem::Initialize(FSubsystemCollectionBase& Collection)
@@ -47,11 +50,11 @@ void UknightProgressionSubsystem::CommitChange()
 void UknightProgressionSubsystem::HandleRaidResult(const FknightRaidResult& Result)
 {
 	UknightSaveGame* const Save = GetSave();
-	if (!Save)
+	if (!Save || !Result.RunId.IsValid() || Save->AppliedRaidRuns.Contains(Result.RunId))
 	{
 		return;
 	}
-	Save->TotalPlayTime += Result.ElapsedTime;
+	Save->AppliedRaidRuns.Add(Result.RunId);
 	if (Result.bSuccess && !Result.StageId.IsNone())
 	{
 		FknightStageRecord& Record = Save->StageRecords.FindOrAdd(Result.StageId);
@@ -63,12 +66,40 @@ void UknightProgressionSubsystem::HandleRaidResult(const FknightRaidResult& Resu
 	}
 	for (const FknightItemStack& Reward : Result.Rewards)
 	{
-		if (Reward.Item && Reward.Count > 0)
+		if (Result.bSuccess && Reward.Item && Reward.Count > 0 && Reward.Item->GetPrimaryAssetId().IsValid()
+			&& Save->ItemCounts.FindRef(Reward.Item->GetPrimaryAssetId()) <= MAX_int32 - Reward.Count)
 		{
 			Save->ItemCounts.FindOrAdd(Reward.Item->GetPrimaryAssetId()) += Reward.Count;
 		}
 	}
 	CommitChange();
+}
+
+bool UknightProgressionSubsystem::IsStageUnlocked(FName StageId) const
+{
+	const UknightSaveGame* const Save = GetSave();
+	const UKnightGameFlowSubsystem* const Flow = GetGameInstance()->GetSubsystem<UKnightGameFlowSubsystem>();
+	FKnightStageDefinition Stage;
+	if (!Save || !Flow || !Flow->FindStageDefinition(StageId, Stage)) return false;
+	if (Save->UnlockedStages.Contains(StageId)) return true;
+	if (Stage.RaidDefinition.IsNull()) return true; // Existing flow-test entries remain available.
+	const UknightRaidDefinition* const Definition = Stage.RaidDefinition.LoadSynchronous();
+	return Definition && (Definition->RequiredClearedStageId.IsNone()
+		|| IsStageCleared(Definition->RequiredClearedStageId));
+}
+
+bool UknightProgressionSubsystem::UnlockStage(FName StageId)
+{
+	UknightSaveGame* const Save = GetSave();
+	const UKnightGameFlowSubsystem* const Flow = GetGameInstance()->GetSubsystem<UKnightGameFlowSubsystem>();
+	FKnightStageDefinition Stage;
+	if (!Save || !Flow || !Flow->FindStageDefinition(StageId, Stage)) return false;
+	if (!Save->UnlockedStages.Contains(StageId))
+	{
+		Save->UnlockedStages.Add(StageId);
+		CommitChange();
+	}
+	return true;
 }
 
 bool UknightProgressionSubsystem::IsStageCleared(FName StageId) const
@@ -95,7 +126,8 @@ int32 UknightProgressionSubsystem::GetItemCount(const UknightItemDefinition* Ite
 void UknightProgressionSubsystem::AddItem(const UknightItemDefinition* Item, int32 Count)
 {
 	UknightSaveGame* const Save = GetSave();
-	if (!Save || !Item || Count <= 0)
+	if (!Save || !Item || !Item->GetPrimaryAssetId().IsValid() || Count <= 0
+		|| GetItemCount(Item) > MAX_int32 - Count)
 	{
 		return;
 	}
@@ -156,12 +188,24 @@ bool UknightProgressionSubsystem::CanUpgradePart(const UknightPartItemDefinition
 	{
 		return false;
 	}
+	TMap<FPrimaryAssetId, int32> TotalCosts;
 	for (const FknightItemCost& Cost : Part->UpgradeSteps[Level].Costs)
 	{
-		if (!Cost.Item || GetItemCount(Cost.Item) < Cost.Count)
+		if (!Cost.Item || !Cost.Item->GetPrimaryAssetId().IsValid() || Cost.Count <= 0)
 		{
 			return false;
 		}
+		int32& Total = TotalCosts.FindOrAdd(Cost.Item->GetPrimaryAssetId());
+		if (Total > MAX_int32 - Cost.Count)
+		{
+			return false;
+		}
+		Total += Cost.Count;
+	}
+	for (const TPair<FPrimaryAssetId, int32>& Cost : TotalCosts)
+	{
+		const UknightSaveGame* const Save = GetSave();
+		if (!Save || Save->ItemCounts.FindRef(Cost.Key) < Cost.Value) return false;
 	}
 	return true;
 }
