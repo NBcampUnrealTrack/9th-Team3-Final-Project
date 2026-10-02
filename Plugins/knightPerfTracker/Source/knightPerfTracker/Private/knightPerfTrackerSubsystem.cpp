@@ -237,8 +237,16 @@ void UknightPerfTrackerSubsystem::DrawOverlay(float FrameMs) const
 		{
 			continue;
 		}
-		Text.Appendf(Mode == EknightPerfCounterMode::TimeMs ? TEXT("\n  %s  %.3f ms") : TEXT("\n  %s  %.0f"),
-			*FknightPerfCounters::GetName(Index).ToString(), Value);
+		// Appendf only accepts a literal format string, so each mode gets its own call.
+		const FString Name = FknightPerfCounters::GetName(Index).ToString();
+		if (Mode == EknightPerfCounterMode::TimeMs)
+		{
+			Text.Appendf(TEXT("\n  %s  %.3f ms"), *Name, Value);
+		}
+		else
+		{
+			Text.Appendf(TEXT("\n  %s  %.0f"), *Name, Value);
+		}
 		++Shown;
 	}
 
