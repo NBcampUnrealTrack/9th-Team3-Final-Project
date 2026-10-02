@@ -5,6 +5,8 @@
 #include "UI/KnightMenuWidgetBase.h"
 #include "UI/KnightTitleMenuWidget.h"
 #include "GameFlow/KnightGameFlowSubsystem.h"
+#include "Progression/knightSaveGame.h"
+#include "Progression/knightSaveSubsystem.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "knight.h"
@@ -79,4 +81,49 @@ void AKnightMenuPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReas
 		MenuWidget = nullptr;
 	}
 	Super::EndPlay(EndPlayReason);
+}
+
+void AKnightMenuPlayerController::KnightCoreLaunchTwice(FName StageId)
+{
+#if WITH_EDITOR
+	UKnightGameFlowSubsystem* const Flow = GetGameInstance()->GetSubsystem<UKnightGameFlowSubsystem>();
+	const bool bFirst = Flow && Flow->RequestStartStage(StageId);
+	const bool bSecond = Flow && Flow->RequestStartStage(StageId);
+	UE_LOG(Logknight, Log, TEXT("KnightCoreLaunchTwice stage=%s first=%d second=%d pending=%d"),
+		*StageId.ToString(), bFirst, bSecond, Flow && Flow->IsTravelPending());
+#endif
+}
+
+void AKnightMenuPlayerController::KnightCoreLaunch(FName StageId)
+{
+#if WITH_EDITOR
+	UKnightGameFlowSubsystem* const Flow = GetGameInstance()->GetSubsystem<UKnightGameFlowSubsystem>();
+	UE_LOG(Logknight, Log, TEXT("KnightCoreLaunch stage=%s accepted=%d"),
+		*StageId.ToString(), Flow && Flow->RequestStartStage(StageId));
+#endif
+}
+
+void AKnightMenuPlayerController::KnightCoreFailNextRaidLoad()
+{
+#if WITH_EDITOR
+	if (UKnightGameFlowSubsystem* const Flow = GetGameInstance()->GetSubsystem<UKnightGameFlowSubsystem>())
+	{
+		Flow->DebugFailNextRaidLoad();
+		UE_LOG(Logknight, Log, TEXT("KnightCoreFailNextRaidLoad armed"));
+	}
+#endif
+}
+
+void AKnightMenuPlayerController::KnightCoreProfileStatus()
+{
+#if WITH_EDITOR
+	const UknightSaveSubsystem* const Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	const UknightSaveGame* const Save = Saves ? Saves->GetSaveGame() : nullptr;
+	const int32 MaterialCount = Save ? Save->ItemCounts.FindRef(FPrimaryAssetId(TEXT("Item"), TEXT("DA_CoreTestMaterial"))) : -1;
+	UE_LOG(Logknight, Log, TEXT("KnightCoreProfileStatus slot=%s exists=%d loadFailed=%d busy=%d material=%d upgrades=%d unlocks=%d runs=%d"),
+		Saves ? *Saves->GetActiveSlotId() : TEXT("None"), Saves && Saves->DoesSlotExist(Saves->GetActiveSlotId()),
+		Saves && Saves->DidLoadFail(), Saves && Saves->IsSaveInFlight(), MaterialCount,
+		Save ? Save->ItemUpgradeLevels.Num() : -1, Save ? Save->UnlockedStages.Num() : -1,
+		Save ? Save->AppliedRaidRuns.Num() : -1);
+#endif
 }

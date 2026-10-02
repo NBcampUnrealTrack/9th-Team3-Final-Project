@@ -126,3 +126,45 @@ void AKnightFlowTestPlayerController::KnightCoreProbeInterfaces()
 	}
 	UE_LOG(Logknight, Warning, TEXT("KnightCoreProbeInterfaces: no probe actor in the level."));
 }
+
+void AKnightFlowTestPlayerController::KnightCoreSaveQueueTest(const FString& AttemptSwitchSlot)
+{
+#if WITH_EDITOR
+	UknightSaveSubsystem* const Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	UknightSaveGame* const Save = Saves ? Saves->GetSaveGame() : nullptr;
+	if (!Save || Saves->IsSaveInFlight()) return;
+	const FPrimaryAssetId ItemId(TEXT("Item"), TEXT("DA_CoreTestMaterial"));
+	Save->ItemCounts.FindOrAdd(ItemId) += 1;
+	Saves->RequestSave();
+	const bool bSwitchedWhileSaving = Saves->SelectSlot(AttemptSwitchSlot);
+	Save->ItemCounts.FindOrAdd(ItemId) += 1;
+	Save->ItemUpgradeLevels.Add(ItemId, 3);
+	Save->UnlockedStages.Add(FName(TEXT("Core_Raid_Test")));
+	Saves->RequestSave();
+	UE_LOG(Logknight, Log, TEXT("KnightCoreSaveQueueTest slot=%s switchAccepted=%d busy=%d latestMaterial=%d upgrade=%d unlock=%d"),
+		*Saves->GetActiveSlotId(), bSwitchedWhileSaving, Saves->IsSaveInFlight(),
+		Save->ItemCounts.FindRef(ItemId), Save->ItemUpgradeLevels.FindRef(ItemId), Save->UnlockedStages.Contains(FName(TEXT("Core_Raid_Test"))));
+#endif
+}
+
+void AKnightFlowTestPlayerController::KnightCoreSaveOnce()
+{
+#if WITH_EDITOR
+	if (UknightSaveSubsystem* const Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>())
+	{
+		Saves->RequestSave();
+		UE_LOG(Logknight, Log, TEXT("KnightCoreSaveOnce slot=%s busy=%d"), *Saves->GetActiveSlotId(), Saves->IsSaveInFlight());
+	}
+#endif
+}
+
+void AKnightFlowTestPlayerController::KnightCoreFailNextSaves(int32 Count)
+{
+#if WITH_EDITOR
+	if (UknightSaveSubsystem* const Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>())
+	{
+		Saves->DebugFailNextSaves(Count);
+		UE_LOG(Logknight, Log, TEXT("KnightCoreFailNextSaves count=%d"), Count);
+	}
+#endif
+}

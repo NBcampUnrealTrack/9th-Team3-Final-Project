@@ -58,6 +58,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|Flow")
 	bool RequestStartStage(FName StageId);
 
+#if WITH_EDITOR
+	/** Test hook consumed by the next asynchronous raid-definition completion. */
+	void DebugFailNextRaidLoad() { bDebugFailNextRaidLoad = true; }
+#endif
+
 	/** Native GameMode initialization hook; call from a Gameplay GameMode's InitGame. */
 	void RegisterEnteredGameplay(UWorld* EnteredWorld);
 
@@ -104,4 +109,7 @@ private:
 	TWeakObjectPtr<UWorld> RegisteredWorld;
 	FDelegateHandle TravelFailureHandle;
 	FDelegateHandle PostLoadMapHandle;
+#if WITH_EDITOR
+	bool bDebugFailNextRaidLoad = false;
+#endif
 };

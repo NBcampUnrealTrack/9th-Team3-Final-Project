@@ -98,6 +98,15 @@ bool UKnightGameFlowSubsystem::GetStageDefinitions(TArray<FKnightStageDefinition
 		}
 		else
 		{
+			if (Stage.bDevelopmentOnly)
+			{
+				bool bEditorPIE = false;
+#if WITH_EDITOR
+				const UWorld* const World = GetGameInstance() ? GetGameInstance()->GetWorld() : nullptr;
+				bEditorPIE = World && World->WorldType == EWorldType::PIE;
+#endif
+				if (!bEditorPIE) continue;
+			}
 			OutStages.Add(Stage);
 		}
 	}
@@ -255,7 +264,12 @@ void UKnightGameFlowSubsystem::HandleRaidDefinitionLoaded()
 	const FName StageId = PendingStageId;
 	PendingLoadHandle.Reset();
 	PendingRaidDefinitionPath.Reset();
-	if (!Cast<UknightRaidDefinition>(DefinitionPath.ResolveObject()) || !Source
+	bool bInjectedFailure = false;
+#if WITH_EDITOR
+	bInjectedFailure = bDebugFailNextRaidLoad;
+	bDebugFailNextRaidLoad = false;
+#endif
+	if (bInjectedFailure || !Cast<UknightRaidDefinition>(DefinitionPath.ResolveObject()) || !Source
 		|| Source != GetGameInstance()->GetWorld())
 	{
 		ResetPendingTravel();

@@ -34,7 +34,7 @@ class KNIGHT_API UknightSaveGame : public USaveGame
 public:
 	/**
 	 * Bump when the layout changes, and handle the old version in UknightSaveSubsystem::MigrateSave.
-	 * 1: items keyed by FName. 2: items keyed by primary asset id, equipment loadout.
+	 * 1: items keyed by FName. 2: primary asset IDs and equipment. 3: explicit unlocks and applied run IDs.
 	 */
 	static constexpr int32 CurrentVersion = 3;
 

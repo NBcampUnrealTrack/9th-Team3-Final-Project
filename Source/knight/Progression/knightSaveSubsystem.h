@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Subsystems/GameInstanceSubsystem.h"
+#include "TimerManager.h"
 #include "knightSaveSubsystem.generated.h"
 
 class USaveGame;
@@ -30,6 +31,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|Save")
 	bool SelectSlot(const FString& SlotId);
 
+	/** Presence only; a damaged slot may still report true and must be selected to validate it. */
+	UFUNCTION(BlueprintPure, Category="Knight|Save")
+	bool DoesSlotExist(const FString& SlotId) const;
+
+	UFUNCTION(BlueprintPure, Category="Knight|Save")
+	bool IsSaveInFlight() const { return bSaveInFlight; }
+
 	UFUNCTION(BlueprintPure, Category="Knight|Save")
 	FString GetActiveSlotId() const { return ActiveSlotId; }
 
@@ -49,9 +57,15 @@ public:
 	static const FString SlotName;
 	static constexpr int32 UserIndex = 0;
 
+#if WITH_EDITOR
+	/** Test hook: the next N saves complete as failures without writing a file. */
+	void DebugFailNextSaves(int32 Count) { DebugFailuresRemaining = FMath::Max(0, Count); }
+#endif
+
 private:
 	bool LoadSlot(const FString& Slot);
 	bool MigrateSave(UknightSaveGame& Save) const;
+	static bool MakeSlotName(const FString& SlotId, FString& OutSlotName);
 	void StartAsyncSave();
 	void HandleAsyncSaveFinished(const FString& Slot, int32 User, bool bSuccess);
 
@@ -68,4 +82,10 @@ private:
 
 	bool bSaveInFlight = false;
 	bool bSavePending = false;
+	FString InFlightSlotName;
+#if WITH_EDITOR
+	int32 DebugFailuresRemaining = 0;
+	FTimerHandle DebugFailureTimer;
+	void HandleDebugSaveFailure();
+#endif
 };

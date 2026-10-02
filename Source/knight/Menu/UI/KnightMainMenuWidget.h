@@ -86,6 +86,12 @@ protected:
 	TObjectPtr<UButton> Button_Stage;
 
 	UPROPERTY(meta=(BindWidget))
+	TObjectPtr<UTextBlock> Text_ActiveProfile;
+
+	UPROPERTY(meta=(BindWidget))
+	TObjectPtr<UButton> Button_ChangeProfile;
+
+	UPROPERTY(meta=(BindWidget))
 	TObjectPtr<UButton> Button_Maintenance;
 
 	UPROPERTY(meta=(BindWidget))
@@ -103,6 +109,9 @@ protected:
 private:
 	UFUNCTION()
 	void HandleStageClicked();
+
+	UFUNCTION()
+	void HandleChangeProfileClicked();
 
 	UFUNCTION()
 	void HandleMaintenanceClicked();

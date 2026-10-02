@@ -1,6 +1,7 @@
 #include "Progression/knightSaveSubsystem.h"
 
 #include "Kismet/GameplayStatics.h"
+#include "Engine/World.h"
 #include "Progression/knightSaveGame.h"
 #include "knight.h"
 
@@ -86,14 +87,28 @@ bool UknightSaveSubsystem::MigrateSave(UknightSaveGame& Save) const
 	return true;
 }
 
-bool UknightSaveSubsystem::SelectSlot(const FString& SlotId)
+bool UknightSaveSubsystem::MakeSlotName(const FString& SlotId, FString& OutSlotName)
 {
-	if (bSaveInFlight || SlotId.IsEmpty() || SlotId.Len() > 48) return false;
+	OutSlotName.Reset();
+	if (SlotId.IsEmpty() || SlotId.Len() > 48) return false;
 	for (const TCHAR Character : SlotId)
 	{
 		if (!FChar::IsAlnum(Character) && Character != TEXT('_') && Character != TEXT('-')) return false;
 	}
-	const FString NewSlot = SlotId == TEXT("Default") ? SlotName : TEXT("KnightProgress_") + SlotId;
+	OutSlotName = SlotId == TEXT("Default") ? SlotName : TEXT("KnightProgress_") + SlotId;
+	return true;
+}
+
+bool UknightSaveSubsystem::DoesSlotExist(const FString& SlotId) const
+{
+	FString Name;
+	return MakeSlotName(SlotId, Name) && UGameplayStatics::DoesSaveGameExist(Name, UserIndex);
+}
+
+bool UknightSaveSubsystem::SelectSlot(const FString& SlotId)
+{
+	FString NewSlot;
+	if (bSaveInFlight || !MakeSlotName(SlotId, NewSlot)) return false;
 	if (NewSlot == ActiveSlotName) return !bLoadFailed && SaveGame != nullptr;
 	ActiveSlotId = SlotId;
 	ActiveSlotName = NewSlot;
@@ -120,28 +135,59 @@ void UknightSaveSubsystem::StartAsyncSave()
 {
 	bSaveInFlight = true;
 	bSavePending = false;
+	InFlightSlotName = ActiveSlotName;
 	SaveSnapshot = DuplicateObject<UknightSaveGame>(SaveGame, this);
 	if (!SaveSnapshot)
 	{
 		bSaveInFlight = false;
+		InFlightSlotName.Reset();
 		OnSaveFinished.Broadcast(false);
 		return;
 	}
-	UGameplayStatics::AsyncSaveGameToSlot(SaveSnapshot, ActiveSlotName, UserIndex,
+	#if WITH_EDITOR
+	if (DebugFailuresRemaining > 0)
+	{
+		--DebugFailuresRemaining;
+		if (UWorld* const World = GetWorld())
+		{
+			World->GetTimerManager().SetTimer(DebugFailureTimer, this, &ThisClass::HandleDebugSaveFailure, 0.25f, false);
+			return;
+		}
+		HandleAsyncSaveFinished(InFlightSlotName, UserIndex, false);
+		return;
+	}
+	#endif
+	UGameplayStatics::AsyncSaveGameToSlot(SaveSnapshot, InFlightSlotName, UserIndex,
 		FAsyncSaveGameToSlotDelegate::CreateUObject(this, &ThisClass::HandleAsyncSaveFinished));
 }
 
+#if WITH_EDITOR
+void UknightSaveSubsystem::HandleDebugSaveFailure()
+{
+	HandleAsyncSaveFinished(InFlightSlotName, UserIndex, false);
+}
+#endif
+
 void UknightSaveSubsystem::HandleAsyncSaveFinished(const FString& Slot, int32 User, bool bSuccess)
 {
+	const FString CompletedSlot = Slot;
+	if (!bSaveInFlight || CompletedSlot != InFlightSlotName || User != UserIndex)
+	{
+		UE_LOG(Logknight, Error, TEXT("Ignoring stale save completion for slot %s."), *CompletedSlot);
+		return;
+	}
 	bSaveInFlight = false;
 	SaveSnapshot = nullptr;
+	InFlightSlotName.Reset();
 	if (!bSuccess)
 	{
-		UE_LOG(Logknight, Error, TEXT("Saving slot %s failed."), *Slot);
+		UE_LOG(Logknight, Error, TEXT("Saving slot %s failed."), *CompletedSlot);
 	}
+	UE_LOG(Logknight, Log, TEXT("Save completion slot=%s success=%d followUp=%d"), *CompletedSlot, bSuccess, bSavePending);
 	if (bSavePending)
 	{
 		StartAsyncSave();
+		return;
 	}
 	OnSaveFinished.Broadcast(bSuccess);
 }
