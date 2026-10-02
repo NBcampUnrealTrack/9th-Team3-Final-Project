@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "TimerManager.h"
+#include "Containers/Ticker.h"
 #include "knightSaveSubsystem.generated.h"
 
 class USaveGame;
@@ -22,6 +23,7 @@ class KNIGHT_API UknightSaveSubsystem : public UGameInstanceSubsystem
 
 public:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
+	virtual void Deinitialize() override;
 
 	/** Null when the selected slot exists but cannot be safely loaded. */
 	UFUNCTION(BlueprintPure, Category="Knight|Save")
@@ -34,6 +36,17 @@ public:
 	/** Presence only; a damaged slot may still report true and must be selected to validate it. */
 	UFUNCTION(BlueprintPure, Category="Knight|Save")
 	bool DoesSlotExist(const FString& SlotId) const;
+
+	/** Fixed title slots: 1 = legacy Default, 2 = Slot2, 3 = Slot3. */
+	UFUNCTION(BlueprintCallable, Category="Knight|Save")
+	bool SelectFixedSlot(int32 SlotNumber);
+
+	/** Reads a disk snapshot without changing the active profile. */
+	UFUNCTION(BlueprintCallable, Category="Knight|Save")
+	bool GetFixedSlotInfo(int32 SlotNumber, bool& bExists, bool& bReadable, float& PlayTimeSeconds) const;
+
+	UFUNCTION(BlueprintPure, Category="Knight|Save")
+	int32 GetActiveFixedSlotNumber() const;
 
 	UFUNCTION(BlueprintPure, Category="Knight|Save")
 	bool IsSaveInFlight() const { return bSaveInFlight; }
@@ -64,8 +77,13 @@ public:
 
 private:
 	bool LoadSlot(const FString& Slot);
+	UknightSaveGame* ReadExistingSlot(const FString& Slot) const;
 	bool MigrateSave(UknightSaveGame& Save) const;
 	static bool MakeSlotName(const FString& SlotId, FString& OutSlotName);
+	static FString FixedSlotId(int32 SlotNumber);
+	bool TickPlayTime(float DeltaTime);
+	void AccumulatePlayTime();
+	bool CanCountPlayTime() const;
 	void StartAsyncSave();
 	void HandleAsyncSaveFinished(const FString& Slot, int32 User, bool bSuccess);
 
@@ -79,6 +97,11 @@ private:
 	FString ActiveSlotId = TEXT("Default");
 	FString ActiveSlotName = SlotName;
 	bool bLoadFailed = false;
+	bool bSlotSelected = false;
+	bool bWasCountingPlayTime = false;
+	double LastPlayTimeSample = 0.0;
+	double SecondsSincePeriodicSave = 0.0;
+	FTSTicker::FDelegateHandle PlayTimeTickerHandle;
 
 	bool bSaveInFlight = false;
 	bool bSavePending = false;

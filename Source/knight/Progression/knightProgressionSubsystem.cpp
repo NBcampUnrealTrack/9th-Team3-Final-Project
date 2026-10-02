@@ -55,7 +55,6 @@ void UknightProgressionSubsystem::HandleRaidResult(const FknightRaidResult& Resu
 		return;
 	}
 	Save->AppliedRaidRuns.Add(Result.RunId);
-	Save->TotalPlayTime += Result.ElapsedTime;
 	if (Result.bSuccess && !Result.StageId.IsNone())
 	{
 		FknightStageRecord& Record = Save->StageRecords.FindOrAdd(Result.StageId);

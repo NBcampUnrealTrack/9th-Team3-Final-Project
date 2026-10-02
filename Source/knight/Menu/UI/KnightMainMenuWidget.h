@@ -89,7 +89,7 @@ protected:
 	TObjectPtr<UTextBlock> Text_ActiveProfile;
 
 	UPROPERTY(meta=(BindWidget))
-	TObjectPtr<UButton> Button_ChangeProfile;
+	TObjectPtr<UButton> Button_ReturnToTitle;
 
 	UPROPERTY(meta=(BindWidget))
 	TObjectPtr<UButton> Button_Maintenance;
@@ -111,7 +111,7 @@ private:
 	void HandleStageClicked();
 
 	UFUNCTION()
-	void HandleChangeProfileClicked();
+	void HandleReturnToTitleClicked();
 
 	UFUNCTION()
 	void HandleMaintenanceClicked();

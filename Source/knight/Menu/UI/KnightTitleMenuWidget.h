@@ -5,7 +5,6 @@
 #include "KnightTitleMenuWidget.generated.h"
 
 class UButton;
-class UEditableTextBox;
 class UPanelWidget;
 class UTextBlock;
 
@@ -29,6 +28,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category="Knight|Menu")
 	bool ShowPage(EKnightTitlePage NewPage);
+
+	/** Same path as a fixed slot button; useful for UI automation. */
+	void SelectFixedSlot(int32 SlotNumber);
 
 protected:
 	virtual void NativeOnInitialized() override;
@@ -55,13 +57,22 @@ protected:
 	TObjectPtr<UButton> Button_SaveSelect;
 
 	UPROPERTY(meta=(BindWidget))
-	TObjectPtr<UEditableTextBox> Input_SlotId;
+	TObjectPtr<UButton> Button_Slot1;
 
 	UPROPERTY(meta=(BindWidget))
-	TObjectPtr<UButton> Button_UseSlot;
+	TObjectPtr<UButton> Button_Slot2;
 
 	UPROPERTY(meta=(BindWidget))
-	TObjectPtr<UTextBlock> Text_SlotInfo;
+	TObjectPtr<UButton> Button_Slot3;
+
+	UPROPERTY(meta=(BindWidget))
+	TObjectPtr<UTextBlock> Text_Slot1;
+
+	UPROPERTY(meta=(BindWidget))
+	TObjectPtr<UTextBlock> Text_Slot2;
+
+	UPROPERTY(meta=(BindWidget))
+	TObjectPtr<UTextBlock> Text_Slot3;
 
 	UPROPERTY(meta=(BindWidget))
 	TObjectPtr<UButton> Button_Settings;
@@ -77,10 +88,13 @@ private:
 	void HandleSaveSelectClicked();
 
 	UFUNCTION()
-	void HandleUseSlotClicked();
+	void HandleSlot1Clicked();
 
 	UFUNCTION()
-	void HandleSlotIdChanged(const FText& NewText);
+	void HandleSlot2Clicked();
+
+	UFUNCTION()
+	void HandleSlot3Clicked();
 
 	UFUNCTION()
 	void HandleSaveFinished(bool bSuccess);
@@ -92,7 +106,7 @@ private:
 	void HandleQuitClicked();
 
 	bool ApplyPage(EKnightTitlePage NewPage, bool bAllowDuringTravel);
-	void RefreshSlotInfo();
+	void RefreshSlots();
 	void OpenLobby();
 
 	EKnightTitlePage CurrentPage = EKnightTitlePage::Home;

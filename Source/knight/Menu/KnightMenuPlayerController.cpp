@@ -9,6 +9,7 @@
 #include "Progression/knightSaveSubsystem.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
+#include "TimerManager.h"
 #include "knight.h"
 
 AKnightMenuPlayerController::AKnightMenuPlayerController()
@@ -65,12 +66,39 @@ void AKnightMenuPlayerController::BeginPlay()
 		return;
 	}
 	MenuWidget->AddToViewport();
+	ApplyMenuInputMode();
+	GetWorldTimerManager().SetTimerForNextTick(this, &ThisClass::ApplyMenuInputMode);
+}
+
+void AKnightMenuPlayerController::ApplyMenuInputMode()
+{
+	if (!IsLocalController() || !MenuWidget || !MenuWidget->IsInViewport()) return;
 	FInputModeUIOnly InputMode;
 	InputMode.SetWidgetToFocus(MenuWidget->TakeWidget());
 	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 	SetInputMode(InputMode);
 	bShowMouseCursor = true;
 	MenuWidget->FocusCurrentPage();
+}
+
+void AKnightMenuPlayerController::KnightCoreUseFixedSlot(int32 SlotNumber)
+{
+#if WITH_EDITOR
+	UKnightTitleMenuWidget* const TitleWidget = Cast<UKnightTitleMenuWidget>(MenuWidget);
+	if (!TitleWidget || !TitleWidget->ShowPage(EKnightTitlePage::SaveSelect)) return;
+	TitleWidget->SelectFixedSlot(SlotNumber);
+	const UknightSaveSubsystem* const Save = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	UE_LOG(Logknight, Log, TEXT("KnightCoreUseFixedSlot slot=%d active=%s loadFailed=%d busy=%d"), SlotNumber,
+		Save ? *Save->GetActiveSlotId() : TEXT("none"), Save && Save->DidLoadFail(), Save && Save->IsSaveInFlight());
+#endif
+}
+
+void AKnightMenuPlayerController::KnightCoreReturnTitle()
+{
+#if WITH_EDITOR
+	UKnightGameFlowSubsystem* const Flow = GetGameInstance()->GetSubsystem<UKnightGameFlowSubsystem>();
+	UE_LOG(Logknight, Log, TEXT("KnightCoreReturnTitle accepted=%d"), Flow && Flow->RequestOpenTitle());
+#endif
 }
 
 void AKnightMenuPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)

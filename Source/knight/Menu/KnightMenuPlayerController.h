@@ -20,12 +20,16 @@ public:
 	UFUNCTION(Exec) void KnightCoreLaunch(FName StageId);
 	UFUNCTION(Exec) void KnightCoreFailNextRaidLoad();
 	UFUNCTION(Exec) void KnightCoreProfileStatus();
+	UFUNCTION(Exec) void KnightCoreUseFixedSlot(int32 SlotNumber);
+	UFUNCTION(Exec) void KnightCoreReturnTitle();
 
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
+	void ApplyMenuInputMode();
+
 	UPROPERTY(Transient)
 	TObjectPtr<UKnightMenuWidgetBase> MenuWidget;
 };

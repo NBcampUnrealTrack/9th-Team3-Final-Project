@@ -8,6 +8,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Misc/PackageName.h"
 #include "Progression/knightProgressionSubsystem.h"
+#include "Progression/knightSaveSubsystem.h"
 #include "Raid/knightRaidDefinition.h"
 #include "Raid/knightRaidSubsystem.h"
 #include "System/knightAssetManager.h"
@@ -45,6 +46,14 @@ bool UKnightGameFlowSubsystem::RequestOpenMainMenu()
 
 bool UKnightGameFlowSubsystem::RequestOpenTitle()
 {
+	if ((CurrentFlowState == EKnightFlowState::MainMenu || CurrentFlowState == EKnightFlowState::Gameplay)
+		&& !bTravelPending)
+	{
+		if (UknightSaveSubsystem* const Save = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>())
+		{
+			Save->RequestSave();
+		}
+	}
 	return RequestOpenMenu(EKnightFlowState::Title);
 }
 

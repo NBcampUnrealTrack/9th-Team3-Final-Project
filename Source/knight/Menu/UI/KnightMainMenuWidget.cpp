@@ -28,12 +28,12 @@ void UKnightMainMenuWidget::NativeOnInitialized()
 	ValidateRequiredWidget(Panel_Codex, TEXT("Panel_Codex"));
 	ValidateRequiredWidget(Button_Stage, TEXT("Button_Stage"));
 	ValidateRequiredWidget(Text_ActiveProfile, TEXT("Text_ActiveProfile"));
-	ValidateRequiredWidget(Button_ChangeProfile, TEXT("Button_ChangeProfile"));
+	ValidateRequiredWidget(Button_ReturnToTitle, TEXT("Button_ReturnToTitle"));
 	ValidateRequiredWidget(Button_Maintenance, TEXT("Button_Maintenance"));
 	ValidateRequiredWidget(Button_Settings, TEXT("Button_Settings"));
 	ValidateRequiredWidget(Button_Codex, TEXT("Button_Codex"));
 	if (Button_Stage) Button_Stage->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleStageClicked);
-	if (Button_ChangeProfile) Button_ChangeProfile->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleChangeProfileClicked);
+	if (Button_ReturnToTitle) Button_ReturnToTitle->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleReturnToTitleClicked);
 	if (Button_Maintenance) Button_Maintenance->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleMaintenanceClicked);
 	if (Button_Settings) Button_Settings->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleSettingsClicked);
 	if (Button_Codex) Button_Codex->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleCodexClicked);
@@ -47,8 +47,10 @@ void UKnightMainMenuWidget::NativeConstruct()
 	const UknightSaveSubsystem* const Save = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
 	if (Text_ActiveProfile)
 	{
-		Text_ActiveProfile->SetText(FText::Format(LOCTEXT("ActiveProfile", "프로필: {0}"),
-			FText::FromString(Save ? Save->GetActiveSlotId() : TEXT("없음"))));
+		const int32 SlotNumber = Save ? Save->GetActiveFixedSlotNumber() : 0;
+		Text_ActiveProfile->SetText(SlotNumber > 0
+			? FText::Format(LOCTEXT("ActiveSlot", "세이브 {0}"), FText::AsNumber(SlotNumber))
+			: LOCTEXT("NoActiveSlot", "세이브 없음"));
 	}
 	UknightRaidSubsystem* const Session = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightRaidSubsystem>() : nullptr;
 	FknightRaidResult Result;
@@ -159,7 +161,7 @@ UWidget* UKnightMainMenuWidget::GetPreferredFocusTarget() const
 	{
 		return Button_Back;
 	}
-	for (UButton* Button : { Button_Stage.Get(), Button_Maintenance.Get(), Button_Settings.Get(), Button_Codex.Get(), Button_ChangeProfile.Get() })
+	for (UButton* Button : { Button_Stage.Get(), Button_Maintenance.Get(), Button_Settings.Get(), Button_Codex.Get(), Button_ReturnToTitle.Get() })
 	{
 		if (Button && Button->GetIsFocusable() && Button->IsVisible() && Button->GetIsEnabled())
 		{
@@ -173,7 +175,7 @@ void UKnightMainMenuWidget::SetTravelControlsEnabled(bool bEnabled)
 {
 	Super::SetTravelControlsEnabled(bEnabled);
 	if (Button_Stage) Button_Stage->SetIsEnabled(bEnabled);
-	if (Button_ChangeProfile) Button_ChangeProfile->SetIsEnabled(bEnabled);
+	if (Button_ReturnToTitle) Button_ReturnToTitle->SetIsEnabled(bEnabled);
 	if (Button_Maintenance) Button_Maintenance->SetIsEnabled(bEnabled);
 	if (Button_Settings) Button_Settings->SetIsEnabled(bEnabled);
 	if (Button_Codex) Button_Codex->SetIsEnabled(bEnabled);
@@ -189,14 +191,8 @@ void UKnightMainMenuWidget::HandleStageClicked()
 	ShowPage(EKnightMainMenuPage::Stage);
 }
 
-void UKnightMainMenuWidget::HandleChangeProfileClicked()
+void UKnightMainMenuWidget::HandleReturnToTitleClicked()
 {
-	const UknightSaveSubsystem* const Save = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
-	if (Save && Save->IsSaveInFlight())
-	{
-		SetStatusText(LOCTEXT("SaveBeforeProfileChange", "저장이 끝난 뒤 프로필을 변경할 수 있습니다."));
-		return;
-	}
 	if (UKnightGameFlowSubsystem* const Flow = GetFlow()) Flow->RequestOpenTitle();
 }
 

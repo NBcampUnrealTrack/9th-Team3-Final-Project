@@ -2,6 +2,10 @@
 
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
+#include "GameFlow/KnightGameFlowSubsystem.h"
+#include "HAL/PlatformTime.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "Progression/knightSaveGame.h"
 #include "knight.h"
 
@@ -10,7 +14,112 @@ const FString UknightSaveSubsystem::SlotName = TEXT("KnightProgress");
 void UknightSaveSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
+	MakeSlotName(ActiveSlotId, ActiveSlotName);
 	LoadSlot(ActiveSlotName);
+	LastPlayTimeSample = FPlatformTime::Seconds();
+	PlayTimeTickerHandle = FTSTicker::GetCoreTicker().AddTicker(
+		FTickerDelegate::CreateUObject(this, &ThisClass::TickPlayTime), 0.25f);
+}
+
+void UknightSaveSubsystem::Deinitialize()
+{
+	FTSTicker::GetCoreTicker().RemoveTicker(PlayTimeTickerHandle);
+	Super::Deinitialize();
+}
+
+FString UknightSaveSubsystem::FixedSlotId(int32 SlotNumber)
+{
+	switch (SlotNumber)
+	{
+	case 1: return TEXT("Default");
+	case 2: return TEXT("Slot2");
+	case 3: return TEXT("Slot3");
+	default: return FString();
+	}
+}
+
+bool UknightSaveSubsystem::SelectFixedSlot(int32 SlotNumber)
+{
+	return SelectSlot(FixedSlotId(SlotNumber));
+}
+
+int32 UknightSaveSubsystem::GetActiveFixedSlotNumber() const
+{
+	for (int32 Number = 1; Number <= 3; ++Number)
+	{
+		if (ActiveSlotId == FixedSlotId(Number)) return Number;
+	}
+	return 0;
+}
+
+bool UknightSaveSubsystem::GetFixedSlotInfo(int32 SlotNumber, bool& bExists, bool& bReadable, float& PlayTimeSeconds) const
+{
+	bExists = false;
+	bReadable = false;
+	PlayTimeSeconds = 0.f;
+	FString Name;
+	if (!MakeSlotName(FixedSlotId(SlotNumber), Name)) return false;
+	bExists = UGameplayStatics::DoesSaveGameExist(Name, UserIndex);
+	if (!bExists)
+	{
+		bReadable = true;
+		return true;
+	}
+	if (UknightSaveGame* const Loaded = ReadExistingSlot(Name))
+	{
+		bReadable = true;
+		PlayTimeSeconds = Loaded->TotalPlayTime;
+	}
+	return true;
+}
+
+bool UknightSaveSubsystem::CanCountPlayTime() const
+{
+	if (!bSlotSelected || !SaveGame || bLoadFailed) return false;
+	const UWorld* const World = GetWorld();
+	const UKnightGameFlowSubsystem* const Flow = GetGameInstance()
+		? GetGameInstance()->GetSubsystem<UKnightGameFlowSubsystem>() : nullptr;
+	return World && World->IsGameWorld() && !World->IsPaused() && Flow && !Flow->IsTravelPending()
+		&& (Flow->GetCurrentFlowState() == EKnightFlowState::MainMenu
+			|| Flow->GetCurrentFlowState() == EKnightFlowState::Gameplay);
+}
+
+void UknightSaveSubsystem::AccumulatePlayTime()
+{
+	const double Now = FPlatformTime::Seconds();
+	const bool bCounting = CanCountPlayTime();
+	if (bCounting && bWasCountingPlayTime && LastPlayTimeSample > 0.0)
+	{
+		const double Elapsed = FMath::Max(0.0, Now - LastPlayTimeSample);
+		SaveGame->TotalPlayTime += static_cast<float>(Elapsed);
+		SecondsSincePeriodicSave += Elapsed;
+	}
+	LastPlayTimeSample = Now;
+	bWasCountingPlayTime = bCounting;
+}
+
+bool UknightSaveSubsystem::TickPlayTime(float DeltaTime)
+{
+	AccumulatePlayTime();
+	if (SecondsSincePeriodicSave >= 60.0 && !bSaveInFlight && CanCountPlayTime())
+	{
+		SecondsSincePeriodicSave = 0.0;
+		RequestSave();
+	}
+	return true;
+}
+
+UknightSaveGame* UknightSaveSubsystem::ReadExistingSlot(const FString& Slot) const
+{
+	TArray<uint8> RawSave;
+	const bool bReadable = UGameplayStatics::LoadDataFromSlot(RawSave, Slot, UserIndex);
+	// UE's legacy/no-header path tries to deserialize arbitrary bytes and can assert on an invalid FName.
+	// This project only writes the versioned GVAS format used by UE 5.8.
+	const bool bValidHeader = bReadable && RawSave.Num() >= 64 && RawSave.Num() <= 32 * 1024 * 1024
+		&& RawSave[0] == 'G' && RawSave[1] == 'V' && RawSave[2] == 'A' && RawSave[3] == 'S';
+	UknightSaveGame* const Loaded = bValidHeader
+		? Cast<UknightSaveGame>(UGameplayStatics::LoadGameFromMemory(RawSave)) : nullptr;
+	return Loaded && MigrateSave(*Loaded) ? Loaded : nullptr;
 }
 
 bool UknightSaveSubsystem::LoadSlot(const FString& Slot)
@@ -18,17 +127,8 @@ bool UknightSaveSubsystem::LoadSlot(const FString& Slot)
 	UknightSaveGame* Loaded = nullptr;
 	if (UGameplayStatics::DoesSaveGameExist(Slot, UserIndex))
 	{
-		TArray<uint8> RawSave;
-		const bool bReadable = UGameplayStatics::LoadDataFromSlot(RawSave, Slot, UserIndex);
-		// UE's legacy/no-header path tries to deserialize arbitrary bytes and can assert on an invalid FName.
-		// This project only writes the versioned GVAS format used by UE 5.8.
-		const bool bValidHeader = bReadable && RawSave.Num() >= 64 && RawSave.Num() <= 32 * 1024 * 1024
-			&& RawSave[0] == 'G' && RawSave[1] == 'V' && RawSave[2] == 'A' && RawSave[3] == 'S';
-		if (bValidHeader)
-		{
-			Loaded = Cast<UknightSaveGame>(UGameplayStatics::LoadGameFromMemory(RawSave));
-		}
-		if (!Loaded || !MigrateSave(*Loaded))
+		Loaded = ReadExistingSlot(Slot);
+		if (!Loaded)
 		{
 			UE_LOG(Logknight, Error, TEXT("Save slot %s exists but is unreadable or invalid; writes are blocked."), *Slot);
 			bLoadFailed = true;
@@ -96,6 +196,18 @@ bool UknightSaveSubsystem::MakeSlotName(const FString& SlotId, FString& OutSlotN
 		if (!FChar::IsAlnum(Character) && Character != TEXT('_') && Character != TEXT('-')) return false;
 	}
 	OutSlotName = SlotId == TEXT("Default") ? SlotName : TEXT("KnightProgress_") + SlotId;
+#if WITH_EDITOR
+	FString TestNamespace;
+	if (FParse::Value(FCommandLine::Get(), TEXT("KnightSaveTestNamespace="), TestNamespace))
+	{
+		if (TestNamespace.IsEmpty() || TestNamespace.Len() > 32) return false;
+		for (const TCHAR Character : TestNamespace)
+		{
+			if (!FChar::IsAlnum(Character) && Character != TEXT('_') && Character != TEXT('-')) return false;
+		}
+		OutSlotName = TEXT("KnightProgress_Test_") + TestNamespace + TEXT("_") + SlotId;
+	}
+#endif
 	return true;
 }
 
@@ -109,15 +221,26 @@ bool UknightSaveSubsystem::SelectSlot(const FString& SlotId)
 {
 	FString NewSlot;
 	if (bSaveInFlight || !MakeSlotName(SlotId, NewSlot)) return false;
-	if (NewSlot == ActiveSlotName) return !bLoadFailed && SaveGame != nullptr;
+	if (NewSlot == ActiveSlotName)
+	{
+		if (!bSlotSelected || bLoadFailed) LoadSlot(NewSlot);
+		bSlotSelected = !bLoadFailed && SaveGame != nullptr;
+		return bSlotSelected;
+	}
+	AccumulatePlayTime();
+	bWasCountingPlayTime = false;
+	bSlotSelected = false;
 	ActiveSlotId = SlotId;
 	ActiveSlotName = NewSlot;
 	bSavePending = false;
-	return LoadSlot(NewSlot);
+	bSlotSelected = LoadSlot(NewSlot);
+	SecondsSincePeriodicSave = 0.0;
+	return bSlotSelected;
 }
 
 void UknightSaveSubsystem::RequestSave()
 {
+	AccumulatePlayTime();
 	if (!SaveGame || bLoadFailed)
 	{
 		OnSaveFinished.Broadcast(false);
