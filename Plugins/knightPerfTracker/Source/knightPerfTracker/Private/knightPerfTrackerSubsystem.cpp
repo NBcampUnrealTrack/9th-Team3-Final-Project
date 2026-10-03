@@ -121,13 +121,6 @@ void UknightPerfTrackerSubsystem::StartCapture(const FString& Label, float Durat
 	Capture->Label = FPaths::MakeValidFileName(Label.IsEmpty() ? FString(TEXT("Capture")) : Label, TEXT('_'));
 	Capture->MapName = GetWorld() ? UWorld::RemovePIEPrefix(GetWorld()->GetMapName()) : FString();
 	Capture->StartTime = FDateTime::Now();
-	if (const UGameViewportClient* const GameViewport = GetWorld() ? GetWorld()->GetGameViewport() : nullptr)
-	{
-		if (GameViewport->Viewport)
-		{
-			Capture->ViewportSize = GameViewport->Viewport->GetSizeXY();
-		}
-	}
 	Capture->HitchThresholdMs = knightPerfTracker::CVarHitchMs.GetValueOnGameThread();
 	Capture->Frames.Reserve(DurationSeconds > 0.f ? FMath::CeilToInt32(DurationSeconds * 144.f) : 8192);
 
@@ -182,6 +175,17 @@ UknightPerfTrackerSubsystem* UknightPerfTrackerSubsystem::Get(const UWorld* Worl
 
 void UknightPerfTrackerSubsystem::SampleFrame(double Now, float FrameMs)
 {
+	// Read at the first sampled frame, not at Start: a capture started from BeginPlay in Standalone runs
+	// before the game viewport has its size.
+	if (Capture->ViewportSize == FIntPoint::ZeroValue)
+	{
+		const UGameViewportClient* const GameViewport = GetWorld() ? GetWorld()->GetGameViewport() : nullptr;
+		if (GameViewport && GameViewport->Viewport)
+		{
+			Capture->ViewportSize = GameViewport->Viewport->GetSizeXY();
+		}
+	}
+
 	FknightPerfFrameSample& Sample = Capture->Frames.AddDefaulted_GetRef();
 	Sample.Time = Now - SamplingStartSeconds;
 	Sample.FrameMs = FrameMs;
