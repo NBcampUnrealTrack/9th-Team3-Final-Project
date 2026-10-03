@@ -1,4 +1,4 @@
-#include "Debug/knightMonsterStressSpawner.h"
+#include "knightMonsterStressSpawner.h"
 
 #include "Components/BillboardComponent.h"
 #include "Engine/World.h"
@@ -7,7 +7,7 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "Monster/knightMonsterCharacterBase.h"
 #include "TimerManager.h"
-#include "knight.h"
+#include "knightDev.h"
 #include "knightPerfTrackerSubsystem.h"
 
 AknightMonsterStressSpawner::AknightMonsterStressSpawner()
@@ -44,7 +44,7 @@ void AknightMonsterStressSpawner::SpawnMonsters(int32 InCount)
 	UWorld* const World = GetWorld();
 	if (!World || !MonsterClass)
 	{
-		UE_LOG(LogknightAI, Warning, TEXT("%s: set MonsterClass to spawn."), *GetName());
+		UE_LOG(LogknightDev, Warning, TEXT("%s: set MonsterClass to spawn."), *GetName());
 		return;
 	}
 	if (RandomSeed != 0)
@@ -69,7 +69,7 @@ void AknightMonsterStressSpawner::SpawnMonsters(int32 InCount)
 			SpawnedMonsters.Add(Monster);
 		}
 	}
-	UE_LOG(LogknightAI, Log, TEXT("%s spawned %d x %s."), *GetName(), SpawnedMonsters.Num(), *GetNameSafe(MonsterClass));
+	UE_LOG(LogknightDev, Log, TEXT("%s spawned %d x %s."), *GetName(), SpawnedMonsters.Num(), *GetNameSafe(MonsterClass));
 
 	if (bAutoCapture)
 	{
@@ -81,7 +81,7 @@ void AknightMonsterStressSpawner::SpawnMonsters(int32 InCount)
 		}
 		else
 		{
-			UE_LOG(LogknightAI, Warning, TEXT("%s: knightPerfTracker is not available (Shipping build?); no capture."), *GetName());
+			UE_LOG(LogknightDev, Warning, TEXT("%s: knightPerfTracker subsystem is not available in this world; no capture."), *GetName());
 		}
 	}
 }
@@ -128,7 +128,7 @@ namespace knightMonsterStressSpawner
 		}
 		if (Spawners == 0)
 		{
-			UE_LOG(LogknightAI, Warning, TEXT("knight.Monster.StressSpawn: no knightMonsterStressSpawner in this map."));
+			UE_LOG(LogknightDev, Warning, TEXT("knight.Monster.StressSpawn: no knightMonsterStressSpawner in this map."));
 		}
 	}
 

@@ -17,7 +17,7 @@ class AknightMonsterCharacterBase;
  * Console: knight.Monster.StressSpawn <Count> respawns every spawner in the world with that count.
  */
 UCLASS(Blueprintable)
-class KNIGHT_API AknightMonsterStressSpawner : public AActor
+class KNIGHTDEV_API AknightMonsterStressSpawner : public AActor
 {
 	GENERATED_BODY()
 

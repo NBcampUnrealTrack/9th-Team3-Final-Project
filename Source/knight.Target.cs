@@ -11,5 +11,11 @@ public class knightTarget : TargetRules
 		DefaultBuildSettings = BuildSettingsVersion.V7;
 		IncludeOrderVersion = EngineIncludeOrderVersion.Unreal5_8;
 		ExtraModuleNames.AddRange(new string[] { "knight", "knightUI" });
+
+		// Development tools (cheats, test helpers) stay out of Shipping.
+		if (Target.Configuration != UnrealTargetConfiguration.Shipping)
+		{
+			ExtraModuleNames.Add("knightDev");
+		}
 	}
 }

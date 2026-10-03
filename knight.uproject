@@ -23,6 +23,11 @@
 			"Name": "knightEditor",
 			"Type": "Editor",
 			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "knightDev",
+			"Type": "DeveloperTool",
+			"LoadingPhase": "Default"
 		}
 	],
 	"Plugins": [
