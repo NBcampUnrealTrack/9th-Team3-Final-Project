@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "AbilitySystem/Abilities/knightGameplayAbility.h"
+#include "AbilitySystem/Abilities/knightGameplayAbility_MonsterAttack.h"
 #include "Combat/knightCombatTypes.h"
 #include "knightGameplayAbility_MonsterAreaAttack.generated.h"
 
@@ -19,7 +19,7 @@ class UAnimMontage;
  * Debug: knight.Monster.DrawAttacks 1 draws the telegraph (orange) and the impact (red).
  */
 UCLASS()
-class KNIGHT_API UknightGameplayAbility_MonsterAreaAttack : public UknightGameplayAbility
+class KNIGHT_API UknightGameplayAbility_MonsterAreaAttack : public UknightGameplayAbility_MonsterAttack
 {
 	GENERATED_BODY()
 

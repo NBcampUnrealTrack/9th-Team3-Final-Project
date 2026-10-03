@@ -58,6 +58,10 @@ struct FknightMonsterTargetEvaluatorInstanceData
 
 	UPROPERTY(EditAnywhere, Category="Output")
 	bool bExhausted = false;
+
+	/** A reaction (down, flinch, roar) is running: State.Monster.Reacting. Wait instead of acting. */
+	UPROPERTY(EditAnywhere, Category="Output")
+	bool bIsReacting = false;
 };
 
 USTRUCT(meta=(DisplayName="Knight Monster Target", Category="Knight"))
@@ -85,7 +89,11 @@ struct FknightActivateAbilityTaskInstanceData
 	UPROPERTY(EditAnywhere, Category="Context")
 	TObjectPtr<AActor> Actor;
 
-	/** Abilities whose asset tags match all of these are candidates; one activatable candidate is picked at random. */
+	/** Optional. Bind to the evaluator's Target so monster attacks are filtered by range, angle and airborne rules. */
+	UPROPERTY(EditAnywhere, Category="Input", meta=(Optional))
+	TObjectPtr<AActor> Target;
+
+	/** Abilities whose asset tags match all of these are candidates. */
 	UPROPERTY(EditAnywhere, Category="Parameter")
 	FGameplayTagContainer AbilityTags;
 
@@ -93,12 +101,24 @@ struct FknightActivateAbilityTaskInstanceData
 	UPROPERTY(EditAnywhere, Category="Parameter")
 	bool bCancelOnExit = true;
 
+	/**
+	 * When nothing can be used (all on cooldown, target out of range), wait this long before failing, so the
+	 * tree does not re-enter the attack state every frame. 0 fails at once.
+	 */
+	UPROPERTY(EditAnywhere, Category="Parameter", meta=(ClampMin=0, Units="s"))
+	float RetryDelay = 0.5f;
+
 	FGameplayAbilitySpecHandle ActiveHandle;
 	FDelegateHandle EndedDelegateHandle;
 	TWeakObjectPtr<UAbilitySystemComponent> AbilitySystem;
+	double FailAtTime = -1.0;
 };
 
-/** Activates a GAS ability on the actor and succeeds when it ends (fails if it was cancelled or could not start). */
+/**
+ * Activates one GAS ability on the actor and succeeds when it ends (fails if it was cancelled or nothing
+ * could start). Monster attacks (UknightGameplayAbility_MonsterAttack) are chosen by weighted random among
+ * those whose Selection allows the current target; other matching abilities count with weight 1.
+ */
 USTRUCT(meta=(DisplayName="Knight Activate Ability", Category="Knight"))
 struct KNIGHT_API FknightStateTreeActivateAbilityTask : public FStateTreeTaskCommonBase
 {
@@ -106,13 +126,15 @@ struct KNIGHT_API FknightStateTreeActivateAbilityTask : public FStateTreeTaskCom
 
 	FknightStateTreeActivateAbilityTask()
 	{
-		bShouldCallTick = false;
+		// Ticks only to end the retry wait; a running ability finishes the task through its end delegate.
+		bShouldCallTick = true;
 	}
 
 	using FInstanceDataType = FknightActivateAbilityTaskInstanceData;
 	virtual const UStruct* GetInstanceDataType() const override { return FInstanceDataType::StaticStruct(); }
 
 	virtual EStateTreeRunStatus EnterState(FStateTreeExecutionContext& Context, const FStateTreeTransitionResult& Transition) const override;
+	virtual EStateTreeRunStatus Tick(FStateTreeExecutionContext& Context, const float DeltaTime) const override;
 	virtual void ExitState(FStateTreeExecutionContext& Context, const FStateTreeTransitionResult& Transition) const override;
 };
 

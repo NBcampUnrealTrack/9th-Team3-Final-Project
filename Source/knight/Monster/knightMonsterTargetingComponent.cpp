@@ -48,7 +48,7 @@ void UknightMonsterTargetingComponent::InitializeTargeting(UAbilitySystemCompone
 
 void UknightMonsterTargetingComponent::NotifyPerceived(AActor* Actor, bool bSensed)
 {
-	if (!Actor || Actor == GetOwner())
+	if (!Actor || Actor == GetOwner() || bStopped)
 	{
 		return;
 	}
@@ -63,7 +63,10 @@ void UknightMonsterTargetingComponent::NotifyPerceived(AActor* Actor, bool bSens
 		Candidate->Actor = Actor;
 		Candidate->Priority = PerceivedPriority;
 	}
+	// Perception reports changes only, so a target in plain sight gets no updates while it stays seen.
+	// Losing it is therefore the last moment it was sensed, and the memory window starts there.
 	Candidate->bPerceived = bSensed;
+	Candidate->LastSensedTime = GetWorld()->GetTimeSeconds();
 	// First contact reacts immediately rather than on the next timer tick.
 	if (bSensed && !CurrentTarget.IsValid())
 	{
@@ -99,7 +102,7 @@ void UknightMonsterTargetingComponent::RemoveCandidate(AActor* Actor)
 void UknightMonsterTargetingComponent::HandleDamaged(AActor* DamageInstigator, AActor* DamageCauser, const FGameplayEffectSpec* EffectSpec,
 	float Magnitude, float OldValue, float NewValue)
 {
-	if (!DamageInstigator || DamageInstigator == GetOwner())
+	if (!DamageInstigator || DamageInstigator == GetOwner() || bStopped)
 	{
 		return;
 	}
@@ -112,6 +115,7 @@ void UknightMonsterTargetingComponent::HandleDamaged(AActor* DamageInstigator, A
 		Candidate->Priority = PerceivedPriority;
 		Candidate->bPerceived = true;
 	}
+	Candidate->LastSensedTime = GetWorld()->GetTimeSeconds();
 	Candidate->Threat += Magnitude * ThreatPerDamage;
 	if (!CurrentTarget.IsValid())
 	{
@@ -121,6 +125,10 @@ void UknightMonsterTargetingComponent::HandleDamaged(AActor* DamageInstigator, A
 
 void UknightMonsterTargetingComponent::EvaluateTarget()
 {
+	if (bStopped)
+	{
+		return;
+	}
 	KNIGHT_PERF_SCOPE("Monster.Targeting");
 	const double Now = GetWorld()->GetTimeSeconds();
 	const float Elapsed = static_cast<float>(Now - LastEvaluationTime);
@@ -135,7 +143,7 @@ void UknightMonsterTargetingComponent::EvaluateTarget()
 	for (FCandidate& Candidate : Candidates)
 	{
 		Candidate.Threat *= Decay;
-		if (!IsCandidateValid(Candidate))
+		if (!IsCandidateValid(Candidate, Now))
 		{
 			continue;
 		}
@@ -158,6 +166,18 @@ void UknightMonsterTargetingComponent::EvaluateTarget()
 	SetCurrentTarget(Best);
 }
 
+void UknightMonsterTargetingComponent::StopTargeting()
+{
+	// Perception events already queued for this frame can still arrive after death; ignore them.
+	bStopped = true;
+	if (UWorld* const World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(EvaluationTimer);
+	}
+	Candidates.Reset();
+	SetCurrentTarget(nullptr);
+}
+
 UknightMonsterTargetingComponent::FCandidate* UknightMonsterTargetingComponent::FindCandidate(const AActor* Actor)
 {
 	return Candidates.FindByPredicate([Actor](const FCandidate& Candidate) { return Candidate.Actor.Get() == Actor; });
@@ -169,15 +189,19 @@ float UknightMonsterTargetingComponent::ScoreCandidate(const FCandidate& Candida
 	return Candidate.Priority / (1.f + Distance / DistanceFalloff) + Candidate.Threat;
 }
 
-bool UknightMonsterTargetingComponent::IsCandidateValid(const FCandidate& Candidate) const
+bool UknightMonsterTargetingComponent::IsCandidateValid(const FCandidate& Candidate, double Now) const
 {
 	AActor* const Actor = Candidate.Actor.Get();
-	if (!Actor || (!Candidate.bPerceived && !Candidate.bObjective))
+	if (!Actor)
 	{
 		return false;
 	}
-	const ICombatInterface* const Combat = Cast<ICombatInterface>(Actor);
-	if (Combat && Combat->IsDead())
+	const bool bRemembered = Now - Candidate.LastSensedTime <= LoseTargetDelay;
+	if (!Candidate.bPerceived && !Candidate.bObjective && !bRemembered)
+	{
+		return false;
+	}
+	if (Actor->GetClass()->ImplementsInterface(UCombatInterface::StaticClass()) && ICombatInterface::Execute_IsDeadBP(Actor))
 	{
 		return false;
 	}

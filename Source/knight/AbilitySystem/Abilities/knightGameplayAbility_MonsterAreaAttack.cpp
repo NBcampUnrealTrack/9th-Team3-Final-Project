@@ -10,7 +10,6 @@
 #include "GenericTeamAgentInterface.h"
 #include "HAL/IConsoleManager.h"
 #include "Interfaces/CombatInterface.h"
-#include "System/knightGameplayTags.h"
 #include "knight.h"
 #include "knightPerfCounters.h"
 
@@ -25,11 +24,9 @@ namespace knightMonsterAttackCVars
 UknightGameplayAbility_MonsterAreaAttack::UknightGameplayAbility_MonsterAreaAttack(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
-	// Activated by the monster's StateTree, never by input.
-	ActivationGroup = EknightAbilityActivationGroup::Exclusive_Replaceable;
-	SetAssetTags(FGameplayTagContainer(knightGameplayTags::Ability_Attack));
-	ActivationBlockedTags.AddTag(knightGameplayTags::State_Dead);
-	ActivationBlockedTags.AddTag(knightGameplayTags::State_HitReact);
+	// The sphere reaches AreaOffset.X + AreaRadius in front of the monster; choose it inside that.
+	Selection.MaxRange = 600.f;
+	Selection.MaxAngle = 45.f;
 }
 
 void UknightGameplayAbility_MonsterAreaAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
@@ -116,8 +113,9 @@ void UknightGameplayAbility_MonsterAreaAttack::OnImpact()
 		{
 			continue;
 		}
-		const ICombatInterface* const Combat = Cast<ICombatInterface>(Target);
-		if (!Combat || !Combat->CanReceiveHit(Avatar) || FGenericTeamId::GetAttitude(Avatar, Target) != ETeamAttitude::Hostile)
+		if (!Target->GetClass()->ImplementsInterface(UCombatInterface::StaticClass())
+			|| !ICombatInterface::Execute_CanReceiveHitBP(Target, Avatar)
+			|| FGenericTeamId::GetAttitude(Avatar, Target) != ETeamAttitude::Hostile)
 		{
 			continue;
 		}

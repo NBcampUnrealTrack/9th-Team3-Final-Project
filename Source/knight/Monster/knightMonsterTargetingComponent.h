@@ -15,7 +15,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FknightMonsterTargetChanged, AActor
  *
  * Candidates come from perception (UknightBossAIController forwards sight/hearing/damage) and from
  * AddObjective. Score = Priority / (1 + distance / DistanceFalloff) + recent damage threat.
- * Damage threat decays over time, so hitting the monster pulls it for a while.
+ * Damage threat decays over time, so hitting the monster pulls it for a while. A candidate that is no
+ * longer sensed stays valid for LoseTargetDelay seconds.
  */
 UCLASS(ClassGroup=(Knight), meta=(BlueprintSpawnableComponent))
 class KNIGHT_API UknightMonsterTargetingComponent : public UActorComponent
@@ -41,6 +42,9 @@ public:
 	/** Re-scores candidates now instead of waiting for the next evaluation. */
 	UFUNCTION(BlueprintCallable, Category="Knight|Monster")
 	void EvaluateTarget();
+
+	/** Stops evaluating and forgets every candidate (death). */
+	void StopTargeting();
 
 	UFUNCTION(BlueprintPure, Category="Knight|Monster")
 	AActor* GetCurrentTarget() const { return CurrentTarget.Get(); }
@@ -75,12 +79,21 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Monster", meta=(ClampMin=1))
 	float SwitchHysteresis = 1.25f;
 
+	/**
+	 * Seconds a candidate stays valid after the last sight, sound or hit. A boss keeps hunting a Knight that
+	 * stepped behind it instead of dropping it the moment it leaves the sight cone.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Monster", meta=(ClampMin=0, Units="s"))
+	float LoseTargetDelay = 8.f;
+
 private:
 	struct FCandidate
 	{
 		TWeakObjectPtr<AActor> Actor;
 		float Priority = 1.f;
 		float Threat = 0.f;
+		/** World time it was last sensed or hit the monster. */
+		double LastSensedTime = -1.e9;
 		bool bPerceived = false;
 		bool bObjective = false;
 	};
@@ -89,7 +102,7 @@ private:
 		float Magnitude, float OldValue, float NewValue);
 	FCandidate* FindCandidate(const AActor* Actor);
 	float ScoreCandidate(const FCandidate& Candidate) const;
-	bool IsCandidateValid(const FCandidate& Candidate) const;
+	bool IsCandidateValid(const FCandidate& Candidate, double Now) const;
 	void SetCurrentTarget(AActor* NewTarget);
 
 	TArray<FCandidate> Candidates;
@@ -97,4 +110,5 @@ private:
 	TWeakObjectPtr<UAbilitySystemComponent> BoundASC;
 	FTimerHandle EvaluationTimer;
 	double LastEvaluationTime = 0.0;
+	bool bStopped = false;
 };

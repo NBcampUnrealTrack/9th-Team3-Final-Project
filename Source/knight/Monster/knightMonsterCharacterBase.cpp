@@ -17,6 +17,7 @@
 #include "Monster/knightMonsterPartComponent.h"
 #include "Monster/knightMonsterTargetingComponent.h"
 #include "MotionWarpingComponent.h"
+#include "Perception/AIPerceptionComponent.h"
 #include "System/knightGameplayTags.h"
 #include "System/knightTeams.h"
 #include "knight.h"
@@ -197,14 +198,26 @@ void AknightMonsterCharacterBase::HandleOutOfHealth(AActor* DamageInstigator, AA
 	const FGameplayTagContainer KeepAbilities(knightGameplayTags::Ability_Death);
 	AbilitySystemComponent->CancelAbilities(nullptr, &KeepAbilities);
 
-	if (const AAIController* const AIController = Cast<AAIController>(GetController()))
+	if (AAIController* const AIController = Cast<AAIController>(GetController()))
 	{
 		if (UBrainComponent* const Brain = AIController->GetBrainComponent())
 		{
 			Brain->StopLogic(TEXT("Monster defeated"));
 		}
+		AIController->StopMovement();
+		// A corpse no longer needs sight and hearing queries.
+		if (UAIPerceptionComponent* const Perception = AIController->GetAIPerceptionComponent())
+		{
+			Perception->Deactivate();
+		}
 	}
+	TargetingComponent->StopTargeting();
 	GetCharacterMovement()->StopMovementImmediately();
+	GetCharacterMovement()->DisableMovement();
+
+	// The Knight walks over or through the corpse to reach carve points; part bodies stay for presentation.
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 
 	UE_LOG(LogknightAI, Log, TEXT("%s defeated by %s."), *GetNameSafe(this), *GetNameSafe(DamageInstigator));
 	OnMonsterDefeated.Broadcast(this, DamageInstigator);

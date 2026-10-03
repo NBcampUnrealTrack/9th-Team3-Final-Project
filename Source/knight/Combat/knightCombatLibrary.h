@@ -22,6 +22,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|Combat")
 	static EknightHitOutcome ApplyMeleeHit(AActor* Attacker, const FHitResult& Hit, const FknightMeleeHitParams& Params);
 
+	/**
+	 * Reduces sweep hits to one per actor, in first-seen actor order. For each actor it keeps the first hit
+	 * that resolves to a part (ICombatInterface), else its first hit. Without this, a monster's movement
+	 * capsule, which overlaps its part bodies, often comes first and the hit loses its part.
+	 */
+	static void SelectBestHitPerActor(TArrayView<const FHitResult> Hits, TArray<FHitResult>& OutHits);
+
 	/** Points a motion warp target at the attacker's locked target, clamped to MaxDistance. Returns false with no lock. */
 	UFUNCTION(BlueprintCallable, Category="Knight|Combat")
 	static bool SetWarpTargetToLockedTarget(AActor* Attacker, FName WarpTargetName, float MaxDistance);

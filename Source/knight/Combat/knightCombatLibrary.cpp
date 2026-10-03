@@ -95,6 +95,37 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 	return EknightHitOutcome::Hit;
 }
 
+void UknightCombatLibrary::SelectBestHitPerActor(TArrayView<const FHitResult> Hits, TArray<FHitResult>& OutHits)
+{
+	OutHits.Reset();
+	TArray<bool, TInlineAllocator<8>> HasPart;
+	for (const FHitResult& Hit : Hits)
+	{
+		AActor* const Actor = Hit.GetActor();
+		if (!Actor)
+		{
+			continue;
+		}
+		const int32 Existing = OutHits.IndexOfByPredicate([Actor](const FHitResult& Kept) { return Kept.GetActor() == Actor; });
+		if (Existing != INDEX_NONE && HasPart[Existing])
+		{
+			continue;
+		}
+		const bool bResolvesPart = Actor->GetClass()->ImplementsInterface(UCombatInterface::StaticClass())
+			&& ICombatInterface::Execute_ResolveHitPartBP(Actor, Hit).IsValid();
+		if (Existing == INDEX_NONE)
+		{
+			OutHits.Add(Hit);
+			HasPart.Add(bResolvesPart);
+		}
+		else if (bResolvesPart)
+		{
+			OutHits[Existing] = Hit;
+			HasPart[Existing] = true;
+		}
+	}
+}
+
 bool UknightCombatLibrary::SetWarpTargetToLockedTarget(AActor* Attacker, FName WarpTargetName, float MaxDistance)
 {
 	UMotionWarpingComponent* const MotionWarping = Attacker ? Attacker->FindComponentByClass<UMotionWarpingComponent>() : nullptr;

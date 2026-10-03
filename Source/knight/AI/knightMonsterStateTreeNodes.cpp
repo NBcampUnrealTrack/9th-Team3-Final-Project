@@ -4,6 +4,7 @@
 #include "AbilitySystemGlobals.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
 #include "Abilities/GameplayAbility.h"
+#include "AbilitySystem/Abilities/knightGameplayAbility_MonsterAttack.h"
 #include "Monster/knightMonsterCharacterBase.h"
 #include "Monster/knightMonsterMovementComponent.h"
 #include "Monster/knightMonsterTargetingComponent.h"
@@ -62,6 +63,7 @@ void FknightStateTreeMonsterTargetEvaluator::Update(FInstanceDataType& InstanceD
 		InstanceData.HealthPercent = MaxHealth > 0.f ? Health / MaxHealth : 0.f;
 		InstanceData.bEnraged = ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Enraged);
 		InstanceData.bExhausted = ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Exhausted);
+		InstanceData.bIsReacting = ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Reacting);
 	}
 }
 
@@ -73,6 +75,7 @@ EStateTreeRunStatus FknightStateTreeActivateAbilityTask::EnterState(FStateTreeEx
 	FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
 	InstanceData.ActiveHandle = FGameplayAbilitySpecHandle();
 	InstanceData.EndedDelegateHandle.Reset();
+	InstanceData.FailAtTime = -1.0;
 
 	UAbilitySystemComponent* const ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(InstanceData.Actor);
 	InstanceData.AbilitySystem = ASC;
@@ -81,24 +84,48 @@ EStateTreeRunStatus FknightStateTreeActivateAbilityTask::EnterState(FStateTreeEx
 		return EStateTreeRunStatus::Failed;
 	}
 
+	// Weighted candidates. Monster attacks weigh themselves against the target; anything else counts as 1.
+	const FknightMonsterAttackContext AttackContext = FknightMonsterAttackContext::Make(InstanceData.Actor, InstanceData.Target);
 	TArray<FGameplayAbilitySpec*> Specs;
 	ASC->GetActivatableGameplayAbilitySpecsByAllMatchingTags(InstanceData.AbilityTags, Specs, true);
-	TArray<FGameplayAbilitySpecHandle> Candidates;
+	TArray<TPair<FGameplayAbilitySpecHandle, float>> Candidates;
+	float TotalWeight = 0.f;
 	for (const FGameplayAbilitySpec* const Spec : Specs)
 	{
-		if (Spec && !Spec->IsActive())
+		if (!Spec || Spec->IsActive())
 		{
-			Candidates.Add(Spec->Handle);
+			continue;
+		}
+		float Weight = 1.f;
+		const UGameplayAbility* const Instance = Spec->GetPrimaryInstance() ? Spec->GetPrimaryInstance() : Spec->Ability.Get();
+		if (const UknightGameplayAbility_MonsterAttack* const Attack = Cast<UknightGameplayAbility_MonsterAttack>(Instance))
+		{
+			Weight = Attack->GetSelectionWeight(AttackContext);
+		}
+		if (Weight > 0.f)
+		{
+			Candidates.Emplace(Spec->Handle, Weight);
+			TotalWeight += Weight;
 		}
 	}
-	// Random order gives a varied move set when several moves share the same tags.
-	for (int32 Index = Candidates.Num() - 1; Index > 0; --Index)
-	{
-		Candidates.Swap(Index, FMath::RandRange(0, Index));
-	}
 
-	for (const FGameplayAbilitySpecHandle& Handle : Candidates)
+	// Draw by weight; a candidate that refuses to activate (blocked, cost) is dropped and the draw repeats.
+	while (Candidates.Num() > 0)
 	{
+		float Roll = FMath::FRandRange(0.f, TotalWeight);
+		int32 Picked = Candidates.Num() - 1;
+		for (int32 Index = 0; Index < Candidates.Num(); ++Index)
+		{
+			Roll -= Candidates[Index].Value;
+			if (Roll <= 0.f)
+			{
+				Picked = Index;
+				break;
+			}
+		}
+		const FGameplayAbilitySpecHandle Handle = Candidates[Picked].Key;
+		TotalWeight -= Candidates[Picked].Value;
+		Candidates.RemoveAtSwap(Picked);
 		if (!ASC->TryActivateAbility(Handle))
 		{
 			continue;
@@ -124,8 +151,24 @@ EStateTreeRunStatus FknightStateTreeActivateAbilityTask::EnterState(FStateTreeEx
 	}
 
 	KNIGHT_PERF_COUNT("Monster.AbilitySelectFailed", 1);
-	UE_LOG(LogknightAI, Verbose, TEXT("%s: no activatable ability for %s."), *GetNameSafe(InstanceData.Actor), *InstanceData.AbilityTags.ToStringSimple());
+	UE_LOG(LogknightAI, Verbose, TEXT("%s: no usable ability for %s."), *GetNameSafe(InstanceData.Actor), *InstanceData.AbilityTags.ToStringSimple());
+	if (InstanceData.RetryDelay > 0.f)
+	{
+		// Hold the state briefly instead of failing into an immediate re-entry.
+		InstanceData.FailAtTime = Context.GetWorld()->GetTimeSeconds() + InstanceData.RetryDelay;
+		return EStateTreeRunStatus::Running;
+	}
 	return EStateTreeRunStatus::Failed;
+}
+
+EStateTreeRunStatus FknightStateTreeActivateAbilityTask::Tick(FStateTreeExecutionContext& Context, const float DeltaTime) const
+{
+	const FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
+	if (InstanceData.FailAtTime >= 0.0 && Context.GetWorld()->GetTimeSeconds() >= InstanceData.FailAtTime)
+	{
+		return EStateTreeRunStatus::Failed;
+	}
+	return EStateTreeRunStatus::Running;
 }
 
 void FknightStateTreeActivateAbilityTask::ExitState(FStateTreeExecutionContext& Context, const FStateTreeTransitionResult& Transition) const

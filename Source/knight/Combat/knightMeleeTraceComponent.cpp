@@ -4,6 +4,7 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "Abilities/GameplayAbilityTargetTypes.h"
+#include "Combat/knightCombatLibrary.h"
 #include "Components/MeshComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
@@ -177,15 +178,15 @@ void UknightMeleeTraceComponent::SweepFrame()
 	const FCollisionShape Sphere = FCollisionShape::MakeSphere(ActiveParams.Radius);
 	const bool bDraw = knightMeleeTraceCVars::DrawMeleeTraces != 0;
 
+	// Collect the whole blade's hits first, then keep one per actor, preferring a hit on a part over the
+	// movement capsule. Handling sweeps one by one let the capsule claim the actor before a part was seen.
+	TArray<FHitResult> FrameHits;
 	TArray<FHitResult> Hits;
 	for (int32 Index = 0; Index < CurrentPoints.Num(); ++Index)
 	{
 		Hits.Reset();
 		World->SweepMultiByObjectType(Hits, PreviousPoints[Index], CurrentPoints[Index], FQuat::Identity, ObjectParams, Sphere, QueryParams);
-		for (const FHitResult& Hit : Hits)
-		{
-			HandleHit(Hit);
-		}
+		FrameHits.Append(Hits);
 		if (bDraw)
 		{
 			DrawDebugLine(World, PreviousPoints[Index], CurrentPoints[Index], Hits.IsEmpty() ? FColor::Green : FColor::Red, false, 1.f);
@@ -193,6 +194,13 @@ void UknightMeleeTraceComponent::SweepFrame()
 		}
 	}
 	PreviousPoints = MoveTemp(CurrentPoints);
+
+	TArray<FHitResult> BestHits;
+	UknightCombatLibrary::SelectBestHitPerActor(FrameHits, BestHits);
+	for (const FHitResult& Hit : BestHits)
+	{
+		HandleHit(Hit);
+	}
 }
 
 void UknightMeleeTraceComponent::HandleHit(const FHitResult& Hit)

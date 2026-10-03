@@ -150,6 +150,31 @@ void UknightMonsterPartComponent::GetTargetPoints(TArray<FknightTargetPoint>& Ou
 	}
 }
 
+bool UknightMonsterPartComponent::GetPartLocation(const FGameplayTag& PartTag, FVector& OutLocation) const
+{
+	const int32 Index = FindPartIndex(PartTag);
+	const FknightMonsterPartDefinition* const Definition = GetDefinition(Index);
+	if (!Definition)
+	{
+		return false;
+	}
+	TArray<UPrimitiveComponent*> PartComponents;
+	GetPartComponents(Index, PartComponents);
+	if (PartComponents.Num() > 0)
+	{
+		OutLocation = PartComponents[0]->GetComponentLocation();
+		return true;
+	}
+	const ACharacter* const Character = Cast<ACharacter>(GetOwner());
+	USkinnedMeshComponent* const Mesh = Character ? Character->GetMesh() : nullptr;
+	if (Mesh && Definition->Bones.Num() > 0)
+	{
+		OutLocation = Mesh->GetSocketLocation(Definition->Bones[0]);
+		return true;
+	}
+	return false;
+}
+
 void UknightMonsterPartComponent::ApplyPartDamage(FGameplayTag PartTag, float Damage, AActor* DamageInstigator)
 {
 	const int32 Index = FindPartIndex(PartTag);

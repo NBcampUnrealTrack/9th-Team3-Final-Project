@@ -70,6 +70,7 @@ namespace knightGameplayTags
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_HitReact_Knockdown);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Monster_Enraged);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Monster_Exhausted);
+	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Monster_Reacting);
 
 	// Animation windows
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Window_Combo);

@@ -65,6 +65,9 @@ public:
 	/** Lock-on points of parts that have a LockOnSocket and are not hidden by a break. */
 	void GetTargetPoints(TArray<FknightTargetPoint>& OutPoints) const;
 
+	/** World location of a part: its first tagged component, else its first bone. False when the part has neither. */
+	bool GetPartLocation(const FGameplayTag& PartTag, FVector& OutLocation) const;
+
 	/** Adds damage to a part directly (scripted events, debug). Normal hits go through the Core attribute set. */
 	UFUNCTION(BlueprintCallable, Category="Knight|Monster")
 	void ApplyPartDamage(FGameplayTag PartTag, float Damage, AActor* DamageInstigator);
