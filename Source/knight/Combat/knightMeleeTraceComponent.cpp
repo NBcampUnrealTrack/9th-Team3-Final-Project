@@ -28,7 +28,7 @@ UknightMeleeTraceComponent::UknightMeleeTraceComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = false;
-	// Sample sockets after animation has posed the mesh this frame.
+	// 이번 프레임 애니메이션이 메시 포즈를 잡은 뒤에 소켓 위치를 샘플링한다.
 	PrimaryComponentTick.TickGroup = TG_PostPhysics;
 
 	HitObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_Pawn));
@@ -41,7 +41,7 @@ void UknightMeleeTraceComponent::BeginTrace(const FknightMeleeTraceParams& Param
 	++TraceDepth;
 	if (TraceDepth > 1)
 	{
-		// A nested window keeps the first window's shape and hit list.
+		// 중첩된 윈도우는 첫 윈도우의 형태와 타격 목록을 그대로 쓴다.
 		return;
 	}
 
@@ -178,8 +178,8 @@ void UknightMeleeTraceComponent::SweepFrame()
 	const FCollisionShape Sphere = FCollisionShape::MakeSphere(ActiveParams.Radius);
 	const bool bDraw = knightMeleeTraceCVars::DrawMeleeTraces != 0;
 
-	// Collect the whole blade's hits first, then keep one per actor, preferring a hit on a part over the
-	// movement capsule. Handling sweeps one by one let the capsule claim the actor before a part was seen.
+	// 칼날 전체의 타격을 먼저 모은 뒤 액터당 하나만 남기며, 이동 캡슐보다 부위 타격을 우선한다.
+	// 스윕을 하나씩 처리하면 부위가 잡히기 전에 캡슐이 그 액터를 먼저 차지해 버렸다.
 	TArray<FHitResult> FrameHits;
 	TArray<FHitResult> Hits;
 	for (int32 Index = 0; Index < CurrentPoints.Num(); ++Index)

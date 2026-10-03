@@ -15,7 +15,7 @@ UknightGameplayAbility_MonsterReaction::UknightGameplayAbility_MonsterReaction(c
 	: Super(ObjectInitializer)
 {
 	ActivationGroup = EknightAbilityActivationGroup::Independent;
-	// A second poise break during a down does not restart it.
+	// 다운 중에 Poise가 다시 깨져도 다운을 처음부터 다시 시작하지 않는다.
 	bRetriggerInstancedAbility = false;
 
 	SetAssetTags(FGameplayTagContainer(knightGameplayTags::Ability_HitReact));
@@ -26,7 +26,7 @@ UknightGameplayAbility_MonsterReaction::UknightGameplayAbility_MonsterReaction(c
 
 	StateTag = knightGameplayTags::State_HitReact_Knockdown;
 
-	// Default: a down on poise break. Blueprint subclasses replace Triggers for other reactions.
+	// 기본값은 Poise가 깨질 때의 다운이다. 다른 반응은 Blueprint 하위 클래스에서 Triggers를 바꾼다.
 	FAbilityTriggerData Trigger;
 	Trigger.TriggerTag = knightGameplayTags::Event_PoiseBroken;
 	Trigger.TriggerSource = EGameplayAbilityTriggerSource::GameplayEvent;
@@ -53,7 +53,7 @@ void UknightGameplayAbility_MonsterReaction::ActivateAbility(const FGameplayAbil
 		bStateTagApplied = true;
 	}
 
-	// Stop the current path; the StateTree's reaction state keeps a new one from starting.
+	// 현재 이동 경로를 멈춘다. 새 경로가 시작되지 않게 막는 것은 StateTree의 반응 상태가 맡는다.
 	if (AAIController* const Controller = Cast<AAIController>(Character->GetController()))
 	{
 		Controller->StopMovement();
@@ -98,7 +98,7 @@ void UknightGameplayAbility_MonsterReaction::HandleRecoverFinished()
 void UknightGameplayAbility_MonsterReaction::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
-	// Montage blend-out and completion can both call in; only the first end may restore poise.
+	// 몽타주 블렌드 아웃과 완료가 둘 다 호출될 수 있으므로 처음 종료될 때만 Poise를 회복한다.
 	if (!IsEndAbilityValid(Handle, ActorInfo))
 	{
 		return;
@@ -110,7 +110,7 @@ void UknightGameplayAbility_MonsterReaction::EndAbility(const FGameplayAbilitySp
 	}
 	bStateTagApplied = false;
 
-	// Death cancels the reaction; a corpse keeps its broken poise.
+	// 사망하면 반응이 취소되며, 시체는 깨진 Poise를 그대로 둔다.
 	if (!bWasCancelled && bRestorePoise)
 	{
 		RestorePoise();
@@ -125,7 +125,7 @@ void UknightGameplayAbility_MonsterReaction::RestorePoise() const
 	{
 		return;
 	}
-	// Base values, so the change is permanent; raising Poise above zero also re-arms the break event.
+	// 기본값(Base)을 바꾸므로 변경이 영구적이다. Poise가 0보다 커지면 Poise 붕괴 이벤트도 다시 발생할 수 있게 된다.
 	const float NewMaxPoise = ASC->GetNumericAttributeBase(UknightCoreAttributeSet::GetMaxPoiseAttribute()) * (1.f + MaxPoiseGrowth);
 	ASC->SetNumericAttributeBase(UknightCoreAttributeSet::GetMaxPoiseAttribute(), NewMaxPoise);
 	ASC->SetNumericAttributeBase(UknightCoreAttributeSet::GetPoiseAttribute(), NewMaxPoise);

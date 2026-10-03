@@ -16,7 +16,7 @@ UknightMonsterMovementComponent::UknightMonsterMovementComponent(const FObjectIn
 	bUseControllerDesiredRotation = false;
 	GravityScale = 1.5f;
 
-	// Path following accelerates like a heavy body instead of snapping to full speed.
+	// 경로 추종 시 곧바로 최고 속도를 내지 않고 무거운 몸체처럼 가속한다.
 	bRequestedMoveUseAcceleration = true;
 	bUseRVOAvoidance = false;
 
@@ -41,7 +41,7 @@ float UknightMonsterMovementComponent::GetMaxSpeed() const
 
 void UknightMonsterMovementComponent::PhysicsRotation(float DeltaTime)
 {
-	// Orient-to-movement would otherwise keep turning toward the last path while the monster reels.
+	// 이렇게 하지 않으면 몬스터가 휘청이는 동안 Orient-to-movement가 마지막 경로 쪽으로 계속 회전시킨다.
 	if (!IsMovementLocked())
 	{
 		Super::PhysicsRotation(DeltaTime);

@@ -84,7 +84,7 @@ EStateTreeRunStatus FknightStateTreeActivateAbilityTask::EnterState(FStateTreeEx
 		return EStateTreeRunStatus::Failed;
 	}
 
-	// Weighted candidates. Monster attacks weigh themselves against the target; anything else counts as 1.
+	// 가중치가 붙은 후보 목록. 몬스터 공격은 타깃을 보고 스스로 가중치를 정하고, 나머지는 1로 친다.
 	const FknightMonsterAttackContext AttackContext = FknightMonsterAttackContext::Make(InstanceData.Actor, InstanceData.Target);
 	TArray<FGameplayAbilitySpec*> Specs;
 	ASC->GetActivatableGameplayAbilitySpecsByAllMatchingTags(InstanceData.AbilityTags, Specs, true);
@@ -109,7 +109,7 @@ EStateTreeRunStatus FknightStateTreeActivateAbilityTask::EnterState(FStateTreeEx
 		}
 	}
 
-	// Draw by weight; a candidate that refuses to activate (blocked, cost) is dropped and the draw repeats.
+	// 가중치로 뽑는다. 발동을 거부한 후보(차단, 비용 부족)는 빼고 다시 뽑는다.
 	while (Candidates.Num() > 0)
 	{
 		float Roll = FMath::FRandRange(0.f, TotalWeight);
@@ -134,10 +134,10 @@ EStateTreeRunStatus FknightStateTreeActivateAbilityTask::EnterState(FStateTreeEx
 		const FGameplayAbilitySpec* const Spec = ASC->FindAbilitySpecFromHandle(Handle);
 		if (!Spec || !Spec->IsActive())
 		{
-			// Ended within its own activation (an instant move).
+			// 발동 도중에 이미 끝났다(즉발 기술).
 			return EStateTreeRunStatus::Succeeded;
 		}
-		// Bound after activation so the callback never finishes the task while EnterState is still running.
+		// 발동 후에 바인딩해서 EnterState가 아직 실행 중일 때 콜백이 Task를 끝내는 일이 없게 한다.
 		InstanceData.EndedDelegateHandle = ASC->OnAbilityEnded.AddLambda(
 			[WeakContext = Context.MakeWeakExecutionContext(), Handle](const FAbilityEndedData& Data)
 			{
@@ -154,7 +154,7 @@ EStateTreeRunStatus FknightStateTreeActivateAbilityTask::EnterState(FStateTreeEx
 	UE_LOG(LogknightAI, Verbose, TEXT("%s: no usable ability for %s."), *GetNameSafe(InstanceData.Actor), *InstanceData.AbilityTags.ToStringSimple());
 	if (InstanceData.RetryDelay > 0.f)
 	{
-		// Hold the state briefly instead of failing into an immediate re-entry.
+		// 바로 실패해서 즉시 재진입하지 않도록 잠시 상태를 유지한다.
 		InstanceData.FailAtTime = Context.GetWorld()->GetTimeSeconds() + InstanceData.RetryDelay;
 		return EStateTreeRunStatus::Running;
 	}

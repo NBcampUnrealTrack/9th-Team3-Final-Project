@@ -120,7 +120,7 @@ void UknightMonsterPartComponent::GetTargetPoints(TArray<FknightTargetPoint>& Ou
 		{
 			continue;
 		}
-		// A severed part (hidden bone or components) is no longer something to lock onto.
+		// 잘려 나간 부위(숨겨진 본이나 컴포넌트)는 더 이상 락온 대상이 아니다.
 		if (PartStates[Index].bBroken && (!Definition->HideBoneOnBreak.IsNone() || Definition->bHideComponentsOnBreak))
 		{
 			continue;
@@ -207,7 +207,7 @@ void UknightMonsterPartComponent::HandleDamaged(AActor* DamageInstigator, AActor
 	}
 	else
 	{
-		// Hits that landed on something outside every part (often the movement capsule).
+		// 어느 부위에도 속하지 않는 곳에 맞은 타격(주로 이동 캡슐).
 		KNIGHT_PERF_COUNT("Combat.UnresolvedPartHits", 1);
 	}
 }

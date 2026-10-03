@@ -1,22 +1,22 @@
-// Monster test commands (development builds only).
+// 몬스터 테스트용 콘솔 명령 (개발 빌드 전용).
 //
-// Every command drives the same code path a real event would take, so the commands test gameplay instead
-// of bypassing it: hits go through UknightCombatLibrary::ApplyMeleeHit with a swept hit result, kills and
-// poise breaks go through the Damage and PoiseDamage meta attributes, enrage and exhaustion through Rage
-// and Stamina reaching their limits.
+// 모든 명령은 실제 이벤트와 같은 코드 경로를 거치므로 게임플레이를 우회하지 않고 그대로 테스트한다.
+// 타격은 스윕 히트 결과로 UknightCombatLibrary::ApplyMeleeHit를 거치고, 처치와 Poise 붕괴는
+// Damage·PoiseDamage 메타 속성을, 분노와 탈진은 Rage와 Stamina가 한계에 도달하는 경로를
+// 그대로 탄다.
 //
-// The target is the player's lock-on target, otherwise the living monster nearest the player.
+// 타깃은 플레이어의 락온 타깃이고, 없으면 플레이어에게 가장 가까운 살아 있는 몬스터다.
 //
-//   knight.Monster.Hit [Damage=50] [Part] [Poise=10]  one weapon-style hit, optionally aimed at a part
-//   knight.Monster.BreakPart <Part>                   break a part through the normal break flow
-//   knight.Monster.SetHealth <Percent>                0-100 (or 0-1); lowers through Damage, raises through Healing
-//   knight.Monster.Kill [all]                         remaining Health as damage
-//   knight.Monster.Enrage / Exhaust / PoiseBreak      fill Rage, empty Stamina, empty Poise
-//   knight.Monster.FreezeAI [0|1]                     pause or resume every monster's StateTree; no argument toggles
-//   knight.Monster.Status [all]                       attributes, state tags, target and parts in the log
-//   knight.Player.Invulnerable [0|1]                  State.Invulnerable on the player; no argument toggles
+//   knight.Monster.Hit [Damage=50] [Part] [Poise=10]  무기와 같은 방식의 타격 1회, 부위를 지정해 노릴 수 있다
+//   knight.Monster.BreakPart <Part>                   일반 파괴 흐름으로 부위를 파괴한다
+//   knight.Monster.SetHealth <Percent>                0-100 (또는 0-1). 낮출 때는 Damage, 올릴 때는 Healing을 거친다
+//   knight.Monster.Kill [all]                         남은 Health만큼 피해를 넣는다
+//   knight.Monster.Enrage / Exhaust / PoiseBreak      Rage를 채우고, Stamina를 비우고, Poise를 비운다
+//   knight.Monster.FreezeAI [0|1]                     모든 몬스터의 StateTree를 멈추거나 재개한다. 인자가 없으면 토글한다
+//   knight.Monster.Status [all]                       속성, 상태 태그, 타깃, 부위를 로그로 출력한다
+//   knight.Player.Invulnerable [0|1]                  플레이어에 State.Invulnerable을 건다. 인자가 없으면 토글한다
 //
-// Part arguments match a full tag (Monster.Part.Test.Head) or its last segment (Head), case-insensitive.
+// 부위 인자는 전체 태그(Monster.Part.Test.Head)나 마지막 구간(Head)과 대소문자 구분 없이 비교한다.
 
 #include "AIController.h"
 #include "AbilitySystemComponent.h"
@@ -44,7 +44,7 @@
 
 namespace knightMonsterCheats
 {
-	// Matches the melee trace's defaults so a cheat hit lands on the same bodies a sword would.
+	// 근접 트레이스 기본값과 맞춰 치트 타격이 검과 같은 바디에 맞도록 한다.
 	constexpr float HitSweepRadius = 30.f;
 	constexpr float HitApproachDistance = 300.f;
 	constexpr float HitFollowThroughDistance = 100.f;
@@ -60,7 +60,7 @@ namespace knightMonsterCheats
 		return IsValid(Monster) && !Monster->IsDead();
 	}
 
-	/** Lock-on target, else the living monster nearest the player (or any living monster without a player). */
+	/** 락온 타깃, 없으면 플레이어에게 가장 가까운 살아 있는 몬스터 (플레이어가 없으면 살아 있는 아무 몬스터). */
 	static AknightMonsterCharacterBase* FindTargetMonster(UWorld* World)
 	{
 		APawn* const Player = GetPlayerPawn(World);
@@ -95,7 +95,7 @@ namespace knightMonsterCheats
 		return Best;
 	}
 
-	/** One target, or every living monster when the first argument is "all". */
+	/** 타깃 하나, 또는 첫 인자가 "all"이면 살아 있는 모든 몬스터. */
 	static void GatherTargets(UWorld* World, const TArray<FString>& Args, TArray<AknightMonsterCharacterBase*>& OutMonsters)
 	{
 		if (Args.IsValidIndex(0) && Args[0].Equals(TEXT("all"), ESearchCase::IgnoreCase))
@@ -140,15 +140,15 @@ namespace knightMonsterCheats
 	}
 
 	/**
-	 * Instant effect adding a SetByCaller amount to one attribute, built once per attribute. Writing meta
-	 * attributes (Damage, PoiseDamage, Healing) or Rage/Stamina this way runs PostGameplayEffectExecute,
-	 * which is where death, poise break, enrage and exhaustion are detected; setting the value directly would skip it.
+	 * 속성 하나에 SetByCaller 값을 더하는 즉시 효과로, 속성마다 한 번만 만든다. 메타 속성(Damage,
+	 * PoiseDamage, Healing)이나 Rage/Stamina를 이렇게 바꿔야 PostGameplayEffectExecute가 실행되고,
+	 * 사망·Poise 붕괴·분노·탈진은 거기서 감지된다. 값을 직접 설정하면 이 과정을 건너뛴다.
 	 */
 	static const FName AmountName(TEXT("KnightDevAmount"));
 
 	static const UGameplayEffect* GetAttributeDeltaEffect(const FGameplayAttribute& Attribute)
 	{
-		// Rooted rather than held in static smart pointers, which would be released after UObject shutdown on exit.
+		// static 스마트 포인터로 들고 있으면 종료 시 UObject 정리 이후에 해제되므로 대신 루트에 등록한다.
 		static TMap<FString, UGameplayEffect*> Effects;
 		const FString Key = Attribute.GetName();
 		if (UGameplayEffect* const* const Existing = Effects.Find(Key))
@@ -203,7 +203,7 @@ namespace knightMonsterCheats
 
 	// knight.Monster.Hit
 
-	/** Where a sword would aim: the part, else the default lock-on point, else the actor origin. */
+	/** 검이 노릴 지점. 부위, 없으면 기본 락온 지점, 그것도 없으면 액터 원점. */
 	static FVector GetAimPoint(AknightMonsterCharacterBase* Monster, const FGameplayTag& PartTag)
 	{
 		FVector Aim = Monster->GetActorLocation();
@@ -238,7 +238,7 @@ namespace knightMonsterCheats
 		}
 		const float Poise = Args.IsValidIndex(2) ? FCString::Atof(*Args[2]) : 10.f;
 
-		// Sweep in from the player's side toward the aim point with the weapon's object types.
+		// 무기와 같은 오브젝트 타입으로 플레이어 쪽에서 조준 지점을 향해 스윕한다.
 		const FVector Aim = GetAimPoint(Monster, AimPart);
 		const FVector Direction = (Aim - Attacker->GetActorLocation()).GetSafeNormal(UE_SMALL_NUMBER, Monster->GetActorForwardVector() * -1.f);
 		const FVector Start = Aim - Direction * HitApproachDistance;
@@ -252,8 +252,8 @@ namespace knightMonsterCheats
 
 		TArray<FHitResult> SweepHits;
 		World->SweepMultiByObjectType(SweepHits, Start, End, FQuat::Identity, ObjectParams, FCollisionShape::MakeSphere(HitSweepRadius), QueryParams);
-		// A named part wins when the sweep reached it, so overlapping parts can still be tested one by one.
-		// Otherwise, the same per-actor choice the weapon trace makes.
+		// 스윕이 지정한 부위에 닿았다면 그 부위를 우선해, 겹친 부위도 하나씩 테스트할 수 있다.
+		// 그렇지 않으면 무기 트레이스와 같은 방식으로 액터별 히트를 고른다.
 		const FHitResult* Hit = AimPart.IsValid()
 			? SweepHits.FindByPredicate([Monster, &AimPart](const FHitResult& Candidate)
 				{ return Candidate.GetActor() == Monster && ICombatInterface::Execute_ResolveHitPartBP(Monster, Candidate) == AimPart; })
@@ -317,7 +317,7 @@ namespace knightMonsterCheats
 			UE_LOG(LogknightDev, Display, TEXT("%s: %s is already broken."), *Monster->GetName(), *PartTag.ToString());
 			return;
 		}
-		// Enough part damage for any break threshold; non-breakable parts just accumulate it.
+		// 어떤 파괴 임계값도 넘는 부위 피해를 넣는다. 파괴할 수 없는 부위는 누적만 된다.
 		Parts->ApplyPartDamage(PartTag, 1.e9f, GetPlayerPawn(World));
 		UE_LOG(LogknightDev, Display, TEXT("%s: %s %s."), *Monster->GetName(), *PartTag.ToString(),
 			Parts->IsPartBroken(PartTag) ? TEXT("broken") : TEXT("is not breakable"));
@@ -489,7 +489,7 @@ namespace knightMonsterCheats
 		const FGameplayTag Tag = knightGameplayTags::State_Invulnerable;
 		const bool bHas = ASC->GetTagCount(Tag) > 0;
 		const bool bWant = Args.IsValidIndex(0) ? FCString::Atoi(*Args[0]) != 0 : !bHas;
-		// Loose tags count; set the count to exactly 1 or 0 so repeated commands do not stack.
+		// 루즈 태그는 카운트가 쌓이므로 정확히 1 또는 0으로 설정해 명령을 반복해도 중첩되지 않게 한다.
 		ASC->SetLooseGameplayTagCount(Tag, bWant ? 1 : 0);
 		UE_LOG(LogknightDev, Display, TEXT("knight.Player.Invulnerable: %d (hits on the player now resolve as Evaded)."), bWant ? 1 : 0);
 	}

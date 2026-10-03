@@ -185,7 +185,7 @@ void FknightGameplayDebuggerCategory_Monster::CollectLines(const AActor& Actor, 
 	OutLines.Add(FString::Printf(TEXT("Target: {white}%s{grey}  Distance {white}%.0f{grey}  Angle {white}%.0f"),
 		Target ? *GetNameSafe(Target) : TEXT("-"), AttackContext.Distance, AttackContext.AngleToTarget));
 
-	// Attack candidates as the StateTree's Knight Activate Ability task would weigh them now.
+	// StateTree의 Knight Activate Ability 태스크가 지금 시점에 매길 가중치 그대로 공격 후보를 보여준다.
 	if (const UAbilitySystemComponent* const ASC = Monster->GetAbilitySystemComponent())
 	{
 		OutLines.Add(FString::Printf(TEXT("Reacting: %s  Attacks:"), *FlagText(ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Reacting))));

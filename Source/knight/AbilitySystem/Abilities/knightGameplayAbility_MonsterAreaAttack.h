@@ -8,15 +8,14 @@
 class UAnimMontage;
 
 /**
- * A monster attack timed by the ability instead of a montage: wind-up, one sphere overlap in front of the
- * monster (slam, stomp, short breath), recovery.
+ * 몽타주 대신 어빌리티가 타이밍을 잡는 몬스터 공격. 예고 → 몬스터 앞쪽 구체 오버랩 한 번(내려찍기,
+ * 발구르기, 짧은 브레스) → 후딜 순서로 진행한다.
  *
- * Every hostile ICombatInterface actor inside the sphere is resolved once through
- * UknightCombatLibrary::ApplyMeleeHit, so guard, parry, evasion and damage follow the same rules as weapon
- * hits. Works without a skeleton, which is what cube stand-ins in test maps need; real monsters can use it
- * for area moves, with Montage playing for looks while timing stays here.
+ * 구체 안의 적대적인 ICombatInterface 액터마다 UknightCombatLibrary::ApplyMeleeHit을 한 번씩 거치므로
+ * 가드, 패링, 회피, 피해가 무기 타격과 같은 규칙을 따른다. 스켈레톤 없이도 동작하므로 테스트 맵의 큐브
+ * 대역에 쓸 수 있고, 실제 몬스터도 범위 공격에 쓸 수 있다. 이때 Montage는 연출용으로만 재생하고 타이밍은 여기서 잡는다.
  *
- * Debug: knight.Monster.DrawAttacks 1 draws the telegraph (orange) and the impact (red).
+ * 디버그: knight.Monster.DrawAttacks 1 이면 예고(주황)와 타격 지점(빨강)을 그린다.
  */
 UCLASS()
 class KNIGHT_API UknightGameplayAbility_MonsterAreaAttack : public UknightGameplayAbility_MonsterAttack
@@ -30,18 +29,18 @@ public:
 		const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData) override;
 
 protected:
-	/** Runs the overlap and applies hits. Override to add effects at the moment of impact. */
+	/** 오버랩을 실행하고 타격을 적용한다. 타격 순간에 효과를 더하려면 오버라이드한다. */
 	virtual void OnImpact();
 
-	/** Time from activation to impact; the player's window to read and dodge the attack. */
+	/** 발동부터 타격까지의 시간. 플레이어가 공격을 읽고 피할 수 있는 구간이다. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Timing", meta=(ClampMin=0, Units="s"))
 	float WindupTime = 0.8f;
 
-	/** Time after impact before the ability ends; the player's punish window. */
+	/** 타격 후 어빌리티가 끝나기까지의 시간. 플레이어가 반격할 수 있는 구간이다. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Timing", meta=(ClampMin=0, Units="s"))
 	float RecoveryTime = 1.f;
 
-	/** Sphere center in the monster's local space (X forward). */
+	/** 몬스터 로컬 공간 기준 구체 중심(X가 정면). */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Area")
 	FVector AreaOffset = FVector(350.f, 0.f, 0.f);
 
@@ -51,11 +50,11 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack")
 	FknightMeleeHitParams HitParams;
 
-	/** Optional. Plays for presentation only; it stops when the ability ends. */
+	/** 선택 사항. 연출용으로만 재생하며 어빌리티가 끝나면 멈춘다. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Presentation")
 	TObjectPtr<UAnimMontage> Montage;
 
-	/** Optional cue executed at the area center when the wind-up starts (ground decal, roar). */
+	/** 선택 사항. 예고가 시작될 때 범위 중심에서 실행하는 큐(바닥 데칼, 포효 등). */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Presentation", meta=(Categories="GameplayCue"))
 	FGameplayTag TelegraphCue;
 

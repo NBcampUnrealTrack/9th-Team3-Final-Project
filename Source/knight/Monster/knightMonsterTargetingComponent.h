@@ -10,13 +10,13 @@ struct FGameplayEffectSpec;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FknightMonsterTargetChanged, AActor*, OldTarget, AActor*, NewTarget);
 
 /**
- * Chooses what the monster fights. Replaces a classic threat table: in a solo raid the candidate set is
- * the Knight plus any objectives (a power plant) or allies added later.
+ * 몬스터가 싸울 대상을 고른다. 전통적인 위협도 테이블을 대신한다. 솔로 레이드에서 후보는
+ * 플레이어와, 나중에 추가되는 목표물(발전소)이나 아군이다.
  *
- * Candidates come from perception (UknightBossAIController forwards sight/hearing/damage) and from
- * AddObjective. Score = Priority / (1 + distance / DistanceFalloff) + recent damage threat.
- * Damage threat decays over time, so hitting the monster pulls it for a while. A candidate that is no
- * longer sensed stays valid for LoseTargetDelay seconds.
+ * 후보는 AI Perception(UknightBossAIController가 시야/청각/피해를 전달)과 AddObjective에서 들어온다.
+ * 점수 = Priority / (1 + 거리 / DistanceFalloff) + 최근 피해 위협도.
+ * 피해 위협도는 시간이 지나며 줄어들므로, 몬스터를 때리면 한동안 어그로가 끌린다. 더 이상 감지되지
+ * 않는 후보도 LoseTargetDelay초 동안은 유효하다.
  */
 UCLASS(ClassGroup=(Knight), meta=(BlueprintSpawnableComponent))
 class KNIGHT_API UknightMonsterTargetingComponent : public UActorComponent
@@ -26,24 +26,24 @@ class KNIGHT_API UknightMonsterTargetingComponent : public UActorComponent
 public:
 	UknightMonsterTargetingComponent();
 
-	/** Binds damage threat to the owner's Core attribute set. Called by the monster once its ASC is ready. */
+	/** 피해 위협도를 소유자의 Core AttributeSet에 바인딩한다. 몬스터가 ASC 준비를 마친 뒤 호출한다. */
 	void InitializeTargeting(UAbilitySystemComponent* InASC);
 
-	/** Perception updates from the AI controller. */
+	/** AI 컨트롤러에서 오는 Perception 갱신. */
 	void NotifyPerceived(AActor* Actor, bool bSensed);
 
-	/** A target the monster should consider without perceiving it (defended objective). */
+	/** 몬스터가 감지하지 않아도 고려해야 할 타깃(방어 목표물). */
 	UFUNCTION(BlueprintCallable, Category="Knight|Monster")
 	void AddObjective(AActor* Objective, float Priority = 0.5f);
 
 	UFUNCTION(BlueprintCallable, Category="Knight|Monster")
 	void RemoveCandidate(AActor* Actor);
 
-	/** Re-scores candidates now instead of waiting for the next evaluation. */
+	/** 다음 평가를 기다리지 않고 지금 후보 점수를 다시 매긴다. */
 	UFUNCTION(BlueprintCallable, Category="Knight|Monster")
 	void EvaluateTarget();
 
-	/** Stops evaluating and forgets every candidate (death). */
+	/** 평가를 멈추고 모든 후보를 잊는다(사망 시). */
 	void StopTargeting();
 
 	UFUNCTION(BlueprintPure, Category="Knight|Monster")
@@ -56,32 +56,32 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	/** Seconds between automatic evaluations. */
+	/** 자동 평가 간격(초). */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Monster", meta=(ClampMin=0.05, Units="s"))
 	float EvaluationInterval = 0.5f;
 
-	/** Priority of perceived hostile pawns. Objectives use the priority passed to AddObjective. */
+	/** 감지된 적대 폰의 우선순위. 목표물은 AddObjective에 넘긴 우선순위를 쓴다. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Monster", meta=(ClampMin=0))
 	float PerceivedPriority = 1.f;
 
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Monster", meta=(ClampMin=1, Units="cm"))
 	float DistanceFalloff = 3000.f;
 
-	/** Threat added per point of damage taken from a candidate. */
+	/** 후보에게 받은 피해 1당 더해지는 위협도. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Monster", meta=(ClampMin=0))
 	float ThreatPerDamage = 0.01f;
 
-	/** Fraction of threat lost per second. */
+	/** 초당 줄어드는 위협도 비율. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Monster", meta=(ClampMin=0, ClampMax=1))
 	float ThreatDecayPerSecond = 0.1f;
 
-	/** A new target must beat the current score by this factor, so the monster does not flip between targets. */
+	/** 새 타깃은 현재 점수보다 이 배율 이상 높아야 한다. 몬스터가 타깃을 이리저리 바꾸지 않게 한다. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Monster", meta=(ClampMin=1))
 	float SwitchHysteresis = 1.25f;
 
 	/**
-	 * Seconds a candidate stays valid after the last sight, sound or hit. A boss keeps hunting a Knight that
-	 * stepped behind it instead of dropping it the moment it leaves the sight cone.
+	 * 마지막으로 보거나 듣거나 맞은 뒤 후보가 유효하게 남는 유지 시간(초). 보스는 등 뒤로 돌아간 플레이어를
+	 * 시야각을 벗어나는 즉시 놓치지 않고 계속 쫓는다.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Monster", meta=(ClampMin=0, Units="s"))
 	float LoseTargetDelay = 8.f;
@@ -92,7 +92,7 @@ private:
 		TWeakObjectPtr<AActor> Actor;
 		float Priority = 1.f;
 		float Threat = 0.f;
-		/** World time it was last sensed or hit the monster. */
+		/** 마지막으로 감지되었거나 몬스터를 때린 월드 시간. */
 		double LastSensedTime = -1.e9;
 		bool bPerceived = false;
 		bool bObjective = false;

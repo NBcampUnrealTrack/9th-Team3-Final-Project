@@ -53,7 +53,7 @@ void AknightMonsterStressSpawner::SpawnMonsters(int32 InCount)
 		FMath::SRandInit(RandomSeed);
 	}
 
-	// Square grid centered on the spawner, facing the spawner's forward.
+	// 스포너를 중심으로 한 정사각 격자에 배치하고, 스포너의 전방을 바라보게 한다.
 	const int32 Columns = FMath::CeilToInt32(FMath::Sqrt(static_cast<float>(Count)));
 	const int32 Rows = FMath::DivideAndRoundUp(Count, Columns);
 	const FVector GridOrigin(-(Rows - 1) * Spacing * 0.5f, -(Columns - 1) * Spacing * 0.5f, 0.f);
@@ -76,7 +76,7 @@ void AknightMonsterStressSpawner::SpawnMonsters(int32 InCount)
 		if (UknightPerfTrackerSubsystem* const Tracker = UknightPerfTrackerSubsystem::Get(World))
 		{
 			Tracker->StartCapture(FString::Printf(TEXT("%s_%d"), *CaptureLabel, Count), CaptureDuration, CaptureWarmup);
-			// The tracker saves on its own at the end; this only follows up (quit) a moment later.
+			// 저장은 트래커가 끝날 때 알아서 한다. 여기서는 잠시 뒤 후속 처리(종료)만 한다.
 			GetWorldTimerManager().SetTimer(CaptureTimer, this, &ThisClass::HandleCaptureFinished, CaptureWarmup + CaptureDuration + 1.f, false);
 		}
 		else

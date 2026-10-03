@@ -1,8 +1,8 @@
 using UnrealBuildTool;
 
 /**
- * Development-only tools: monster cheats and test helpers.
- * The module is a DeveloperTool, so it is never built into Shipping; game code must not depend on it.
+ * 개발 전용 도구 모음: 몬스터 치트와 테스트 도우미.
+ * DeveloperTool 모듈이라 Shipping 빌드에는 포함되지 않으므로, 게임 코드가 이 모듈에 의존하면 안 된다.
  */
 public class knightDev : ModuleRules
 {

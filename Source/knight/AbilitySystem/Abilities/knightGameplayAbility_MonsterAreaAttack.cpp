@@ -24,7 +24,7 @@ namespace knightMonsterAttackCVars
 UknightGameplayAbility_MonsterAreaAttack::UknightGameplayAbility_MonsterAreaAttack(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
-	// The sphere reaches AreaOffset.X + AreaRadius in front of the monster; choose it inside that.
+	// 구체는 몬스터 앞쪽 AreaOffset.X + AreaRadius까지 닿으므로 그 안에서 고르도록 한다.
 	Selection.MaxRange = 600.f;
 	Selection.MaxAngle = 45.f;
 }
@@ -121,7 +121,7 @@ void UknightGameplayAbility_MonsterAreaAttack::OnImpact()
 		}
 		HitActors.Add(Target);
 
-		// Damage context, cues and part lookups expect a hit result; build one at the closest surface point.
+		// 피해 컨텍스트, 큐, 부위 조회는 히트 결과를 필요로 하므로 가장 가까운 표면 지점으로 하나 만든다.
 		FVector ImpactPoint = Component->GetComponentLocation();
 		FVector ClosestPoint;
 		if (Component->GetClosestPointOnCollision(Center, ClosestPoint) >= 0.f)

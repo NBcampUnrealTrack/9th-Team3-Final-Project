@@ -48,7 +48,7 @@ bool UknightPerfTrackerSubsystem::DoesSupportWorldType(const EWorldType::Type Wo
 
 void UknightPerfTrackerSubsystem::Deinitialize()
 {
-	// Ending PIE or travelling away keeps whatever was recorded.
+	// PIE를 끝내거나 다른 맵으로 이동해도 그때까지 기록한 내용은 저장한다.
 	if (bCapturing)
 	{
 		StopCapture();
@@ -70,13 +70,13 @@ void UknightPerfTrackerSubsystem::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	// Real time, so hit stop, slow motion and pause do not distort frame cost.
+	// 실제 시간을 쓰므로 히트 스톱, 슬로 모션, 일시정지가 프레임 비용을 왜곡하지 않는다.
 	const double Now = FPlatformTime::Seconds();
 	const float FrameMs = LastTickSeconds > 0.0 ? static_cast<float>((Now - LastTickSeconds) * 1000.0) : DeltaTime * 1000.f;
 	LastTickSeconds = Now;
 	SmoothedFrameMs = SmoothedFrameMs > 0.f ? FMath::Lerp(SmoothedFrameMs, FrameMs, 0.1f) : FrameMs;
 
-	// GetStats queries the OS, so it runs every few frames instead of every frame.
+	// GetStats는 OS에 질의하므로 매 프레임이 아니라 몇 프레임마다 한 번씩 실행한다.
 	if (LastMemoryMB <= 0.f || ++FramesSinceMemorySample >= knightPerfTracker::MemorySampleInterval)
 	{
 		LastMemoryMB = static_cast<float>(knightPerfTracker::BytesToMB(FPlatformMemory::GetStats().UsedPhysical));
@@ -108,7 +108,7 @@ void UknightPerfTrackerSubsystem::StartCapture(const FString& Label, float Durat
 	}
 	if (!bOverlayEnabled)
 	{
-		// Not ticking until now: restart the frame clock and drop counts accumulated while idle.
+		// 지금까지 틱하지 않았으므로 프레임 시계를 다시 시작하고, 쉬는 동안 쌓인 카운터 값을 버린다.
 		LastTickSeconds = 0.0;
 		FknightPerfCounters::EndFrame();
 	}
@@ -175,8 +175,8 @@ UknightPerfTrackerSubsystem* UknightPerfTrackerSubsystem::Get(const UWorld* Worl
 
 void UknightPerfTrackerSubsystem::SampleFrame(double Now, float FrameMs)
 {
-	// Read at the first sampled frame, not at Start: a capture started from BeginPlay in Standalone runs
-	// before the game viewport has its size.
+	// Start 시점이 아니라 첫 샘플 프레임에서 읽는다. Standalone에서 BeginPlay에서 시작한 측정은
+	// 게임 뷰포트 크기가 정해지기 전에 실행되기 때문이다.
 	if (Capture->ViewportSize == FIntPoint::ZeroValue)
 	{
 		const UGameViewportClient* const GameViewport = GetWorld() ? GetWorld()->GetGameViewport() : nullptr;
@@ -189,7 +189,7 @@ void UknightPerfTrackerSubsystem::SampleFrame(double Now, float FrameMs)
 	FknightPerfFrameSample& Sample = Capture->Frames.AddDefaulted_GetRef();
 	Sample.Time = Now - SamplingStartSeconds;
 	Sample.FrameMs = FrameMs;
-	// Engine thread timings describe the most recently finished frame, as in stat unit.
+	// 엔진 스레드 시간은 stat unit과 마찬가지로 가장 최근에 끝난 프레임의 값이다.
 	Sample.GameMs = FPlatformTime::ToMilliseconds(GGameThreadTime);
 	Sample.RenderMs = FPlatformTime::ToMilliseconds(GRenderThreadTime);
 	Sample.RHIMs = FPlatformTime::ToMilliseconds(GRHIThreadTime);
@@ -241,7 +241,7 @@ void UknightPerfTrackerSubsystem::DrawOverlay(float FrameMs) const
 		{
 			continue;
 		}
-		// Appendf only accepts a literal format string, so each mode gets its own call.
+		// Appendf는 리터럴 포맷 문자열만 받으므로 모드마다 따로 호출한다.
 		const FString Name = FknightPerfCounters::GetName(Index).ToString();
 		if (Mode == EknightPerfCounterMode::TimeMs)
 		{
@@ -262,7 +262,7 @@ void UknightPerfTrackerSubsystem::DrawOverlay(float FrameMs) const
 
 namespace knightPerfTracker
 {
-	/** The command's world, or any game world when typed into the editor's Output Log during PIE. */
+	/** 명령의 월드. PIE 중 에디터 Output Log에서 입력한 경우에는 아무 게임 월드나 찾는다. */
 	static UknightPerfTrackerSubsystem* FindForCommand(UWorld* World)
 	{
 		if (UknightPerfTrackerSubsystem* const Tracker = UknightPerfTrackerSubsystem::Get(World))

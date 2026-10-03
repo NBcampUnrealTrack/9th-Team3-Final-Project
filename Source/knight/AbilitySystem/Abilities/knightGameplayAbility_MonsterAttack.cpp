@@ -25,7 +25,7 @@ FknightMonsterAttackContext FknightMonsterAttackContext::Make(const AActor* Mons
 UknightGameplayAbility_MonsterAttack::UknightGameplayAbility_MonsterAttack(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
-	// Activated by the monster's StateTree, never by input.
+	// 입력이 아니라 몬스터의 StateTree가 발동한다.
 	ActivationGroup = EknightAbilityActivationGroup::Exclusive_Replaceable;
 	SetAssetTags(FGameplayTagContainer(knightGameplayTags::Ability_Attack));
 	ActivationBlockedTags.AddTag(knightGameplayTags::State_Dead);
@@ -46,7 +46,7 @@ float UknightGameplayAbility_MonsterAttack::GetSelectionWeight(const FknightMons
 			return 0.f;
 		}
 	}
-	// Without a target, range and angle cannot be judged; only target-free moves (roars, buffs) pass.
+	// 타깃이 없으면 사거리와 각도를 판단할 수 없으므로 타깃이 필요 없는 기술(포효, 버프)만 통과시킨다.
 	if (!Context.bHasTarget)
 	{
 		return Selection.MinRange <= 0.f && Selection.MaxAngle >= 180.f ? Selection.Weight : 0.f;

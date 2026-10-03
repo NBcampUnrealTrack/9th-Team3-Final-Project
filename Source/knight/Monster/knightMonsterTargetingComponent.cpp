@@ -63,11 +63,11 @@ void UknightMonsterTargetingComponent::NotifyPerceived(AActor* Actor, bool bSens
 		Candidate->Actor = Actor;
 		Candidate->Priority = PerceivedPriority;
 	}
-	// Perception reports changes only, so a target in plain sight gets no updates while it stays seen.
-	// Losing it is therefore the last moment it was sensed, and the memory window starts there.
+	// Perception은 변화만 알려 주므로, 계속 보이는 타깃은 보이는 동안 갱신이 오지 않는다.
+	// 따라서 놓친 순간이 마지막으로 감지된 시점이고, 유지 시간도 그때부터 센다.
 	Candidate->bPerceived = bSensed;
 	Candidate->LastSensedTime = GetWorld()->GetTimeSeconds();
-	// First contact reacts immediately rather than on the next timer tick.
+	// 첫 접촉은 다음 타이머 틱을 기다리지 않고 바로 반응한다.
 	if (bSensed && !CurrentTarget.IsValid())
 	{
 		EvaluateTarget();
@@ -109,7 +109,7 @@ void UknightMonsterTargetingComponent::HandleDamaged(AActor* DamageInstigator, A
 	FCandidate* Candidate = FindCandidate(DamageInstigator);
 	if (!Candidate)
 	{
-		// Being hit counts as perceiving the attacker, even from outside sight range.
+		// 맞으면 시야 범위 밖이라도 공격자를 감지한 것으로 친다.
 		Candidate = &Candidates.AddDefaulted_GetRef();
 		Candidate->Actor = DamageInstigator;
 		Candidate->Priority = PerceivedPriority;
@@ -168,7 +168,7 @@ void UknightMonsterTargetingComponent::EvaluateTarget()
 
 void UknightMonsterTargetingComponent::StopTargeting()
 {
-	// Perception events already queued for this frame can still arrive after death; ignore them.
+	// 이번 프레임에 이미 쌓인 Perception 이벤트는 사망 후에도 도착할 수 있으니 무시한다.
 	bStopped = true;
 	if (UWorld* const World = GetWorld())
 	{

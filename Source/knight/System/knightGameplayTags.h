@@ -3,23 +3,23 @@
 #include "NativeGameplayTags.h"
 
 /**
- * Tags the C++ code refers to by name. Content-only tags (per-monster parts, per-attack cues)
- * belong in Config/Tags/*.ini instead, so designers can add them without a recompile.
+ * C++ 코드에서 이름으로 참조하는 태그. 콘텐츠 전용 태그(몬스터별 부위, 공격별 큐)는
+ * 디자이너가 재컴파일 없이 추가할 수 있도록 Config/Tags/*.ini에 둔다.
  *
- * Root rules:
- *   InputTag.*     Input actions bound through UknightInputConfig
- *   Ability.*      Ability identity and activation failure reasons
- *   State.*        Loose or GE-granted tags describing what an actor is doing
- *   Window.*       Animation windows opened by AnimNotifyStates
- *   Event.*        Gameplay events sent to abilities
- *   SetByCaller.*  Magnitudes passed into GameplayEffectSpecs
- *   GameplayCue.*  Cosmetic feedback only; never read by gameplay logic
- *   Message.*      GameplayMessageRouter channels (UI and presentation listeners)
- *   Monster.Part.* Monster part identities; specific parts are defined per monster in ini
+ * 루트 규칙:
+ *   InputTag.*     UknightInputConfig로 바인딩되는 입력 액션
+ *   Ability.*      어빌리티 식별자와 활성화 실패 사유
+ *   State.*        액터가 무엇을 하고 있는지 나타내는 루즈 태그 또는 GE가 부여한 태그
+ *   Window.*       AnimNotifyState가 여는 애니메이션 구간
+ *   Event.*        어빌리티로 보내는 게임플레이 이벤트
+ *   SetByCaller.*  GameplayEffectSpec에 넘기는 수치
+ *   GameplayCue.*  연출 피드백 전용. 게임플레이 로직에서는 읽지 않는다
+ *   Message.*      GameplayMessageRouter 채널 (UI·연출 리스너)
+ *   Monster.Part.* 몬스터 부위 식별자. 구체적인 부위는 몬스터별로 ini에 정의한다
  */
 namespace knightGameplayTags
 {
-	// Input
+	// 입력
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Move);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Move_Vertical);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Look);
@@ -35,7 +35,7 @@ namespace knightGameplayTags
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Interact);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Item_Use);
 
-	// Ability identity
+	// 어빌리티 식별자
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack_Charge);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Guard);
@@ -44,14 +44,14 @@ namespace knightGameplayTags
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_HitReact);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Death);
 
-	// Ability activation failure reasons (read by UI and debugger)
+	// 어빌리티 활성화 실패 사유 (UI와 디버거에서 읽는다)
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_ActivateFail_Cost);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_ActivateFail_Cooldown);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_ActivateFail_TagsBlocked);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_ActivateFail_TagsMissing);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_ActivateFail_ActivationGroup);
 
-	// State
+	// 상태
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_InputBlocked);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Dead);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Invulnerable);
@@ -72,12 +72,12 @@ namespace knightGameplayTags
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Monster_Exhausted);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Monster_Reacting);
 
-	// Animation windows
+	// 애니메이션 구간
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Window_Combo);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Window_Cancel);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Window_MeleeTrace);
 
-	// Gameplay events
+	// 게임플레이 이벤트
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Melee_Hit);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Damaged);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Guarded);
@@ -87,13 +87,13 @@ namespace knightGameplayTags
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_PartBroken);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Death);
 
-	// SetByCaller magnitudes
+	// SetByCaller 수치
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_Damage);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_PoiseDamage);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_MotionValue);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_BoostCost);
 
-	// Gameplay cues
+	// 게임플레이 큐
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Hit_Melee);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Hit_Weakpoint);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Guard);
@@ -101,7 +101,7 @@ namespace knightGameplayTags
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_PartBreak);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Boost_Dash);
 
-	// Message channels
+	// 메시지 채널
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Message_Combat_Hit);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Message_Combat_PartBroken);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Message_Boss_PhaseChanged);
@@ -109,10 +109,10 @@ namespace knightGameplayTags
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Message_Raid_PhaseChanged);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Message_Player_Died);
 
-	// Monster parts
+	// 몬스터 부위
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Monster_Part);
 
-	// Items and equipment
+	// 아이템과 장비
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Item_Type_Material);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Item_Type_Part);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Item_Type_Weapon);

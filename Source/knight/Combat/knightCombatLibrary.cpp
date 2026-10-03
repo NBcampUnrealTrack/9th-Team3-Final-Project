@@ -64,13 +64,13 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 	SpecHandle.Data->SetSetByCallerMagnitude(knightGameplayTags::SetByCaller_MotionValue, Params.MotionValue);
 	SpecHandle.Data->SetSetByCallerMagnitude(knightGameplayTags::SetByCaller_PoiseDamage, Params.PoiseDamage);
 
-	// Read before applying: the hit may kill the target and change its tags.
+	// 적용 전에 읽어 둔다. 타격으로 타깃이 죽으면서 태그가 바뀔 수 있다.
 	const bool bGuarding = TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_Guarding);
 	SourceASC->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data, TargetASC);
 
 	if (bGuarding)
 	{
-		// The guard ability decides whether the hit came from inside its arc and how to react.
+		// 타격이 가드 범위 안에서 들어왔는지, 어떻게 반응할지는 가드 어빌리티가 판단한다.
 		FGameplayEventData Payload;
 		Payload.EventTag = knightGameplayTags::Event_Guarded;
 		Payload.Instigator = Attacker;
@@ -90,7 +90,7 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 	CueParams.RawMagnitude = PartMultiplier;
 	TargetASC->ExecuteGameplayCue(CueTag, CueParams);
 	ApplyHitStopPair(Attacker, Target, Params.HitStopDuration);
-	// Combat is audible: a monster that has not noticed the fight yet can hear it.
+	// 전투는 소리가 난다. 아직 전투를 알아채지 못한 몬스터도 이 소리를 들을 수 있다.
 	UAISense_Hearing::ReportNoiseEvent(Attacker, Hit.ImpactPoint, 1.f, Attacker, 0.f, TEXT("Hit"));
 	return EknightHitOutcome::Hit;
 }
