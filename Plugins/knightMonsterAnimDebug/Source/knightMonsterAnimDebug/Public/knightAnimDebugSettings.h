@@ -1,0 +1,138 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Engine/DeveloperSettings.h"
+#include "knightAnimDebugSettings.generated.h"
+
+class APawn;
+class UGameplayAbility;
+
+/** 어빌리티의 float 프로퍼티 하나를 타임라인 구간 하나로 그린다. 어빌리티에 없는 프로퍼티는 건너뛴다. */
+USTRUCT()
+struct FknightAnimDebugPhaseProperty
+{
+	GENERATED_BODY()
+
+	/** 어빌리티 클래스의 float 프로퍼티 이름(초 단위). */
+	UPROPERTY(EditAnywhere, Category="Timeline")
+	FName PropertyName;
+
+	UPROPERTY(EditAnywhere, Category="Timeline")
+	FString Label;
+
+	UPROPERTY(EditAnywhere, Category="Timeline")
+	FColor Color = FColor::White;
+
+	/** 이 구간이 끝나는 순간에 판정이 일어난다(범위 공격의 예고). 타임라인에 판정 표시를 그린다. */
+	UPROPERTY(EditAnywhere, Category="Timeline")
+	bool bHitAtEnd = false;
+};
+
+/** 머리 위와 패널에 표시할 속성. MaxName이 있으면 "값/최댓값"으로 표시한다. */
+USTRUCT()
+struct FknightAnimDebugAttribute
+{
+	GENERATED_BODY()
+
+	/** 속성 세트의 FGameplayAttributeData 프로퍼티 이름. */
+	UPROPERTY(EditAnywhere, Category="Attributes")
+	FName Name;
+
+	UPROPERTY(EditAnywhere, Category="Attributes")
+	FName MaxName;
+};
+
+/**
+ * 몬스터 애니메이션 디버거 설정 (프로젝트 설정 > Knight > Monster Anim Debug, DefaultGame.ini에 저장).
+ *
+ * 플러그인은 게임 모듈을 모르므로 무엇을 추적하고 어떤 프로퍼티를 읽을지는 모두 여기서 이름으로 정한다.
+ * 클래스나 프로퍼티 이름이 바뀌면 이 설정만 고치면 된다.
+ */
+UCLASS(Config=Game, DefaultConfig, meta=(DisplayName="Monster Anim Debug"))
+class KNIGHTMONSTERANIMDEBUG_API UknightAnimDebugSettings : public UDeveloperSettings
+{
+	GENERATED_BODY()
+
+public:
+	UknightAnimDebugSettings();
+
+	//~ UDeveloperSettings
+	virtual FName GetCategoryName() const override { return TEXT("Knight"); }
+
+	/** 이 클래스의 폰을 추적한다. 비어 있으면 AI가 조종하고 어빌리티 시스템이 있는 폰을 모두 추적한다. */
+	UPROPERTY(Config, EditAnywhere, Category="Tracking")
+	TSoftClassPtr<APawn> TrackedPawnClass;
+
+	/** 이 클래스(또는 하위 클래스)의 어빌리티만 기록하고 강제 실행 목록에 올린다. 비어 있으면 모든 어빌리티. */
+	UPROPERTY(Config, EditAnywhere, Category="Tracking")
+	TArray<TSoftClassPtr<UGameplayAbility>> PlayableAbilityClasses;
+
+	/** 이 접두사로 시작하는 태그의 추가·제거를 기록하고 표시한다. */
+	UPROPERTY(Config, EditAnywhere, Category="Tracking")
+	TArray<FString> TagPrefixes;
+
+	/** 위에서부터 순서대로 이어 붙여 어빌리티 타임라인을 만든다. */
+	UPROPERTY(Config, EditAnywhere, Category="Timeline")
+	TArray<FknightAnimDebugPhaseProperty> TimelinePhases;
+
+	/** 범위 판정 구체: 몬스터 로컬 오프셋(FVector)과 반지름(float) 프로퍼티 이름. 둘 다 있는 어빌리티만 월드에 그린다. */
+	UPROPERTY(Config, EditAnywhere, Category="Timeline")
+	FName AreaOffsetProperty;
+
+	UPROPERTY(Config, EditAnywhere, Category="Timeline")
+	FName AreaRadiusProperty;
+
+	/** 노티파이 스테이트 이름에 이 단어가 들어 있으면 판정 구간으로 보고 빨간색으로 그린다. */
+	UPROPERTY(Config, EditAnywhere, Category="Timeline")
+	TArray<FString> HitWindowNotifyKeywords;
+
+	UPROPERTY(Config, EditAnywhere, Category="Display")
+	TArray<FknightAnimDebugAttribute> Attributes;
+
+	/** 이 접두사로 시작하는 knightPerfTracker 카운터를 성능 줄과 녹화에 넣는다. */
+	UPROPERTY(Config, EditAnywhere, Category="Performance")
+	TArray<FString> PerfCounterPrefixes;
+
+	/** 몬스터 수 게이지. 있으면 TimeMs 카운터를 이 값으로 나눠 몬스터 1마리당 평균도 보여준다. */
+	UPROPERTY(Config, EditAnywhere, Category="Performance")
+	FName AliveCountGauge;
+
+	/** 녹화 Markdown에 넣는 이벤트 행의 최대 개수. 전체 이벤트는 CSV에 모두 들어간다. */
+	UPROPERTY(Config, EditAnywhere, Category="Recording", meta=(ClampMin=10))
+	int32 MaxReportEventRows = 300;
+
+	/**
+	 * 커버리지 보드: 이 클래스의 어빌리티가 타이밍 프로퍼티(판정 표시 구간)를 갖지 않으면 몽타주가 판정을 맡는다고 보고,
+	 * 판정 노티파이(HitWindowNotifyKeywords)가 없을 때 문제로 표시한다.
+	 */
+	UPROPERTY(Config, EditAnywhere, Category="Coverage")
+	TSoftClassPtr<UGameplayAbility> AttackAbilityClass;
+
+	/** 비어 있어도 동작하는 몽타주 프로퍼티(반응의 RecoverMontage는 비면 RecoverTime으로 대신한다). 비어 있으면 '주의'로 표시한다. */
+	UPROPERTY(Config, EditAnywhere, Category="Coverage")
+	TArray<FName> OptionalMontageProperties;
+
+	/** 어빌리티 판정 시각과 몽타주 판정 노티파이 시작이 이 값(초)보다 많이 어긋나면 '주의'로 표시한다. */
+	UPROPERTY(Config, EditAnywhere, Category="Coverage", meta=(ClampMin=0, Units="s"))
+	float HitAlignmentTolerance = 0.1f;
+
+	/**
+	 * 공격 미리보기: 판정 노티파이 스테이트에서 궤적을 만들 때 읽는 프로퍼티 이름. 노티파이 객체의 프로퍼티나
+	 * 그 안의 구조체(예: TraceParams) 필드에서 찾는다.
+	 */
+	UPROPERTY(Config, EditAnywhere, Category="Preview")
+	FName TraceStartSocketProperty;
+
+	UPROPERTY(Config, EditAnywhere, Category="Preview")
+	FName TraceEndSocketProperty;
+
+	UPROPERTY(Config, EditAnywhere, Category="Preview")
+	FName TraceRadiusProperty;
+
+	/** 미리보기의 플레이어 더미 캡슐 기본 크기(cm). */
+	UPROPERTY(Config, EditAnywhere, Category="Preview", meta=(ClampMin=1, Units="cm"))
+	float DummyRadius = 42.f;
+
+	UPROPERTY(Config, EditAnywhere, Category="Preview", meta=(ClampMin=1, Units="cm"))
+	float DummyHalfHeight = 96.f;
+};

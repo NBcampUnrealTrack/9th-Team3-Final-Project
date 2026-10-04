@@ -99,6 +99,10 @@
 			"Enabled": true
 		},
 		{
+			"Name": "knightMonsterAnimDebug",
+			"Enabled": true
+		},
+		{
 			"Name": "ModelContextProtocol",
 			"Enabled": true
 		},
