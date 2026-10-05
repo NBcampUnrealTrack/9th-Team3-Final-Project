@@ -39,7 +39,7 @@ void UknightGameplayAbility_MeleeAttack::ActivateAbility(const FGameplayAbilityS
 	HitTask->EventReceived.AddDynamic(this, &ThisClass::OnMeleeHitEvent);
 	HitTask->ReadyForActivation();
 
-	UAbilityTask_PlayMontageAndWait* const MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, AttackMontage, PlayRate, StartSection);
+	UAbilityTask_PlayMontageAndWait* const MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, AttackMontage, PlayRate, StartSection, true, RootMotionScale);
 	MontageTask->OnCompleted.AddDynamic(this, &ThisClass::OnMontageFinished);
 	MontageTask->OnBlendOut.AddDynamic(this, &ThisClass::OnMontageFinished);
 	MontageTask->OnInterrupted.AddDynamic(this, &ThisClass::OnMontageFinished);

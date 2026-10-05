@@ -44,6 +44,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack", meta=(ClampMin=0.01))
 	float PlayRate = 1.f;
 
+	/** Scales the montage's root motion travel (0.4 = 40 % of the authored distance). */
+	UPROPERTY(EditDefaultsOnly, Category="Attack", meta=(ClampMin=0))
+	float RootMotionScale = 1.f;
+
 	UPROPERTY(EditDefaultsOnly, Category="Attack")
 	FName StartSection = NAME_None;
 
