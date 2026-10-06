@@ -26,6 +26,10 @@ struct FknightAnimDebugPhaseProperty
 	/** 이 구간이 끝나는 순간에 판정이 일어난다(범위 공격의 예고). 타임라인에 판정 표시를 그린다. */
 	UPROPERTY(EditAnywhere, Category="Timeline")
 	bool bHitAtEnd = false;
+
+	/** 이 구간 동안 판정이 유지된다(범위 공격의 지속 판정). 판정 표시 구간 바로 뒤에 둔다. */
+	UPROPERTY(EditAnywhere, Category="Timeline")
+	bool bHitWindow = false;
 };
 
 /** 머리 위와 패널에 표시할 속성. MaxName이 있으면 "값/최댓값"으로 표시한다. */

@@ -38,48 +38,53 @@ UknightMeleeTraceComponent::UknightMeleeTraceComponent()
 
 void UknightMeleeTraceComponent::BeginTrace(const FknightMeleeTraceParams& Params)
 {
-	++TraceDepth;
-	if (TraceDepth > 1)
-	{
-		// 중첩된 윈도우는 첫 윈도우의 형태와 타격 목록을 그대로 쓴다.
-		return;
-	}
-
-	ActiveParams = Params;
-	ActiveParams.BladeSamples = FMath::Max(2, ActiveParams.BladeSamples);
-	TraceMesh = FindTraceMesh(Params.MeshComponentTag);
-	HitActors.Reset();
-	PreviousPoints.Reset();
-	if (!TraceMesh.IsValid())
+	const bool bFirst = ActiveTraces.IsEmpty();
+	FActiveTrace& Trace = ActiveTraces.AddDefaulted_GetRef();
+	Trace.Params = Params;
+	Trace.Params.BladeSamples = FMath::Max(2, Params.BladeSamples);
+	Trace.Mesh = FindTraceMesh(Params.MeshComponentTag);
+	if (!Trace.Mesh.IsValid())
 	{
 		UE_LOG(LogknightCombat, Warning, TEXT("%s: no mesh with tag '%s' for the melee trace."), *GetNameSafe(GetOwner()), *Params.MeshComponentTag.ToString());
+	}
+	SampleBlade(Trace, Trace.PreviousPoints);
+
+	if (!bFirst)
+	{
+		// 겹친 윈도우(양손 동시 공격)는 자기 형태로 따로 훑고, 타격 목록은 첫 윈도우부터 함께 쓴다.
 		return;
 	}
-	SampleBlade(PreviousPoints);
+	HitActors.Reset();
 	SetComponentTickEnabled(true);
-
 	if (UAbilitySystemComponent* const ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner()))
 	{
 		ASC->AddLooseGameplayTag(knightGameplayTags::Window_MeleeTrace);
 	}
 }
 
-void UknightMeleeTraceComponent::EndTrace()
+void UknightMeleeTraceComponent::EndTrace(const FknightMeleeTraceParams& Params)
 {
-	if (TraceDepth <= 0)
+	const int32 Index = ActiveTraces.IndexOfByPredicate([&Params](const FActiveTrace& Trace)
+	{
+		return Trace.Params.StartSocket == Params.StartSocket && Trace.Params.EndSocket == Params.EndSocket
+			&& Trace.Params.MeshComponentTag == Params.MeshComponentTag;
+	});
+	if (Index == INDEX_NONE)
 	{
 		return;
 	}
-	--TraceDepth;
-	if (TraceDepth > 0)
+	ActiveTraces.RemoveAt(Index);
+	if (ActiveTraces.IsEmpty())
 	{
-		return;
+		StopAllTraces();
 	}
+}
 
-	SetComponentTickEnabled(false);
-	TraceMesh.Reset();
-	PreviousPoints.Reset();
+void UknightMeleeTraceComponent::StopAllTraces()
+{
+	ActiveTraces.Reset();
 	HitActors.Reset();
+	SetComponentTickEnabled(false);
 
 	if (UAbilitySystemComponent* const ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner()))
 	{
@@ -89,15 +94,17 @@ void UknightMeleeTraceComponent::EndTrace()
 
 void UknightMeleeTraceComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	TraceDepth = FMath::Min(TraceDepth, 1);
-	EndTrace();
+	if (IsTracing())
+	{
+		StopAllTraces();
+	}
 	Super::EndPlay(EndPlayReason);
 }
 
 void UknightMeleeTraceComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-	if (IsTracing() && TraceMesh.IsValid())
+	if (IsTracing())
 	{
 		SweepFrame();
 	}
@@ -130,19 +137,20 @@ UMeshComponent* UknightMeleeTraceComponent::FindTraceMesh(FName ComponentTag) co
 	return nullptr;
 }
 
-void UknightMeleeTraceComponent::SampleBlade(TArray<FVector>& OutPoints) const
+void UknightMeleeTraceComponent::SampleBlade(const FActiveTrace& Trace, TArray<FVector>& OutPoints)
 {
-	OutPoints.Reset(ActiveParams.BladeSamples);
-	const UMeshComponent* const Mesh = TraceMesh.Get();
+	const int32 Samples = Trace.Params.BladeSamples;
+	OutPoints.Reset(Samples);
+	const UMeshComponent* const Mesh = Trace.Mesh.Get();
 	if (!Mesh)
 	{
 		return;
 	}
-	const FVector Start = Mesh->GetSocketLocation(ActiveParams.StartSocket);
-	const FVector End = Mesh->GetSocketLocation(ActiveParams.EndSocket);
-	for (int32 Index = 0; Index < ActiveParams.BladeSamples; ++Index)
+	const FVector Start = Mesh->GetSocketLocation(Trace.Params.StartSocket);
+	const FVector End = Mesh->GetSocketLocation(Trace.Params.EndSocket);
+	for (int32 Index = 0; Index < Samples; ++Index)
 	{
-		const float Alpha = static_cast<float>(Index) / static_cast<float>(ActiveParams.BladeSamples - 1);
+		const float Alpha = static_cast<float>(Index) / static_cast<float>(Samples - 1);
 		OutPoints.Add(FMath::Lerp(Start, End, Alpha));
 	}
 }
@@ -153,14 +161,6 @@ void UknightMeleeTraceComponent::SweepFrame()
 	UWorld* const World = GetWorld();
 	if (!World)
 	{
-		return;
-	}
-
-	TArray<FVector> CurrentPoints;
-	SampleBlade(CurrentPoints);
-	if (CurrentPoints.Num() != PreviousPoints.Num())
-	{
-		PreviousPoints = CurrentPoints;
 		return;
 	}
 
@@ -175,25 +175,35 @@ void UknightMeleeTraceComponent::SweepFrame()
 	GetOwner()->GetAttachedActors(AttachedActors);
 	QueryParams.AddIgnoredActors(AttachedActors);
 
-	const FCollisionShape Sphere = FCollisionShape::MakeSphere(ActiveParams.Radius);
 	const bool bDraw = knightMeleeTraceCVars::DrawMeleeTraces != 0;
 
-	// 칼날 전체의 타격을 먼저 모은 뒤 액터당 하나만 남기며, 이동 캡슐보다 부위 타격을 우선한다.
+	// 모든 칼날(겹친 윈도우 포함)의 타격을 먼저 모은 뒤 액터당 하나만 남기며, 이동 캡슐보다 부위 타격을 우선한다.
 	// 스윕을 하나씩 처리하면 부위가 잡히기 전에 캡슐이 그 액터를 먼저 차지해 버렸다.
 	TArray<FHitResult> FrameHits;
 	TArray<FHitResult> Hits;
-	for (int32 Index = 0; Index < CurrentPoints.Num(); ++Index)
+	TArray<FVector> CurrentPoints;
+	for (FActiveTrace& Trace : ActiveTraces)
 	{
-		Hits.Reset();
-		World->SweepMultiByObjectType(Hits, PreviousPoints[Index], CurrentPoints[Index], FQuat::Identity, ObjectParams, Sphere, QueryParams);
-		FrameHits.Append(Hits);
-		if (bDraw)
+		SampleBlade(Trace, CurrentPoints);
+		if (CurrentPoints.Num() != Trace.PreviousPoints.Num())
 		{
-			DrawDebugLine(World, PreviousPoints[Index], CurrentPoints[Index], Hits.IsEmpty() ? FColor::Green : FColor::Red, false, 1.f);
-			DrawDebugSphere(World, CurrentPoints[Index], ActiveParams.Radius, 8, FColor::Yellow, false, 1.f);
+			Trace.PreviousPoints = CurrentPoints;
+			continue;
 		}
+		const FCollisionShape Sphere = FCollisionShape::MakeSphere(Trace.Params.Radius);
+		for (int32 Index = 0; Index < CurrentPoints.Num(); ++Index)
+		{
+			Hits.Reset();
+			World->SweepMultiByObjectType(Hits, Trace.PreviousPoints[Index], CurrentPoints[Index], FQuat::Identity, ObjectParams, Sphere, QueryParams);
+			FrameHits.Append(Hits);
+			if (bDraw)
+			{
+				DrawDebugLine(World, Trace.PreviousPoints[Index], CurrentPoints[Index], Hits.IsEmpty() ? FColor::Green : FColor::Red, false, 1.f);
+				DrawDebugSphere(World, CurrentPoints[Index], Trace.Params.Radius, 8, FColor::Yellow, false, 1.f);
+			}
+		}
+		Trace.PreviousPoints = CurrentPoints;
 	}
-	PreviousPoints = MoveTemp(CurrentPoints);
 
 	TArray<FHitResult> BestHits;
 	UknightCombatLibrary::SelectBestHitPerActor(FrameHits, BestHits);

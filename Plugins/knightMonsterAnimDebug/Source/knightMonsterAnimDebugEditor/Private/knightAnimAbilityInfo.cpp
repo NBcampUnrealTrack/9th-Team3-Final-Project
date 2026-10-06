@@ -216,6 +216,11 @@ namespace knightAnimAbilityInfo
 					if (Phase.bHitAtEnd && Info.HitTime < 0.f)
 					{
 						Info.HitTime = Info.PhaseTotal;
+						Info.HitEndTime = Info.PhaseTotal;
+					}
+					else if (PhaseProperty.bHitWindow && Info.HitTime >= 0.f)
+					{
+						Info.HitEndTime = Info.PhaseTotal;
 					}
 				}
 			}

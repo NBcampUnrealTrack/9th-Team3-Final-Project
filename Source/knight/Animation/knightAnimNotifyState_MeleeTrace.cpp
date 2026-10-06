@@ -17,7 +17,7 @@ void UknightAnimNotifyState_MeleeTrace::NotifyEnd(USkeletalMeshComponent* MeshCo
 {
 	if (UknightMeleeTraceComponent* const Trace = (MeshComp && MeshComp->GetOwner()) ? MeshComp->GetOwner()->FindComponentByClass<UknightMeleeTraceComponent>() : nullptr)
 	{
-		Trace->EndTrace();
+		Trace->EndTrace(TraceParams);
 	}
 	Super::NotifyEnd(MeshComp, Animation, EventReference);
 }

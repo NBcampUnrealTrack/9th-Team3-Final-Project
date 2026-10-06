@@ -2,6 +2,7 @@
 
 #include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
+#include "Abilities/Tasks/AbilityTask_Repeat.h"
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "Combat/knightCombatLibrary.h"
 #include "DrawDebugHelpers.h"
@@ -12,6 +13,12 @@
 #include "Interfaces/CombatInterface.h"
 #include "knight.h"
 #include "knightPerfCounters.h"
+
+namespace knightMonsterAreaAttack
+{
+	/** 판정이 유지되는 동안 오버랩을 다시 하는 간격. */
+	constexpr float ActiveCheckInterval = 1.f / 20.f;
+}
 
 namespace knightMonsterAttackCVars
 {
@@ -39,6 +46,7 @@ void UknightGameplayAbility_MonsterAreaAttack::ActivateAbility(const FGameplayAb
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
+	HitActors.Reset();
 
 	const FVector Center = GetAreaCenter();
 	if (TelegraphCue.IsValid())
@@ -73,7 +81,25 @@ void UknightGameplayAbility_MonsterAreaAttack::ActivateAbility(const FGameplayAb
 void UknightGameplayAbility_MonsterAreaAttack::HandleWindupFinished()
 {
 	OnImpact();
+	if (ActiveTime <= 0.f)
+	{
+		StartRecovery();
+		return;
+	}
+	const int32 Checks = FMath::Max(1, FMath::RoundToInt(ActiveTime / knightMonsterAreaAttack::ActiveCheckInterval));
+	UAbilityTask_Repeat* const ActiveTask = UAbilityTask_Repeat::RepeatAction(this, knightMonsterAreaAttack::ActiveCheckInterval, Checks);
+	ActiveTask->OnPerformAction.AddDynamic(this, &ThisClass::HandleActiveTick);
+	ActiveTask->OnFinished.AddDynamic(this, &ThisClass::StartRecovery);
+	ActiveTask->ReadyForActivation();
+}
 
+void UknightGameplayAbility_MonsterAreaAttack::HandleActiveTick(int32 ActionNumber)
+{
+	OnImpact();
+}
+
+void UknightGameplayAbility_MonsterAreaAttack::StartRecovery(int32 ActionNumber)
+{
 	UAbilityTask_WaitDelay* const RecoveryTask = UAbilityTask_WaitDelay::WaitDelay(this, RecoveryTime);
 	RecoveryTask->OnFinish.AddDynamic(this, &ThisClass::HandleRecoveryFinished);
 	RecoveryTask->ReadyForActivation();
@@ -104,7 +130,7 @@ void UknightGameplayAbility_MonsterAreaAttack::OnImpact()
 	TArray<FOverlapResult> Overlaps;
 	World->OverlapMultiByObjectType(Overlaps, Center, FQuat::Identity, ObjectParams, FCollisionShape::MakeSphere(AreaRadius), QueryParams);
 
-	TSet<AActor*> HitActors;
+	int32 NewHits = 0;
 	for (const FOverlapResult& Overlap : Overlaps)
 	{
 		AActor* const Target = Overlap.GetActor();
@@ -120,6 +146,7 @@ void UknightGameplayAbility_MonsterAreaAttack::OnImpact()
 			continue;
 		}
 		HitActors.Add(Target);
+		++NewHits;
 
 		// 피해 컨텍스트, 큐, 부위 조회는 히트 결과를 필요로 하므로 가장 가까운 표면 지점으로 하나 만든다.
 		FVector ImpactPoint = Component->GetComponentLocation();
@@ -138,10 +165,11 @@ void UknightGameplayAbility_MonsterAreaAttack::OnImpact()
 #if ENABLE_DRAW_DEBUG
 	if (knightMonsterAttackCVars::DrawAttacks != 0)
 	{
-		DrawDebugSphere(World, Center, AreaRadius, 16, HitActors.IsEmpty() ? FColor::Red : FColor::Magenta, false, 0.5f, 0, 3.f);
+		DrawDebugSphere(World, Center, AreaRadius, 16, NewHits == 0 ? FColor::Red : FColor::Magenta, false,
+			ActiveTime > 0.f ? knightMonsterAreaAttack::ActiveCheckInterval : 0.5f, 0, 3.f);
 	}
 #endif
-	UE_LOG(LogknightAI, Verbose, TEXT("%s: %s hit %d target(s)."), *GetNameSafe(Avatar), *GetName(), HitActors.Num());
+	UE_LOG(LogknightAI, Verbose, TEXT("%s: %s hit %d target(s)."), *GetNameSafe(Avatar), *GetName(), NewHits);
 }
 
 FVector UknightGameplayAbility_MonsterAreaAttack::GetAreaCenter() const
