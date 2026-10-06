@@ -14,7 +14,8 @@ DECLARE_MULTICAST_DELEGATE_OneParam(FknightMeleeHitEvent, const FHitResult& /*Hi
  * Sweeps the weapon between frames while a UknightAnimNotifyState_MeleeTrace is active.
  *
  * Each frame, several points along the blade are swept from last frame's position to this frame's,
- * so fast swings do not tunnel. Each actor is hit at most once per trace window. Valid hits
+ * so fast swings do not tunnel. Overlapping windows (both claws at once) each sweep their own shape and
+ * share one hit list, so each actor is hit at most once until the last overlapping window ends. Valid hits
  * (ICombatInterface::CanReceiveHit and hostile team) are sent to the owner's ASC as Event.Melee.Hit
  * with the hit result as target data; the running attack ability turns them into damage.
  *
@@ -29,10 +30,11 @@ public:
 	UknightMeleeTraceComponent();
 
 	void BeginTrace(const FknightMeleeTraceParams& Params);
-	void EndTrace();
+	/** Ends the window that began with the same shape. */
+	void EndTrace(const FknightMeleeTraceParams& Params);
 
 	UFUNCTION(BlueprintPure, Category="Knight|Combat")
-	bool IsTracing() const { return TraceDepth > 0; }
+	bool IsTracing() const { return !ActiveTraces.IsEmpty(); }
 
 	/** Native listeners (debugger, tests). Gameplay reacts to Event.Melee.Hit instead. */
 	FknightMeleeHitEvent OnMeleeHit;
@@ -47,16 +49,21 @@ protected:
 	TArray<TEnumAsByte<EObjectTypeQuery>> HitObjectTypes;
 
 private:
+	struct FActiveTrace
+	{
+		FknightMeleeTraceParams Params;
+		TWeakObjectPtr<UMeshComponent> Mesh;
+		TArray<FVector> PreviousPoints;
+	};
+
 	UMeshComponent* FindTraceMesh(FName ComponentTag) const;
-	void SampleBlade(TArray<FVector>& OutPoints) const;
+	static void SampleBlade(const FActiveTrace& Trace, TArray<FVector>& OutPoints);
 	void SweepFrame();
 	void HandleHit(const FHitResult& Hit);
 	bool IsValidTarget(AActor* Target) const;
+	void StopAllTraces();
 
-	FknightMeleeTraceParams ActiveParams;
-	TWeakObjectPtr<UMeshComponent> TraceMesh;
-	TArray<FVector> PreviousPoints;
+	TArray<FActiveTrace> ActiveTraces;
+	/** Shared by overlapping windows; cleared when the last one ends. */
 	TSet<TWeakObjectPtr<AActor>> HitActors;
-	/** Supports overlapping trace notifies; the window closes when the last one ends. */
-	int32 TraceDepth = 0;
 };

@@ -451,7 +451,9 @@ FString FknightAttackPreviewModel::GetHitSummary() const
 	}
 	if (Ability->bHasArea)
 	{
-		Lines.Add(bAreaHit ? FString::Printf(TEXT("범위 구체: 명중 (판정 %.2fs)"), Ability->HitTime) : FString(TEXT("범위 구체: 빗나감")));
+		const FString HitText = Ability->HitEndTime > Ability->HitTime
+			? FString::Printf(TEXT("%.2f~%.2fs"), Ability->HitTime, Ability->HitEndTime) : FString::Printf(TEXT("%.2fs"), Ability->HitTime);
+		Lines.Add(bAreaHit ? FString::Printf(TEXT("범위 구체: 명중 (판정 %s)"), *HitText) : FString(TEXT("범위 구체: 빗나감")));
 	}
 	if (Lines.IsEmpty())
 	{
@@ -500,8 +502,8 @@ void FknightAttackPreviewModel::Draw(FPrimitiveDrawInterface* PDI) const
 
 	if (bShowTrail && !Trail.IsEmpty())
 	{
-		// 지나간 표본은 진하게, 아직 안 온 표본은 옅게 그린다. 현재 표본은 판정 캡슐로 그린다.
-		const FknightTrailSample* CurrentSample = nullptr;
+		// 지나간 표본은 진하게, 아직 안 온 표본은 옅게 그린다. 윈도우마다 현재 표본을 판정 캡슐로 그린다(양손 동시 판정).
+		TMap<int32, const FknightTrailSample*> CurrentSamples;
 		for (int32 Index = 0; Index < Trail.Num(); ++Index)
 		{
 			const FknightTrailSample& Sample = Trail[Index];
@@ -513,13 +515,18 @@ void FknightAttackPreviewModel::Draw(FPrimitiveDrawInterface* PDI) const
 				PDI->DrawLine(Sample.Start, Trail[Index + 1].Start, Color, Depth, 0.5f);
 				PDI->DrawLine(Sample.End, Trail[Index + 1].End, Color, Depth, 0.5f);
 			}
-			if (bPast && (!CurrentSample || Sample.Time >= CurrentSample->Time) && Time - Sample.Time < knightAttackPreview::TrailSampleInterval * 1.5f)
+			if (bPast && Time - Sample.Time < knightAttackPreview::TrailSampleInterval * 1.5f)
 			{
-				CurrentSample = &Sample;
+				const FknightTrailSample*& Current = CurrentSamples.FindOrAdd(Sample.Window);
+				if (!Current || Sample.Time >= Current->Time)
+				{
+					Current = &Sample;
+				}
 			}
 		}
-		if (CurrentSample)
+		for (const TPair<int32, const FknightTrailSample*>& Pair : CurrentSamples)
 		{
+			const FknightTrailSample* const CurrentSample = Pair.Value;
 			const FVector Axis = CurrentSample->End - CurrentSample->Start;
 			const FVector Z = Axis.GetSafeNormal();
 			FVector X;
@@ -580,7 +587,7 @@ void FknightAttackPreviewModel::Draw(FPrimitiveDrawInterface* PDI) const
 
 	if (bShowArea && Ability && Ability->bHasArea)
 	{
-		// 판정 전에는 주황, 판정 직후 잠깐 빨강, 그 뒤(후딜)는 회색.
+		// 판정 전에는 주황, 판정 중(지속 판정 포함, 최소 잠깐)은 빨강, 그 뒤(후딜)는 회색.
 		const FVector Center = GetActorTransform().TransformPosition(Ability->AreaOffset);
 		FLinearColor Color(0.5f, 0.5f, 0.5f);
 		float Thickness = 1.f;
@@ -588,7 +595,7 @@ void FknightAttackPreviewModel::Draw(FPrimitiveDrawInterface* PDI) const
 		{
 			Color = FLinearColor(1.f, 0.55f, 0.1f);
 		}
-		else if (Time < Ability->HitTime + knightAttackPreview::AreaFlashSeconds)
+		else if (Time < FMath::Max(Ability->HitTime + knightAttackPreview::AreaFlashSeconds, Ability->HitEndTime))
 		{
 			Color = FLinearColor::Red;
 			Thickness = 3.f;
