@@ -17,14 +17,16 @@
 #include "Monster/knightMonsterPartComponent.h"
 #include "Monster/knightMonsterTargetingComponent.h"
 #include "MotionWarpingComponent.h"
+#include "Perception/AIPerceptionComponent.h"
 #include "System/knightGameplayTags.h"
 #include "System/knightTeams.h"
 #include "knight.h"
+#include "knightPerfCounters.h"
 
 AknightMonsterCharacterBase::AknightMonsterCharacterBase(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UknightMonsterMovementComponent>(ACharacter::CharacterMovementComponentName))
 {
-	// Movement-only capsule. Size it to the monster's footprint in the Blueprint, not its whole body.
+	// 이동 전용 캡슐. Blueprint에서 몸 전체가 아니라 몬스터가 발 딛는 면적에 맞춰 크기를 정한다.
 	GetCapsuleComponent()->InitCapsuleSize(120.f, 200.f);
 
 	bUseControllerRotationYaw = false;
@@ -32,7 +34,7 @@ AknightMonsterCharacterBase::AknightMonsterCharacterBase(const FObjectInitialize
 	bUseControllerRotationRoll = false;
 	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
 
-	// Weapon traces hit the physics asset bodies, not the capsule.
+	// 무기 트레이스는 캡슐이 아니라 피직스 에셋 바디에 맞는다.
 	GetMesh()->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	GetMesh()->SetCollisionObjectType(ECC_PhysicsBody);
 	GetMesh()->SetGenerateOverlapEvents(false);
@@ -67,8 +69,27 @@ void AknightMonsterCharacterBase::BeginPlay()
 	MonsterAttributeSet->OnRageMaxed.AddUObject(this, &ThisClass::HandleRageMaxed);
 	MonsterAttributeSet->OnStaminaDepleted.AddUObject(this, &ThisClass::HandleStaminaDepleted);
 
-	// Placed monsters may begin play before possession; parts and threat work either way.
+	// 배치된 몬스터는 빙의 전에 BeginPlay가 불릴 수 있다. 부위와 위협도는 어느 쪽이든 동작한다.
 	InitializeAbilitySystem();
+	SetCountedAlive(true);
+}
+
+void AknightMonsterCharacterBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	SetCountedAlive(false);
+	Super::EndPlay(EndPlayReason);
+}
+
+void AknightMonsterCharacterBase::SetCountedAlive(bool bAlive)
+{
+	static int32 AliveMonsters = 0;
+	if (bCountedAlive == bAlive)
+	{
+		return;
+	}
+	bCountedAlive = bAlive;
+	AliveMonsters += bAlive ? 1 : -1;
+	KNIGHT_PERF_GAUGE("Monster.Alive", AliveMonsters);
 }
 
 void AknightMonsterCharacterBase::PossessedBy(AController* NewController)
@@ -159,6 +180,7 @@ void AknightMonsterCharacterBase::HandleOutOfHealth(AActor* DamageInstigator, AA
 		return;
 	}
 	bIsDying = true;
+	SetCountedAlive(false);
 
 	AbilitySystemComponent->AddLooseGameplayTag(knightGameplayTags::State_Dead);
 
@@ -176,14 +198,26 @@ void AknightMonsterCharacterBase::HandleOutOfHealth(AActor* DamageInstigator, AA
 	const FGameplayTagContainer KeepAbilities(knightGameplayTags::Ability_Death);
 	AbilitySystemComponent->CancelAbilities(nullptr, &KeepAbilities);
 
-	if (const AAIController* const AIController = Cast<AAIController>(GetController()))
+	if (AAIController* const AIController = Cast<AAIController>(GetController()))
 	{
 		if (UBrainComponent* const Brain = AIController->GetBrainComponent())
 		{
 			Brain->StopLogic(TEXT("Monster defeated"));
 		}
+		AIController->StopMovement();
+		// 시체는 더 이상 시야와 청각 쿼리가 필요 없다.
+		if (UAIPerceptionComponent* const Perception = AIController->GetAIPerceptionComponent())
+		{
+			Perception->Deactivate();
+		}
 	}
+	TargetingComponent->StopTargeting();
 	GetCharacterMovement()->StopMovementImmediately();
+	GetCharacterMovement()->DisableMovement();
+
+	// 플레이어가 갈무리 지점에 닿도록 시체를 밟거나 통과할 수 있게 한다. 부위 바디는 연출용으로 남긴다.
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 
 	UE_LOG(LogknightAI, Log, TEXT("%s defeated by %s."), *GetNameSafe(this), *GetNameSafe(DamageInstigator));
 	OnMonsterDefeated.Broadcast(this, DamageInstigator);

@@ -29,7 +29,7 @@ struct KNIGHT_API FknightTargetPoint
 	}
 };
 
-UINTERFACE(MinimalAPI, meta=(CannotImplementInterfaceInBlueprint))
+UINTERFACE(MinimalAPI, BlueprintType)
 class UTargetableInterface : public UInterface
 {
 	GENERATED_BODY()
@@ -41,11 +41,28 @@ class KNIGHT_API ITargetableInterface
 	GENERATED_BODY()
 
 public:
-	virtual bool IsTargetable() const = 0;
+	virtual bool IsTargetable() const { return false; }
 
 	/** Appends points in a stable order; the first point is the default lock target. */
-	virtual void GetTargetPoints(TArray<FknightTargetPoint>& OutPoints) const = 0;
+	virtual void GetTargetPoints(TArray<FknightTargetPoint>& OutPoints) const { OutPoints.Reset(); }
 
 	/** Approximate radius in cm, used by the lock-on camera to frame the target. */
-	virtual float GetTargetRadius() const = 0;
+	virtual float GetTargetRadius() const { return 0.f; }
+
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category="Knight|Targeting")
+	bool CanBeTargeted() const;
+	virtual bool CanBeTargeted_Implementation() const { return IsTargetable(); }
+
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category="Knight|Targeting")
+	TArray<FknightTargetPoint> QueryTargetPoints() const;
+	virtual TArray<FknightTargetPoint> QueryTargetPoints_Implementation() const
+	{
+		TArray<FknightTargetPoint> Points;
+		GetTargetPoints(Points);
+		return Points;
+	}
+
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category="Knight|Targeting")
+	float QueryTargetRadius() const;
+	virtual float QueryTargetRadius_Implementation() const { return GetTargetRadius(); }
 };

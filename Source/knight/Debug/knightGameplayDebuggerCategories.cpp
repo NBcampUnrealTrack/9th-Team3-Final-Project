@@ -5,6 +5,7 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "AbilitySystem/Abilities/knightGameplayAbility.h"
+#include "AbilitySystem/Abilities/knightGameplayAbility_MonsterAttack.h"
 #include "AbilitySystem/Attributes/knightAttributeSet.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
 #include "AbilitySystem/Attributes/knightMonsterAttributeSet.h"
@@ -179,7 +180,31 @@ void FknightGameplayDebuggerCategory_Monster::CollectLines(const AActor& Actor, 
 	OutLines.Add(FString::Printf(TEXT("Definition: {white}%s{grey}  Dead: %s"), *GetNameSafe(Definition), *FlagText(Monster->IsDead())));
 
 	const UknightMonsterTargetingComponent* const Targeting = Monster->GetTargetingComponent();
-	OutLines.Add(FString::Printf(TEXT("Target: {white}%s"), Targeting && Targeting->GetCurrentTarget() ? *GetNameSafe(Targeting->GetCurrentTarget()) : TEXT("-")));
+	const AActor* const Target = Targeting ? Targeting->GetCurrentTarget() : nullptr;
+	const FknightMonsterAttackContext AttackContext = FknightMonsterAttackContext::Make(Monster, Target);
+	OutLines.Add(FString::Printf(TEXT("Target: {white}%s{grey}  Distance {white}%.0f{grey}  Angle {white}%.0f"),
+		Target ? *GetNameSafe(Target) : TEXT("-"), AttackContext.Distance, AttackContext.AngleToTarget));
+
+	// StateTree의 Knight Activate Ability 태스크가 지금 시점에 매길 가중치 그대로 공격 후보를 보여준다.
+	if (const UAbilitySystemComponent* const ASC = Monster->GetAbilitySystemComponent())
+	{
+		OutLines.Add(FString::Printf(TEXT("Reacting: %s  Attacks:"), *FlagText(ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Reacting))));
+		for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+		{
+			const UGameplayAbility* const Instance = Spec.GetPrimaryInstance() ? Spec.GetPrimaryInstance() : Spec.Ability.Get();
+			const UknightGameplayAbility_MonsterAttack* const Attack = Cast<UknightGameplayAbility_MonsterAttack>(Instance);
+			if (!Attack)
+			{
+				continue;
+			}
+			const FknightMonsterAttackSelection& Selection = Attack->GetSelection();
+			const float Weight = Attack->GetSelectionWeight(AttackContext);
+			OutLines.Add(FString::Printf(TEXT("  %s%s {grey}weight %.1f  range %.0f-%.0f  angle %.0f  cooldown %.1f%s"),
+				Weight > 0.f ? TEXT("{green}") : TEXT("{white}"), *Attack->GetClass()->GetName(), Weight,
+				Selection.MinRange, Selection.MaxRange, Selection.MaxAngle, Attack->GetCooldownRemaining(AttackContext.WorldTime),
+				Spec.IsActive() ? TEXT("  {yellow}ACTIVE") : TEXT("")));
+		}
+	}
 
 	const UknightMonsterPartComponent* const Parts = Monster->GetPartComponent();
 	if (!Parts || Parts->GetPartStates().IsEmpty())

@@ -1,6 +1,7 @@
 #include "System/knightAssetManager.h"
 
 #include "System/knightTeams.h"
+#include "Raid/knightRaidDefinition.h"
 #include "Misc/ScopeLock.h"
 #include "knight.h"
 
@@ -14,6 +15,14 @@ UknightAssetManager& UknightAssetManager::Get()
 	UE_LOG(LogknightData, Fatal, TEXT("AssetManagerClassName in DefaultEngine.ini must be knightAssetManager."));
 	// Fatal never returns; this keeps the compiler satisfied.
 	return *NewObject<UknightAssetManager>();
+}
+
+TSharedPtr<FStreamableHandle> UknightAssetManager::LoadRaidDefinitionAsync(
+	const TSoftObjectPtr<UknightRaidDefinition>& Definition, FStreamableDelegate Completion)
+{
+	if (Definition.IsNull()) return nullptr;
+	return UAssetManager::GetStreamableManager().RequestAsyncLoad(
+		Definition.ToSoftObjectPath(), MoveTemp(Completion));
 }
 
 void UknightAssetManager::StartInitialLoading()

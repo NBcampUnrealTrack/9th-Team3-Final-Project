@@ -7,6 +7,7 @@
 #include "Interfaces/CombatInterface.h"
 #include "TimerManager.h"
 #include "knight.h"
+#include "knightPerfCounters.h"
 
 UknightMonsterTargetingComponent::UknightMonsterTargetingComponent()
 {
@@ -47,7 +48,7 @@ void UknightMonsterTargetingComponent::InitializeTargeting(UAbilitySystemCompone
 
 void UknightMonsterTargetingComponent::NotifyPerceived(AActor* Actor, bool bSensed)
 {
-	if (!Actor || Actor == GetOwner())
+	if (!Actor || Actor == GetOwner() || bStopped)
 	{
 		return;
 	}
@@ -62,8 +63,11 @@ void UknightMonsterTargetingComponent::NotifyPerceived(AActor* Actor, bool bSens
 		Candidate->Actor = Actor;
 		Candidate->Priority = PerceivedPriority;
 	}
+	// Perception은 변화만 알려 주므로, 계속 보이는 타깃은 보이는 동안 갱신이 오지 않는다.
+	// 따라서 놓친 순간이 마지막으로 감지된 시점이고, 유지 시간도 그때부터 센다.
 	Candidate->bPerceived = bSensed;
-	// First contact reacts immediately rather than on the next timer tick.
+	Candidate->LastSensedTime = GetWorld()->GetTimeSeconds();
+	// 첫 접촉은 다음 타이머 틱을 기다리지 않고 바로 반응한다.
 	if (bSensed && !CurrentTarget.IsValid())
 	{
 		EvaluateTarget();
@@ -98,19 +102,20 @@ void UknightMonsterTargetingComponent::RemoveCandidate(AActor* Actor)
 void UknightMonsterTargetingComponent::HandleDamaged(AActor* DamageInstigator, AActor* DamageCauser, const FGameplayEffectSpec* EffectSpec,
 	float Magnitude, float OldValue, float NewValue)
 {
-	if (!DamageInstigator || DamageInstigator == GetOwner())
+	if (!DamageInstigator || DamageInstigator == GetOwner() || bStopped)
 	{
 		return;
 	}
 	FCandidate* Candidate = FindCandidate(DamageInstigator);
 	if (!Candidate)
 	{
-		// Being hit counts as perceiving the attacker, even from outside sight range.
+		// 맞으면 시야 범위 밖이라도 공격자를 감지한 것으로 친다.
 		Candidate = &Candidates.AddDefaulted_GetRef();
 		Candidate->Actor = DamageInstigator;
 		Candidate->Priority = PerceivedPriority;
 		Candidate->bPerceived = true;
 	}
+	Candidate->LastSensedTime = GetWorld()->GetTimeSeconds();
 	Candidate->Threat += Magnitude * ThreatPerDamage;
 	if (!CurrentTarget.IsValid())
 	{
@@ -120,6 +125,11 @@ void UknightMonsterTargetingComponent::HandleDamaged(AActor* DamageInstigator, A
 
 void UknightMonsterTargetingComponent::EvaluateTarget()
 {
+	if (bStopped)
+	{
+		return;
+	}
+	KNIGHT_PERF_SCOPE("Monster.Targeting");
 	const double Now = GetWorld()->GetTimeSeconds();
 	const float Elapsed = static_cast<float>(Now - LastEvaluationTime);
 	LastEvaluationTime = Now;
@@ -133,7 +143,7 @@ void UknightMonsterTargetingComponent::EvaluateTarget()
 	for (FCandidate& Candidate : Candidates)
 	{
 		Candidate.Threat *= Decay;
-		if (!IsCandidateValid(Candidate))
+		if (!IsCandidateValid(Candidate, Now))
 		{
 			continue;
 		}
@@ -156,6 +166,18 @@ void UknightMonsterTargetingComponent::EvaluateTarget()
 	SetCurrentTarget(Best);
 }
 
+void UknightMonsterTargetingComponent::StopTargeting()
+{
+	// 이번 프레임에 이미 쌓인 Perception 이벤트는 사망 후에도 도착할 수 있으니 무시한다.
+	bStopped = true;
+	if (UWorld* const World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(EvaluationTimer);
+	}
+	Candidates.Reset();
+	SetCurrentTarget(nullptr);
+}
+
 UknightMonsterTargetingComponent::FCandidate* UknightMonsterTargetingComponent::FindCandidate(const AActor* Actor)
 {
 	return Candidates.FindByPredicate([Actor](const FCandidate& Candidate) { return Candidate.Actor.Get() == Actor; });
@@ -167,15 +189,19 @@ float UknightMonsterTargetingComponent::ScoreCandidate(const FCandidate& Candida
 	return Candidate.Priority / (1.f + Distance / DistanceFalloff) + Candidate.Threat;
 }
 
-bool UknightMonsterTargetingComponent::IsCandidateValid(const FCandidate& Candidate) const
+bool UknightMonsterTargetingComponent::IsCandidateValid(const FCandidate& Candidate, double Now) const
 {
 	AActor* const Actor = Candidate.Actor.Get();
-	if (!Actor || (!Candidate.bPerceived && !Candidate.bObjective))
+	if (!Actor)
 	{
 		return false;
 	}
-	const ICombatInterface* const Combat = Cast<ICombatInterface>(Actor);
-	if (Combat && Combat->IsDead())
+	const bool bRemembered = Now - Candidate.LastSensedTime <= LoseTargetDelay;
+	if (!Candidate.bPerceived && !Candidate.bObjective && !bRemembered)
+	{
+		return false;
+	}
+	if (Actor->GetClass()->ImplementsInterface(UCombatInterface::StaticClass()) && ICombatInterface::Execute_IsDeadBP(Actor))
 	{
 		return false;
 	}
@@ -190,6 +216,7 @@ void UknightMonsterTargetingComponent::SetCurrentTarget(AActor* NewTarget)
 		return;
 	}
 	CurrentTarget = NewTarget;
+	KNIGHT_PERF_COUNT("Monster.TargetChanges", 1);
 	UE_LOG(LogknightAI, Log, TEXT("%s target: %s -> %s"), *GetNameSafe(GetOwner()), *GetNameSafe(OldTarget), *GetNameSafe(NewTarget));
 	OnTargetChanged.Broadcast(OldTarget, NewTarget);
 }

@@ -4,6 +4,9 @@
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Engine/GameInstance.h"
+#include "InputCoreTypes.h"
+#include "knightPlayerController.h"
+#include "Raid/knightRaidGameMode.h"
 #include "knight.h"
 
 #define LOCTEXT_NAMESPACE "KnightFlowTestReturn"
@@ -45,6 +48,19 @@ void UKnightFlowTestReturnWidget::NativeDestruct()
 	}
 	BoundFlow.Reset();
 	Super::NativeDestruct();
+}
+
+FReply UKnightFlowTestReturnWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
+{
+	if (InKeyEvent.GetKey() == EKeys::Escape)
+	{
+		if (AknightPlayerController* const RaidController = Cast<AknightPlayerController>(GetOwningPlayer()))
+		{
+			RaidController->CloseRaidReturnMenu();
+			return FReply::Handled();
+		}
+	}
+	return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
 }
 
 void UKnightFlowTestReturnWidget::FocusReturnButton()
@@ -93,7 +109,17 @@ void UKnightFlowTestReturnWidget::HandleReturnClicked()
 	{
 		return;
 	}
-	const bool bAccepted = Flow->RequestOpenMainMenu();
+	bool bAccepted = false;
+	if (AknightRaidGameMode* const Raid = GetWorld() ? GetWorld()->GetAuthGameMode<AknightRaidGameMode>() : nullptr)
+	{
+		if (APlayerController* const Controller = GetOwningPlayer()) Controller->SetPause(false);
+		Raid->RequestReturnToLobby();
+		bAccepted = Flow->IsTravelPending();
+	}
+	else
+	{
+		bAccepted = Flow->RequestOpenMainMenu();
+	}
 	if (Button_ReturnToMainMenu) Button_ReturnToMainMenu->SetIsEnabled(Flow->GetCurrentFlowState() == EKnightFlowState::Gameplay && !Flow->IsTravelPending());
 	if (bAccepted && Flow->IsTravelPending() && Text_Status)
 	{

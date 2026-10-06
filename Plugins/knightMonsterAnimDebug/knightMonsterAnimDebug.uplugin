@@ -1,0 +1,43 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0",
+	"FriendlyName": "Knight Monster Anim Debug",
+	"Description": "Gameplay Debugger category for monster animation work: live StateTree state, ability, montage and notify timeline, forced playback, slow motion and frame stepping, and Markdown/CSV recordings. Reads the game through GAS, StateTree and reflection, with no dependency on the game module.",
+	"Category": "Knight",
+	"CreatedBy": "Project Knight",
+	"EnabledByDefault": true,
+	"CanContainContent": false,
+	"IsBetaVersion": false,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "knightMonsterAnimDebug",
+			"Type": "DeveloperTool",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "knightMonsterAnimDebugEditor",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "GameplayAbilities",
+			"Enabled": true
+		},
+		{
+			"Name": "StateTree",
+			"Enabled": true
+		},
+		{
+			"Name": "GameplayStateTree",
+			"Enabled": true
+		},
+		{
+			"Name": "knightPerfTracker",
+			"Enabled": true
+		}
+	]
+}

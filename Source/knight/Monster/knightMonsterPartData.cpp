@@ -12,6 +12,7 @@ EDataValidationResult UknightMonsterPartData::IsDataValid(FDataValidationContext
 	EDataValidationResult Result = CombineDataValidationResults(Super::IsDataValid(Context), EDataValidationResult::Valid);
 	TSet<FGameplayTag> SeenTags;
 	TMap<FName, FGameplayTag> BoneOwners;
+	TMap<FName, FGameplayTag> ComponentTagOwners;
 	for (int32 Index = 0; Index < Parts.Num(); ++Index)
 	{
 		const FknightMonsterPartDefinition& Part = Parts[Index];
@@ -27,9 +28,19 @@ EDataValidationResult UknightMonsterPartData::IsDataValid(FDataValidationContext
 			Result = EDataValidationResult::Invalid;
 		}
 		SeenTags.Add(Part.PartTag);
-		if (Part.Bones.IsEmpty())
+		if (Part.Bones.IsEmpty() && Part.ComponentTags.IsEmpty())
 		{
-			Context.AddWarning(FText::Format(LOCTEXT("NoBones", "Part {0} lists no bones, so no hit can resolve to it."), FText::FromName(Part.PartTag.GetTagName())));
+			Context.AddWarning(FText::Format(LOCTEXT("NoBones", "Part {0} lists no bones or component tags, so no hit can resolve to it."), FText::FromName(Part.PartTag.GetTagName())));
+		}
+		for (const FName& ComponentTag : Part.ComponentTags)
+		{
+			if (const FGameplayTag* const Owner = ComponentTagOwners.Find(ComponentTag))
+			{
+				Context.AddError(FText::Format(LOCTEXT("SharedComponentTag", "Component tag {0} is in both {1} and {2}."),
+					FText::FromName(ComponentTag), FText::FromName(Owner->GetTagName()), FText::FromName(Part.PartTag.GetTagName())));
+				Result = EDataValidationResult::Invalid;
+			}
+			ComponentTagOwners.Add(ComponentTag, Part.PartTag);
 		}
 		for (const FName& Bone : Part.Bones)
 		{

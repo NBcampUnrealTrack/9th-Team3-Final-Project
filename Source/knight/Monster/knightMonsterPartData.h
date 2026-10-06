@@ -24,6 +24,14 @@ struct KNIGHT_API FknightMonsterPartDefinition
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Part")
 	TArray<FName> Bones;
 
+	/**
+	 * Component tags that belong to this part. A hit on a component carrying one of these tags resolves to
+	 * this part. For separate primitives (cube stand-ins in test maps, detachable armor meshes); bones win
+	 * when a hit matches both.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Part")
+	TArray<FName> ComponentTags;
+
 	/** Hitzone multiplier (1 = neutral). Weak points are simply high values; the hit cue switches at the attack's threshold. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hitzone", meta=(ClampMin=0))
 	float DamageMultiplier = 1.f;
@@ -31,6 +39,10 @@ struct KNIGHT_API FknightMonsterPartDefinition
 	/** Socket or bone used as a lock-on point. None means this part is not a lock-on point. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Lock On")
 	FName LockOnSocket;
+
+	/** Lock on to the first component with one of ComponentTags (its origin). For parts without a skeleton socket. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Lock On")
+	bool bLockOnComponent = false;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Break")
 	bool bBreakable = false;
@@ -50,6 +62,10 @@ struct KNIGHT_API FknightMonsterPartDefinition
 	/** Bone hidden on break, including its children (tail cut, horn snapped). None hides nothing. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Break", meta=(EditCondition="bBreakable"))
 	FName HideBoneOnBreak;
+
+	/** Hide the part's tagged components and turn off their collision on break. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Break", meta=(EditCondition="bBreakable"))
+	bool bHideComponentsOnBreak = false;
 };
 
 /** Every part of one monster species. Shared by all instances of that monster. */

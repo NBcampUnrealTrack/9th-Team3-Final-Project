@@ -56,6 +56,14 @@ void AknightRaidGameMode::ResolveRaidDefinition()
 void AknightRaidGameMode::StartPlay()
 {
 	Super::StartPlay();
+	if (UknightRaidSubsystem* const Session = GetGameInstance()->GetSubsystem<UknightRaidSubsystem>())
+	{
+		if (!Session->GetCurrentRunId().IsValid())
+		{
+			const UKnightGameFlowSubsystem* const Flow = GetGameInstance()->GetSubsystem<UKnightGameFlowSubsystem>();
+			Session->BeginRun(Flow ? Flow->GetActiveStageId() : NAME_None);
+		}
+	}
 
 	if (AknightRaidGameState* const RaidState = GetRaidGameState())
 	{
@@ -205,6 +213,39 @@ void AknightRaidGameMode::BeginExploration()
 	}
 }
 
+bool AknightRaidGameMode::RequestStartRaid()
+{
+	const AknightRaidGameState* const State = GetRaidGameState();
+	if (!State || State->GetRaidPhase() != EknightRaidPhase::Deploy) return false;
+	GetWorldTimerManager().ClearTimer(PhaseTimer);
+	BeginExploration();
+	return true;
+}
+
+void AknightRaidGameMode::NotifyObjectiveCompleted()
+{
+	FinishRaid(true, EknightRaidFailReason::None);
+}
+
+void AknightRaidGameMode::NotifyPlayerDefeated()
+{
+	FinishRaid(false, EknightRaidFailReason::KnightDestroyed);
+}
+
+void AknightRaidGameMode::RequestReturnToLobby()
+{
+	const AknightRaidGameState* const State = GetRaidGameState();
+	if (State && (State->GetRaidPhase() == EknightRaidPhase::Success
+		|| State->GetRaidPhase() == EknightRaidPhase::Failed)) ReturnToMainMenu();
+	else AbandonRaid();
+}
+
+void AknightRaidGameMode::DebugFinishRaid(bool bSuccess)
+{
+	if (bSuccess) NotifyObjectiveCompleted();
+	else NotifyPlayerDefeated();
+}
+
 void AknightRaidGameMode::HandleMonsterTargetChanged(AActor* OldTarget, AActor* NewTarget)
 {
 	// The targeting component does not say which monster changed, so re-check every target monster.
@@ -248,7 +289,7 @@ void AknightRaidGameMode::HandleMonsterDefeated(AknightMonsterCharacterBase* Mon
 void AknightRaidGameMode::HandlePlayerDeath(AController* PlayerController)
 {
 	// Replaces the base behaviour: the raid result decides the return delay.
-	FinishRaid(false, EknightRaidFailReason::KnightDestroyed);
+	NotifyPlayerDefeated();
 }
 
 void AknightRaidGameMode::HandleTimeUp()
@@ -279,6 +320,10 @@ void AknightRaidGameMode::FinishRaid(bool bSuccess, EknightRaidFailReason FailRe
 
 	FknightRaidResult Result;
 	const UGameInstance* const GameInstance = GetGameInstance();
+	if (const UknightRaidSubsystem* const Session = GameInstance ? GameInstance->GetSubsystem<UknightRaidSubsystem>() : nullptr)
+	{
+		Result.RunId = Session->GetCurrentRunId();
+	}
 	if (const UKnightGameFlowSubsystem* const Flow = GameInstance ? GameInstance->GetSubsystem<UKnightGameFlowSubsystem>() : nullptr)
 	{
 		Result.StageId = Flow->GetActiveStageId();

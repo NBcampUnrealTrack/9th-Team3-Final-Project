@@ -16,8 +16,8 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 	AActor* const Target = Hit.GetActor();
 	UAbilitySystemComponent* const SourceASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Attacker);
 	UAbilitySystemComponent* const TargetASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Target);
-	const ICombatInterface* const TargetCombat = Cast<ICombatInterface>(Target);
-	if (!SourceASC || !TargetASC || !TargetCombat || !TargetCombat->CanReceiveHit(Attacker))
+	if (!SourceASC || !TargetASC || !Target || !Target->GetClass()->ImplementsInterface(UCombatInterface::StaticClass())
+		|| !ICombatInterface::Execute_CanReceiveHitBP(Target, Attacker))
 	{
 		return EknightHitOutcome::Ignored;
 	}
@@ -64,13 +64,13 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 	SpecHandle.Data->SetSetByCallerMagnitude(knightGameplayTags::SetByCaller_MotionValue, Params.MotionValue);
 	SpecHandle.Data->SetSetByCallerMagnitude(knightGameplayTags::SetByCaller_PoiseDamage, Params.PoiseDamage);
 
-	// Read before applying: the hit may kill the target and change its tags.
+	// 적용 전에 읽어 둔다. 타격으로 타깃이 죽으면서 태그가 바뀔 수 있다.
 	const bool bGuarding = TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_Guarding);
 	SourceASC->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data, TargetASC);
 
 	if (bGuarding)
 	{
-		// The guard ability decides whether the hit came from inside its arc and how to react.
+		// 타격이 가드 범위 안에서 들어왔는지, 어떻게 반응할지는 가드 어빌리티가 판단한다.
 		FGameplayEventData Payload;
 		Payload.EventTag = knightGameplayTags::Event_Guarded;
 		Payload.Instigator = Attacker;
@@ -82,16 +82,48 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 		return EknightHitOutcome::Guarded;
 	}
 
-	const float PartMultiplier = TargetCombat->GetPartDamageMultiplier(TargetCombat->ResolveHitPart(Hit));
+	const float PartMultiplier = ICombatInterface::Execute_GetPartDamageMultiplierBP(
+		Target, ICombatInterface::Execute_ResolveHitPartBP(Target, Hit));
 	const FGameplayTag CueTag = PartMultiplier >= Params.WeakpointMultiplierThreshold
 		? knightGameplayTags::GameplayCue_Hit_Weakpoint.GetTag()
 		: knightGameplayTags::GameplayCue_Hit_Melee.GetTag();
 	CueParams.RawMagnitude = PartMultiplier;
 	TargetASC->ExecuteGameplayCue(CueTag, CueParams);
 	ApplyHitStopPair(Attacker, Target, Params.HitStopDuration);
-	// Combat is audible: a monster that has not noticed the fight yet can hear it.
+	// 전투는 소리가 난다. 아직 전투를 알아채지 못한 몬스터도 이 소리를 들을 수 있다.
 	UAISense_Hearing::ReportNoiseEvent(Attacker, Hit.ImpactPoint, 1.f, Attacker, 0.f, TEXT("Hit"));
 	return EknightHitOutcome::Hit;
+}
+
+void UknightCombatLibrary::SelectBestHitPerActor(TArrayView<const FHitResult> Hits, TArray<FHitResult>& OutHits)
+{
+	OutHits.Reset();
+	TArray<bool, TInlineAllocator<8>> HasPart;
+	for (const FHitResult& Hit : Hits)
+	{
+		AActor* const Actor = Hit.GetActor();
+		if (!Actor)
+		{
+			continue;
+		}
+		const int32 Existing = OutHits.IndexOfByPredicate([Actor](const FHitResult& Kept) { return Kept.GetActor() == Actor; });
+		if (Existing != INDEX_NONE && HasPart[Existing])
+		{
+			continue;
+		}
+		const bool bResolvesPart = Actor->GetClass()->ImplementsInterface(UCombatInterface::StaticClass())
+			&& ICombatInterface::Execute_ResolveHitPartBP(Actor, Hit).IsValid();
+		if (Existing == INDEX_NONE)
+		{
+			OutHits.Add(Hit);
+			HasPart.Add(bResolvesPart);
+		}
+		else if (bResolvesPart)
+		{
+			OutHits[Existing] = Hit;
+			HasPart[Existing] = true;
+		}
+	}
 }
 
 bool UknightCombatLibrary::SetWarpTargetToLockedTarget(AActor* Attacker, FName WarpTargetName, float MaxDistance)

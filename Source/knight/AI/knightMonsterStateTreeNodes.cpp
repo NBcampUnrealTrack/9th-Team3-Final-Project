@@ -4,6 +4,7 @@
 #include "AbilitySystemGlobals.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
 #include "Abilities/GameplayAbility.h"
+#include "AbilitySystem/Abilities/knightGameplayAbility_MonsterAttack.h"
 #include "Monster/knightMonsterCharacterBase.h"
 #include "Monster/knightMonsterMovementComponent.h"
 #include "Monster/knightMonsterTargetingComponent.h"
@@ -11,6 +12,7 @@
 #include "StateTreeExecutionContext.h"
 #include "System/knightGameplayTags.h"
 #include "knight.h"
+#include "knightPerfCounters.h"
 
 // Knight Monster Target
 
@@ -21,6 +23,8 @@ void FknightStateTreeMonsterTargetEvaluator::TreeStart(FStateTreeExecutionContex
 
 void FknightStateTreeMonsterTargetEvaluator::Tick(FStateTreeExecutionContext& Context, const float DeltaTime) const
 {
+	KNIGHT_PERF_SCOPE("Monster.Evaluator");
+	KNIGHT_PERF_COUNT("Monster.EvaluatorUpdates", 1);
 	Update(Context.GetInstanceData(*this));
 }
 
@@ -59,6 +63,7 @@ void FknightStateTreeMonsterTargetEvaluator::Update(FInstanceDataType& InstanceD
 		InstanceData.HealthPercent = MaxHealth > 0.f ? Health / MaxHealth : 0.f;
 		InstanceData.bEnraged = ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Enraged);
 		InstanceData.bExhausted = ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Exhausted);
+		InstanceData.bIsReacting = ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Reacting);
 	}
 }
 
@@ -66,9 +71,11 @@ void FknightStateTreeMonsterTargetEvaluator::Update(FInstanceDataType& InstanceD
 
 EStateTreeRunStatus FknightStateTreeActivateAbilityTask::EnterState(FStateTreeExecutionContext& Context, const FStateTreeTransitionResult& Transition) const
 {
+	KNIGHT_PERF_SCOPE("Monster.SelectAbility");
 	FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
 	InstanceData.ActiveHandle = FGameplayAbilitySpecHandle();
 	InstanceData.EndedDelegateHandle.Reset();
+	InstanceData.FailAtTime = -1.0;
 
 	UAbilitySystemComponent* const ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(InstanceData.Actor);
 	InstanceData.AbilitySystem = ASC;
@@ -77,35 +84,60 @@ EStateTreeRunStatus FknightStateTreeActivateAbilityTask::EnterState(FStateTreeEx
 		return EStateTreeRunStatus::Failed;
 	}
 
+	// 가중치가 붙은 후보 목록. 몬스터 공격은 타깃을 보고 스스로 가중치를 정하고, 나머지는 1로 친다.
+	const FknightMonsterAttackContext AttackContext = FknightMonsterAttackContext::Make(InstanceData.Actor, InstanceData.Target);
 	TArray<FGameplayAbilitySpec*> Specs;
 	ASC->GetActivatableGameplayAbilitySpecsByAllMatchingTags(InstanceData.AbilityTags, Specs, true);
-	TArray<FGameplayAbilitySpecHandle> Candidates;
+	TArray<TPair<FGameplayAbilitySpecHandle, float>> Candidates;
+	float TotalWeight = 0.f;
 	for (const FGameplayAbilitySpec* const Spec : Specs)
 	{
-		if (Spec && !Spec->IsActive())
+		if (!Spec || Spec->IsActive())
 		{
-			Candidates.Add(Spec->Handle);
+			continue;
+		}
+		float Weight = 1.f;
+		const UGameplayAbility* const Instance = Spec->GetPrimaryInstance() ? Spec->GetPrimaryInstance() : Spec->Ability.Get();
+		if (const UknightGameplayAbility_MonsterAttack* const Attack = Cast<UknightGameplayAbility_MonsterAttack>(Instance))
+		{
+			Weight = Attack->GetSelectionWeight(AttackContext);
+		}
+		if (Weight > 0.f)
+		{
+			Candidates.Emplace(Spec->Handle, Weight);
+			TotalWeight += Weight;
 		}
 	}
-	// Random order gives a varied move set when several moves share the same tags.
-	for (int32 Index = Candidates.Num() - 1; Index > 0; --Index)
-	{
-		Candidates.Swap(Index, FMath::RandRange(0, Index));
-	}
 
-	for (const FGameplayAbilitySpecHandle& Handle : Candidates)
+	// 가중치로 뽑는다. 발동을 거부한 후보(차단, 비용 부족)는 빼고 다시 뽑는다.
+	while (Candidates.Num() > 0)
 	{
+		float Roll = FMath::FRandRange(0.f, TotalWeight);
+		int32 Picked = Candidates.Num() - 1;
+		for (int32 Index = 0; Index < Candidates.Num(); ++Index)
+		{
+			Roll -= Candidates[Index].Value;
+			if (Roll <= 0.f)
+			{
+				Picked = Index;
+				break;
+			}
+		}
+		const FGameplayAbilitySpecHandle Handle = Candidates[Picked].Key;
+		TotalWeight -= Candidates[Picked].Value;
+		Candidates.RemoveAtSwap(Picked);
 		if (!ASC->TryActivateAbility(Handle))
 		{
 			continue;
 		}
+		KNIGHT_PERF_COUNT("Monster.AbilitiesActivated", 1);
 		const FGameplayAbilitySpec* const Spec = ASC->FindAbilitySpecFromHandle(Handle);
 		if (!Spec || !Spec->IsActive())
 		{
-			// Ended within its own activation (an instant move).
+			// 발동 도중에 이미 끝났다(즉발 기술).
 			return EStateTreeRunStatus::Succeeded;
 		}
-		// Bound after activation so the callback never finishes the task while EnterState is still running.
+		// 발동 후에 바인딩해서 EnterState가 아직 실행 중일 때 콜백이 Task를 끝내는 일이 없게 한다.
 		InstanceData.EndedDelegateHandle = ASC->OnAbilityEnded.AddLambda(
 			[WeakContext = Context.MakeWeakExecutionContext(), Handle](const FAbilityEndedData& Data)
 			{
@@ -118,8 +150,25 @@ EStateTreeRunStatus FknightStateTreeActivateAbilityTask::EnterState(FStateTreeEx
 		return EStateTreeRunStatus::Running;
 	}
 
-	UE_LOG(LogknightAI, Verbose, TEXT("%s: no activatable ability for %s."), *GetNameSafe(InstanceData.Actor), *InstanceData.AbilityTags.ToStringSimple());
+	KNIGHT_PERF_COUNT("Monster.AbilitySelectFailed", 1);
+	UE_LOG(LogknightAI, Verbose, TEXT("%s: no usable ability for %s."), *GetNameSafe(InstanceData.Actor), *InstanceData.AbilityTags.ToStringSimple());
+	if (InstanceData.RetryDelay > 0.f)
+	{
+		// 바로 실패해서 즉시 재진입하지 않도록 잠시 상태를 유지한다.
+		InstanceData.FailAtTime = Context.GetWorld()->GetTimeSeconds() + InstanceData.RetryDelay;
+		return EStateTreeRunStatus::Running;
+	}
 	return EStateTreeRunStatus::Failed;
+}
+
+EStateTreeRunStatus FknightStateTreeActivateAbilityTask::Tick(FStateTreeExecutionContext& Context, const float DeltaTime) const
+{
+	const FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
+	if (InstanceData.FailAtTime >= 0.0 && Context.GetWorld()->GetTimeSeconds() >= InstanceData.FailAtTime)
+	{
+		return EStateTreeRunStatus::Failed;
+	}
+	return EStateTreeRunStatus::Running;
 }
 
 void FknightStateTreeActivateAbilityTask::ExitState(FStateTreeExecutionContext& Context, const FStateTreeTransitionResult& Transition) const

@@ -3,7 +3,9 @@
 #include "GameFlow/KnightGameFlowSubsystem.h"
 #include "Components/Button.h"
 #include "Components/PanelWidget.h"
+#include "Components/TextBlock.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "Progression/knightSaveSubsystem.h"
 #include "knight.h"
 
 #define LOCTEXT_NAMESPACE "KnightTitleMenu"
@@ -16,10 +18,19 @@ void UKnightTitleMenuWidget::NativeOnInitialized()
 	ValidateRequiredWidget(Panel_Settings, TEXT("Panel_Settings"));
 	ValidateRequiredWidget(Button_StartGame, TEXT("Button_StartGame"));
 	ValidateRequiredWidget(Button_SaveSelect, TEXT("Button_SaveSelect"));
+	ValidateRequiredWidget(Button_Slot1, TEXT("Button_Slot1"));
+	ValidateRequiredWidget(Button_Slot2, TEXT("Button_Slot2"));
+	ValidateRequiredWidget(Button_Slot3, TEXT("Button_Slot3"));
+	ValidateRequiredWidget(Text_Slot1, TEXT("Text_Slot1"));
+	ValidateRequiredWidget(Text_Slot2, TEXT("Text_Slot2"));
+	ValidateRequiredWidget(Text_Slot3, TEXT("Text_Slot3"));
 	ValidateRequiredWidget(Button_Settings, TEXT("Button_Settings"));
 	ValidateRequiredWidget(Button_Quit, TEXT("Button_Quit"));
 	if (Button_StartGame) Button_StartGame->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleStartGameClicked);
 	if (Button_SaveSelect) Button_SaveSelect->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleSaveSelectClicked);
+	if (Button_Slot1) Button_Slot1->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleSlot1Clicked);
+	if (Button_Slot2) Button_Slot2->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleSlot2Clicked);
+	if (Button_Slot3) Button_Slot3->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleSlot3Clicked);
 	if (Button_Settings) Button_Settings->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleSettingsClicked);
 	if (Button_Quit) Button_Quit->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleQuitClicked);
 }
@@ -28,6 +39,22 @@ void UKnightTitleMenuWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 	ApplyPage(EKnightTitlePage::Home, true);
+	if (UknightSaveSubsystem* const Save = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr)
+	{
+		Save->OnSaveFinished.AddUniqueDynamic(this, &ThisClass::HandleSaveFinished);
+		if (Save->IsSaveInFlight()) SetStatusText(LOCTEXT("SaveBusy", "저장 작업이 끝날 때까지 기다려 주세요."));
+	}
+	RefreshSlots();
+	RefreshTravelControls();
+}
+
+void UKnightTitleMenuWidget::NativeDestruct()
+{
+	if (UknightSaveSubsystem* const Save = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr)
+	{
+		Save->OnSaveFinished.RemoveDynamic(this, &ThisClass::HandleSaveFinished);
+	}
+	Super::NativeDestruct();
 }
 
 bool UKnightTitleMenuWidget::ShowPage(EKnightTitlePage NewPage)
@@ -37,7 +64,7 @@ bool UKnightTitleMenuWidget::ShowPage(EKnightTitlePage NewPage)
 
 bool UKnightTitleMenuWidget::ApplyPage(EKnightTitlePage NewPage, bool bAllowDuringTravel)
 {
-	if (!bAllowDuringTravel && IsTravelPending())
+	if (!bAllowDuringTravel && (IsTravelPending() || bAwaitingInitialSave))
 	{
 		return false;
 	}
@@ -63,6 +90,7 @@ bool UKnightTitleMenuWidget::ApplyPage(EKnightTitlePage NewPage, bool bAllowDuri
 		ClearStatus();
 	}
 	FocusCurrentPage();
+	if (NewPage == EKnightTitlePage::SaveSelect) RefreshSlots();
 	return true;
 }
 
@@ -75,6 +103,7 @@ UWidget* UKnightTitleMenuWidget::GetPreferredFocusTarget() const
 {
 	if (CurrentPage != EKnightTitlePage::Home)
 	{
+		if (CurrentPage == EKnightTitlePage::SaveSelect && Button_Slot1 && Button_Slot1->GetIsEnabled()) return Button_Slot1;
 		return Button_Back;
 	}
 	for (UButton* Button : { Button_StartGame.Get(), Button_SaveSelect.Get(), Button_Settings.Get(), Button_Quit.Get() })
@@ -90,36 +119,129 @@ UWidget* UKnightTitleMenuWidget::GetPreferredFocusTarget() const
 void UKnightTitleMenuWidget::SetTravelControlsEnabled(bool bEnabled)
 {
 	Super::SetTravelControlsEnabled(bEnabled);
-	if (Button_StartGame) Button_StartGame->SetIsEnabled(bEnabled && GetFlow() != nullptr);
-	if (Button_SaveSelect) Button_SaveSelect->SetIsEnabled(bEnabled);
-	if (Button_Settings) Button_Settings->SetIsEnabled(bEnabled);
-	if (Button_Quit) Button_Quit->SetIsEnabled(bEnabled);
+	const UknightSaveSubsystem* const Save = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
+	const bool bReady = bEnabled && !bAwaitingInitialSave && !(Save && Save->IsSaveInFlight());
+	if (Button_StartGame) Button_StartGame->SetIsEnabled(bReady && GetFlow() != nullptr);
+	if (Button_SaveSelect) Button_SaveSelect->SetIsEnabled(bReady);
+	if (Button_Settings) Button_Settings->SetIsEnabled(bReady);
+	if (Button_Quit) Button_Quit->SetIsEnabled(bReady);
+	for (UButton* Button : { Button_Slot1.Get(), Button_Slot2.Get(), Button_Slot3.Get() })
+	{
+		if (Button) Button->SetIsEnabled(bReady);
+	}
+	if (Button_Back) Button_Back->SetIsEnabled(bReady && CurrentPage != EKnightTitlePage::Home);
 }
 
 void UKnightTitleMenuWidget::HandleStartGameClicked()
 {
-	if (IsTravelPending())
-	{
-		return;
-	}
-	UKnightGameFlowSubsystem* const Flow = GetFlow();
-	if (!Flow)
-	{
-		UE_LOG(Logknight, Error, TEXT("Title StartGame has no GameFlow subsystem."));
-		SetStatusText(LOCTEXT("NoFlow", "지금 메뉴를 열 수 없습니다."));
-		return;
-	}
-	const bool bAccepted = Flow->RequestOpenMainMenu();
-	RefreshTravelControls();
-	if (bAccepted && Flow->IsTravelPending())
-	{
-		SetStatusText(LOCTEXT("OpeningMainMenu", "메인메뉴로 이동 중입니다."));
-	}
+	ShowPage(EKnightTitlePage::SaveSelect);
 }
 
 void UKnightTitleMenuWidget::HandleSaveSelectClicked()
 {
 	ShowPage(EKnightTitlePage::SaveSelect);
+}
+
+void UKnightTitleMenuWidget::HandleSlot1Clicked() { SelectFixedSlot(1); }
+void UKnightTitleMenuWidget::HandleSlot2Clicked() { SelectFixedSlot(2); }
+void UKnightTitleMenuWidget::HandleSlot3Clicked() { SelectFixedSlot(3); }
+
+void UKnightTitleMenuWidget::RefreshSlots()
+{
+	const UknightSaveSubsystem* const Save = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
+	UTextBlock* Labels[] = { Text_Slot1.Get(), Text_Slot2.Get(), Text_Slot3.Get() };
+	for (int32 Number = 1; Number <= 3; ++Number)
+	{
+		if (!Labels[Number - 1]) continue;
+		bool bExists = false;
+		bool bReadable = false;
+		float Seconds = 0.f;
+		if (!Save || !Save->GetFixedSlotInfo(Number, bExists, bReadable, Seconds)) continue;
+		FString Description;
+		if (!bExists)
+		{
+			Description = FString::Printf(TEXT("세이브 %d / 빈 슬롯 / 새 게임"), Number);
+		}
+		else if (!bReadable)
+		{
+			Description = FString::Printf(TEXT("세이브 %d / 저장 파일 오류 / 재시도"), Number);
+		}
+		else
+		{
+			const int64 WholeSeconds = FMath::Max<int64>(0, FMath::FloorToInt64(Seconds));
+			Description = FString::Printf(TEXT("세이브 %d / 플레이타임 %02lld:%02lld:%02lld / 이어하기"),
+				Number, WholeSeconds / 3600, (WholeSeconds / 60) % 60, WholeSeconds % 60);
+		}
+		Labels[Number - 1]->SetText(FText::FromString(Description));
+	}
+}
+
+void UKnightTitleMenuWidget::SelectFixedSlot(int32 SlotNumber)
+{
+	UknightSaveSubsystem* const Save = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
+	if (!Save || IsTravelPending() || bAwaitingInitialSave || Save->IsSaveInFlight())
+	{
+		SetStatusText(LOCTEXT("ProfileBusy", "저장 작업이 끝날 때까지 기다려 주세요."));
+		return;
+	}
+	bool bExisting = false;
+	bool bReadable = false;
+	float Seconds = 0.f;
+	if (!Save->GetFixedSlotInfo(SlotNumber, bExisting, bReadable, Seconds)) return;
+	if (bExisting && !bReadable)
+	{
+		SetStatusText(LOCTEXT("ProfileUnreadable", "저장 파일을 읽을 수 없습니다. 원본은 보존됩니다. 다시 시도하거나 다른 슬롯을 선택해 주세요."));
+		RefreshSlots();
+		return;
+	}
+	SetStatusText(LOCTEXT("LoadingProfile", "프로필을 불러오는 중입니다."));
+	if (!Save->SelectFixedSlot(SlotNumber))
+	{
+		SetStatusText(LOCTEXT("ProfileUnreadable", "저장 파일을 읽을 수 없습니다. 원본은 보존됩니다. 다시 시도하거나 다른 슬롯을 선택해 주세요."));
+		RefreshSlots();
+		return;
+	}
+	if (bExisting)
+	{
+		OpenLobby();
+		return;
+	}
+	bAwaitingInitialSave = true;
+	SetStatusText(LOCTEXT("CreatingProfile", "새 게임을 저장하는 중입니다."));
+	RefreshTravelControls();
+	Save->RequestSave();
+}
+
+void UKnightTitleMenuWidget::HandleSaveFinished(bool bSuccess)
+{
+	const bool bWasCreating = bAwaitingInitialSave;
+	bAwaitingInitialSave = false;
+	RefreshTravelControls();
+	RefreshSlots();
+	if (!bWasCreating)
+	{
+		if (bSuccess) ClearStatus();
+		else SetStatusText(LOCTEXT("BackgroundSaveFailed", "저장하지 못했습니다. 잠시 후 다시 시도해 주세요."));
+		return;
+	}
+	if (!bSuccess)
+	{
+		SetStatusText(LOCTEXT("CreateFailed", "프로필을 저장하지 못했습니다. 같은 슬롯으로 다시 시도할 수 있습니다."));
+		return;
+	}
+	OpenLobby();
+}
+
+void UKnightTitleMenuWidget::OpenLobby()
+{
+	UKnightGameFlowSubsystem* const Flow = GetFlow();
+	if (!Flow || !Flow->RequestOpenMainMenu())
+	{
+		SetStatusText(LOCTEXT("LobbyOpenFailed", "로비를 열지 못했습니다. 다시 시도해 주세요."));
+		return;
+	}
+	RefreshTravelControls();
+	SetStatusText(LOCTEXT("OpeningMainMenu", "메인메뉴로 이동 중입니다."));
 }
 
 void UKnightTitleMenuWidget::HandleSettingsClicked()

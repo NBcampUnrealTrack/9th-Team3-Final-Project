@@ -71,6 +71,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void PossessedBy(AController* NewController) override;
 
 	void InitializeAbilitySystem();
@@ -118,4 +119,8 @@ private:
 
 	bool bAbilitySystemInitialized = false;
 	bool bIsDying = false;
+	/** Counted in the Monster.Alive perf gauge. */
+	bool bCountedAlive = false;
+
+	void SetCountedAlive(bool bAlive);
 };
