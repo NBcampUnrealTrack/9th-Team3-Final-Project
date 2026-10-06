@@ -133,8 +133,10 @@ void UknightPartHealthComponent::InitializeWithAbilitySystem(UAbilitySystemCompo
 
 FGameplayTag UknightPartHealthComponent::ResolveHitPartTag(const FHitResult& Hit) const
 {
+	// 부위 바디에 맞았을 때만 부위 태그를 준다. 이동 캡슐처럼 본이 없는 히트는 빈 태그여야
+	// SelectBestHitPerActor가 같은 프레임의 부위 히트를 캡슐보다 우선 고른다. (피해 분배는 HandleDamaged가 DefaultHitPart로 처리)
 	const EknightBodyPart* const Found = BoneToPart.Find(Hit.BoneName);
-	return GetPartTag(Found ? *Found : DefaultHitPart);
+	return Found ? GetPartTag(*Found) : FGameplayTag();
 }
 
 float UknightPartHealthComponent::GetDamageMultiplier(const FGameplayTag& PartTag) const

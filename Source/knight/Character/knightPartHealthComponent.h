@@ -64,7 +64,7 @@ public:
 	/** 소유 캐릭터의 ASC가 준비되고 파츠가 장착된 뒤 한 번 호출한다. 이벤트 연결과 MaxHealth 합산을 한다. */
 	void InitializeWithAbilitySystem(UAbilitySystemComponent* InASC);
 
-	/** 맞은 위치 → 부위 태그(Knight.Part.*). 본을 모르면 DefaultHitPart. ICombatInterface::ResolveHitPart에서 쓴다. */
+	/** 맞은 위치 → 부위 태그(Knight.Part.*). BoneToPart에 없는 본(이동 캡슐 등)이면 빈 태그. ICombatInterface::ResolveHitPart에서 쓴다. */
 	FGameplayTag ResolveHitPartTag(const FHitResult& Hit) const;
 
 	/** 맞은 부위의 피해 배율. 파괴된 부위면 크리티컬, 머리가 파괴돼 있으면 피해 증가. ICombatInterface::GetPartDamageMultiplier에서 쓴다. */
@@ -83,7 +83,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|PartHealth")
 	TMap<FName, EknightBodyPart> BoneToPart;
 
-	/** 맞은 본이 BoneToPart에 없을 때의 부위. */
+	/** 맞은 본이 BoneToPart에 없을 때 피해를 받을 부위(HandleDamaged). 이때 파괴 부위 크리티컬은 붙지 않는다. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|PartHealth")
 	EknightBodyPart DefaultHitPart = EknightBodyPart::Torso;
 
