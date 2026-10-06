@@ -148,7 +148,7 @@ private:
 	UPROPERTY(BlueprintReadOnly, Category="Knight|Mech|Speed", meta=(AllowPrivateAccess=true))
 	FGameplayAttributeData DodgeSpeed;
 
-	/** 퀵스텝을 다시 쓰기까지 기다리는 시간(초, 소수점 가능). 기본 0 = 쿨타임 없음(기존 동작과 같음). */
+	/** 퀵스텝을 다시 쓰기까지 기다리는 시간(초, 소수점 가능). 대시 이동이 끝난 시점부터 센다. 기본 0.5초(임시). */
 	UPROPERTY(BlueprintReadOnly, Category="Knight|Mech|Speed", meta=(AllowPrivateAccess=true))
 	FGameplayAttributeData DodgeCooldown;
 

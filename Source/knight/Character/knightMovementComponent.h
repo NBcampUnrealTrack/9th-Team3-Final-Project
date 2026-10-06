@@ -64,7 +64,14 @@ public:
 	UFUNCTION(BlueprintPure, Category="Knight|Movement")
 	float GetWeightSpeedFactor() const;
 
+	/**
+	 * 이동 입력으로 가속하지 못하게 막는다. 입력 값은 그대로 들어오므로 방향은 읽을 수 있고,
+	 * 가속이 0이라 지금 속도에서 제동으로 미끄러지며 멈춘다. 퀵스텝 경직에서 쓴다.
+	 */
+	void SetMoveInputLocked(bool bLocked) { bMoveInputLocked = bLocked; }
+
 	virtual float GetMaxSpeed() const override;
+	virtual float GetMaxAcceleration() const override;
 
 protected:
 	virtual void OnMovementModeChanged(EMovementMode PreviousMovementMode, uint8 PreviousCustomMode) override;
@@ -97,4 +104,5 @@ protected:
 
 private:
 	bool bWantsToRun = false;
+	bool bMoveInputLocked = false;
 };

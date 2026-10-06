@@ -94,6 +94,12 @@ float UknightMovementComponent::GetMaxSpeed() const
 	return BaseSpeed * SpeedScale * GetWeightSpeedFactor();
 }
 
+float UknightMovementComponent::GetMaxAcceleration() const
+{
+	// 잠금 중에는 입력이 있어도 가속이 0 → 엔진이 제동을 걸어 미끄러지며 멈춘다. 이동 방향으로 몸도 돌지 않는다.
+	return bMoveInputLocked ? 0.f : Super::GetMaxAcceleration();
+}
+
 bool UknightMovementComponent::DoJump(bool bReplayingMoves, float DeltaTime)
 {
 	// 점프 직전에 스탯으로 점프 힘을 정한다. 중량은 점프에 영향을 주지 않는다.
