@@ -35,10 +35,19 @@ void UknightGameplayAbility_BoostDash::ActivateAbility(const FGameplayAbilitySpe
 	}
 
 	FVector Direction = Character->GetCharacterMovement()->GetLastInputVector().GetSafeNormal2D();
-	if (Direction.IsNearlyZero())
+	const bool bHasInput = !Direction.IsNearlyZero();
+	if (!bHasInput)
 	{
 		Direction = -Character->GetActorForwardVector().GetSafeNormal2D();
 	}
+
+	const UAbilitySystemComponent* const OwnerASC = GetAbilitySystemComponentFromActorInfo();
+	const bool bLockedOn = OwnerASC && OwnerASC->HasMatchingGameplayTag(knightGameplayTags::State_LockedOn);
+	if (bFaceDashDirectionWhenFree && bHasInput && !bLockedOn)
+	{
+		Character->SetActorRotation(FRotator(0.f, Direction.Rotation().Yaw, 0.f));
+	}
+	UAnimMontage* const Montage = SelectDashMontage(*Character, Direction);
 
 	if (InvulnerableDuration > 0.f)
 	{
@@ -52,10 +61,10 @@ void UknightGameplayAbility_BoostDash::ActivateAbility(const FGameplayAbilitySpe
 		InvulnerableTask->ReadyForActivation();
 	}
 
-	if (DashMontage)
+	if (Montage)
 	{
 		UAbilityTask_PlayMontageAndWait* const MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
-			this, NAME_None, DashMontage, 1.f, NAME_None, true, 0.f);
+			this, NAME_None, Montage, 1.f, NAME_None, true, 0.f);
 		MontageTask->ReadyForActivation();
 	}
 
@@ -77,6 +86,32 @@ void UknightGameplayAbility_BoostDash::ActivateAbility(const FGameplayAbilitySpe
 
 	// Thrusters are loud: monsters that have not seen the Knight can hear it (AI hearing sense).
 	UAISense_Hearing::ReportNoiseEvent(Character, Character->GetActorLocation(), NoiseLoudness, Character, NoiseRange, TEXT("Boost"));
+}
+
+UAnimMontage* UknightGameplayAbility_BoostDash::SelectDashMontage(const ACharacter& Character, const FVector& Direction) const
+{
+	const FVector Forward = Character.GetActorForwardVector().GetSafeNormal2D();
+	const FVector Right = Character.GetActorRightVector().GetSafeNormal2D();
+	const float ForwardDot = FVector::DotProduct(Direction, Forward);
+	const float RightDot = FVector::DotProduct(Direction, Right);
+
+	UAnimMontage* Picked = DashMontage;
+	if (FMath::Abs(ForwardDot) >= FMath::Abs(RightDot))
+	{
+		if (ForwardDot < 0.f && DashMontageBack)
+		{
+			Picked = DashMontageBack;
+		}
+	}
+	else if (RightDot > 0.f)
+	{
+		Picked = DashMontageRight ? DashMontageRight.Get() : DashMontage.Get();
+	}
+	else
+	{
+		Picked = DashMontageLeft ? DashMontageLeft.Get() : DashMontage.Get();
+	}
+	return Picked;
 }
 
 void UknightGameplayAbility_BoostDash::OnDashFinished()

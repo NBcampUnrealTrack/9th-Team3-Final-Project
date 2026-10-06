@@ -2,17 +2,22 @@
 
 #include "knight.h"
 #include "Modules/ModuleManager.h"
+#include "System/knightTeams.h"
 
 #if WITH_GAMEPLAY_DEBUGGER
 #include "Debug/knightGameplayDebuggerCategories.h"
 #endif
 
-/** Primary game module. Registers project-wide debug tooling. */
+/** Primary game module. Registers the team attitude solver and project-wide debug tooling. */
 class FknightModule : public FDefaultGameModuleImpl
 {
 public:
 	virtual void StartupModule() override
 	{
+		// Player/Ally friendly, NoTeam neutral, everything else hostile. Without this the engine default
+		// (same team friendly, any other team hostile) applies, so allied objectives and neutral actors read as enemies.
+		knightTeams::RegisterAttitudeSolver();
+
 #if WITH_GAMEPLAY_DEBUGGER
 		knightGameplayDebugger::RegisterCategories();
 #endif

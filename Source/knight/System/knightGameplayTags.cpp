@@ -49,6 +49,7 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_HitReact_Knockdown, "State.HitReact.Knockdown", "Knocked to the ground.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Monster_Enraged, "State.Monster.Enraged", "Monster rage state.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Monster_Exhausted, "State.Monster.Exhausted", "Monster fatigue state.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Monster_Reacting, "State.Monster.Reacting", "Monster is in a down, flinch or roar; its StateTree waits instead of acting.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Window_Combo, "Window.Combo", "Buffered attack input may chain into the next attack.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Window_Cancel, "Window.Cancel", "Buffered evasive input may cancel the current action.");

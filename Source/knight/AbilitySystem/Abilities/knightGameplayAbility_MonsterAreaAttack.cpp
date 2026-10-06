@@ -10,7 +10,6 @@
 #include "GenericTeamAgentInterface.h"
 #include "HAL/IConsoleManager.h"
 #include "Interfaces/CombatInterface.h"
-#include "System/knightGameplayTags.h"
 #include "knight.h"
 #include "knightPerfCounters.h"
 
@@ -25,11 +24,9 @@ namespace knightMonsterAttackCVars
 UknightGameplayAbility_MonsterAreaAttack::UknightGameplayAbility_MonsterAreaAttack(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
-	// Activated by the monster's StateTree, never by input.
-	ActivationGroup = EknightAbilityActivationGroup::Exclusive_Replaceable;
-	SetAssetTags(FGameplayTagContainer(knightGameplayTags::Ability_Attack));
-	ActivationBlockedTags.AddTag(knightGameplayTags::State_Dead);
-	ActivationBlockedTags.AddTag(knightGameplayTags::State_HitReact);
+	// 구체는 몬스터 앞쪽 AreaOffset.X + AreaRadius까지 닿으므로 그 안에서 고르도록 한다.
+	Selection.MaxRange = 600.f;
+	Selection.MaxAngle = 45.f;
 }
 
 void UknightGameplayAbility_MonsterAreaAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
@@ -116,14 +113,15 @@ void UknightGameplayAbility_MonsterAreaAttack::OnImpact()
 		{
 			continue;
 		}
-		const ICombatInterface* const Combat = Cast<ICombatInterface>(Target);
-		if (!Combat || !Combat->CanReceiveHit(Avatar) || FGenericTeamId::GetAttitude(Avatar, Target) != ETeamAttitude::Hostile)
+		if (!Target->GetClass()->ImplementsInterface(UCombatInterface::StaticClass())
+			|| !ICombatInterface::Execute_CanReceiveHitBP(Target, Avatar)
+			|| FGenericTeamId::GetAttitude(Avatar, Target) != ETeamAttitude::Hostile)
 		{
 			continue;
 		}
 		HitActors.Add(Target);
 
-		// Damage context, cues and part lookups expect a hit result; build one at the closest surface point.
+		// 피해 컨텍스트, 큐, 부위 조회는 히트 결과를 필요로 하므로 가장 가까운 표면 지점으로 하나 만든다.
 		FVector ImpactPoint = Component->GetComponentLocation();
 		FVector ClosestPoint;
 		if (Component->GetClosestPointOnCollision(Center, ClosestPoint) >= 0.f)

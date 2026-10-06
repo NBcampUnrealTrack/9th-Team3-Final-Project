@@ -23,6 +23,11 @@
 			"Name": "knightEditor",
 			"Type": "Editor",
 			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "knightDev",
+			"Type": "DeveloperTool",
+			"LoadingPhase": "Default"
 		}
 	],
 	"Plugins": [
@@ -94,6 +99,12 @@
 			"Enabled": true
 		},
 		{
+
+			"Name": "knightMonsterAnimDebug",
+			"Enabled": true
+		},
+		{
+
 			"Name": "ModelContextProtocol",
 			"Enabled": true
 		},
