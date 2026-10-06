@@ -45,6 +45,8 @@ struct FknightAbilityAnimInfo
 	float PhaseTotal = 0.f;
 	/** 판정 표시 구간이 끝나는 시각, 없으면 -1. */
 	float HitTime = -1.f;
+	/** 지속 판정이 끝나는 시각. 지속 구간이 없으면 HitTime과 같다. */
+	float HitEndTime = -1.f;
 
 	bool bHasArea = false;
 	FVector AreaOffset = FVector::ZeroVector;

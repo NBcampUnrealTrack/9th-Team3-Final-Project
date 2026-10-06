@@ -22,6 +22,9 @@ class UAnimMontage;
  *
  * With a lock-on target, the WarpTargetName warp target is set before the montage starts, so root motion
  * with a Motion Warping notify steers into the target.
+ *
+ * Movement cancels the recovery: while Window.Cancel is open, any movement input stops the montage
+ * (RecoveryCancelBlendOut) and ends the attack, so the Knight walks off instead of finishing the follow-through.
  */
 UCLASS()
 class KNIGHT_API UknightGameplayAbility_MeleeAttack : public UknightGameplayAbility
@@ -33,6 +36,8 @@ public:
 
 	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 		const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData) override;
+	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+		const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
 
 protected:
 	/** Called after each resolved hit. Override for on-hit effects (gauge gain, combo counters). */
@@ -57,10 +62,29 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Motion Warping", meta=(ClampMin=0, Units="cm"))
 	float MaxWarpDistance = 300.f;
 
+	/** Movement input during Window.Cancel stops the montage and ends the attack. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Recovery")
+	bool bCancelRecoveryOnMove = true;
+
+	/**
+	 * Also cancel while Window.Combo is open. True: movement right after the swing walks off at once, but holding
+	 * a direction while mashing attack can break the combo. False: movement only cancels after the combo window.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Recovery", meta=(EditCondition="bCancelRecoveryOnMove"))
+	bool bMoveCancelInComboWindow = true;
+
+	/** Blend out used when movement cancels the recovery. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Recovery", meta=(ClampMin=0, Units="s", EditCondition="bCancelRecoveryOnMove"))
+	float RecoveryCancelBlendOut = 0.25f;
+
 private:
 	UFUNCTION()
 	void OnMontageFinished();
 
 	UFUNCTION()
 	void OnMeleeHitEvent(FGameplayEventData Payload);
+
+	void CheckMoveCancel();
+
+	FTimerHandle MoveCancelTimer;
 };

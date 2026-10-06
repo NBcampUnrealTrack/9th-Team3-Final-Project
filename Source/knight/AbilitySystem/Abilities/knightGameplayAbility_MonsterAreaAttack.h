@@ -8,8 +8,8 @@
 class UAnimMontage;
 
 /**
- * 몽타주 대신 어빌리티가 타이밍을 잡는 몬스터 공격. 예고 → 몬스터 앞쪽 구체 오버랩 한 번(내려찍기,
- * 발구르기, 짧은 브레스) → 후딜 순서로 진행한다.
+ * 몽타주 대신 어빌리티가 타이밍을 잡는 몬스터 공격. 예고 → 몬스터 앞쪽 구체 오버랩(내려찍기, 발구르기는 한 번,
+ * 브레스처럼 이어지는 공격은 ActiveTime 동안 계속) → 후딜 순서로 진행한다. 대상마다 한 번만 맞는다.
  *
  * 구체 안의 적대적인 ICombatInterface 액터마다 UknightCombatLibrary::ApplyMeleeHit을 한 번씩 거치므로
  * 가드, 패링, 회피, 피해가 무기 타격과 같은 규칙을 따른다. 스켈레톤 없이도 동작하므로 테스트 맵의 큐브
@@ -36,7 +36,11 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Timing", meta=(ClampMin=0, Units="s"))
 	float WindupTime = 0.8f;
 
-	/** 타격 후 어빌리티가 끝나기까지의 시간. 플레이어가 반격할 수 있는 구간이다. */
+	/** 타격 순간부터 판정이 유지되는 시간. 0이면 타격 순간 한 번만 판정한다. 유지되는 동안 구체에 들어온 대상도 맞는다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Timing", meta=(ClampMin=0, Units="s"))
+	float ActiveTime = 0.f;
+
+	/** 판정이 끝난 뒤 어빌리티가 끝나기까지의 시간. 플레이어가 반격할 수 있는 구간이다. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Timing", meta=(ClampMin=0, Units="s"))
 	float RecoveryTime = 1.f;
 
@@ -63,7 +67,16 @@ private:
 	void HandleWindupFinished();
 
 	UFUNCTION()
+	void HandleActiveTick(int32 ActionNumber);
+
+	UFUNCTION()
+	void StartRecovery(int32 ActionNumber = 0);
+
+	UFUNCTION()
 	void HandleRecoveryFinished();
 
 	FVector GetAreaCenter() const;
+
+	/** 이번 발동에서 이미 맞은 대상. 판정이 유지되는 동안 같은 대상을 다시 때리지 않는다. */
+	TSet<TWeakObjectPtr<AActor>> HitActors;
 };
