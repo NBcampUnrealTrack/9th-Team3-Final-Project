@@ -120,7 +120,7 @@ void UknightMonsterPartComponent::GetTargetPoints(TArray<FknightTargetPoint>& Ou
 		{
 			continue;
 		}
-		// A severed part (hidden bone or components) is no longer something to lock onto.
+		// 잘려 나간 부위(숨겨진 본이나 컴포넌트)는 더 이상 락온 대상이 아니다.
 		if (PartStates[Index].bBroken && (!Definition->HideBoneOnBreak.IsNone() || Definition->bHideComponentsOnBreak))
 		{
 			continue;
@@ -148,6 +148,31 @@ void UknightMonsterPartComponent::GetTargetPoints(TArray<FknightTargetPoint>& Ou
 		Point.SocketName = PointSocket;
 		Point.PartTag = Definition->PartTag;
 	}
+}
+
+bool UknightMonsterPartComponent::GetPartLocation(const FGameplayTag& PartTag, FVector& OutLocation) const
+{
+	const int32 Index = FindPartIndex(PartTag);
+	const FknightMonsterPartDefinition* const Definition = GetDefinition(Index);
+	if (!Definition)
+	{
+		return false;
+	}
+	TArray<UPrimitiveComponent*> PartComponents;
+	GetPartComponents(Index, PartComponents);
+	if (PartComponents.Num() > 0)
+	{
+		OutLocation = PartComponents[0]->GetComponentLocation();
+		return true;
+	}
+	const ACharacter* const Character = Cast<ACharacter>(GetOwner());
+	USkinnedMeshComponent* const Mesh = Character ? Character->GetMesh() : nullptr;
+	if (Mesh && Definition->Bones.Num() > 0)
+	{
+		OutLocation = Mesh->GetSocketLocation(Definition->Bones[0]);
+		return true;
+	}
+	return false;
 }
 
 void UknightMonsterPartComponent::ApplyPartDamage(FGameplayTag PartTag, float Damage, AActor* DamageInstigator)
@@ -182,7 +207,7 @@ void UknightMonsterPartComponent::HandleDamaged(AActor* DamageInstigator, AActor
 	}
 	else
 	{
-		// Hits that landed on something outside every part (often the movement capsule).
+		// 어느 부위에도 속하지 않는 곳에 맞은 타격(주로 이동 캡슐).
 		KNIGHT_PERF_COUNT("Combat.UnresolvedPartHits", 1);
 	}
 }

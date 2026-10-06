@@ -58,3 +58,6 @@ PackagedBuilds/
 
 # Personal developer folders (Content/Developers/<user>)
 Content/Developers/
+
+# Personal MCP client settings (Claude Code)
+.mcp.json
