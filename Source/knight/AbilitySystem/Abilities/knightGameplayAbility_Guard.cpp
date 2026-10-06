@@ -45,7 +45,16 @@ void UknightGameplayAbility_Guard::ActivateAbility(const FGameplayAbilitySpecHan
 		MontageTask->ReadyForActivation();
 	}
 
-	// Already released (a tap): the guard still lasts through the parry window.
+	// With a parry window the release is checked when the window closes (a tap still lasts through it, and a
+	// second press during the window keeps the guard up until that press is released).
+	if (ParryWindow <= 0.f)
+	{
+		WaitForRelease();
+	}
+}
+
+void UknightGameplayAbility_Guard::WaitForRelease()
+{
 	UAbilityTask_WaitInputRelease* const ReleaseTask = UAbilityTask_WaitInputRelease::WaitInputRelease(this, true);
 	ReleaseTask->OnRelease.AddDynamic(this, &ThisClass::OnGuardReleased);
 	ReleaseTask->ReadyForActivation();
@@ -54,22 +63,21 @@ void UknightGameplayAbility_Guard::ActivateAbility(const FGameplayAbilitySpecHan
 void UknightGameplayAbility_Guard::OnParryWindowEnded()
 {
 	RemoveParryTag();
-	// A tap-parry ends once its window closes if the input is no longer held.
-	if (const FGameplayAbilitySpec* const Spec = GetCurrentAbilitySpec())
+	// A tap-parry ends once its window closes if the input is no longer held; otherwise guard until release.
+	// Waiting for the release only now also covers a double click: the first release falls inside the window,
+	// and the second press is still the one being held here.
+	const FGameplayAbilitySpec* const Spec = GetCurrentAbilitySpec();
+	if (!Spec || !Spec->InputPressed)
 	{
-		if (!Spec->InputPressed)
-		{
-			EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, false);
-		}
+		EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, false);
+		return;
 	}
+	WaitForRelease();
 }
 
 void UknightGameplayAbility_Guard::OnGuardReleased(float TimeHeld)
 {
-	if (!bParryTagApplied)
-	{
-		EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, false);
-	}
+	EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, false);
 }
 
 void UknightGameplayAbility_Guard::RemoveParryTag()
