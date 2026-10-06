@@ -4,6 +4,8 @@
 #include "AbilitySystem/Abilities/knightGameplayAbility.h"
 #include "knightGameplayAbility_MonsterAttack.generated.h"
 
+class UAbilityTask_Repeat;
+
 class UAbilitySystemComponent;
 
 UENUM(BlueprintType)
@@ -96,6 +98,24 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Selection")
 	FknightMonsterAttackSelection Selection;
 
+	/**
+	 * 발동하면 타깃 방향에서 이 각도(도)만큼 틀어진 쪽으로 몸을 돌린다. 양수는 오른쪽, 음수는 왼쪽, 0이면 돌지 않는다.
+	 * 정면이 아닌 쪽을 치는 공격이 타깃을 판정 안에 두도록 쓴다(오른쪽 앞을 덮는 공격이면 -45: 왼쪽으로 몸을 틀어
+	 * 타깃이 오른쪽 앞에 오게 한다). 회전은 몸을 다 돌리거나 StartTurnMaxTime이 지나면 멈춘다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Turn", meta=(ClampMin=-180, ClampMax=180, Units="deg"))
+	float StartTurnYaw = 0.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Turn", meta=(ClampMin=1, EditCondition="StartTurnYaw != 0"))
+	float StartTurnRate = 180.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Turn", meta=(ClampMin=0, Units="s", EditCondition="StartTurnYaw != 0"))
+	float StartTurnMaxTime = 0.5f;
+
 private:
+	UFUNCTION()
+	void HandleStartTurnTick(int32 ActionNumber);
+
+	TWeakObjectPtr<UAbilityTask_Repeat> StartTurnTask;
 	double LastActivationTime = -1.e9;
 };
