@@ -44,7 +44,13 @@ public:
 	static EknightPerfCounterMode GetMode(int32 Index);
 	static double GetValue(int32 Index);
 
-	/** Clears PerFrame and TimeMs counters. Called by the tracker after it samples a frame. */
+	/**
+	 * Value at the last EndFrame, i.e. the whole previous frame for PerFrame and TimeMs counters.
+	 * Lets other tools read a complete frame without depending on where they tick relative to the tracker.
+	 */
+	static double GetLastFrameValue(int32 Index);
+
+	/** Snapshots every counter for GetLastFrameValue, then clears PerFrame and TimeMs counters. Called by the tracker after it samples a frame. */
 	static void EndFrame();
 };
 
