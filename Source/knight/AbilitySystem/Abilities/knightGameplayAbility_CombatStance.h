@@ -18,7 +18,9 @@ class UAnimMontage;
  *   2. Hold (SheatheDelay seconds): only CombatStateTag, the Knight stands relaxed with the sword in hand.
  * Then SheatheMontage plays (its Knight Attach Weapon notify moves the sword to the back) and the tag is removed.
  * Any trigger tag during either phase restarts from the alert phase.
- * When the Knight is moving faster than MaxSpeedForSheatheMontage, the sword is put away without the montage.
+ * With bKeepDrawnWhileMoving the sword stays in hand while the Knight moves (faster than MaxSpeedForSheatheMontage):
+ * the sheathe waits until it has stood still for StillTimeBeforeSheathe seconds. Otherwise moving puts the sword
+ * away instantly without the montage.
  *
  * Drawing is done by the attack montages themselves (Knight Attach Weapon on weapon_r at their start).
  */
@@ -64,6 +66,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Combat Stance", meta=(ClampMin=0, Units="cm/s"))
 	float MaxSpeedForSheatheMontage = 30.f;
 
+	/** Keep the sword drawn while moving; sheathe only after standing still for StillTimeBeforeSheathe. */
+	UPROPERTY(EditDefaultsOnly, Category="Combat Stance")
+	bool bKeepDrawnWhileMoving = true;
+
+	/** Seconds the Knight must stand still before the sheathe montage plays. */
+	UPROPERTY(EditDefaultsOnly, Category="Combat Stance", meta=(ClampMin=0, Units="s", EditCondition="bKeepDrawnWhileMoving"))
+	float StillTimeBeforeSheathe = 1.f;
+
 	UPROPERTY(EditDefaultsOnly, Category="Combat Stance")
 	FName BackSocket = TEXT("weapon_back");
 
@@ -92,4 +102,6 @@ private:
 	bool bInCombat = false;
 	bool bAlert = false;
 	bool bSheathing = false;
+	/** World time the Knight stopped moving while the sheathe was waiting; negative while moving. */
+	double StillSince = -1.0;
 };

@@ -41,6 +41,16 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 		Payload.Instigator = Target;
 		Payload.Target = Attacker;
 		SourceASC->HandleGameplayEvent(Payload.EventTag, &Payload);
+		// The defender learns about its own parry too (the guard ability opens the parry counter window).
+		static const FGameplayTag ParrySucceededTag = FGameplayTag::RequestGameplayTag(TEXT("Event.ParrySucceeded"), false);
+		if (ParrySucceededTag.IsValid())
+		{
+			FGameplayEventData DefenderPayload;
+			DefenderPayload.EventTag = ParrySucceededTag;
+			DefenderPayload.Instigator = Attacker;
+			DefenderPayload.Target = Target;
+			TargetASC->HandleGameplayEvent(DefenderPayload.EventTag, &DefenderPayload);
+		}
 		TargetASC->ExecuteGameplayCue(knightGameplayTags::GameplayCue_Parry, CueParams);
 		ApplyHitStopPair(Attacker, Target, Params.ParryHitStopDuration);
 		UE_LOG(LogknightCombat, Log, TEXT("%s parried %s."), *GetNameSafe(Target), *GetNameSafe(Attacker));
