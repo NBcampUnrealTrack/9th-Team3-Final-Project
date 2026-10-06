@@ -1,7 +1,10 @@
 #include "AbilitySystem/Abilities/knightGameplayAbility_BoostDash.h"
 
 #include "AbilitySystemComponent.h"
+#include "AbilitySystem/Attributes/knightAttributeSet.h"
 #include "Abilities/Tasks/AbilityTask_ApplyRootMotionConstantForce.h"
+#include "Character/knightMovementComponent.h"
+#include "Engine/World.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "GameFramework/Character.h"
@@ -22,6 +25,24 @@ UknightGameplayAbility_BoostDash::UknightGameplayAbility_BoostDash(const FObject
 	ActivationBlockedTags.AddTag(knightGameplayTags::State_Overheated);
 }
 
+float UknightGameplayAbility_BoostDash::GetMechAttributeValue(const FGameplayAttribute& Attribute, float Fallback) const
+{
+	const UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();
+	return ASC && ASC->HasAttributeSetForAttribute(Attribute) ? ASC->GetNumericAttribute(Attribute) : Fallback;
+}
+
+bool UknightGameplayAbility_BoostDash::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
+{
+	// 퀵스텝 쿨타임 중이면 발동하지 않는다.
+	const UWorld* const World = GetWorld();
+	if (World && World->GetTimeSeconds() < CooldownEndTime)
+	{
+		return false;
+	}
+	return Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags);
+}
+
 void UknightGameplayAbility_BoostDash::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
 {
@@ -33,6 +54,7 @@ void UknightGameplayAbility_BoostDash::ActivateAbility(const FGameplayAbilitySpe
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
+	bDashStarted = true;
 
 	FVector Direction = Character->GetCharacterMovement()->GetLastInputVector().GetSafeNormal2D();
 	const bool bHasInput = !Direction.IsNearlyZero();
@@ -68,7 +90,11 @@ void UknightGameplayAbility_BoostDash::ActivateAbility(const FGameplayAbilitySpe
 		MontageTask->ReadyForActivation();
 	}
 
-	const float Strength = DashDistance / DashDuration;
+	// 거리 = 기본 거리 x 퀵스텝 속도 배율 x 중량 계수. 시간은 고정이라 거리가 늘면 속도도 빨라진다.
+	const UknightMovementComponent* const KnightMovement = Cast<UknightMovementComponent>(Character->GetCharacterMovement());
+	const float WeightFactor = KnightMovement ? KnightMovement->GetWeightSpeedFactor() : 1.f;
+	const float Distance = DashDistance * GetMechAttributeValue(UknightAttributeSet::GetDodgeSpeedAttribute(), 1.f) * WeightFactor;
+	const float Strength = Distance / DashDuration;
 	UAbilityTask_ApplyRootMotionConstantForce* const DashTask = UAbilityTask_ApplyRootMotionConstantForce::ApplyRootMotionConstantForce(
 		this, TEXT("BoostDash"), Direction, Strength, DashDuration, false, StrengthOverTime,
 		ERootMotionFinishVelocityMode::ClampVelocity, FVector::ZeroVector, Character->GetCharacterMovement()->GetMaxSpeed(), false);
@@ -84,7 +110,7 @@ void UknightGameplayAbility_BoostDash::ActivateAbility(const FGameplayAbilitySpe
 		ASC->ExecuteGameplayCue(knightGameplayTags::GameplayCue_Boost_Dash, CueParams);
 	}
 
-	// Thrusters are loud: monsters that have not seen the Knight can hear it (AI hearing sense).
+	// 추진기는 시끄럽다: 아직 나이트를 못 본 몬스터도 소리를 들을 수 있다 (AI 청각).
 	UAISense_Hearing::ReportNoiseEvent(Character, Character->GetActorLocation(), NoiseLoudness, Character, NoiseRange, TEXT("Boost"));
 }
 
@@ -140,5 +166,17 @@ void UknightGameplayAbility_BoostDash::EndAbility(const FGameplayAbilitySpecHand
 	const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
 	RemoveInvulnerability();
+
+	// 실제로 대시한 경우에만, 끝난 시점부터 쿨타임을 센다 (피격 등으로 중간에 끊겨도 적용).
+	if (bDashStarted)
+	{
+		bDashStarted = false;
+		const float Cooldown = GetMechAttributeValue(UknightAttributeSet::GetDodgeCooldownAttribute(), 0.f);
+		if (const UWorld* const World = GetWorld(); World && Cooldown > 0.f)
+		{
+			CooldownEndTime = World->GetTimeSeconds() + Cooldown;
+		}
+	}
+
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }

@@ -6,7 +6,7 @@
 //   knight.Player.Damage <피해> [그로기]   지정한 양만큼 피해·그로기 피해를 넣는다 (예: knight.Player.Damage 0 30)
 //   knight.Player.SetStat <스탯 이름> <값>  플레이어 스탯의 기본값을 바꾼다 (예: knight.Player.SetStat Weight 100)
 //   knight.Player.Run <1|0>                달리기를 켜고 끈다 (키 연결 전 테스트용)
-//   knight.Player.Status                   체력, 그로기, 회복 속도, 마지막 피격 후 경과 시간을 출력한다
+//   knight.Player.Status                   체력, 그로기, 회복 속도, 마지막 피격 후 경과 시간, 부위 체력을 출력한다
 //
 // Kill·Damage는 실제 피격과 같은 GAS 경로를 거치므로 아래 흐름 전체를 확인할 수 있다.
 //   체력 감소 → 체력 0 → AknightCharacter::HandleOutOfHealth → 레이드 NotifyPlayerDefeated → 레이드 Failed
@@ -15,6 +15,7 @@
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
+#include "AbilitySystem/Attributes/knightAttributeSet.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
 #include "AttributeSet.h"
 #include "Character/knightMovementComponent.h"
@@ -25,6 +26,7 @@
 #include "HAL/IConsoleManager.h"
 #include "Interfaces/CombatInterface.h"
 #include "Raid/knightRaidGameState.h"
+#include "System/knightGameplayTags.h"
 #include "UObject/StrongObjectPtr.h"
 #include "UObject/UnrealType.h"
 #include "knightDev.h"
@@ -242,8 +244,23 @@ namespace knightPlayerCheats
 			return;
 		}
 		LogVitals(World, Pawn, ASC, CommandName, TEXT(""));
-		UE_LOG(LogknightDev, Log, TEXT("%s: PoiseRecoveryRate=%.1f/s  SecondsSinceLastHit=%.2f"),
-			CommandName, CoreSet->GetPoiseRecoveryRate(), World->GetTimeSeconds() - CoreSet->GetLastHitTime());
+		UE_LOG(LogknightDev, Log, TEXT("%s: PoiseRecoveryRate=%.1f/s  SecondsSinceLastHit=%.2f  MaxHealth=%.1f  AttackPower=%.1f"),
+			CommandName, CoreSet->GetPoiseRecoveryRate(), World->GetTimeSeconds() - CoreSet->GetLastHitTime(),
+			CoreSet->GetMaxHealth(), CoreSet->GetAttackPower());
+
+		// 부위 체력: 현재/최대, 파괴 여부(B). 파괴 페널티가 걸리면 위 AttackPower·아래 MaxSpeed가 줄어든다.
+		if (const UknightAttributeSet* const MechSet = ASC->GetSet<UknightAttributeSet>())
+		{
+			auto PartText = [ASC](const TCHAR* Name, float Health, float MaxHealth, const FGameplayTag& BrokenTag)
+			{
+				return FString::Printf(TEXT("%s=%.1f/%.1f%s"), Name, Health, MaxHealth, ASC->HasMatchingGameplayTag(BrokenTag) ? TEXT("(B)") : TEXT(""));
+			};
+			UE_LOG(LogknightDev, Log, TEXT("%s: Parts %s  %s  %s  %s"), CommandName,
+				*PartText(TEXT("Head"), MechSet->GetHeadHealth(), MechSet->GetMaxHeadHealth(), knightGameplayTags::State_PartBroken_Head),
+				*PartText(TEXT("Torso"), MechSet->GetTorsoHealth(), MechSet->GetMaxTorsoHealth(), knightGameplayTags::State_PartBroken_Torso),
+				*PartText(TEXT("Arms"), MechSet->GetArmsHealth(), MechSet->GetMaxArmsHealth(), knightGameplayTags::State_PartBroken_Arms),
+				*PartText(TEXT("Legs"), MechSet->GetLegsHealth(), MechSet->GetMaxLegsHealth(), knightGameplayTags::State_PartBroken_Legs));
+		}
 		LogMovement(Pawn, CommandName);
 	}
 
