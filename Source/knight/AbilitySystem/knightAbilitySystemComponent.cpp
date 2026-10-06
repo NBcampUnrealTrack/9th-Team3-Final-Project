@@ -175,9 +175,27 @@ void UknightAbilitySystemComponent::ProcessAbilityInput(float DeltaTime, bool bG
 	}
 
 	// 누름 처리를 끝낸 뒤 발동해야, 한 번의 누름으로 발동한 어빌리티가 같은 누름 이벤트를 또 받지 않는다.
+	// 같은 입력 태그에 묶인 어빌리티는 한 번에 하나만 발동한다 (입력 버퍼의 TryActivateAbilityByInputTag와 같은 규칙).
+	// 콤보처럼 단계들이 같은 키를 쓰면, 2단계가 발동하며 생긴 태그로 3단계까지 같은 프레임에 연달아 발동해 2단계를 건너뛸 수 있다.
+	// (앞 단계 몽타주의 Window.Combo는 노티파이가 끝나는 다음 애니메이션 업데이트까지 남아 있다)
+	FGameplayTagContainer ActivatedInputTags;
 	for (const FGameplayAbilitySpecHandle& Handle : AbilitiesToActivate)
 	{
-		TryActivateAbility(Handle);
+		const FGameplayAbilitySpec* const Spec = FindAbilitySpecFromHandle(Handle);
+		if (!Spec)
+		{
+			continue;
+		}
+		// 동적 소스 태그에는 InputTag만 들어 있다 (UknightAbilitySet 참고).
+		const FGameplayTagContainer InputTags = Spec->GetDynamicSpecSourceTags();
+		if (InputTags.HasAnyExact(ActivatedInputTags))
+		{
+			continue;
+		}
+		if (TryActivateAbility(Handle))
+		{
+			ActivatedInputTags.AppendTags(InputTags);
+		}
 	}
 
 	// 이번 프레임에 뗀 입력: 실행 중인 어빌리티가 뗌을 전달받는다 (차지 공격은 여기서 차지를 끝낸다).
