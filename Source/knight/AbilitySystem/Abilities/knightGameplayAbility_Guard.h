@@ -43,6 +43,7 @@ private:
 	void OnGuardReleased(float TimeHeld);
 
 	void RemoveParryTag();
+	void WaitForRelease();
 
 	bool bParryTagApplied = false;
 };
