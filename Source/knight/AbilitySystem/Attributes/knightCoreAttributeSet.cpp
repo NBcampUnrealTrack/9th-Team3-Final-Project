@@ -9,8 +9,11 @@ UknightCoreAttributeSet::UknightCoreAttributeSet()
 	InitMaxHealth(100.f);
 	InitPoise(100.f);
 	InitMaxPoise(100.f);
+	InitPoiseRecoveryRate(0.f);
 	InitAttackPower(0.f);
+	InitStaggerPower(1.f);
 	InitDefense(0.f);
+	InitGuardEfficiency(1.f);
 	InitCriticalChance(0.f);
 	InitCriticalDamageMultiplier(1.25f);
 	InitDamage(0.f);
@@ -48,6 +51,12 @@ void UknightCoreAttributeSet::ClampAttribute(const FGameplayAttribute& Attribute
 	{
 		NewValue = FMath::Max(NewValue, 0.f);
 	}
+	// 그로기 회복 속도·경직치·가드 효율은 음수만 막는다.
+	else if (Attribute == GetPoiseRecoveryRateAttribute() || Attribute == GetStaggerPowerAttribute()
+		|| Attribute == GetGuardEfficiencyAttribute())
+	{
+		NewValue = FMath::Max(NewValue, 0.f);
+	}
 	else if (Attribute == GetCriticalChanceAttribute())
 	{
 		NewValue = FMath::Clamp(NewValue, 0.f, 1.f);
@@ -70,7 +79,7 @@ void UknightCoreAttributeSet::PostAttributeChange(const FGameplayAttribute& Attr
 	{
 		AdjustForMaxChange(GetOwningAbilitySystemComponent(), GetPoiseAttribute(), OldValue, NewValue, false);
 	}
-	// Restoring a value above zero re-arms its threshold event (revive, poise recovery).
+	// 값이 다시 0보다 커지면 해당 임계 이벤트를 다시 발생할 수 있게 한다 (부활, Poise 회복).
 	else if (Attribute == GetHealthAttribute() && NewValue > 0.f)
 	{
 		bOutOfHealth = false;
