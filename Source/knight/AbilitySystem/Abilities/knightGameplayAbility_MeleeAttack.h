@@ -5,6 +5,7 @@
 #include "Combat/knightCombatTypes.h"
 #include "knightGameplayAbility_MeleeAttack.generated.h"
 
+class ACharacter;
 class UAnimMontage;
 
 /**
@@ -25,6 +26,11 @@ class UAnimMontage;
  *
  * Movement cancels the recovery: while Window.Cancel is open, any movement input stops the montage
  * (RecoveryCancelBlendOut) and ends the attack, so the Knight walks off instead of finishing the follow-through.
+ *
+ * (2026-10-07) 이동 캔슬은 '새로 누른' 이동 입력에만 반응한다. 공격 전부터 누르고 있던 방향키는 무시하고,
+ * 뗐다가 다시 누르거나 누른 채로 다른 키를 더 눌러 방향이 크게 바뀌면(W → W+D 등) 캔슬한다.
+ * 방향키를 누른 채 공격하면 이동 캔슬 없이 후딜까지 재생되어, 이동-공격이 빠르게 반복되지 않는다.
+ * 또 공격·가드·대시 입력이 버퍼에 남아 있으면 이동 캔슬보다 그 입력이 우선이다.
  */
 UCLASS()
 class KNIGHT_API UknightGameplayAbility_MeleeAttack : public UknightGameplayAbility
@@ -77,7 +83,18 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Recovery", meta=(ClampMin=0, Units="s", EditCondition="bCancelRecoveryOnMove"))
 	float RecoveryCancelBlendOut = 0.25f;
 
+	/**
+	 * 공격이 캔슬 없이 끝난 뒤에도 콤보 단계 태그(ActivationOwnedTags, 예: Combo.Greatsword.1)를 남겨 두는 시간.
+	 * 이 안에 누르면 1타로 돌아가지 않고 다음 단계가 나간다. 공격은 몽타주 블렌드 아웃이 시작될 때 끝나므로, 그 직후의 늦은 입력을 받아 준다.
+	 * (2026-10-07 플레이 피드백으로 0.05초 추가)
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Combo", meta=(ClampMin=0, Units="s"))
+	float ComboGraceTime = 0.05f;
+
 private:
+	/** ComboGraceTime 동안 콤보 단계 태그를 루즈 태그로 남긴다. */
+	void KeepComboStepTags();
+
 	UFUNCTION()
 	void OnMontageFinished();
 
@@ -86,5 +103,17 @@ private:
 
 	void CheckMoveCancel();
 
+	/** 이동 입력을 컨트롤 회전 기준 2D 방향으로 읽는다(카메라를 돌려도 같은 키는 같은 방향). 입력이 없으면 영벡터. */
+	static FVector2D GetLocalMoveInput(const ACharacter& Character);
+
+	/** 이번 공격에서 이동 키를 새로 눌렀는지 갱신한다. 공격 전부터 누르고 있던 방향은 무시한다. */
+	void UpdateFreshMovePress(const ACharacter& Character);
+
 	FTimerHandle MoveCancelTimer;
+
+	/** 새 누름 판정 기준 방향: 공격 시작 때 누르고 있던 방향. 키를 떼면 0이 된다. */
+	FVector2D MoveInputBaseline = FVector2D::ZeroVector;
+
+	/** 이번 공격 중 이동 키를 새로 눌렀는지(뗐다가 다시 누름, 또는 누른 채로 방향을 크게 바꿈). */
+	bool bFreshMovePress = false;
 };

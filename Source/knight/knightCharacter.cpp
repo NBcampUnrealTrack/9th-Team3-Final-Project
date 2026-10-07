@@ -25,6 +25,7 @@
 #include "Input/knightInputBufferComponent.h"
 #include "Item/knightDamageVisualComponent.h"
 #include "Item/knightPartsComponent.h"
+#include "Character/knightPartHealthComponent.h"
 #include "Input/knightInputComponent.h"
 #include "Settings/knightSettingsSubsystem.h"
 #include "Settings/knightSharedSettings.h"
@@ -36,31 +37,31 @@
 AknightCharacter::AknightCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UknightMovementComponent>(ACharacter::CharacterMovementComponentName))
 {
-	// Set size for collision capsule
+	// 충돌 캡슐 크기
 	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
 
-	// Don't rotate when the controller rotates. Let that just affect the camera.
+	// 컨트롤러가 돌아도 캐릭터는 돌지 않는다. 컨트롤러 회전은 카메라에만 쓴다.
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw = false;
 	bUseControllerRotationRoll = false;
 
-	// Movement tuning lives in UknightMovementComponent; override per mech in the Blueprint.
+	// 이동 수치는 UknightMovementComponent에 있고, 메카별로 블루프린트에서 덮어쓴다.
 
-	// Create a camera boom (pulls in towards the player if there is a collision)
+	// 카메라 붐 (충돌하면 플레이어 쪽으로 당겨진다)
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
 	CameraBoom->TargetArmLength = 400.0f;
 	CameraBoom->bUsePawnControlRotation = true;
 
-	// Create a follow camera
-	// Mode-driven camera. Until DefaultCameraMode is set it behaves like the template camera on the boom.
+	// 따라오는 카메라
+	// 카메라 모드로 움직이는 카메라. DefaultCameraMode를 지정하기 전에는 붐 위의 템플릿 카메라처럼 동작한다.
 	FollowCamera = CreateDefaultSubobject<UknightCameraComponent>(TEXT("FollowCamera"));
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
 
 	AbilitySystemComponent = CreateDefaultSubobject<UknightAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
 
-	// Attribute sets created as subobjects of the ASC's owner are registered by the ASC automatically.
+	// ASC 소유자의 하위 오브젝트로 만든 속성 세트는 ASC가 자동으로 등록한다.
 	CoreAttributeSet = CreateDefaultSubobject<UknightCoreAttributeSet>(TEXT("CoreAttributeSet"));
 	MechAttributeSet = CreateDefaultSubobject<UknightAttributeSet>(TEXT("MechAttributeSet"));
 
@@ -72,9 +73,10 @@ AknightCharacter::AknightCharacter(const FObjectInitializer& ObjectInitializer)
 	MotionWarping = CreateDefaultSubobject<UMotionWarpingComponent>(TEXT("MotionWarping"));
 	Parts = CreateDefaultSubobject<UknightPartsComponent>(TEXT("Parts"));
 	DamageVisual = CreateDefaultSubobject<UknightDamageVisualComponent>(TEXT("DamageVisual"));
+	PartHealth = CreateDefaultSubobject<UknightPartHealthComponent>(TEXT("PartHealth"));
 
-	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character)
-	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
+	// 참고: Mesh 컴포넌트(Character에서 상속)의 스켈레탈 메시와 애님 블루프린트는
+	// 파생 블루프린트 에셋(BP_Knight)에서 지정한다 (C++에서 콘텐츠를 직접 참조하지 않기 위해)
 }
 
 UAbilitySystemComponent* AknightCharacter::GetAbilitySystemComponent() const
@@ -133,8 +135,21 @@ void AknightCharacter::InitializeAbilitySystem()
 		}
 	}
 
-	// Parts grant their stats through the ASC, so they equip after it is ready.
+	// 파츠는 ASC를 통해 스탯을 주므로, ASC가 준비된 뒤에 장착한다.
 	Parts->ApplyLoadout();
+
+	// 부위 체력은 파츠가 부위 최대 체력을 정한 뒤에 연결해서 MaxHealth 합산이 맞게 한다.
+	PartHealth->InitializeWithAbilitySystem(AbilitySystemComponent);
+}
+
+FGameplayTag AknightCharacter::ResolveHitPart(const FHitResult& Hit) const
+{
+	return PartHealth->ResolveHitPartTag(Hit);
+}
+
+float AknightCharacter::GetPartDamageMultiplier(const FGameplayTag& PartTag) const
+{
+	return PartHealth->GetDamageMultiplier(PartTag);
 }
 
 void AknightCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -155,23 +170,28 @@ void AknightCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 		KnightInput->BindNativeAction(InputConfig, knightGameplayTags::InputTag_LockOn_SwitchLeft, ETriggerEvent::Started, this, &ThisClass::Input_LockOnSwitchLeft, false);
 		KnightInput->BindNativeAction(InputConfig, knightGameplayTags::InputTag_LockOn_SwitchRight, ETriggerEvent::Started, this, &ThisClass::Input_LockOnSwitchRight, false);
 
+		// 달리기. InputConfig에 아직 없을 수 있어서 못 찾아도 경고를 남기지 않는다(마지막 인자 false).
+		// 키 배치(IMC·InputConfig 에셋)는 입력 담당이 InputTag.Run에 입력 액션을 연결하면 동작한다.
+		KnightInput->BindNativeAction(InputConfig, knightGameplayTags::InputTag_Run, ETriggerEvent::Started, this, &ThisClass::Input_RunPressed, false);
+		KnightInput->BindNativeAction(InputConfig, knightGameplayTags::InputTag_Run, ETriggerEvent::Completed, this, &ThisClass::Input_RunReleased, false);
+
 		TArray<uint32> BindHandles;
 		KnightInput->BindAbilityActions(InputConfig, this, &ThisClass::Input_AbilityInputTagPressed, &ThisClass::Input_AbilityInputTagReleased, BindHandles);
 		return;
 	}
 
-	// Legacy template bindings
+	// 템플릿 입력 연결 (InputConfig가 없을 때)
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent)) {
 
-		// Jumping
+		// 점프
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
 
-		// Moving
+		// 이동
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AknightCharacter::Move);
 		EnhancedInputComponent->BindAction(MouseLookAction, ETriggerEvent::Triggered, this, &AknightCharacter::LookMouse);
 
-		// Looking
+		// 시점
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AknightCharacter::Look);
 	}
 	else
@@ -211,10 +231,10 @@ void AknightCharacter::Input_LockOnSwitchRight()
 
 void AknightCharacter::Move(const FInputActionValue& Value)
 {
-	// input is a Vector2D
+	// 입력은 Vector2D
 	FVector2D MovementVector = Value.Get<FVector2D>();
 
-	// route the input
+	// 입력 전달
 	DoMove(MovementVector.X, MovementVector.Y);
 }
 
@@ -241,7 +261,7 @@ void AknightCharacter::LookMouse(const FInputActionValue& Value)
 
 void AknightCharacter::ApplyLookInput(FVector2D LookAxisVector, bool bFromMouse)
 {
-	// Personal settings: per-device sensitivity and Y inversion.
+	// 개인 설정: 장치별 감도와 Y축 반전.
 	const APlayerController* const PC = Cast<APlayerController>(GetController());
 	const ULocalPlayer* const LocalPlayer = PC ? PC->GetLocalPlayer() : nullptr;
 	UknightSettingsSubsystem* const Settings = LocalPlayer ? LocalPlayer->GetSubsystem<UknightSettingsSubsystem>() : nullptr;
@@ -254,25 +274,55 @@ void AknightCharacter::ApplyLookInput(FVector2D LookAxisVector, bool bFromMouse)
 		}
 	}
 
-	// route the input
+	// 입력 전달
 	DoLook(LookAxisVector.X, LookAxisVector.Y);
+}
+
+bool AknightCharacter::IsRunToggleEnabled() const
+{
+	const APlayerController* const PC = Cast<APlayerController>(GetController());
+	const ULocalPlayer* const LocalPlayer = PC ? PC->GetLocalPlayer() : nullptr;
+	UknightSettingsSubsystem* const Settings = LocalPlayer ? LocalPlayer->GetSubsystem<UknightSettingsSubsystem>() : nullptr;
+	const UknightSharedSettings* const Shared = Settings ? Settings->GetSharedSettings() : nullptr;
+	return Shared && Shared->bToggleRun;
+}
+
+void AknightCharacter::Input_RunPressed()
+{
+	UknightMovementComponent* const KnightMovement = GetKnightMovementComponent();
+	if (!KnightMovement || IsDead())
+	{
+		return;
+	}
+	// 토글이면 누를 때마다 뒤집고, 아니면 누르는 동안 켠다.
+	KnightMovement->SetWantsToRun(IsRunToggleEnabled() ? !KnightMovement->GetWantsToRun() : true);
+}
+
+void AknightCharacter::Input_RunReleased()
+{
+	UknightMovementComponent* const KnightMovement = GetKnightMovementComponent();
+	// 토글이면 뗄 때는 아무것도 하지 않는다.
+	if (KnightMovement && !IsRunToggleEnabled())
+	{
+		KnightMovement->SetWantsToRun(false);
+	}
 }
 
 void AknightCharacter::DoMove(float Right, float Forward)
 {
 	if (GetController() != nullptr && !IsDead())
 	{
-		// find out which way is forward
+		// 어느 쪽이 앞인지 구한다
 		const FRotator Rotation = GetController()->GetControlRotation();
 		const FRotator YawRotation(0, Rotation.Yaw, 0);
 
-		// get forward vector
+		// 앞 방향 벡터
 		const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
 
-		// get right vector
+		// 오른쪽 방향 벡터
 		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 
-		// add movement
+		// 이동 입력 추가
 		AddMovementInput(ForwardDirection, Forward);
 		AddMovementInput(RightDirection, Right);
 	}
@@ -280,10 +330,10 @@ void AknightCharacter::DoMove(float Right, float Forward)
 
 void AknightCharacter::DoLook(float Yaw, float Pitch)
 {
-	// While locked on, the lock drives the view; switching points uses the dedicated inputs.
+	// 락온 중에는 락온이 시점을 정한다. 대상 전환은 전용 입력을 쓴다.
 	if (GetController() != nullptr && !TargetLock->IsLockedOn())
 	{
-		// add yaw and pitch input to controller
+		// 컨트롤러에 좌우·상하 회전 입력 추가
 		AddControllerYawInput(Yaw);
 		AddControllerPitchInput(Pitch);
 	}
@@ -291,13 +341,13 @@ void AknightCharacter::DoLook(float Yaw, float Pitch)
 
 void AknightCharacter::DoJumpStart()
 {
-	// signal the character to jump
+	// 캐릭터에 점프를 알린다
 	Jump();
 }
 
 void AknightCharacter::DoJumpEnd()
 {
-	// signal the character to stop jumping
+	// 캐릭터에 점프 그만을 알린다
 	StopJumping();
 }
 
@@ -317,7 +367,7 @@ void AknightCharacter::HandleOutOfHealth(AActor* DamageInstigator, AActor* Damag
 	TargetLock->ClearLockOn();
 	GetCharacterMovement()->StopMovementImmediately();
 
-	// A death ability triggered by Event.Death plays the presentation. Everything else is cancelled.
+	// Event.Death로 발동하는 사망 어빌리티가 연출을 맡는다. 나머지 어빌리티는 모두 취소한다.
 	FGameplayEventData Payload;
 	Payload.EventTag = knightGameplayTags::Event_Death;
 	Payload.Instigator = DamageInstigator;
