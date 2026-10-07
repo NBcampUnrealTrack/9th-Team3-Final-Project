@@ -29,6 +29,7 @@ class UknightTargetLockComponent;
 class UMotionWarpingComponent;
 class UknightDamageVisualComponent;
 class UknightPartsComponent;
+class UknightPartHealthComponent;
 struct FGameplayEffectSpec;
 struct FInputActionValue;
 
@@ -39,23 +40,23 @@ class AknightCharacter;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FknightCharacterDeathEvent, AknightCharacter*, DeadCharacter);
 
 /**
- * The player's Knight mech.
+ * 플레이어의 나이트 메카.
  *
- * Owns its AbilitySystemComponent (solo game, so no PlayerState indirection) with the Core and mech
- * attribute sets. Abilities come from DefaultAbilitySets on possession; parts and weapons add more later.
- * Input is bound by tag through InputConfig. Without an InputConfig, the template's direct input
- * actions still work, so existing template maps stay playable during the transition.
+ * AbilitySystemComponent를 직접 가진다(싱글 게임이라 PlayerState를 거치지 않음). Core·메카 속성 세트가 붙는다.
+ * 어빌리티는 빙의할 때 DefaultAbilitySets에서 받고, 이후 파츠와 무기가 더 추가한다.
+ * 입력은 InputConfig를 통해 태그로 연결한다. InputConfig가 없으면 템플릿의 직접 입력 액션이 그대로 동작해서,
+ * 기존 템플릿 맵도 전환 기간 동안 플레이할 수 있다.
  */
 UCLASS(abstract)
 class KNIGHT_API AknightCharacter : public ACharacter, public IAbilitySystemInterface, public ICombatInterface, public IGenericTeamAgentInterface
 {
 	GENERATED_BODY()
 
-	/** Camera boom positioning the camera behind the character */
+	/** 캐릭터 뒤에 카메라를 두는 카메라 붐 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	USpringArmComponent* CameraBoom;
 
-	/** Follow camera */
+	/** 따라오는 카메라 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	UCameraComponent* FollowCamera;
 
@@ -80,12 +81,16 @@ class KNIGHT_API AknightCharacter : public ACharacter, public IAbilitySystemInte
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UMotionWarpingComponent> MotionWarping;
 
-	/** Mech parts and weapon: meshes and the stats/abilities they grant. */
+	/** 메카 파츠와 무기: 메시와, 파츠가 주는 스탯·어빌리티. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UknightPartsComponent> Parts;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UknightDamageVisualComponent> DamageVisual;
+
+	/** 부위 체력: 맞은 부위 판정, 부위 피해 분배, 파괴·복구, 최대 체력 = 부위 최대 체력의 합. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UknightPartHealthComponent> PartHealth;
 
 	UPROPERTY()
 	TObjectPtr<UknightCoreAttributeSet> CoreAttributeSet;
@@ -95,30 +100,30 @@ class KNIGHT_API AknightCharacter : public ACharacter, public IAbilitySystemInte
 
 protected:
 
-	/** Tag-based input. When set, it replaces the legacy template input actions below. */
+	/** 태그 기반 입력. 지정하면 아래 템플릿 입력 액션 대신 쓰인다. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Input")
 	TObjectPtr<const UknightInputConfig> InputConfig;
 
-	/** Granted once on first possession. */
+	/** 처음 빙의할 때 한 번 부여한다. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Abilities")
 	TArray<TObjectPtr<const UknightAbilitySet>> DefaultAbilitySets;
 
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Abilities")
 	TObjectPtr<UknightAbilityTagRelationshipMapping> TagRelationshipMapping;
 
-	/** Legacy template input. Used only when InputConfig is empty. */
+	/** 템플릿 입력. InputConfig가 비어 있을 때만 쓴다. */
 	UPROPERTY(EditAnywhere, Category="Input")
 	UInputAction* JumpAction;
 
-	/** Legacy template input. Used only when InputConfig is empty. */
+	/** 템플릿 입력. InputConfig가 비어 있을 때만 쓴다. */
 	UPROPERTY(EditAnywhere, Category="Input")
 	UInputAction* MoveAction;
 
-	/** Legacy template input. Used only when InputConfig is empty. */
+	/** 템플릿 입력. InputConfig가 비어 있을 때만 쓴다. */
 	UPROPERTY(EditAnywhere, Category="Input")
 	UInputAction* LookAction;
 
-	/** Legacy template input. Used only when InputConfig is empty. */
+	/** 템플릿 입력. InputConfig가 비어 있을 때만 쓴다. */
 	UPROPERTY(EditAnywhere, Category="Input")
 	UInputAction* MouseLookAction;
 
@@ -132,6 +137,10 @@ public:
 	//~ ICombatInterface
 	virtual bool CanReceiveHit(const AActor* Attacker) const override;
 	virtual bool IsDead() const override;
+	/** 맞은 위치 → 나이트 부위 태그(Knight.Part.*). 부위 체력 컴포넌트가 판정한다. */
+	virtual FGameplayTag ResolveHitPart(const FHitResult& Hit) const override;
+	/** 파괴된 부위 재피격 크리티컬과 머리 파괴 피해 증가. 부위 체력 컴포넌트가 계산한다. */
+	virtual float GetPartDamageMultiplier(const FGameplayTag& PartTag) const override;
 
 	//~ IGenericTeamAgentInterface
 	virtual FGenericTeamId GetGenericTeamId() const override;
@@ -139,9 +148,10 @@ public:
 	UknightAbilitySystemComponent* GetKnightAbilitySystemComponent() const { return AbilitySystemComponent; }
 	UknightInputBufferComponent* GetInputBuffer() const { return InputBuffer; }
 	UknightTargetLockComponent* GetTargetLock() const { return TargetLock; }
+	UknightPartHealthComponent* GetPartHealth() const { return PartHealth; }
 	UknightMovementComponent* GetKnightMovementComponent() const;
 
-	/** Fires once when Health reaches zero, after State.Dead is applied and Event.Death is sent. */
+	/** Health가 0이 되면 한 번 발생한다. State.Dead가 붙고 Event.Death가 보내진 뒤다. */
 	UPROPERTY(BlueprintAssignable, Category="Knight|Health")
 	FknightCharacterDeathEvent OnDeathStarted;
 
@@ -150,16 +160,16 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void PossessedBy(AController* NewController) override;
 
-	/** Initialize input action bindings */
+	/** 입력 액션 연결을 초기화한다 */
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
-	/** Called for movement input */
+	/** 이동 입력 */
 	void Move(const FInputActionValue& Value);
 
-	/** Called for looking input */
+	/** 시점 입력 */
 	void Look(const FInputActionValue& Value);
 
-	/** Mouse look: same as Look but uses the mouse sensitivity setting. */
+	/** 마우스 시점: Look과 같지만 마우스 감도 설정을 쓴다. */
 	void LookMouse(const FInputActionValue& Value);
 
 	void ApplyLookInput(FVector2D LookAxisVector, bool bFromMouse);
@@ -173,36 +183,46 @@ protected:
 	void Input_LockOnSwitchLeft();
 	void Input_LockOnSwitchRight();
 
+	/**
+	 * 달리기 입력. 기본은 누르고 있는 동안만 달린다.
+	 * 개인 설정의 bToggleRun이 켜져 있으면 누를 때마다 달리기를 켜고 끈다(뗄 때는 아무것도 안 함).
+	 */
+	void Input_RunPressed();
+	void Input_RunReleased();
+
+	/** 개인 설정에서 달리기 토글이 켜져 있는지. 설정을 읽을 수 없으면 false(누르고 있는 동안). */
+	bool IsRunToggleEnabled() const;
+
 	void InitializeAbilitySystem();
 
-	/** Poise breaks and ordinary hits are turned into reaction events by UknightHitReactionComponent. */
+	/** Poise 붕괴와 일반 피격은 UknightHitReactionComponent가 반응 이벤트로 바꾼다. */
 	void HandleOutOfHealth(AActor* DamageInstigator, AActor* DamageCauser, const FGameplayEffectSpec* DamageEffectSpec,
 		float DamageMagnitude, float OldValue, float NewValue);
 
 public:
 
-	/** Handles move inputs from either controls or UI interfaces */
+	/** 조작이나 UI에서 오는 이동 입력을 처리한다 */
 	UFUNCTION(BlueprintCallable, Category="Input")
 	virtual void DoMove(float Right, float Forward);
 
-	/** Handles look inputs from either controls or UI interfaces */
+	/** 조작이나 UI에서 오는 시점 입력을 처리한다 */
 	UFUNCTION(BlueprintCallable, Category="Input")
 	virtual void DoLook(float Yaw, float Pitch);
 
-	/** Handles jump pressed inputs from either controls or UI interfaces */
+	/** 조작이나 UI에서 오는 점프 누름을 처리한다 */
 	UFUNCTION(BlueprintCallable, Category="Input")
 	virtual void DoJumpStart();
 
-	/** Handles jump pressed inputs from either controls or UI interfaces */
+	/** 조작이나 UI에서 오는 점프 뗌을 처리한다 */
 	UFUNCTION(BlueprintCallable, Category="Input")
 	virtual void DoJumpEnd();
 
 public:
 
-	/** Returns CameraBoom subobject **/
+	/** CameraBoom 하위 오브젝트를 돌려준다 **/
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
 
-	/** Returns FollowCamera subobject **/
+	/** FollowCamera 하위 오브젝트를 돌려준다 **/
 	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return FollowCamera; }
 
 private:

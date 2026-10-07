@@ -2,6 +2,7 @@
 
 #include "GameplayEffect.h"
 #include "GameplayEffectExtension.h"
+#include "Engine/World.h"
 
 UknightCoreAttributeSet::UknightCoreAttributeSet()
 {
@@ -104,6 +105,7 @@ void UknightCoreAttributeSet::PostGameplayEffectExecute(const FGameplayEffectMod
 		SetDamage(0.f);
 		if (LocalDamage > 0.f)
 		{
+			RecordHit();
 			const float OldHealth = GetHealth();
 			SetHealth(FMath::Clamp(OldHealth - LocalDamage, 0.f, GetMaxHealth()));
 			const float NewHealth = GetHealth();
@@ -124,6 +126,7 @@ void UknightCoreAttributeSet::PostGameplayEffectExecute(const FGameplayEffectMod
 		SetPoiseDamage(0.f);
 		if (LocalPoiseDamage > 0.f)
 		{
+			RecordHit();
 			const float OldPoise = GetPoise();
 			SetPoise(FMath::Clamp(OldPoise - LocalPoiseDamage, 0.f, GetMaxPoise()));
 			if (GetPoise() <= 0.f && !bPoiseBroken)
@@ -141,5 +144,13 @@ void UknightCoreAttributeSet::PostGameplayEffectExecute(const FGameplayEffectMod
 		{
 			SetHealth(FMath::Clamp(GetHealth() + LocalHealing, 0.f, GetMaxHealth()));
 		}
+	}
+}
+
+void UknightCoreAttributeSet::RecordHit()
+{
+	if (const UWorld* const World = GetWorld())
+	{
+		LastHitTime = World->GetTimeSeconds();
 	}
 }
