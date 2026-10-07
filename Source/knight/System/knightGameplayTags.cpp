@@ -104,4 +104,8 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Equipment_Slot_Legs, "Equipment.Slot.Legs", "Legs part slot.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Equipment_Slot_Backpack, "Equipment.Slot.Backpack", "Backpack / booster part slot.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Equipment_Slot_Weapon, "Equipment.Slot.Weapon", "Weapon slot.");
+	// 내장 파츠 슬롯. 외장은 역할이 아직 정해지지 않아 슬롯만 있다.
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Equipment_Slot_Booster, "Equipment.Slot.Booster", "Internal booster part slot (movement and dodge speed).");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Equipment_Slot_Generator, "Equipment.Slot.Generator", "Internal energy generator slot (max boost gauge and recovery).");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Equipment_Slot_Exterior, "Equipment.Slot.Exterior", "Internal exterior part slot (role not decided yet).");
 }

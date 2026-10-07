@@ -68,6 +68,13 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Part", meta=(Categories="Equipment.Slot"))
 	FGameplayTag SlotTag;
 
+	/**
+	 * 파츠 중량 (2026-10-07). 장착한 파츠 중량의 합이 메카의 Weight 스탯이 되어 이동·퀵스텝 속도를 낮추고,
+	 * 합이 적재 한도(LoadCapacity 스탯)를 넘는 장착은 거부된다 (UknightPartsComponent::CanEquipPart).
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Part", meta=(ClampMin=0))
+	float Weight = 0.f;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Part")
 	TSoftObjectPtr<USkeletalMesh> Mesh;
 

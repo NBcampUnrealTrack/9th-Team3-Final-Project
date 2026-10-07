@@ -134,4 +134,8 @@ namespace knightGameplayTags
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Equipment_Slot_Legs);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Equipment_Slot_Backpack);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Equipment_Slot_Weapon);
+	// 내장 파츠 슬롯 (2026-10-07, 1차 MVP 파츠 구성: 필수 4부위 + 내장 3종). 내장 파츠는 모델링 없이 스탯만 준다.
+	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Equipment_Slot_Booster);
+	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Equipment_Slot_Generator);
+	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Equipment_Slot_Exterior);
 }

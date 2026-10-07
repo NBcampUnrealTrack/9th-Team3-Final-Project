@@ -1,5 +1,6 @@
 #include "Item/knightPartsComponent.h"
 
+#include "AbilitySystem/Attributes/knightAttributeSet.h"
 #include "AbilitySystem/knightAbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -12,9 +13,23 @@
 #include "System/knightGameplayTags.h"
 #include "knight.h"
 
+bool knightPartsLoad::FitsLoadCapacity(float TotalWeight, float ReplacedWeight, float NewWeight, float LoadCapacity)
+{
+	// 부동소수 오차로 '딱 한도'인 조합이 거부되지 않게 아주 작은 여유를 둔다.
+	return TotalWeight - ReplacedWeight + NewWeight <= LoadCapacity + KINDA_SMALL_NUMBER;
+}
+
 UknightPartsComponent::UknightPartsComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
+
+	// 필수 4부위 → 내장 3종 → 무기 순서로 입힌다.
+	LoadoutSlots = {
+		knightGameplayTags::Equipment_Slot_Head, knightGameplayTags::Equipment_Slot_Torso,
+		knightGameplayTags::Equipment_Slot_Arms, knightGameplayTags::Equipment_Slot_Legs,
+		knightGameplayTags::Equipment_Slot_Booster, knightGameplayTags::Equipment_Slot_Generator,
+		knightGameplayTags::Equipment_Slot_Exterior, knightGameplayTags::Equipment_Slot_Weapon
+	};
 }
 
 void UknightPartsComponent::ApplyLoadout()
@@ -22,12 +37,7 @@ void UknightPartsComponent::ApplyLoadout()
 	const UGameInstance* const GameInstance = GetWorld() ? GetWorld()->GetGameInstance() : nullptr;
 	const UknightProgressionSubsystem* const Progression = GameInstance ? GameInstance->GetSubsystem<UknightProgressionSubsystem>() : nullptr;
 
-	const FGameplayTag Slots[] = {
-		knightGameplayTags::Equipment_Slot_Head, knightGameplayTags::Equipment_Slot_Torso,
-		knightGameplayTags::Equipment_Slot_Arms, knightGameplayTags::Equipment_Slot_Legs,
-		knightGameplayTags::Equipment_Slot_Backpack, knightGameplayTags::Equipment_Slot_Weapon
-	};
-	for (const FGameplayTag& Slot : Slots)
+	for (const FGameplayTag& Slot : LoadoutSlots)
 	{
 		// The saved choice wins; the default fills slots the save has nothing for.
 		const UknightPartItemDefinition* Part = Progression ? Progression->GetEquippedPart(Slot) : nullptr;
@@ -39,12 +49,76 @@ void UknightPartsComponent::ApplyLoadout()
 		}
 		if (Part)
 		{
-			EquipPart(Part, Progression ? Progression->GetUpgradeLevel(Part) : 0);
+			// 저장된 로드아웃은 적재 한도로 거부하지 않는다(아래에서 경고만).
+			EquipPartUnchecked(Part, Progression ? Progression->GetUpgradeLevel(Part) : 0);
 		}
+	}
+
+	const float LoadCapacity = GetLoadCapacity();
+	if (LoadCapacity >= 0.f && GetTotalWeight() > LoadCapacity + KINDA_SMALL_NUMBER)
+	{
+		UE_LOG(Logknight, Warning, TEXT("%s: loadout weight %.1f exceeds load capacity %.1f."), *GetNameSafe(GetOwner()), GetTotalWeight(), LoadCapacity);
 	}
 }
 
 bool UknightPartsComponent::EquipPart(const UknightPartItemDefinition* Part, int32 UpgradeLevel)
+{
+	// 슬롯 없는 파츠는 아래 EquipPartUnchecked가 거른다. 여기서는 적재 한도만 본다.
+	if (Part && Part->SlotTag.IsValid() && !CanEquipPart(Part))
+	{
+		const UknightPartItemDefinition* const Replaced = GetEquippedPart(Part->SlotTag);
+		UE_LOG(Logknight, Log, TEXT("%s: cannot equip %s, weight %.1f -> %.1f exceeds load capacity %.1f."),
+			*GetNameSafe(GetOwner()), *Part->GetName(), GetTotalWeight(),
+			GetTotalWeight() - (Replaced ? Replaced->Weight : 0.f) + Part->Weight, GetLoadCapacity());
+		return false;
+	}
+	return EquipPartUnchecked(Part, UpgradeLevel);
+}
+
+bool UknightPartsComponent::CanEquipPart(const UknightPartItemDefinition* Part) const
+{
+	if (!Part || !Part->SlotTag.IsValid())
+	{
+		return false;
+	}
+	const float LoadCapacity = GetLoadCapacity();
+	if (LoadCapacity < 0.f)
+	{
+		return true;
+	}
+	const UknightPartItemDefinition* const Replaced = GetEquippedPart(Part->SlotTag);
+	return knightPartsLoad::FitsLoadCapacity(GetTotalWeight(), Replaced ? Replaced->Weight : 0.f, Part->Weight, LoadCapacity);
+}
+
+float UknightPartsComponent::GetTotalWeight() const
+{
+	float TotalWeight = 0.f;
+	for (const TPair<FGameplayTag, FknightEquippedPart>& Entry : EquippedParts)
+	{
+		TotalWeight += Entry.Value.Definition ? Entry.Value.Definition->Weight : 0.f;
+	}
+	return TotalWeight;
+}
+
+float UknightPartsComponent::GetLoadCapacity() const
+{
+	const UAbilitySystemComponent* const ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner());
+	const FGameplayAttribute LoadCapacity = UknightAttributeSet::GetLoadCapacityAttribute();
+	return ASC && ASC->HasAttributeSetForAttribute(LoadCapacity) ? ASC->GetNumericAttribute(LoadCapacity) : -1.f;
+}
+
+void UknightPartsComponent::UpdateWeightAttribute()
+{
+	// 중량의 출처는 파츠뿐이라 기본값을 합으로 덮어쓴다. 다른 효과(GE)가 Weight를 바꾸면 그 위에 더해진다.
+	UAbilitySystemComponent* const ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner());
+	const FGameplayAttribute Weight = UknightAttributeSet::GetWeightAttribute();
+	if (ASC && ASC->HasAttributeSetForAttribute(Weight))
+	{
+		ASC->SetNumericAttributeBase(Weight, GetTotalWeight());
+	}
+}
+
+bool UknightPartsComponent::EquipPartUnchecked(const UknightPartItemDefinition* Part, int32 UpgradeLevel)
 {
 	ACharacter* const Character = Cast<ACharacter>(GetOwner());
 	if (!Part || !Part->SlotTag.IsValid() || !Character)
@@ -75,6 +149,8 @@ bool UknightPartsComponent::EquipPart(const UknightPartItemDefinition* Part, int
 		Part->AbilitySet->GiveToAbilitySystem(ASC, &Equipped.GrantedHandles, const_cast<UknightPartItemDefinition*>(Part), Equipped.UpgradeLevel);
 	}
 
+	UpdateWeightAttribute();
+
 	UE_LOG(Logknight, Verbose, TEXT("%s equipped %s (level %d) in %s."), *GetNameSafe(Character), *Part->GetName(), Equipped.UpgradeLevel, *Part->SlotTag.ToString());
 	OnEquipmentChanged.Broadcast(Part->SlotTag, const_cast<UknightPartItemDefinition*>(Part));
 	return true;
@@ -86,6 +162,7 @@ void UknightPartsComponent::UnequipSlot(FGameplayTag SlotTag)
 	if (EquippedParts.RemoveAndCopyValue(SlotTag, Removed))
 	{
 		RemovePart(Removed);
+		UpdateWeightAttribute();
 		OnEquipmentChanged.Broadcast(SlotTag, nullptr);
 	}
 }
