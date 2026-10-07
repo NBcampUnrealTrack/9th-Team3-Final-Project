@@ -32,7 +32,7 @@ public class knight : ModuleRules
 		});
 
 		// knightPerfTracker: KNIGHT_PERF_* counters for test captures; compiled out in Shipping.
-		PrivateDependencyModuleNames.AddRange(new string[] { "knightPerfTracker" });
+		PrivateDependencyModuleNames.AddRange(new string[] { "knightPerfTracker", "Niagara" });
 
 		// Defines WITH_GAMEPLAY_DEBUGGER and adds the debugger modules in builds that include it.
 		SetupGameplayDebuggerSupport(Target);

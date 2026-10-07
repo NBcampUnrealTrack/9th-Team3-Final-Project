@@ -23,13 +23,14 @@ UknightAttributeSet::UknightAttributeSet()
 	InitWeight(0.f);
 	InitLoadCapacity(100.f);
 
-	// 배율 스탯은 1.0, 퀵스텝 쿨타임은 0초로 두어 기존 동작이 바뀌지 않게 한다.
+	// 배율 스탯은 1.0으로 두어 기존 동작이 바뀌지 않게 한다.
+	// 퀵스텝 쿨타임은 0.5초 (2026-10-07, 연타 테스트 후 임시로 정한 값 — 이후 조정).
 	InitWalkSpeed(1.f);
 	InitRunSpeed(1.f);
 	InitActionSpeed(1.f);
 	InitJumpSpeed(1.f);
 	InitDodgeSpeed(1.f);
-	InitDodgeCooldown(0.f);
+	InitDodgeCooldown(0.5f);
 
 	InitRepairEfficiency(1.f);
 }

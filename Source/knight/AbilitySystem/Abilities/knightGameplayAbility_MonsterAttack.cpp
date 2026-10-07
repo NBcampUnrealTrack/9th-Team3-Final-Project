@@ -2,8 +2,18 @@
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
+#include "Abilities/Tasks/AbilityTask_Repeat.h"
 #include "Engine/World.h"
+#include "Monster/knightMonsterCharacterBase.h"
+#include "Monster/knightMonsterMovementComponent.h"
+#include "Monster/knightMonsterTargetingComponent.h"
 #include "System/knightGameplayTags.h"
+
+namespace knightMonsterAttack
+{
+	constexpr float StartTurnInterval = 1.f / 60.f;
+	constexpr float StartTurnTolerance = 3.f;
+}
 
 FknightMonsterAttackContext FknightMonsterAttackContext::Make(const AActor* Monster, const AActor* Target)
 {
@@ -77,4 +87,33 @@ void UknightGameplayAbility_MonsterAttack::ActivateAbility(const FGameplayAbilit
 		LastActivationTime = World->GetTimeSeconds();
 	}
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
+
+	if (!FMath::IsNearlyZero(StartTurnYaw) && StartTurnMaxTime > 0.f)
+	{
+		const int32 Steps = FMath::Max(1, FMath::CeilToInt(StartTurnMaxTime / knightMonsterAttack::StartTurnInterval));
+		UAbilityTask_Repeat* const TurnTask = UAbilityTask_Repeat::RepeatAction(this, knightMonsterAttack::StartTurnInterval, Steps);
+		TurnTask->OnPerformAction.AddDynamic(this, &ThisClass::HandleStartTurnTick);
+		StartTurnTask = TurnTask;
+		TurnTask->ReadyForActivation();
+	}
+}
+
+void UknightGameplayAbility_MonsterAttack::HandleStartTurnTick(int32 ActionNumber)
+{
+	const AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetAvatarActorFromActorInfo());
+	UknightMonsterMovementComponent* const Movement = Monster ? Monster->GetMonsterMovementComponent() : nullptr;
+	const UknightMonsterTargetingComponent* const Targeting = Monster ? Monster->GetTargetingComponent() : nullptr;
+	const AActor* const Target = Targeting ? Targeting->GetCurrentTarget() : nullptr;
+	bool bDone = !Movement || !Target;
+	if (!bDone)
+	{
+		// 타깃이 움직여도 따라가도록 매번 방향을 다시 잡는다.
+		const FVector ToTarget = (Target->GetActorLocation() - Monster->GetActorLocation()).GetSafeNormal2D();
+		const FVector Facing = Monster->GetActorLocation() + ToTarget.RotateAngleAxis(StartTurnYaw, FVector::UpVector) * 100.f;
+		bDone = Movement->TurnTowards(Facing, knightMonsterAttack::StartTurnInterval, StartTurnRate, knightMonsterAttack::StartTurnTolerance);
+	}
+	if (bDone && StartTurnTask.IsValid())
+	{
+		StartTurnTask->EndTask();
+	}
 }

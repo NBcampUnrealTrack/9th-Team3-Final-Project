@@ -1,8 +1,26 @@
 #include "AbilitySystem/knightAbilitySystemComponent.h"
 
 #include "AbilitySystem/knightAbilityTagRelationshipMapping.h"
+#include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
+#include "Engine/World.h"
 #include "System/knightGameplayTags.h"
+#include "TimerManager.h"
 #include "knight.h"
+
+// ---- 그로기 자연 회복: 순수 계산 (테스트 대상) ----
+
+namespace knightPoiseRecovery
+{
+	float Step(float CurrentPoise, float MaxPoise, float RecoveryRate, float DeltaSeconds,
+		float SecondsSinceLastHit, float RecoveryDelay)
+	{
+		if (RecoveryRate <= 0.f || CurrentPoise <= 0.f || CurrentPoise >= MaxPoise || SecondsSinceLastHit < RecoveryDelay)
+		{
+			return CurrentPoise;
+		}
+		return FMath::Min(MaxPoise, CurrentPoise + RecoveryRate * FMath::Max(0.f, DeltaSeconds));
+	}
+}
 
 UknightAbilitySystemComponent::UknightAbilitySystemComponent(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -20,6 +38,47 @@ void UknightAbilitySystemComponent::InitAbilityActorInfo(AActor* InOwnerActor, A
 	if (bHasNewAvatar)
 	{
 		TryActivateAbilitiesOnSpawn();
+	}
+	StartPoiseRecovery();
+}
+
+void UknightAbilitySystemComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (const UWorld* const World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(PoiseRecoveryTimer);
+	}
+	Super::EndPlay(EndPlayReason);
+}
+
+void UknightAbilitySystemComponent::StartPoiseRecovery()
+{
+	UWorld* const World = GetWorld();
+	// 에디터의 BP 미리보기 같은 게임 밖 월드에서는 켜지 않는다.
+	if (!World || !World->IsGameWorld() || World->GetTimerManager().IsTimerActive(PoiseRecoveryTimer))
+	{
+		return;
+	}
+	World->GetTimerManager().SetTimer(PoiseRecoveryTimer, this, &ThisClass::TickPoiseRecovery, PoiseRecoveryInterval, true);
+}
+
+void UknightAbilitySystemComponent::TickPoiseRecovery()
+{
+	const UknightCoreAttributeSet* const CoreSet = GetSet<UknightCoreAttributeSet>();
+	const UWorld* const World = GetWorld();
+	if (!CoreSet || !World || HasMatchingGameplayTag(knightGameplayTags::State_Dead))
+	{
+		return;
+	}
+
+	const FGameplayAttribute PoiseAttribute = UknightCoreAttributeSet::GetPoiseAttribute();
+	const float CurrentPoise = GetNumericAttributeBase(PoiseAttribute);
+	const float NewPoise = knightPoiseRecovery::Step(CurrentPoise, CoreSet->GetMaxPoise(), CoreSet->GetPoiseRecoveryRate(),
+		PoiseRecoveryInterval, World->GetTimeSeconds() - CoreSet->GetLastHitTime(), PoiseRecoveryDelay);
+	if (NewPoise != CurrentPoise)
+	{
+		// 몬스터 반응(UknightGameplayAbility_MonsterReaction)과 같은 방식으로 기본값을 바꾼다.
+		SetNumericAttributeBase(PoiseAttribute, NewPoise);
 	}
 }
 
@@ -78,7 +137,7 @@ void UknightAbilitySystemComponent::ProcessAbilityInput(float DeltaTime, bool bG
 	RecentlyActivatedInputTags.Reset();
 	TArray<FGameplayAbilitySpecHandle, TInlineAllocator<8>> AbilitiesToActivate;
 
-	// Held input: WhileInputActive abilities retry every frame until they activate.
+	// 누르고 있는 입력: WhileInputActive 어빌리티는 발동할 때까지 매 프레임 다시 시도한다.
 	for (const FGameplayAbilitySpecHandle& Handle : InputHeldSpecHandles)
 	{
 		const FGameplayAbilitySpec* const Spec = FindAbilitySpecFromHandle(Handle);
@@ -92,7 +151,7 @@ void UknightAbilitySystemComponent::ProcessAbilityInput(float DeltaTime, bool bG
 		}
 	}
 
-	// Pressed this frame: running abilities receive the press, idle OnInputTriggered abilities activate.
+	// 이번 프레임에 누른 입력: 실행 중인 어빌리티는 누름을 전달받고, 대기 중인 OnInputTriggered 어빌리티는 발동한다.
 	for (const FGameplayAbilitySpecHandle& Handle : InputPressedSpecHandles)
 	{
 		FGameplayAbilitySpec* const Spec = FindAbilitySpecFromHandle(Handle);
@@ -115,13 +174,31 @@ void UknightAbilitySystemComponent::ProcessAbilityInput(float DeltaTime, bool bG
 		}
 	}
 
-	// Activate after processing presses so a single press never activates and then receives its own press event.
+	// 누름 처리를 끝낸 뒤 발동해야, 한 번의 누름으로 발동한 어빌리티가 같은 누름 이벤트를 또 받지 않는다.
+	// 같은 입력 태그에 묶인 어빌리티는 한 번에 하나만 발동한다 (입력 버퍼의 TryActivateAbilityByInputTag와 같은 규칙).
+	// 콤보처럼 단계들이 같은 키를 쓰면, 2단계가 발동하며 생긴 태그로 3단계까지 같은 프레임에 연달아 발동해 2단계를 건너뛸 수 있다.
+	// (앞 단계 몽타주의 Window.Combo는 노티파이가 끝나는 다음 애니메이션 업데이트까지 남아 있다)
+	FGameplayTagContainer ActivatedInputTags;
 	for (const FGameplayAbilitySpecHandle& Handle : AbilitiesToActivate)
 	{
-		TryActivateAbility(Handle);
+		const FGameplayAbilitySpec* const Spec = FindAbilitySpecFromHandle(Handle);
+		if (!Spec)
+		{
+			continue;
+		}
+		// 동적 소스 태그에는 InputTag만 들어 있다 (UknightAbilitySet 참고).
+		const FGameplayTagContainer InputTags = Spec->GetDynamicSpecSourceTags();
+		if (InputTags.HasAnyExact(ActivatedInputTags))
+		{
+			continue;
+		}
+		if (TryActivateAbility(Handle))
+		{
+			ActivatedInputTags.AppendTags(InputTags);
+		}
 	}
 
-	// Released this frame: running abilities receive the release (charge attacks end their charge here).
+	// 이번 프레임에 뗀 입력: 실행 중인 어빌리티가 뗌을 전달받는다 (차지 공격은 여기서 차지를 끝낸다).
 	for (const FGameplayAbilitySpecHandle& Handle : InputReleasedSpecHandles)
 	{
 		FGameplayAbilitySpec* const Spec = FindAbilitySpecFromHandle(Handle);
@@ -174,7 +251,7 @@ bool UknightAbilitySystemComponent::TryActivateAbilityByInputTag(const FGameplay
 void UknightAbilitySystemComponent::AbilitySpecInputPressed(FGameplayAbilitySpec& Spec)
 {
 	Super::AbilitySpecInputPressed(Spec);
-	// Wake UAbilityTask_WaitInputPress. All project abilities are instanced, so the primary instance holds the key.
+	// UAbilityTask_WaitInputPress를 깨운다. 프로젝트의 모든 어빌리티는 인스턴스형이라 기본 인스턴스가 키를 가지고 있다.
 	if (Spec.IsActive())
 	{
 		if (const UGameplayAbility* const Instance = Spec.GetPrimaryInstance())
@@ -188,7 +265,7 @@ void UknightAbilitySystemComponent::AbilitySpecInputPressed(FGameplayAbilitySpec
 void UknightAbilitySystemComponent::AbilitySpecInputReleased(FGameplayAbilitySpec& Spec)
 {
 	Super::AbilitySpecInputReleased(Spec);
-	// Wake UAbilityTask_WaitInputRelease.
+	// UAbilityTask_WaitInputRelease를 깨운다.
 	if (Spec.IsActive())
 	{
 		if (const UGameplayAbility* const Instance = Spec.GetPrimaryInstance())
@@ -219,7 +296,7 @@ bool UknightAbilitySystemComponent::IsActivationGroupBlocked(EknightAbilityActiv
 		{
 			return false;
 		}
-		// Combo window: only attacks may chain. Everything else waits for the cancel window.
+		// 콤보 창: 공격만 이어서 쓸 수 있다. 나머지는 캔슬 창을 기다린다.
 		return !(HasMatchingGameplayTag(knightGameplayTags::Window_Combo) && AbilityTags.HasTag(knightGameplayTags::Ability_Attack));
 	default:
 		checkf(false, TEXT("Invalid activation group %d"), static_cast<int32>(Group));
@@ -259,14 +336,14 @@ void UknightAbilitySystemComponent::NotifyAbilityActivated(const FGameplayAbilit
 	}
 	if (const FGameplayAbilitySpec* const Spec = FindAbilitySpecFromHandle(Handle))
 	{
-		// Only InputTags live in the dynamic source tags (see UknightAbilitySet).
+		// 동적 소스 태그에는 InputTag만 들어 있다 (UknightAbilitySet 참고).
 		RecentlyActivatedInputTags.AppendTags(Spec->GetDynamicSpecSourceTags());
 	}
 
 	const EknightAbilityActivationGroup Group = KnightAbility->GetActivationGroup();
 	ActivationGroupCounts[static_cast<uint8>(Group)]++;
 
-	// A new exclusive ability replaces whatever replaceable exclusive ability was running.
+	// 새 배타 어빌리티는 실행 중이던 교체 가능한 배타 어빌리티를 대신한다.
 	if (Group != EknightAbilityActivationGroup::Independent)
 	{
 		CancelActivationGroupAbilities(EknightAbilityActivationGroup::Exclusive_Replaceable, KnightAbility);
