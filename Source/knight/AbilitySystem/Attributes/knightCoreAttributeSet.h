@@ -47,6 +47,12 @@ public:
 	/** 어떤 효과로든 Health가 줄었을 때(피해 계산 이후). Magnitude는 줄어든 Health 양이다. */
 	mutable FknightAttributeEvent OnDamaged;
 
+	/**
+	 * 마지막으로 피격된 월드 시각(초). 피해나 그로기 피해가 0보다 크게 들어오면 갱신한다
+	 * (가드로 막아 그로기 피해만 들어온 경우도 포함). 그로기 자연 회복 대기 시간 계산에 쓴다.
+	 */
+	float GetLastHitTime() const { return LastHitTime; }
+
 protected:
 	virtual void PreAttributeBaseChange(const FGameplayAttribute& Attribute, float& NewValue) const override;
 	virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;
@@ -73,6 +79,7 @@ private:
 	/**
 	 * 그로기 회복 속도. 맞지 않는 동안 초당 회복하는 Poise 양.
 	 * 기본 0 = 자연 회복 없음(기존 동작과 같음). 몬스터도 같이 쓴다.
+	 * 실제 회복은 UknightAbilitySystemComponent가 마지막 피격 후 PoiseRecoveryDelay초가 지나면 처리한다.
 	 */
 	UPROPERTY(BlueprintReadOnly, Category="Knight|Core", meta=(AllowPrivateAccess=true))
 	FGameplayAttributeData PoiseRecoveryRate;
@@ -122,4 +129,10 @@ private:
 
 	bool bOutOfHealth = false;
 	bool bPoiseBroken = false;
+
+	/** 아직 맞은 적이 없으면 아주 먼 과거로 두어, 처음부터 회복 대기 시간이 지난 것으로 본다. */
+	float LastHitTime = -UE_BIG_NUMBER;
+
+	/** 지금 월드 시각을 LastHitTime에 기록한다. */
+	void RecordHit();
 };

@@ -6,6 +6,7 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_Move_Vertical, "InputTag.Move.Vertical", "Ascend and descend during boost flight, handled natively.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_Look, "InputTag.Look", "Camera input, handled natively.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_Look_Mouse, "InputTag.Look.Mouse", "Mouse camera input, handled natively.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_Run, "InputTag.Run", "Run while held, or toggle when the run toggle setting is on. Handled natively.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_Attack_Primary, "InputTag.Attack.Primary", "Greatsword main attack. Hold to charge.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_Attack_Secondary, "InputTag.Attack.Secondary", "Greatsword secondary attack.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_Guard, "InputTag.Guard", "Guard. Pressing on an incoming hit is a parry.");
@@ -50,6 +51,11 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Monster_Enraged, "State.Monster.Enraged", "Monster rage state.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Monster_Exhausted, "State.Monster.Exhausted", "Monster fatigue state.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Monster_Reacting, "State.Monster.Reacting", "Monster is in a down, flinch or roar; its StateTree waits instead of acting.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_PartBroken, "State.PartBroken", "Root for broken Knight parts (part health at or below zero).");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_PartBroken_Head, "State.PartBroken.Head", "Head broken: takes more damage.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_PartBroken_Torso, "State.PartBroken.Torso", "Torso broken: lower MaxPoise.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_PartBroken_Arms, "State.PartBroken.Arms", "Arms broken: lower AttackPower.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_PartBroken_Legs, "State.PartBroken.Legs", "Legs broken: lower walk and run speed.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Window_Combo, "Window.Combo", "Buffered attack input may chain into the next attack.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Window_Cancel, "Window.Cancel", "Buffered evasive input may cancel the current action.");
@@ -84,6 +90,10 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Message_Player_Died, "Message.Player.Died", "Broadcast when the player's Knight is destroyed.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Monster_Part, "Monster.Part", "Root for monster part tags. Add specific parts in Config/Tags.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Knight_Part_Head, "Knight.Part.Head", "Knight head part (part health).");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Knight_Part_Torso, "Knight.Part.Torso", "Knight torso part (part health).");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Knight_Part_Arms, "Knight.Part.Arms", "Knight arms part (part health).");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Knight_Part_Legs, "Knight.Part.Legs", "Knight legs part (part health).");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Item_Type_Material, "Item.Type.Material", "Monster materials and other crafting stackables.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Item_Type_Part, "Item.Type.Part", "Mech armor and equipment parts.");
