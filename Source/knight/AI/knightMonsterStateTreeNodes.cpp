@@ -228,3 +228,38 @@ bool FknightStateTreeHasGameplayTagCondition::TestCondition(FStateTreeExecutionC
 	}
 	return InstanceData.bInvert ? !bResult : bResult;
 }
+
+// Knight Can Use Ability
+
+bool FknightStateTreeCanUseAbilityCondition::TestCondition(FStateTreeExecutionContext& Context) const
+{
+	const FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
+	UAbilitySystemComponent* const ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(InstanceData.Actor);
+	bool bResult = false;
+	if (ASC && !InstanceData.AbilityTags.IsEmpty())
+	{
+		FknightMonsterAttackContext AttackContext = FknightMonsterAttackContext::Make(InstanceData.Actor, InstanceData.Target);
+		if (InstanceData.bIgnoreAngle)
+		{
+			AttackContext.AngleToTarget = 0.f;
+		}
+		TArray<FGameplayAbilitySpec*> Specs;
+		ASC->GetActivatableGameplayAbilitySpecsByAllMatchingTags(InstanceData.AbilityTags, Specs, true);
+		for (const FGameplayAbilitySpec* const Spec : Specs)
+		{
+			if (!Spec || Spec->IsActive())
+			{
+				continue;
+			}
+			// Activate Ability 태스크와 같은 판정: 몬스터 공격은 Selection 가중치, 나머지는 쓸 수 있으면 통과.
+			const UGameplayAbility* const Instance = Spec->GetPrimaryInstance() ? Spec->GetPrimaryInstance() : Spec->Ability.Get();
+			const UknightGameplayAbility_MonsterAttack* const Attack = Cast<UknightGameplayAbility_MonsterAttack>(Instance);
+			if (!Attack || Attack->GetSelectionWeight(AttackContext) > 0.f)
+			{
+				bResult = true;
+				break;
+			}
+		}
+	}
+	return InstanceData.bInvert ? !bResult : bResult;
+}

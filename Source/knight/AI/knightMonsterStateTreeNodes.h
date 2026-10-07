@@ -14,7 +14,7 @@ class UAbilitySystemComponent;
 /*
  * 몬스터용 StateTree 구성 요소. 의도한 구성은 다음과 같다.
  *   Evaluator  Knight Monster Target   -> 타깃, 거리, 각도, 공중 여부, 체력, 분노 상태를 출력한다
- *   Conditions 위 출력에 바인딩한 엔진 Float/Bool 비교 노드, 그리고 Knight Has Gameplay Tag
+ *   Conditions 위 출력에 바인딩한 엔진 Float/Bool 비교 노드, Knight Has Gameplay Tag, Knight Can Use Ability
  *   Tasks      접근은 엔진 Move To, 회전은 Knight Face Target, 기술 사용은 Knight Activate Ability
  * 공격은 GAS 어빌리티로 유지하므로 타격 판정, 피해, 반응이 플레이어와 같은 규칙을 따른다.
  */
@@ -206,6 +206,47 @@ struct KNIGHT_API FknightStateTreeHasGameplayTagCondition : public FStateTreeCon
 	GENERATED_BODY()
 
 	using FInstanceDataType = FknightHasGameplayTagConditionInstanceData;
+	virtual const UStruct* GetInstanceDataType() const override { return FInstanceDataType::StaticStruct(); }
+
+	virtual bool TestCondition(FStateTreeExecutionContext& Context) const override;
+};
+
+////////////////////////////////////////////////////////////////////
+
+USTRUCT()
+struct FknightCanUseAbilityConditionInstanceData
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, Category="Context")
+	TObjectPtr<AActor> Actor;
+
+	/** Evaluator의 Target에 바인딩한다. 몬스터 공격의 사거리와 각도를 이 타깃 기준으로 본다. */
+	UPROPERTY(EditAnywhere, Category="Input", meta=(Optional))
+	TObjectPtr<AActor> Target;
+
+	/** Knight Activate Ability와 같은 규칙: 에셋 태그가 이 태그를 모두 만족하는 어빌리티가 후보다. */
+	UPROPERTY(EditAnywhere, Category="Parameter")
+	FGameplayTagContainer AbilityTags;
+
+	/** 각도 제한을 무시한다. 발동 전에 Knight Face Target으로 몸을 돌리는 상태에 쓴다. */
+	UPROPERTY(EditAnywhere, Category="Parameter")
+	bool bIgnoreAngle = true;
+
+	UPROPERTY(EditAnywhere, Category="Parameter")
+	bool bInvert = false;
+};
+
+/**
+ * Knight Activate Ability가 지금 고를 수 있는 어빌리티가 있는지 검사한다(사거리, 쿨다운, 소유 태그).
+ * 추적 중 원거리 공격으로 끼어드는 전이처럼, 쿨다운 중이면 상태를 오가지 않아야 하는 곳에 쓴다.
+ */
+USTRUCT(meta=(DisplayName="Knight Can Use Ability", Category="Knight"))
+struct KNIGHT_API FknightStateTreeCanUseAbilityCondition : public FStateTreeConditionCommonBase
+{
+	GENERATED_BODY()
+
+	using FInstanceDataType = FknightCanUseAbilityConditionInstanceData;
 	virtual const UStruct* GetInstanceDataType() const override { return FInstanceDataType::StaticStruct(); }
 
 	virtual bool TestCondition(FStateTreeExecutionContext& Context) const override;
