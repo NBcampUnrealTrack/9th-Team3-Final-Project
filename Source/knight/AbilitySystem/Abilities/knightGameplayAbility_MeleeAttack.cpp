@@ -4,6 +4,7 @@
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "AbilitySystemComponent.h"
 #include "Combat/knightCombatLibrary.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "Input/knightInputBufferComponent.h"
@@ -47,6 +48,103 @@ void UknightGameplayAbility_MeleeAttack::ActivateAbility(const FGameplayAbilityS
 		return;
 	}
 
+	bAttackStarted = false;
+	if (DrawMontage && !IsWeaponInHand())
+	{
+		UAbilityTask_PlayMontageAndWait* const DrawTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
+			this, TEXT("Draw"), DrawMontage, DrawPlayRate);
+		DrawTask->OnBlendOut.AddDynamic(this, &ThisClass::OnDrawFinished);
+		DrawTask->OnCompleted.AddDynamic(this, &ThisClass::OnDrawFinished);
+		DrawTask->OnInterrupted.AddDynamic(this, &ThisClass::OnDrawInterrupted);
+		DrawTask->OnCancelled.AddDynamic(this, &ThisClass::OnDrawInterrupted);
+		DrawTask->ReadyForActivation();
+		if (UWorld* const World = GetWorld())
+		{
+			if (!bAttackAfterDraw)
+			{
+				World->GetTimerManager().SetTimer(DrawTimer, this, &ThisClass::CheckDrawMoveCancel, 0.05f, true);
+			}
+			else if (DrawAttackStartTime > 0.f)
+			{
+				World->GetTimerManager().SetTimer(DrawTimer, this, &ThisClass::OnDrawFinished, DrawAttackStartTime / DrawPlayRate, false);
+			}
+		}
+		return;
+	}
+	StartAttack();
+}
+
+void UknightGameplayAbility_MeleeAttack::OnDrawFinished()
+{
+	if (!IsActive() || bAttackStarted)
+	{
+		return;
+	}
+	if (bAttackAfterDraw)
+	{
+		StartAttack();
+	}
+	else
+	{
+		// Draw only: the next press attacks with the sword in hand.
+		EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, false);
+	}
+}
+
+void UknightGameplayAbility_MeleeAttack::CheckDrawMoveCancel()
+{
+	const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	if (!IsActive() || bAttackStarted || !Character || !IsWeaponInHand() || Character->GetLastMovementInputVector().IsNearlyZero())
+	{
+		return;
+	}
+	if (UWorld* const World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(DrawTimer);
+	}
+	MontageStop(RecoveryCancelBlendOut);
+	if (IsActive())
+	{
+		EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, false);
+	}
+}
+
+void UknightGameplayAbility_MeleeAttack::OnDrawInterrupted()
+{
+	// Starting the attack montage interrupts the draw; anything else (a hit, death) ends the attack.
+	if (IsActive() && !bAttackStarted)
+	{
+		EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, true);
+	}
+}
+
+bool UknightGameplayAbility_MeleeAttack::IsWeaponInHand() const
+{
+	const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	const USkeletalMeshComponent* const CharacterMesh = Character ? Character->GetMesh() : nullptr;
+	if (!CharacterMesh)
+	{
+		return true;
+	}
+	TArray<UMeshComponent*> Meshes;
+	Character->GetComponents<UMeshComponent>(Meshes);
+	for (const UMeshComponent* const Mesh : Meshes)
+	{
+		if (Mesh != CharacterMesh && Mesh->ComponentHasTag(WeaponComponentTag))
+		{
+			return Mesh->GetAttachSocketName() == WeaponHandSocket;
+		}
+	}
+	return true;
+}
+
+void UknightGameplayAbility_MeleeAttack::StartAttack()
+{
+	bAttackStarted = true;
+	if (UWorld* const World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(DrawTimer);
+	}
 	const bool bWarp = UknightCombatLibrary::SetAttackWarpTarget(GetAvatarActorFromActorInfo(), WarpTargetName, MaxWarpDistance,
 		WarpStopDistance, bUseSoftTarget, SoftTargetRange, SoftTargetAngle);
 	FVector WarpLocation;
@@ -166,6 +264,7 @@ void UknightGameplayAbility_MeleeAttack::EndAbility(const FGameplayAbilitySpecHa
 	if (UWorld* const World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(MoveCancelTimer);
+		World->GetTimerManager().ClearTimer(DrawTimer);
 	}
 	// 다음 단계로 교체되거나 피격 등으로 캔슬된 경우가 아니라, 정상적으로 끝난 공격만 콤보 유예를 준다.
 	if (!bWasCancelled && IsActive())

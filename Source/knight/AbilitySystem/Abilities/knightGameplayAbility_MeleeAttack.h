@@ -24,6 +24,10 @@ class UAnimMontage;
  * The WarpTargetName warp target is set before the montage starts (the locked target, or without a lock the
  * closest enemy in the attack direction), so root motion inside a Motion Warping notify window steers into it.
  *
+ * Drawing: with DrawMontage set and the weapon not in the hand (WeaponHandSocket), DrawMontage plays instead (its
+ * Knight Attach Weapon notify moves the sword to the hand). With bAttackAfterDraw the attack follows at
+ * DrawAttackStartTime; otherwise the press only draws, and moving once the sword is in hand ends the draw early.
+ *
  * Movement cancels the recovery: while Window.Cancel is open, any movement input stops the montage
  * (RecoveryCancelBlendOut) and ends the attack, so the Knight walks off instead of finishing the follow-through.
  *
@@ -60,6 +64,28 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category="Attack")
 	FknightMeleeHitParams HitParams;
+
+	/** Played first when the weapon is not in the hand (sword on the back). Leave empty to draw instantly. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Draw")
+	TObjectPtr<UAnimMontage> DrawMontage;
+
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Draw", meta=(ClampMin=0.01))
+	float DrawPlayRate = 1.f;
+
+	/** False: the first press with the sword on the back only draws it. True: the attack follows the draw. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Draw")
+	bool bAttackAfterDraw = false;
+
+	/** Montage time (s) at which the attack takes over from the draw, so the settle at its end is skipped. 0: when it blends out. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Draw", meta=(ClampMin=0, Units="s"))
+	float DrawAttackStartTime = 0.f;
+
+	/** The weapon counts as drawn while it is attached to this socket. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Draw")
+	FName WeaponHandSocket = TEXT("weapon_r");
+
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Draw")
+	FName WeaponComponentTag = TEXT("Weapon");
 
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Motion Warping")
 	FName WarpTargetName = TEXT("AttackTarget");
@@ -119,6 +145,15 @@ private:
 	UFUNCTION()
 	void OnMeleeHitEvent(FGameplayEventData Payload);
 
+	UFUNCTION()
+	void OnDrawFinished();
+
+	UFUNCTION()
+	void OnDrawInterrupted();
+
+	void StartAttack();
+	void CheckDrawMoveCancel();
+	bool IsWeaponInHand() const;
 	void CheckMoveCancel();
 
 	/** 이동 입력을 컨트롤 회전 기준 2D 방향으로 읽는다(카메라를 돌려도 같은 키는 같은 방향). 입력이 없으면 영벡터. */
@@ -128,6 +163,8 @@ private:
 	void UpdateFreshMovePress(const ACharacter& Character);
 
 	FTimerHandle MoveCancelTimer;
+	FTimerHandle DrawTimer;
+	bool bAttackStarted = false;
 
 	/** 새 누름 판정 기준 방향: 공격 시작 때 누르고 있던 방향. 키를 떼면 0이 된다. */
 	FVector2D MoveInputBaseline = FVector2D::ZeroVector;
