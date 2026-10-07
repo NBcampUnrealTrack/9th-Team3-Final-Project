@@ -140,6 +140,12 @@ void AknightCharacter::InitializeAbilitySystem()
 
 	// 부위 체력은 파츠가 부위 최대 체력을 정한 뒤에 연결해서 MaxHealth 합산이 맞게 한다.
 	PartHealth->InitializeWithAbilitySystem(AbilitySystemComponent);
+
+	// 출격 = 이 캐릭터가 생겨 파츠를 모두 입은 직후 (이 함수는 캐릭터마다 한 번만 끝까지 온다). (2026-10-07)
+	// 파츠로 오른 최대치에 맞춰 체력·그로기를 가득 채운다. 최대치가 바뀔 때 현재 체력·그로기를 따라 올리지 않는 것은
+	// 속성 세트의 규칙(전투 중 파츠 교체로 회복 방지)이라 그대로 두고, 출격 시점에만 채운다.
+	AbilitySystemComponent->SetNumericAttributeBase(UknightCoreAttributeSet::GetHealthAttribute(), CoreAttributeSet->GetMaxHealth());
+	AbilitySystemComponent->SetNumericAttributeBase(UknightCoreAttributeSet::GetPoiseAttribute(), CoreAttributeSet->GetMaxPoise());
 }
 
 FGameplayTag AknightCharacter::ResolveHitPart(const FHitResult& Hit) const

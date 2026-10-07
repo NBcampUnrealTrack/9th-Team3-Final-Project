@@ -36,6 +36,15 @@ EDataValidationResult UknightPartItemDefinition::IsDataValid(FDataValidationCont
 	{
 		Context.AddWarning(LOCTEXT("NoMesh", "Part has no Mesh; it grants stats but shows nothing."));
 	}
+	// 능력치 줄에 스탯을 고르지 않으면 장착해도 아무 효과가 없다.
+	for (int32 Index = 0; Index < StatModifiers.Num(); ++Index)
+	{
+		if (!StatModifiers[Index].Attribute.IsValid())
+		{
+			Context.AddError(FText::Format(LOCTEXT("NoStatAttribute", "StatModifiers[{0}] has no attribute."), Index));
+			Result = EDataValidationResult::Invalid;
+		}
+	}
 	for (int32 Step = 0; Step < UpgradeSteps.Num(); ++Step)
 	{
 		for (const FknightItemCost& Cost : UpgradeSteps[Step].Costs)
