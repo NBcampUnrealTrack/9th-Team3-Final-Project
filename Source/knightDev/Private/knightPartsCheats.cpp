@@ -9,7 +9,7 @@
 //   knight.Player.UnequipPart <슬롯>              슬롯을 비운다 (예: knight.Player.UnequipPart Torso)
 //                                                슬롯: Head Torso Arms Legs Booster Generator Exterior Weapon
 //
-// 확인 흐름: EquipPart → 파츠 AbilitySet의 GE로 스탯 변화 + 중량 합이 Weight 스탯으로 → 이동 속도의 중량 계수가 바뀜
+// 확인 흐름: EquipPart → 파츠 능력치(StatModifiers)로 만든 GE·AbilitySet으로 스탯 변화 + 중량 합이 Weight 스탯으로 → 이동 속도의 중량 계수가 바뀜
 //           적재 한도를 넘는 파츠는 장착이 거부되고 이유(중량 합 → 장착 후 중량 / 한도)가 로그로 나온다.
 // 결과는 LogknightDev 로그로 출력한다.
 

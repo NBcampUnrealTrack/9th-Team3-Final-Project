@@ -6,6 +6,7 @@
 #include "GameplayTagContainer.h"
 #include "knightPartsComponent.generated.h"
 
+class UGameplayEffect;
 class USkeletalMeshComponent;
 class UknightPartItemDefinition;
 
@@ -39,6 +40,9 @@ struct FknightEquippedPart
 
 	UPROPERTY()
 	FknightAbilitySet_GrantedHandles GrantedHandles;
+
+	/** 파츠 능력치(StatModifiers)로 만든 GE를 적용한 핸들. 해제할 때 이걸로 회수한다. */
+	FActiveGameplayEffectHandle StatEffectHandle;
 };
 
 /**
@@ -53,6 +57,10 @@ struct FknightEquippedPart
  *   - 다리 파츠처럼 적재 한도를 바꾸는 파츠를 갈아 끼울 때는 '지금' 한도로 판단한다. 새 다리의 한도가 더 낮아
  *     장착 뒤 한도를 넘을 수 있는데, 그때 중량 계수는 최저값에서 멈춘다(무브먼트에서 0~1로 자름).
  * 슬롯 목록은 LoadoutSlots(BP에서 수정 가능): 필수 4부위 + 내장 3종(부스터·발전기·외장) + 무기.
+ *
+ * 파츠 능력치 (2026-10-07): 파츠 정의의 StatModifiers로 무한 지속 GE를 메모리에서 만들어(파츠마다 한 번, 재사용)
+ * 장착할 때 적용하고 해제할 때 회수한다. 그래서 능력치만 있는 파츠는 파츠 정의 파일 하나면 된다.
+ * AbilitySet은 스킬·특수 효과가 있는 파츠만 쓰고, 둘 다 있으면 둘 다 적용된다.
  */
 UCLASS(ClassGroup=(Knight), meta=(BlueprintSpawnableComponent))
 class KNIGHT_API UknightPartsComponent : public UActorComponent
@@ -115,8 +123,15 @@ private:
 	/** 장착 중량 합을 메카 Weight 스탯 기본값에 반영한다. Weight 스탯이 없는 소유자는 아무것도 하지 않는다. */
 	void UpdateWeightAttribute();
 
+	/** 파츠 능력치 GE. 파츠마다 처음 한 번 만들고 재사용한다. 능력치가 없는 파츠는 null. */
+	const UGameplayEffect* GetStatEffect(const UknightPartItemDefinition* Part);
+
 	void RemovePart(FknightEquippedPart& Part);
 
 	UPROPERTY(Transient)
 	TMap<FGameplayTag, FknightEquippedPart> EquippedParts;
+
+	/** 파츠 정의 → 그 능력치로 만든 GE (에셋 파일 없이 메모리에만 있다). */
+	UPROPERTY(Transient)
+	TMap<TObjectPtr<const UknightPartItemDefinition>, TObjectPtr<UGameplayEffect>> StatEffects;
 };

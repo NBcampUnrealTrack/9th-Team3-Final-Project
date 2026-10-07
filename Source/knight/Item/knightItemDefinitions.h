@@ -1,6 +1,8 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "AttributeSet.h"
+#include "GameplayEffectTypes.h"
 #include "GameplayTagContainer.h"
 #include "MechPartAttachment.h"
 #include "knightItemDefinition.h"
@@ -30,6 +32,28 @@ struct KNIGHT_API FknightUpgradeStep
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Upgrade", meta=(TitleProperty="Item"))
 	TArray<FknightItemCost> Costs;
+};
+
+/**
+ * 파츠 능력치 한 줄 (2026-10-07): 어떤 스탯을 얼마나 바꾸는지.
+ * 장착하면 UknightPartsComponent가 파츠의 목록으로 무한 지속 GE를 메모리에서 만들어 적용하고, 해제하면 회수한다.
+ * 능력치만 있는 파츠는 이것만 채우면 되고 GE·AbilitySet 에셋을 따로 만들지 않는다.
+ */
+USTRUCT(BlueprintType)
+struct KNIGHT_API FknightPartStatModifier
+{
+	GENERATED_BODY()
+
+	/** 바꿀 스탯 (knightCoreAttributeSet·knightAttributeSet의 속성). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Stat")
+	FGameplayAttribute Attribute;
+
+	/** 계산 방식. 대부분 Add (Base) = 기본값에 더하기. 속도처럼 배율(기본 1.0)인 스탯도 +0.1처럼 더한다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Stat")
+	TEnumAsByte<EGameplayModOp::Type> ModifierOp = EGameplayModOp::AddBase;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Stat")
+	float Value = 0.f;
 };
 
 /** Monster material (horn, scale, core). Obtained from raid rewards, spent on upgrades. */
@@ -85,6 +109,13 @@ public:
 	/** Tags added to the spawned mesh component. "Weapon" lets melee trace notifies find the weapon mesh. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Part")
 	TArray<FName> MeshComponentTags;
+
+	/**
+	 * 장착하는 동안의 능력치 (2026-10-07). 능력치는 여기에 적고, 아래 AbilitySet은 스킬·특수 효과가 있는 파츠만 쓴다.
+	 * 강화 레벨은 아직 반영하지 않는다(강화 규칙이 정해지면 추가). AbilitySet로 스탯을 주는 기존 파츠(무기 등)도 그대로 동작한다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Part", meta=(TitleProperty="Attribute"))
+	TArray<FknightPartStatModifier> StatModifiers;
 
 	/** Stat effects and abilities while equipped. Granted at level 1 + upgrade level. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Part")

@@ -7,6 +7,7 @@
 #include "Engine/GameInstance.h"
 #include "Engine/SkeletalMesh.h"
 #include "GameFramework/Character.h"
+#include "GameplayEffect.h"
 #include "Item/knightItemDefinitions.h"
 #include "Progression/knightProgressionSubsystem.h"
 #include "System/knightAssetManager.h"
@@ -148,6 +149,11 @@ bool UknightPartsComponent::EquipPartUnchecked(const UknightPartItemDefinition* 
 	{
 		Part->AbilitySet->GiveToAbilitySystem(ASC, &Equipped.GrantedHandles, const_cast<UknightPartItemDefinition*>(Part), Equipped.UpgradeLevel);
 	}
+	// 파츠 능력치: 메모리에서 만든 GE를 적용하고 핸들을 들고 있다가 해제할 때 회수한다.
+	if (const UGameplayEffect* const StatEffect = ASC ? GetStatEffect(Part) : nullptr)
+	{
+		Equipped.StatEffectHandle = ASC->ApplyGameplayEffectToSelf(StatEffect, 1.f, ASC->MakeEffectContext());
+	}
 
 	UpdateWeightAttribute();
 
@@ -167,11 +173,47 @@ void UknightPartsComponent::UnequipSlot(FGameplayTag SlotTag)
 	}
 }
 
+const UGameplayEffect* UknightPartsComponent::GetStatEffect(const UknightPartItemDefinition* Part)
+{
+	if (!Part || Part->StatModifiers.IsEmpty())
+	{
+		return nullptr;
+	}
+	if (const TObjectPtr<UGameplayEffect>* const Cached = StatEffects.Find(Part))
+	{
+		return *Cached;
+	}
+
+	// 장착하는 동안 유지되는(무한 지속) GE를 파츠의 능력치 목록대로 만든다. 에셋으로 저장하지 않는다.
+	const FName EffectName = MakeUniqueObjectName(this, UGameplayEffect::StaticClass(), *FString::Printf(TEXT("GE_PartStats_%s"), *Part->GetName()));
+	UGameplayEffect* const Effect = NewObject<UGameplayEffect>(this, EffectName, RF_Transient);
+	Effect->DurationPolicy = EGameplayEffectDurationType::Infinite;
+	for (const FknightPartStatModifier& Stat : Part->StatModifiers)
+	{
+		if (!Stat.Attribute.IsValid())
+		{
+			continue;
+		}
+		FGameplayModifierInfo Modifier;
+		Modifier.Attribute = Stat.Attribute;
+		Modifier.ModifierOp = Stat.ModifierOp;
+		Modifier.ModifierMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(Stat.Value));
+		Effect->Modifiers.Add(Modifier);
+	}
+	StatEffects.Add(Part, Effect);
+	return Effect;
+}
+
 void UknightPartsComponent::RemovePart(FknightEquippedPart& Part)
 {
 	if (UknightAbilitySystemComponent* const ASC = Cast<UknightAbilitySystemComponent>(UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner())))
 	{
 		Part.GrantedHandles.TakeFromAbilitySystem(ASC);
+		if (Part.StatEffectHandle.IsValid())
+		{
+			ASC->RemoveActiveGameplayEffect(Part.StatEffectHandle);
+			Part.StatEffectHandle.Invalidate();
+		}
 	}
 	if (USkeletalMeshComponent* const Mesh = Part.MeshComponent.Get())
 	{
