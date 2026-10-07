@@ -67,7 +67,18 @@ void UknightGameplayAbility_HeavyAttack::OnReleased(float TimeHeld)
 		UE_LOG(LogknightAbility, Log, TEXT("%s: released after %.2fs charge, x%.2f (MV %.0f)"), *GetName(), Held, Scale, ActiveHitParams.MotionValue);
 		if (ChargeReleaseMontage)
 		{
+			FVector WarpLocation;
+			FRotator WarpRotation;
+			float WarpTravel = 0.f;
+			const bool bWarp = UknightCombatLibrary::SetAttackWarpTarget(GetAvatarActorFromActorInfo(), WarpTargetName, MaxWarpDistance,
+				WarpStopDistance, bUseSoftTarget, SoftTargetRange, SoftTargetAngle)
+				&& UknightCombatLibrary::ComputeAttackWarp(GetAvatarActorFromActorInfo(), MaxWarpDistance, WarpStopDistance,
+					bUseSoftTarget, SoftTargetRange, SoftTargetAngle, WarpLocation, WarpRotation, WarpTravel);
 			PlayMontage(ChargeReleaseMontage, TEXT("ChargeRelease"), false);
+			if (bWarp)
+			{
+				UknightCombatLibrary::StartAttackLunge(this, ChargeReleaseMontage, 1.f, WarpLocation, WarpTravel, 0.25f);
+			}
 		}
 		else
 		{

@@ -20,8 +20,8 @@ class UAnimMontage;
  * block on the whole Combo.Greatsword family (ActivationBlockedTags). Only the correct next step can then
  * activate for the press.
  *
- * With a lock-on target, the WarpTargetName warp target is set before the montage starts, so root motion
- * with a Motion Warping notify steers into the target.
+ * The WarpTargetName warp target is set before the montage starts (the locked target, or without a lock the
+ * closest enemy in the attack direction), so root motion inside a Motion Warping notify window steers into it.
  *
  * Movement cancels the recovery: while Window.Cancel is open, any movement input stops the montage
  * (RecoveryCancelBlendOut) and ends the attack, so the Knight walks off instead of finishing the follow-through.
@@ -61,6 +61,24 @@ protected:
 	/** How far the warp may pull the Knight toward the locked target. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Motion Warping", meta=(ClampMin=0, Units="cm"))
 	float MaxWarpDistance = 300.f;
+
+	/** The lunge toward the warp location takes at most this long and ends with the warp window (the first trace). */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Motion Warping", meta=(ClampMin=0.05, Units="s"))
+	float MaxLungeTime = 0.35f;
+
+	/** The warp stops this far in front of the target's surface (or part point), so the blade lands instead of the body. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Motion Warping", meta=(ClampMin=0, Units="cm"))
+	float WarpStopDistance = 150.f;
+
+	/** Without a lock, steer into the closest enemy in the attack direction. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Motion Warping")
+	bool bUseSoftTarget = true;
+
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Motion Warping", meta=(ClampMin=0, Units="cm", EditCondition="bUseSoftTarget"))
+	float SoftTargetRange = 500.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Motion Warping", meta=(ClampMin=1, ClampMax=180, Units="deg", EditCondition="bUseSoftTarget"))
+	float SoftTargetAngle = 75.f;
 
 	/** Movement input during Window.Cancel stops the montage and ends the attack. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Recovery")

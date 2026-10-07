@@ -55,6 +55,13 @@ public:
 	/** Radius reported by the locked target, for camera framing. Zero without a lock. */
 	float GetLockedTargetRadius() const;
 
+	/**
+	 * Target for an attack made without a lock: the closest hostile target point within Range whose horizontal
+	 * direction is within MaxAngle of Direction (the attack direction). Distance is measured to the target's
+	 * surface for single-point targets (QueryTargetRadius), to the point itself for part points.
+	 */
+	bool FindSoftTarget(const FVector& Direction, float Range, float MaxAngle, FVector& OutLocation, AActor*& OutActor, FGameplayTag& OutPartTag) const;
+
 	UPROPERTY(BlueprintAssignable, Category="Knight|LockOn")
 	FknightLockOnTargetChanged OnLockOnTargetChanged;
 

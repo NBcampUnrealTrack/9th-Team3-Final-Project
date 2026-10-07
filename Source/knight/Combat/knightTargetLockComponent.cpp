@@ -174,6 +174,66 @@ float UknightTargetLockComponent::GetLockedTargetRadius() const
 		? ITargetableInterface::Execute_QueryTargetRadius(Target) : 0.f;
 }
 
+bool UknightTargetLockComponent::FindSoftTarget(const FVector& Direction, float Range, float MaxAngle, FVector& OutLocation,
+	AActor*& OutActor, FGameplayTag& OutPartTag) const
+{
+	const AActor* const Owner = GetOwner();
+	const FVector Forward = FVector(Direction.X, Direction.Y, 0.f).GetSafeNormal();
+	if (!Owner || Forward.IsNearlyZero())
+	{
+		return false;
+	}
+	const FVector Origin = Owner->GetActorLocation();
+	const float CosMaxAngle = FMath::Cos(FMath::DegreesToRadians(MaxAngle));
+
+	TArray<FCandidate> Candidates;
+	GatherCandidates(Candidates);
+
+	const FCandidate* Best = nullptr;
+	FVector BestLocation = FVector::ZeroVector;
+	float BestScore = TNumericLimits<float>::Max();
+	for (const FCandidate& Candidate : Candidates)
+	{
+		AActor* const Actor = Candidate.Actor.Get();
+		const FVector PointLocation = Candidate.Point.GetLocation();
+		FVector ToPoint = PointLocation - Origin;
+		ToPoint.Z = 0.f;
+		const float CenterDistance = ToPoint.Size();
+		const float Radius = Candidate.Point.PartTag.IsValid() || !Actor ? 0.f : ITargetableInterface::Execute_QueryTargetRadius(Actor);
+		const float Distance = FMath::Max(0.f, CenterDistance - Radius);
+		if (Distance > Range)
+		{
+			continue;
+		}
+		// Inside the target (or right at it) any direction counts.
+		const float CosAngle = CenterDistance > KINDA_SMALL_NUMBER ? FVector::DotProduct(ToPoint / CenterDistance, Forward) : 1.f;
+		if (CosAngle < CosMaxAngle && Distance > 50.f)
+		{
+			continue;
+		}
+		if (!HasLineOfSight(Origin, PointLocation, Actor))
+		{
+			continue;
+		}
+		const float AngleDegrees = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(CosAngle, -1.f, 1.f)));
+		const float Score = Distance * (1.f + AngleDegrees / FMath::Max(MaxAngle, 1.f));
+		if (Score < BestScore)
+		{
+			BestScore = Score;
+			Best = &Candidate;
+			BestLocation = PointLocation;
+		}
+	}
+	if (!Best)
+	{
+		return false;
+	}
+	OutLocation = BestLocation;
+	OutActor = Best->Actor.Get();
+	OutPartTag = Best->Point.PartTag;
+	return true;
+}
+
 void UknightTargetLockComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);

@@ -37,7 +37,13 @@ void UknightGameplayAbility_MeleeAttack::ActivateAbility(const FGameplayAbilityS
 		return;
 	}
 
-	UknightCombatLibrary::SetWarpTargetToLockedTarget(GetAvatarActorFromActorInfo(), WarpTargetName, MaxWarpDistance);
+	const bool bWarp = UknightCombatLibrary::SetAttackWarpTarget(GetAvatarActorFromActorInfo(), WarpTargetName, MaxWarpDistance,
+		WarpStopDistance, bUseSoftTarget, SoftTargetRange, SoftTargetAngle);
+	FVector WarpLocation;
+	FRotator WarpRotation;
+	float WarpTravel = 0.f;
+	const bool bLunge = bWarp && UknightCombatLibrary::ComputeAttackWarp(GetAvatarActorFromActorInfo(), MaxWarpDistance, WarpStopDistance,
+		bUseSoftTarget, SoftTargetRange, SoftTargetAngle, WarpLocation, WarpRotation, WarpTravel);
 
 	UAbilityTask_WaitGameplayEvent* const HitTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, knightGameplayTags::Event_Melee_Hit, nullptr, false, true);
 	HitTask->EventReceived.AddDynamic(this, &ThisClass::OnMeleeHitEvent);
@@ -49,6 +55,11 @@ void UknightGameplayAbility_MeleeAttack::ActivateAbility(const FGameplayAbilityS
 	MontageTask->OnInterrupted.AddDynamic(this, &ThisClass::OnMontageFinished);
 	MontageTask->OnCancelled.AddDynamic(this, &ThisClass::OnMontageFinished);
 	MontageTask->ReadyForActivation();
+
+	if (bLunge)
+	{
+		UknightCombatLibrary::StartAttackLunge(this, AttackMontage, PlayRate, WarpLocation, WarpTravel, MaxLungeTime);
+	}
 
 	if (bCancelRecoveryOnMove)
 	{

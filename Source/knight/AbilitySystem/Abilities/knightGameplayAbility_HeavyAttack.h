@@ -73,6 +73,27 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Charge", meta=(ClampMin=1))
 	float MaxChargeMultiplier = 2.f;
 
+	/** Warp target of the release montage, set when the button is released. */
+	UPROPERTY(EditDefaultsOnly, Category="Charge|Motion Warping")
+	FName WarpTargetName = TEXT("AttackTarget");
+
+	UPROPERTY(EditDefaultsOnly, Category="Charge|Motion Warping", meta=(ClampMin=0, Units="cm"))
+	float MaxWarpDistance = 400.f;
+
+	/** The warp stops this far in front of the target's surface (or part point), so the blade lands instead of the body. */
+	UPROPERTY(EditDefaultsOnly, Category="Charge|Motion Warping", meta=(ClampMin=0, Units="cm"))
+	float WarpStopDistance = 150.f;
+
+	/** Without a lock, steer into the closest enemy in the attack direction. */
+	UPROPERTY(EditDefaultsOnly, Category="Charge|Motion Warping")
+	bool bUseSoftTarget = true;
+
+	UPROPERTY(EditDefaultsOnly, Category="Charge|Motion Warping", meta=(ClampMin=0, Units="cm", EditCondition="bUseSoftTarget"))
+	float SoftTargetRange = 500.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Charge|Motion Warping", meta=(ClampMin=1, ClampMax=180, Units="deg", EditCondition="bUseSoftTarget"))
+	float SoftTargetAngle = 75.f;
+
 private:
 	UFUNCTION()
 	void OnReleased(float TimeHeld);
