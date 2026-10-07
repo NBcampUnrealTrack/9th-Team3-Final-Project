@@ -82,6 +82,7 @@ void UknightGameplayAbility_CombatStance::RefreshCombatState()
 		Timers.ClearTimer(SheatheTimer);
 		Timers.ClearTimer(AlertTimer);
 		bSheathing = false;
+		StillSince = -1.0;
 		if (!bInCombat)
 		{
 			bInCombat = true;
@@ -142,6 +143,31 @@ void UknightGameplayAbility_CombatStance::StartSheathe()
 
 	const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
 	const bool bStandingStill = Character && Character->GetVelocity().Size2D() <= MaxSpeedForSheatheMontage;
+	if (bKeepDrawnWhileMoving)
+	{
+		// Moving with the sword in hand keeps it drawn; sheathe once the Knight has stood still for a moment.
+		UWorld* const World = GetWorld();
+		if (World)
+		{
+			const double Now = World->GetTimeSeconds();
+			if (!bStandingStill)
+			{
+				StillSince = -1.0;
+				World->GetTimerManager().SetTimer(SheatheTimer, this, &ThisClass::StartSheathe, 0.2f, false);
+				return;
+			}
+			if (StillSince < 0.0)
+			{
+				StillSince = Now;
+			}
+			if (Now - StillSince < StillTimeBeforeSheathe)
+			{
+				World->GetTimerManager().SetTimer(SheatheTimer, this, &ThisClass::StartSheathe, 0.1f, false);
+				return;
+			}
+		}
+		StillSince = -1.0;
+	}
 	if (!SheatheMontage || !bStandingStill)
 	{
 		AttachWeaponToBack();

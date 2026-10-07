@@ -20,6 +20,7 @@ namespace knightGameplayTags
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Attack, "Ability.Attack", "Any attack ability.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Attack_Charge, "Ability.Attack.Charge", "Charged greatsword attack.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Attack_Ranged, "Ability.Attack.Ranged", "Monster attack used from range (StateTree ranged branch).");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Guard, "Ability.Guard", "Guard and parry ability.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Boost_Dash, "Ability.Boost.Dash", "Boost dash ability.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Boost_Flight, "Ability.Boost.Flight", "Boost flight ability.");
@@ -104,4 +105,8 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Equipment_Slot_Legs, "Equipment.Slot.Legs", "Legs part slot.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Equipment_Slot_Backpack, "Equipment.Slot.Backpack", "Backpack / booster part slot.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Equipment_Slot_Weapon, "Equipment.Slot.Weapon", "Weapon slot.");
+	// 내장 파츠 슬롯. 외장은 역할이 아직 정해지지 않아 슬롯만 있다.
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Equipment_Slot_Booster, "Equipment.Slot.Booster", "Internal booster part slot (movement and dodge speed).");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Equipment_Slot_Generator, "Equipment.Slot.Generator", "Internal energy generator slot (max boost gauge and recovery).");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Equipment_Slot_Exterior, "Equipment.Slot.Exterior", "Internal exterior part slot (role not decided yet).");
 }

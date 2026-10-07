@@ -18,6 +18,7 @@ public class knightDev : ModuleRules
 
 		PrivateDependencyModuleNames.AddRange(new string[] {
 			"AIModule",
+			"AssetRegistry",
 			"GameplayAbilities",
 			"GameplayTags",
 			"GameplayTasks",
