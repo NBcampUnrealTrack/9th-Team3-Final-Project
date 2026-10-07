@@ -3,7 +3,11 @@
 #include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
+#include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "Abilities/Tasks/AbilityTask_WaitInputRelease.h"
+#include "Engine/World.h"
+#include "GameplayEffect.h"
+#include "TimerManager.h"
 #include "System/knightGameplayTags.h"
 
 UknightGameplayAbility_Guard::UknightGameplayAbility_Guard(const FObjectInitializer& ObjectInitializer)
@@ -25,6 +29,13 @@ void UknightGameplayAbility_Guard::ActivateAbility(const FGameplayAbilitySpecHan
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
+	}
+
+	if (ParryWindow > 0.f && ParrySucceededEventTag.IsValid())
+	{
+		UAbilityTask_WaitGameplayEvent* const CounterTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, ParrySucceededEventTag, nullptr, true, true);
+		CounterTask->EventReceived.AddDynamic(this, &ThisClass::OnParrySucceeded);
+		CounterTask->ReadyForActivation();
 	}
 
 	if (ParryWindow > 0.f)
@@ -58,6 +69,31 @@ void UknightGameplayAbility_Guard::WaitForRelease()
 	UAbilityTask_WaitInputRelease* const ReleaseTask = UAbilityTask_WaitInputRelease::WaitInputRelease(this, true);
 	ReleaseTask->OnRelease.AddDynamic(this, &ThisClass::OnGuardReleased);
 	ReleaseTask->ReadyForActivation();
+}
+
+void UknightGameplayAbility_Guard::OnParrySucceeded(FGameplayEventData Payload)
+{
+	if (UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		UWorld* const World = GetWorld();
+		if (ParryCounterTag.IsValid() && ParryCounterWindow > 0.f && World)
+		{
+			// The window outlives this ability, so the timer belongs to the ASC, not to the guard.
+			ASC->AddLooseGameplayTag(ParryCounterTag);
+			const FGameplayTag Tag = ParryCounterTag;
+			FTimerHandle Handle;
+			World->GetTimerManager().SetTimer(Handle, FTimerDelegate::CreateWeakLambda(ASC, [ASC, Tag]()
+			{
+				ASC->RemoveLooseGameplayTag(Tag);
+			}), ParryCounterWindow, false);
+		}
+		if (ParryCounterEffect)
+		{
+			ASC->ApplyGameplayEffectToSelf(ParryCounterEffect->GetDefaultObject<UGameplayEffect>(), 1.f, ASC->MakeEffectContext());
+		}
+	}
+	// End the guard so the attack key can start the counter right away.
+	EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, false);
 }
 
 void UknightGameplayAbility_Guard::OnParryWindowEnded()

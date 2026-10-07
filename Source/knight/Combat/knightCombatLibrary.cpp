@@ -2,10 +2,19 @@
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
+#include "Abilities/GameplayAbility.h"
+#include "Animation/AnimMontage.h"
+#include "AnimNotifyState_MotionWarping.h"
+#include "Engine/World.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "TimerManager.h"
 #include "Combat/knightHitStopComponent.h"
 #include "Combat/knightTargetLockComponent.h"
 #include "GameplayEffect.h"
+#include "GameFramework/Pawn.h"
 #include "Interfaces/CombatInterface.h"
+#include "Interfaces/TargetableInterface.h"
 #include "MotionWarpingComponent.h"
 #include "Perception/AISense_Hearing.h"
 #include "System/knightGameplayTags.h"
@@ -41,6 +50,16 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 		Payload.Instigator = Target;
 		Payload.Target = Attacker;
 		SourceASC->HandleGameplayEvent(Payload.EventTag, &Payload);
+		// The defender learns about its own parry too (the guard ability opens the parry counter window).
+		static const FGameplayTag ParrySucceededTag = FGameplayTag::RequestGameplayTag(TEXT("Event.ParrySucceeded"), false);
+		if (ParrySucceededTag.IsValid())
+		{
+			FGameplayEventData DefenderPayload;
+			DefenderPayload.EventTag = ParrySucceededTag;
+			DefenderPayload.Instigator = Attacker;
+			DefenderPayload.Target = Target;
+			TargetASC->HandleGameplayEvent(DefenderPayload.EventTag, &DefenderPayload);
+		}
 		TargetASC->ExecuteGameplayCue(knightGameplayTags::GameplayCue_Parry, CueParams);
 		ApplyHitStopPair(Attacker, Target, Params.ParryHitStopDuration);
 		UE_LOG(LogknightCombat, Log, TEXT("%s parried %s."), *GetNameSafe(Target), *GetNameSafe(Attacker));
@@ -126,18 +145,34 @@ void UknightCombatLibrary::SelectBestHitPerActor(TArrayView<const FHitResult> Hi
 	}
 }
 
-bool UknightCombatLibrary::SetWarpTargetToLockedTarget(AActor* Attacker, FName WarpTargetName, float MaxDistance)
+bool UknightCombatLibrary::ComputeAttackWarp(AActor* Attacker, float MaxDistance, float StopDistance, bool bUseSoftTarget,
+	float SoftTargetRange, float SoftTargetAngle, FVector& OutLocation, FRotator& OutRotation, float& OutTravel)
 {
-	UMotionWarpingComponent* const MotionWarping = Attacker ? Attacker->FindComponentByClass<UMotionWarpingComponent>() : nullptr;
 	const UknightTargetLockComponent* const TargetLock = Attacker ? Attacker->FindComponentByClass<UknightTargetLockComponent>() : nullptr;
-	if (!MotionWarping)
+	if (!TargetLock)
 	{
 		return false;
 	}
-	FVector TargetLocation;
-	if (!TargetLock || !TargetLock->GetLockedTargetLocation(TargetLocation))
+
+	FVector TargetLocation = FVector::ZeroVector;
+	AActor* TargetActor = nullptr;
+	FGameplayTag PartTag;
+	bool bFound = false;
+	if (TargetLock->GetLockedTargetLocation(TargetLocation))
 	{
-		MotionWarping->RemoveWarpTarget(WarpTargetName);
+		TargetActor = TargetLock->GetLockedTarget();
+		PartTag = TargetLock->GetLockedPartTag();
+		bFound = true;
+	}
+	else if (bUseSoftTarget)
+	{
+		const APawn* const Pawn = Cast<APawn>(Attacker);
+		const FVector Input = Pawn ? Pawn->GetLastMovementInputVector() : FVector::ZeroVector;
+		const FVector Direction = Input.IsNearlyZero() ? Attacker->GetActorForwardVector() : Input;
+		bFound = TargetLock->FindSoftTarget(Direction, SoftTargetRange, SoftTargetAngle, TargetLocation, TargetActor, PartTag);
+	}
+	if (!bFound)
+	{
 		return false;
 	}
 
@@ -147,13 +182,150 @@ bool UknightCombatLibrary::SetWarpTargetToLockedTarget(AActor* Attacker, FName W
 	const float Distance = ToTarget.Size();
 	if (Distance < KINDA_SMALL_NUMBER)
 	{
-		MotionWarping->RemoveWarpTarget(WarpTargetName);
 		return false;
 	}
 	const FVector Direction = ToTarget / Distance;
-	const FVector WarpLocation = AttackerLocation + Direction * FMath::Min(Distance, MaxDistance);
-	MotionWarping->AddOrUpdateWarpTargetFromLocationAndRotation(WarpTargetName, WarpLocation, Direction.Rotation());
+	// 부위 지점은 몸 표면 근처라 반지름을 빼지 않는다. 단일 지점(몬스터 중심)은 반지름만큼 표면까지.
+	const float Radius = !PartTag.IsValid() && TargetActor && TargetActor->GetClass()->ImplementsInterface(UTargetableInterface::StaticClass())
+		? ITargetableInterface::Execute_QueryTargetRadius(TargetActor) : 0.f;
+	OutTravel = FMath::Clamp(Distance - Radius - StopDistance, 0.f, MaxDistance);
+	OutLocation = AttackerLocation + Direction * OutTravel;
+	OutRotation = Direction.Rotation();
+	UE_LOG(LogknightCombat, Log, TEXT("Attack warp -> %s: distance %.0f, radius %.0f, travel %.0f"),
+		*GetNameSafe(TargetActor), Distance, Radius, OutTravel);
 	return true;
+}
+
+bool UknightCombatLibrary::SetAttackWarpTarget(AActor* Attacker, FName WarpTargetName, float MaxDistance, float StopDistance,
+	bool bUseSoftTarget, float SoftTargetRange, float SoftTargetAngle)
+{
+	UMotionWarpingComponent* const MotionWarping = Attacker ? Attacker->FindComponentByClass<UMotionWarpingComponent>() : nullptr;
+	if (!MotionWarping)
+	{
+		return false;
+	}
+	FVector Location;
+	FRotator Rotation;
+	float Travel = 0.f;
+	if (!ComputeAttackWarp(Attacker, MaxDistance, StopDistance, bUseSoftTarget, SoftTargetRange, SoftTargetAngle, Location, Rotation, Travel))
+	{
+		MotionWarping->RemoveWarpTarget(WarpTargetName);
+		return false;
+	}
+	MotionWarping->AddOrUpdateWarpTargetFromLocationAndRotation(WarpTargetName, Location, Rotation);
+	return true;
+}
+
+float UknightCombatLibrary::GetWarpWindowEnd(const UAnimMontage* Montage)
+{
+	float End = -1.f;
+	if (Montage)
+	{
+		for (const FAnimNotifyEvent& Event : Montage->Notifies)
+		{
+			if (Cast<UAnimNotifyState_MotionWarping>(Event.NotifyStateClass) && (End < 0.f || Event.GetEndTriggerTime() < End))
+			{
+				End = Event.GetEndTriggerTime();
+			}
+		}
+	}
+	return End;
+}
+
+void UknightCombatLibrary::StartAttackLunge(UGameplayAbility* Ability, const UAnimMontage* Montage, float PlayRate, const FVector& Location,
+	float Travel, float MaxLungeTime, float MinTravel)
+{
+	UWorld* const World = Ability ? Ability->GetWorld() : nullptr;
+	const float WindowEnd = GetWarpWindowEnd(Montage);
+	if (!World || Travel < MinTravel || WindowEnd <= 0.f)
+	{
+		return;
+	}
+	const float WindowSeconds = WindowEnd / FMath::Max(PlayRate, 0.01f);
+	const float Duration = FMath::Clamp(WindowSeconds, 0.05f, MaxLungeTime);
+	const float Delay = WindowSeconds - Duration;
+	ACharacter* const Character = Cast<ACharacter>(Ability->GetAvatarActorFromActorInfo());
+	if (!Character || !Character->GetCharacterMovement())
+	{
+		return;
+	}
+
+	// 루트 모션 힘 대신 매 프레임 스윕 이동으로 Location까지 미끄러진다. 벽·몬스터에 막히면 그 자리에서 멈춘다.
+	struct FLunge
+	{
+		TWeakObjectPtr<UGameplayAbility> WeakAbility;
+		TWeakObjectPtr<ACharacter> WeakCharacter;
+		const UAnimMontage* LungeMontage = nullptr;
+		FVector TargetLocation = FVector::ZeroVector;
+		FVector StartLocation = FVector::ZeroVector;
+		float LungeDuration = 0.f;
+		double StartTime = -1.0;
+		FTimerHandle Timer;
+	};
+	TSharedRef<FLunge> Lunge = MakeShared<FLunge>();
+	Lunge->WeakAbility = Ability;
+	Lunge->WeakCharacter = Character;
+	Lunge->LungeMontage = Montage;
+	Lunge->TargetLocation = Location;
+	Lunge->LungeDuration = Duration;
+	const double BeginTime = World->GetTimeSeconds() + FMath::Max(0.f, Delay);
+
+	World->GetTimerManager().SetTimer(Lunge->Timer, FTimerDelegate::CreateLambda([Lunge, BeginTime]()
+	{
+		UGameplayAbility* const A = Lunge->WeakAbility.Get();
+		ACharacter* const C = Lunge->WeakCharacter.Get();
+		UWorld* const W = C ? C->GetWorld() : nullptr;
+		if (!W)
+		{
+			return;
+		}
+		const double Now = W->GetTimeSeconds();
+		if (!A || !A->IsActive() || A->GetCurrentMontage() != Lunge->LungeMontage)
+		{
+			W->GetTimerManager().ClearTimer(Lunge->Timer);
+			return;
+		}
+		if (Now < BeginTime)
+		{
+			return;
+		}
+		if (Lunge->StartTime < 0.0)
+		{
+			Lunge->StartTime = Now;
+			Lunge->StartLocation = C->GetActorLocation();
+		}
+		const float Alpha = FMath::Clamp(static_cast<float>((Now - Lunge->StartTime) / Lunge->LungeDuration), 0.f, 1.f);
+		// 빠르게 출발해서 타격 직전에 감속한다.
+		const float Eased = 1.f - FMath::Square(1.f - Alpha);
+		FVector Desired = FMath::Lerp(Lunge->StartLocation, Lunge->TargetLocation, Eased);
+		FVector Delta = Desired - C->GetActorLocation();
+		Delta.Z = 0.f;
+		if (!Delta.IsNearlyZero())
+		{
+			FHitResult Hit;
+			C->GetCharacterMovement()->SafeMoveUpdatedComponent(Delta, C->GetActorQuat(), true, Hit);
+			if (Hit.IsValidBlockingHit())
+			{
+				// 막힌 면을 따라 남은 이동만큼 미끄러진다.
+				FVector Slide = FVector::VectorPlaneProject(Delta * (1.f - Hit.Time), Hit.Normal);
+				Slide.Z = 0.f;
+				if (!Slide.IsNearlyZero())
+				{
+					FHitResult SlideHit;
+					C->GetCharacterMovement()->SafeMoveUpdatedComponent(Slide, C->GetActorQuat(), true, SlideHit);
+				}
+			}
+		}
+		if (Alpha >= 1.f)
+		{
+			W->GetTimerManager().ClearTimer(Lunge->Timer);
+		}
+	}), 1.f / 120.f, true);
+}
+
+bool UknightCombatLibrary::SetWarpTargetToLockedTarget(AActor* Attacker, FName WarpTargetName, float MaxDistance)
+{
+	return SetAttackWarpTarget(Attacker, WarpTargetName, MaxDistance, 0.f, false, 0.f, 0.f);
 }
 
 void UknightCombatLibrary::ApplyHitStopPair(AActor* Attacker, AActor* Target, float Duration)
