@@ -48,6 +48,12 @@ public:
 	EknightAbilityActivationPolicy GetActivationPolicy() const { return ActivationPolicy; }
 	EknightAbilityActivationGroup GetActivationGroup() const { return ActivationGroup; }
 
+	/**
+	 * 실행 중에 입력이 다시 들어오면 재발동(지금 것을 끝내고 다시 시작)을 시도하는지 (bRetriggerInstancedAbility). (2026-10-08)
+	 * 입력 처리(knightAbilitySystemComponent, 입력 버퍼)가 읽는다. 받아들일지는 각 어빌리티의 CanActivateAbility가 정한다(예: 퀵스텝은 경직 중에만).
+	 */
+	bool CanRetriggerWhileActive() const { return bRetriggerInstancedAbility; }
+
 	UFUNCTION(BlueprintCallable, Category="Knight|Ability")
 	UknightAbilitySystemComponent* GetKnightAbilitySystemComponentFromActorInfo() const;
 
@@ -65,6 +71,13 @@ protected:
 	virtual bool DoesAbilitySatisfyTagRequirements(const UAbilitySystemComponent& AbilitySystemComponent,
 		const FGameplayTagContainer* SourceTags = nullptr, const FGameplayTagContainer* TargetTags = nullptr,
 		FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
+
+	/**
+	 * 행동 속도 배율(메카 속성 ActionSpeed, 기본 1.0, 하한 0.1). (2026-10-08)
+	 * 공격·가드 몽타주의 재생 속도에 곱한다. 몽타주를 시작할 때 읽으므로, 재생 도중 값이 바뀌면 다음 동작부터 반영된다.
+	 * 메카 속성 세트가 없는 액터(몬스터 등)는 1.0.
+	 */
+	float GetActionSpeed() const;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Knight|Ability Activation")
 	EknightAbilityActivationPolicy ActivationPolicy = EknightAbilityActivationPolicy::OnInputTriggered;

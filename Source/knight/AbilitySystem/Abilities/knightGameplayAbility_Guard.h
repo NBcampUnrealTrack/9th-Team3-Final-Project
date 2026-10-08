@@ -18,6 +18,8 @@ class UGameplayEffect;
  * the defender. The guard then gives the owner ParryCounterTag (State.ParryCounter, which the counter attack
  * requires) for ParryCounterWindow seconds, applies the optional ParryCounterEffect, and ends, so the attack key
  * can start the counter.
+ *
+ * (2026-10-08) 행동 속도(ActionSpeed): GuardMontage는 행동 속도 배속으로 재생한다. ParryWindow는 초 단위 그대로.
  */
 UCLASS()
 class KNIGHT_API UknightGameplayAbility_Guard : public UknightGameplayAbility

@@ -1,6 +1,7 @@
 #include "AbilitySystem/Abilities/knightGameplayAbility.h"
 
 #include "AbilitySystem/knightAbilitySystemComponent.h"
+#include "AbilitySystem/Attributes/knightAttributeSet.h"
 #include "AbilitySystemGlobals.h"
 #include "System/knightGameplayTags.h"
 
@@ -13,6 +14,13 @@ UknightGameplayAbility::UknightGameplayAbility(const FObjectInitializer& ObjectI
 UknightAbilitySystemComponent* UknightGameplayAbility::GetKnightAbilitySystemComponentFromActorInfo() const
 {
 	return CurrentActorInfo ? Cast<UknightAbilitySystemComponent>(CurrentActorInfo->AbilitySystemComponent.Get()) : nullptr;
+}
+
+float UknightGameplayAbility::GetActionSpeed() const
+{
+	const UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();
+	const FGameplayAttribute Attribute = UknightAttributeSet::GetActionSpeedAttribute();
+	return ASC && ASC->HasAttributeSetForAttribute(Attribute) ? ASC->GetNumericAttribute(Attribute) : 1.f;
 }
 
 void UknightGameplayAbility::TryActivateAbilityOnSpawn(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec) const

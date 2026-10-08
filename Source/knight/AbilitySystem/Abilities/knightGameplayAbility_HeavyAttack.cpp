@@ -77,7 +77,8 @@ void UknightGameplayAbility_HeavyAttack::OnReleased(float TimeHeld)
 			PlayMontage(ChargeReleaseMontage, TEXT("ChargeRelease"), false);
 			if (bWarp)
 			{
-				UknightCombatLibrary::StartAttackLunge(this, ChargeReleaseMontage, 1.f, WarpLocation, WarpTravel, 0.25f);
+				// 발사 몽타주와 같은 배속(행동 속도)을 넘겨야 돌진이 모션과 같이 끝난다. (2026-10-08)
+				UknightCombatLibrary::StartAttackLunge(this, ChargeReleaseMontage, GetActionSpeed(), WarpLocation, WarpTravel, 0.25f);
 			}
 		}
 		else
@@ -199,7 +200,8 @@ void UknightGameplayAbility_HeavyAttack::PlayLoop()
 
 void UknightGameplayAbility_HeavyAttack::PlayMontage(UAnimMontage* Montage, FName TaskName, bool bLoopOnEnd)
 {
-	UAbilityTask_PlayMontageAndWait* const Task = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, TaskName, Montage);
+	// 차지 시작·반복·발사 몽타주 모두 행동 속도 배속으로 재생한다. (2026-10-08)
+	UAbilityTask_PlayMontageAndWait* const Task = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, TaskName, Montage, GetActionSpeed());
 	if (Phase == EPhase::Releasing)
 	{
 		Task->OnCompleted.AddDynamic(this, &ThisClass::OnReleaseFinished);

@@ -51,8 +51,10 @@ void UknightGameplayAbility_MeleeAttack::ActivateAbility(const FGameplayAbilityS
 	bAttackStarted = false;
 	if (DrawMontage && !IsWeaponInHand())
 	{
+		// 발도도 행동 속도를 따른다. 공격으로 넘어가는 시점(DrawAttackStartTime)도 같은 배속으로 맞춘다. (2026-10-08)
+		const float DrawRate = DrawPlayRate * GetActionSpeed();
 		UAbilityTask_PlayMontageAndWait* const DrawTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
-			this, TEXT("Draw"), DrawMontage, DrawPlayRate);
+			this, TEXT("Draw"), DrawMontage, DrawRate);
 		DrawTask->OnBlendOut.AddDynamic(this, &ThisClass::OnDrawFinished);
 		DrawTask->OnCompleted.AddDynamic(this, &ThisClass::OnDrawFinished);
 		DrawTask->OnInterrupted.AddDynamic(this, &ThisClass::OnDrawInterrupted);
@@ -66,7 +68,7 @@ void UknightGameplayAbility_MeleeAttack::ActivateAbility(const FGameplayAbilityS
 			}
 			else if (DrawAttackStartTime > 0.f)
 			{
-				World->GetTimerManager().SetTimer(DrawTimer, this, &ThisClass::OnDrawFinished, DrawAttackStartTime / DrawPlayRate, false);
+				World->GetTimerManager().SetTimer(DrawTimer, this, &ThisClass::OnDrawFinished, DrawAttackStartTime / DrawRate, false);
 			}
 		}
 		return;
@@ -157,7 +159,9 @@ void UknightGameplayAbility_MeleeAttack::StartAttack()
 	HitTask->EventReceived.AddDynamic(this, &ThisClass::OnMeleeHitEvent);
 	HitTask->ReadyForActivation();
 
-	UAbilityTask_PlayMontageAndWait* const MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, AttackMontage, PlayRate, StartSection);
+	// 실제 재생 속도 = PlayRate x 행동 속도. 돌진도 같은 배속을 넘겨야 모션과 같이 끝난다. (2026-10-08)
+	const float Rate = PlayRate * GetActionSpeed();
+	UAbilityTask_PlayMontageAndWait* const MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, AttackMontage, Rate, StartSection);
 	MontageTask->OnCompleted.AddDynamic(this, &ThisClass::OnMontageFinished);
 	MontageTask->OnBlendOut.AddDynamic(this, &ThisClass::OnMontageFinished);
 	MontageTask->OnInterrupted.AddDynamic(this, &ThisClass::OnMontageFinished);
@@ -166,7 +170,7 @@ void UknightGameplayAbility_MeleeAttack::StartAttack()
 
 	if (bLunge)
 	{
-		UknightCombatLibrary::StartAttackLunge(this, AttackMontage, PlayRate, WarpLocation, WarpTravel, MaxLungeTime);
+		UknightCombatLibrary::StartAttackLunge(this, AttackMontage, Rate, WarpLocation, WarpTravel, MaxLungeTime);
 	}
 
 	if (bCancelRecoveryOnMove)

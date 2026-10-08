@@ -52,7 +52,8 @@ void UknightGameplayAbility_Guard::ActivateAbility(const FGameplayAbilitySpecHan
 
 	if (GuardMontage)
 	{
-		UAbilityTask_PlayMontageAndWait* const MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, GuardMontage);
+		// 가드 모션은 행동 속도 배속으로 재생한다. 패리 판정 시간(ParryWindow)은 난이도가 바뀌지 않게 그대로 둔다. (2026-10-08)
+		UAbilityTask_PlayMontageAndWait* const MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, GuardMontage, GetActionSpeed());
 		MontageTask->ReadyForActivation();
 	}
 
