@@ -5,8 +5,8 @@
 #include "knightSharedSettings.generated.h"
 
 /**
- * 기기를 옮겨도 따라가는 개인 설정 (로컬 플레이어 세이브 게임으로 저장하므로 Steam Cloud로 옮겨진다):
- * 카메라 감도와 반전, 카메라 흔들림, 자막, 조작 방식.
+ * 세이브 슬롯과 분리된 로컬 플레이어 환경설정: 카메라 감도와 반전, 카메라 흔들림,
+ * 자막, 조작 방식, 오디오 볼륨. 클라우드 동기화 여부는 배포 환경의 저장 정책에 따른다.
  * 키 배치는 여기에 저장하지 않는다: Enhanced Input 사용자 설정(Project Settings > Enhanced Input >
  * Enable User Settings)을 쓰며, 플레이어별로 키 변경을 저장한다.
  */
@@ -21,6 +21,19 @@ public:
 
 	UPROPERTY(SaveGame, BlueprintReadWrite, Category="Knight|Settings|Camera", meta=(ClampMin=0.1, ClampMax=5))
 	float MouseSensitivity = 1.f;
+
+	UPROPERTY(SaveGame, BlueprintReadWrite, Category="Knight|Settings|Camera")
+	bool bMouseAcceleration = false;
+
+	/** Offset from each camera mode's designed FOV, so lock-on and cinematics retain their relative view. */
+	UPROPERTY(SaveGame, BlueprintReadWrite, Category="Knight|Settings|Display", meta=(ClampMin=-20, ClampMax=30))
+	float FieldOfViewOffset = 0.f;
+
+	UPROPERTY(SaveGame, BlueprintReadWrite, Category="Knight|Settings|Display", meta=(ClampMin=0.8, ClampMax=1.2))
+	float Brightness = 1.f;
+
+	UPROPERTY(SaveGame, BlueprintReadWrite, Category="Knight|Settings|Display", meta=(ClampMin=0.8, ClampMax=1.2))
+	float Gamma = 1.f;
 
 	UPROPERTY(SaveGame, BlueprintReadWrite, Category="Knight|Settings|Camera", meta=(ClampMin=0.1, ClampMax=5))
 	float GamepadSensitivity = 1.f;
@@ -42,7 +55,7 @@ public:
 	UPROPERTY(SaveGame, BlueprintReadWrite, Category="Knight|Settings|Accessibility")
 	bool bSubtitlesEnabled = true;
 
-	/** 볼륨 분류. 같은 이름의 Knight Audio 컨트롤 버스에 적용된다. */
+	/** Knight Audio의 Sound Class 카테고리에 런타임 Sound Mix로 적용된다. */
 	UPROPERTY(SaveGame, BlueprintReadWrite, Category="Knight|Settings|Audio", meta=(ClampMin=0, ClampMax=1))
 	float MasterVolume = 1.f;
 

@@ -9,6 +9,7 @@
 class UInputMappingContext;
 class UUserWidget;
 class UKnightFlowTestReturnWidget;
+class UKnightSettingsWidget;
 
 /**
  *  Basic PlayerController class for a third person game
@@ -33,6 +34,7 @@ public:
 	UFUNCTION(Exec) void KnightRaidDebugSuccess();
 	UFUNCTION(Exec) void KnightRaidDebugFailure();
 	UFUNCTION(Exec) void KnightRaidDebugReturn();
+	UFUNCTION(Exec) void KnightRaidDebugSettings();
 
 protected:
 
@@ -59,6 +61,12 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UKnightFlowTestReturnWidget> RaidReturnWidget;
 
+	UPROPERTY(Transient)
+	TObjectPtr<UKnightSettingsWidget> SettingsWidget;
+
+	bool bSettingsPausedGame = false;
+	bool bCursorBeforeSettings = false;
+
 	/** If true, the player will use UMG touch controls even if not playing on mobile platforms */
 	UPROPERTY(EditAnywhere, Config, Category = "Input|Touch Controls")
 	bool bForceTouchControls = false;
@@ -76,5 +84,7 @@ protected:
 	/** Returns true if the player should use UMG touch controls */
 	bool ShouldUseTouchControls() const;
 	void ToggleRaidReturnMenu();
+	void ToggleSettings();
+	UFUNCTION() void CloseSettings();
 
 };

@@ -10,6 +10,7 @@
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "knight.h"
+#include "Settings/KnightSettingsWidget.h"
 
 #define LOCTEXT_NAMESPACE "KnightMainMenu"
 
@@ -71,6 +72,7 @@ void UKnightMainMenuWidget::NativeConstruct()
 
 void UKnightMainMenuWidget::NativeDestruct()
 {
+	if (SettingsWidget) SettingsWidget->OnClosed.RemoveDynamic(this, &ThisClass::HandleSettingsClosed);
 	RemoveStageEntries();
 	Super::NativeDestruct();
 }
@@ -112,7 +114,12 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 		return false;
 	}
 	CurrentPage = NewPage;
-	UpdateBackVisibility(NewPage == EKnightMainMenuPage::Home);
+	if (NewPage == EKnightMainMenuPage::Settings)
+	{
+		EnsureSettingsWidget();
+		if (SettingsWidget) SettingsWidget->Open();
+	}
+	UpdateBackVisibility(NewPage == EKnightMainMenuPage::Home || NewPage == EKnightMainMenuPage::Settings);
 	RefreshTravelControls();
 	if (!IsTravelPending() && GetFlow() && GetFlow()->GetCurrentFlowState() == EKnightFlowState::MainMenu)
 	{
@@ -127,17 +134,36 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 		SetStatusText(LOCTEXT("NoStages", "표시할 스테이지가 없습니다. 카탈로그 설정을 확인해 주세요."));
 	}
 	FocusCurrentPage();
+	if (NewPage == EKnightMainMenuPage::Settings && SettingsWidget) SettingsWidget->FocusSettings();
 	return true;
 }
 
 bool UKnightMainMenuWidget::HandleBackRequested()
 {
+	if (CurrentPage == EKnightMainMenuPage::Settings && SettingsWidget) { SettingsWidget->RequestClose(); return true; }
 	if (CurrentPage == EKnightMainMenuPage::StageDetails)
 	{
 		return ShowPage(EKnightMainMenuPage::Stage);
 	}
-	return CurrentPage != EKnightMainMenuPage::Home && ShowPage(EKnightMainMenuPage::Home);
+	return CurrentPage == EKnightMainMenuPage::Home ? ShowPage(EKnightMainMenuPage::Settings) : ShowPage(EKnightMainMenuPage::Home);
 }
+
+bool UKnightMainMenuWidget::ShouldAllowEscapeToChild() const
+{
+	return CurrentPage == EKnightMainMenuPage::Settings && SettingsWidget && SettingsWidget->IsCapturingKey();
+}
+
+void UKnightMainMenuWidget::EnsureSettingsWidget()
+{
+	if (SettingsWidget || !Panel_Settings || !GetOwningPlayer()) return;
+	SettingsWidget = CreateWidget<UKnightSettingsWidget>(GetOwningPlayer(), UKnightSettingsWidget::GetSharedWidgetClass());
+	if (!SettingsWidget) return;
+	Panel_Settings->ClearChildren();
+	Panel_Settings->AddChild(SettingsWidget);
+	SettingsWidget->OnClosed.AddUniqueDynamic(this, &ThisClass::HandleSettingsClosed);
+}
+
+void UKnightMainMenuWidget::HandleSettingsClosed() { ShowPage(EKnightMainMenuPage::Home); }
 
 UWidget* UKnightMainMenuWidget::GetPreferredFocusTarget() const
 {

@@ -7,6 +7,8 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "Progression/knightSaveSubsystem.h"
 #include "knight.h"
+#include "Settings/KnightSettingsWidget.h"
+#include "Settings/knightGameUserSettings.h"
 
 #define LOCTEXT_NAMESPACE "KnightTitleMenu"
 
@@ -46,10 +48,13 @@ void UKnightTitleMenuWidget::NativeConstruct()
 	}
 	RefreshSlots();
 	RefreshTravelControls();
+	if (UknightGameUserSettings* const Graphics = UknightGameUserSettings::Get(); Graphics && Graphics->ConsumeGraphicsAppliedNotice())
+		SetStatusText(LOCTEXT("GraphicsApplied", "새 그래픽 설정이 적용되었습니다."));
 }
 
 void UKnightTitleMenuWidget::NativeDestruct()
 {
+	if (SettingsWidget) SettingsWidget->OnClosed.RemoveDynamic(this, &ThisClass::HandleSettingsClosed);
 	if (UknightSaveSubsystem* const Save = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr)
 	{
 		Save->OnSaveFinished.RemoveDynamic(this, &ThisClass::HandleSaveFinished);
@@ -83,21 +88,45 @@ bool UKnightTitleMenuWidget::ApplyPage(EKnightTitlePage NewPage, bool bAllowDuri
 		return false;
 	}
 	CurrentPage = NewPage;
-	UpdateBackVisibility(NewPage == EKnightTitlePage::Home);
+	if (NewPage == EKnightTitlePage::Settings)
+	{
+		EnsureSettingsWidget();
+		if (SettingsWidget) SettingsWidget->Open();
+	}
+	UpdateBackVisibility(NewPage == EKnightTitlePage::Home || NewPage == EKnightTitlePage::Settings);
 	RefreshTravelControls();
 	if (!IsTravelPending() && GetFlow() && GetFlow()->GetCurrentFlowState() == EKnightFlowState::Title)
 	{
 		ClearStatus();
 	}
 	FocusCurrentPage();
+	if (NewPage == EKnightTitlePage::Settings && SettingsWidget) SettingsWidget->FocusSettings();
 	if (NewPage == EKnightTitlePage::SaveSelect) RefreshSlots();
 	return true;
 }
 
 bool UKnightTitleMenuWidget::HandleBackRequested()
 {
-	return CurrentPage != EKnightTitlePage::Home && ShowPage(EKnightTitlePage::Home);
+	if (CurrentPage == EKnightTitlePage::Settings && SettingsWidget) { SettingsWidget->RequestClose(); return true; }
+	return CurrentPage == EKnightTitlePage::Home ? ShowPage(EKnightTitlePage::Settings) : ShowPage(EKnightTitlePage::Home);
 }
+
+bool UKnightTitleMenuWidget::ShouldAllowEscapeToChild() const
+{
+	return CurrentPage == EKnightTitlePage::Settings && SettingsWidget && SettingsWidget->IsCapturingKey();
+}
+
+void UKnightTitleMenuWidget::EnsureSettingsWidget()
+{
+	if (SettingsWidget || !Panel_Settings || !GetOwningPlayer()) return;
+	SettingsWidget = CreateWidget<UKnightSettingsWidget>(GetOwningPlayer(), UKnightSettingsWidget::GetSharedWidgetClass());
+	if (!SettingsWidget) return;
+	Panel_Settings->ClearChildren();
+	Panel_Settings->AddChild(SettingsWidget);
+	SettingsWidget->OnClosed.AddUniqueDynamic(this, &ThisClass::HandleSettingsClosed);
+}
+
+void UKnightTitleMenuWidget::HandleSettingsClosed() { ShowPage(EKnightTitlePage::Home); }
 
 UWidget* UKnightTitleMenuWidget::GetPreferredFocusTarget() const
 {
