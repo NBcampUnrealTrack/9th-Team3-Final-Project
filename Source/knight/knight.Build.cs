@@ -22,6 +22,8 @@ public class knight : ModuleRules
 			"GameplayTasks",
 			"GameplayAbilities",
 			"MotionWarping",
+			// knightAnimNode_LegPlacement (SkeletalControlBase를 상속하는 몬스터 발 맞추기 노드).
+			"AnimGraphRuntime",
 			"knightInventory",
 			"MechPartsWorkbenchRuntime",
 			"knightAudio",
@@ -33,6 +35,9 @@ public class knight : ModuleRules
 
 		// knightPerfTracker: KNIGHT_PERF_* counters for test captures; compiled out in Shipping.
 		PrivateDependencyModuleNames.AddRange(new string[] { "knightPerfTracker", "Niagara" });
+
+		// 2본 IK 풀이(AnimationCore::SolveTwoBoneIK).
+		PrivateDependencyModuleNames.Add("AnimationCore");
 
 		// Defines WITH_GAMEPLAY_DEBUGGER and adds the debugger modules in builds that include it.
 		SetupGameplayDebuggerSupport(Target);

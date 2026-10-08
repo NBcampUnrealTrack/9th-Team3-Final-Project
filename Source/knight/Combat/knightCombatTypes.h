@@ -65,6 +65,10 @@ struct KNIGHT_API FknightMeleeHitParams
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Damage")
 	float PoiseDamage = 10.f;
 
+	/** False for attacks too big to deflect (breath, slams, body checks). A parry attempt then counts as a guard. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Defense")
+	bool bCanBeParried = true;
+
 	/** Part multipliers at or above this play the weak point cue instead of the normal hit cue. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Feedback")
 	float WeakpointMultiplierThreshold = 1.45f;

@@ -43,7 +43,8 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 		return EknightHitOutcome::Evaded;
 	}
 
-	if (TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_Parrying))
+	// 패링할 수 없는 공격은 패링 판정을 건너뛴다. 패링 구간에도 State.Guarding이 붙어 있어 아래 가드로 처리된다.
+	if (Params.bCanBeParried && TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_Parrying))
 	{
 		FGameplayEventData Payload;
 		Payload.EventTag = knightGameplayTags::Event_Parried;

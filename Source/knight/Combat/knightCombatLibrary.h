@@ -19,6 +19,7 @@ public:
 	 * Attacker가 Hit.GetActor()에 가한 무기 타격 하나를 처리한다.
 	 *   무적         -> Evaded, 아무것도 적용하지 않는다
 	 *   패리 중      -> Parried: 공격자에게 Event.Parried, 패리 큐, 긴 히트 스톱, 피해 없음
+	 *                   (Params.bCanBeParried가 false면 패리 대신 가드로 처리)
 	 *   그 외        -> 컨텍스트에 타격 결과를 담은 피해 이펙트(부위 배율 계산에 필요),
 	 *                   타격 또는 약점 큐, 히트 스톱. 가드 중인 타깃에는 Event.Guarded
 	 */
