@@ -2,6 +2,17 @@
 
 #include "CommonActivatableWidget.h"
 #include "knightUI.h"
+#include "knightUIGameplayTags.h"
+
+void UknightPrimaryGameLayout::NativeOnInitialized()
+{
+	Super::NativeOnInitialized();
+
+	RegisterLayer(knightUIGameplayTags::UI_Layer_Game, Layer_Game);
+	RegisterLayer(knightUIGameplayTags::UI_Layer_GameMenu, Layer_GameMenu);
+	RegisterLayer(knightUIGameplayTags::UI_Layer_Menu, Layer_Menu);
+	RegisterLayer(knightUIGameplayTags::UI_Layer_Modal, Layer_Modal);
+}
 
 void UknightPrimaryGameLayout::RegisterLayer(FGameplayTag LayerTag, UCommonActivatableWidgetContainerBase* LayerWidget)
 {

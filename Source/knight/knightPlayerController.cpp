@@ -23,6 +23,8 @@
 #include "GameFramework/Pawn.h"
 #include "Input/knightInputBufferComponent.h"
 #include "Camera/knightPlayerCameraManager.h"
+#include "Settings/KnightSettingsWidget.h"
+#include "UserSettings/EnhancedInputUserSettings.h"
 
 AknightPlayerController::AknightPlayerController()
 {
@@ -66,18 +68,27 @@ void AknightPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		RaidReturnWidget->RemoveFromParent();
 		RaidReturnWidget = nullptr;
 	}
+	if (SettingsWidget)
+	{
+		SettingsWidget->OnClosed.RemoveDynamic(this, &ThisClass::CloseSettings);
+		SettingsWidget->RemoveFromParent();
+		SettingsWidget = nullptr;
+	}
 	Super::EndPlay(EndPlayReason);
 }
 
 void AknightPlayerController::SetupInputComponent()
 {
 	Super::SetupInputComponent();
+	if (InputComponent)
+	{
+		FInputKeyBinding& SettingsBinding = InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &ThisClass::ToggleSettings);
+		SettingsBinding.bExecuteWhenPaused = true;
+	}
 	if (RaidReturnWidgetClass && InputComponent)
 	{
-		FInputKeyBinding& ReturnBinding = InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &ThisClass::ToggleRaidReturnMenu);
-		ReturnBinding.bExecuteWhenPaused = true;
 #if WITH_EDITOR
-		// The editor reserves Escape to stop in-viewport PIE; F6 exercises the same menu there.
+		// Retain the existing raid return test overlay on its editor shortcut.
 		FInputKeyBinding& PieReturnBinding = InputComponent->BindKey(EKeys::F6, IE_Pressed, this, &ThisClass::ToggleRaidReturnMenu);
 		PieReturnBinding.bExecuteWhenPaused = true;
 #endif
@@ -92,6 +103,8 @@ void AknightPlayerController::SetupInputComponent()
 			for (UInputMappingContext* CurrentContext : DefaultMappingContexts)
 			{
 				Subsystem->AddMappingContext(CurrentContext, 0);
+				if (UEnhancedInputUserSettings* const UserSettings = Subsystem->GetUserSettings())
+					UserSettings->RegisterInputMappingContext(CurrentContext);
 			}
 
 			// only add these IMCs if we're not using mobile touch input
@@ -100,10 +113,56 @@ void AknightPlayerController::SetupInputComponent()
 				for (UInputMappingContext* CurrentContext : MobileExcludedMappingContexts)
 				{
 					Subsystem->AddMappingContext(CurrentContext, 0);
+					if (UEnhancedInputUserSettings* const UserSettings = Subsystem->GetUserSettings())
+						UserSettings->RegisterInputMappingContext(CurrentContext);
 				}
 			}
 		}
 	}
+}
+
+void AknightPlayerController::ToggleSettings()
+{
+	if (!IsLocalController() || !GetWorld() || !GetWorld()->GetAuthGameMode<AknightRaidGameMode>()) return;
+	if (SettingsWidget && SettingsWidget->IsInViewport())
+	{
+		SettingsWidget->RequestClose();
+		return;
+	}
+	if (RaidReturnWidget && RaidReturnWidget->IsInViewport()) return;
+	if (!SettingsWidget)
+	{
+		SettingsWidget = CreateWidget<UKnightSettingsWidget>(this, UKnightSettingsWidget::GetSharedWidgetClass());
+		if (SettingsWidget) SettingsWidget->OnClosed.AddUniqueDynamic(this, &ThisClass::CloseSettings);
+	}
+	if (!SettingsWidget) return;
+	bCursorBeforeSettings = bShowMouseCursor;
+	bSettingsPausedGame = !GetWorld()->IsPaused();
+	SettingsWidget->AddToViewport(100);
+	SettingsWidget->SetPositionInViewport(FVector2D::ZeroVector, false);
+	SettingsWidget->SetDesiredSizeInViewport(FVector2D(800.f, 620.f));
+	SettingsWidget->SetAnchorsInViewport(FAnchors(0.5f, 0.5f));
+	SettingsWidget->SetAlignmentInViewport(FVector2D(0.5f, 0.5f));
+	SettingsWidget->Open();
+	if (bSettingsPausedGame && !SetPause(true)) bSettingsPausedGame = false;
+	FInputModeUIOnly Mode;
+	Mode.SetWidgetToFocus(SettingsWidget->TakeWidget());
+	Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	SetInputMode(Mode);
+	bShowMouseCursor = true;
+	SettingsWidget->FocusSettings();
+	UE_LOG(Logknight, Log, TEXT("Raid settings opened; paused=%d cursor=%d"), GetWorld()->IsPaused(), bShowMouseCursor);
+}
+
+void AknightPlayerController::CloseSettings()
+{
+	if (SettingsWidget && SettingsWidget->IsInViewport()) SettingsWidget->RemoveFromParent();
+	FInputModeGameOnly Mode;
+	SetInputMode(Mode);
+	bShowMouseCursor = bCursorBeforeSettings;
+	if (bSettingsPausedGame && GetWorld() && GetWorld()->IsPaused()) SetPause(false);
+	bSettingsPausedGame = false;
+	UE_LOG(Logknight, Log, TEXT("Raid settings closed; paused=%d cursor=%d"), GetWorld() && GetWorld()->IsPaused(), bShowMouseCursor);
 }
 
 void AknightPlayerController::ToggleRaidReturnMenu()
@@ -200,6 +259,13 @@ void AknightPlayerController::KnightRaidDebugReturn()
 #endif
 }
 
+void AknightPlayerController::KnightRaidDebugSettings()
+{
+#if WITH_EDITOR
+	ToggleSettings();
+#endif
+}
+
 bool AknightPlayerController::ShouldUseTouchControls() const
 {
 	// are we on a mobile platform? Should we force touch?
@@ -208,6 +274,11 @@ bool AknightPlayerController::ShouldUseTouchControls() const
 
 void AknightPlayerController::PostProcessInput(const float DeltaTime, const bool bGamePaused)
 {
+	if (SettingsWidget && SettingsWidget->IsInViewport())
+	{
+		Super::PostProcessInput(DeltaTime, bGamePaused);
+		return;
+	}
 	APawn* const ControlledPawn = GetPawn();
 	if (UknightAbilitySystemComponent* const ASC = Cast<UknightAbilitySystemComponent>(UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(ControlledPawn)))
 	{

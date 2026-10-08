@@ -2,6 +2,9 @@
 
 #include "Engine/GameInstance.h"
 #include "Engine/LocalPlayer.h"
+#include "EnhancedInputSubsystems.h"
+#include "InputMappingContext.h"
+#include "UserSettings/EnhancedInputUserSettings.h"
 #include "knightAudioSubsystem.h"
 #include "Settings/knightSharedSettings.h"
 
@@ -9,6 +12,7 @@ const FString UknightSettingsSubsystem::SlotName = TEXT("KnightSharedSettings");
 
 UknightSharedSettings* UknightSettingsSubsystem::GetSharedSettings()
 {
+	RegisterMappableContexts();
 	if (!SharedSettings)
 	{
 		if (const ULocalPlayer* const LocalPlayer = GetLocalPlayer())
@@ -21,6 +25,25 @@ UknightSharedSettings* UknightSettingsSubsystem::GetSharedSettings()
 	return SharedSettings;
 }
 
+void UknightSettingsSubsystem::RegisterMappableContexts()
+{
+	if (bMappableContextsRegistered || !GetLocalPlayer()) return;
+	UEnhancedInputLocalPlayerSubsystem* const Input = GetLocalPlayer()->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>();
+	UEnhancedInputUserSettings* const Keys = Input ? Input->GetUserSettings() : nullptr;
+	if (!Keys) return;
+	const TCHAR* const ContextPaths[] = {
+		TEXT("/Game/Input/IMC_Default.IMC_Default"),
+		TEXT("/Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat")
+	};
+	for (const TCHAR* Path : ContextPaths)
+	{
+		const UInputMappingContext* const Context = LoadObject<UInputMappingContext>(nullptr, Path);
+		if (!Context) return;
+		Keys->RegisterInputMappingContext(Context);
+	}
+	bMappableContextsRegistered = true;
+}
+
 void UknightSettingsSubsystem::PlayerControllerChanged(APlayerController* NewPlayerController)
 {
 	Super::PlayerControllerChanged(NewPlayerController);
@@ -30,13 +53,17 @@ void UknightSettingsSubsystem::PlayerControllerChanged(APlayerController* NewPla
 	}
 }
 
-void UknightSettingsSubsystem::SaveSharedSettings()
+bool UknightSettingsSubsystem::SaveSharedSettings()
 {
-	if (SharedSettings)
-	{
-		ApplyAudioSettings();
-		SharedSettings->AsyncSaveGameToSlotForLocalPlayer();
-	}
+	if (!GetSharedSettings() || !SharedSettings->SaveGameToSlotForLocalPlayer()) return false;
+	ApplyAudioSettings();
+	return true;
+}
+
+bool UknightSettingsSubsystem::AreSubtitlesEnabled()
+{
+	const UknightSharedSettings* const Settings = GetSharedSettings();
+	return Settings && Settings->bSubtitlesEnabled;
 }
 
 void UknightSettingsSubsystem::ApplyAudioSettings()

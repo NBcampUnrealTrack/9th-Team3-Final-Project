@@ -43,6 +43,7 @@ protected:
 
 	virtual EKnightFlowState GetExpectedFlowState() const { return EKnightFlowState::Uninitialized; }
 	virtual bool HandleBackRequested() { return false; }
+	virtual bool ShouldAllowEscapeToChild() const { return false; }
 	virtual UWidget* GetPreferredFocusTarget() const;
 	virtual void SetTravelControlsEnabled(bool bEnabled);
 

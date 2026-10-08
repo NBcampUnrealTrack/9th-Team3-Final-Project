@@ -4,10 +4,21 @@
 #include "Progression/knightProgressionSubsystem.h"
 #include "Progression/knightSaveSubsystem.h"
 #include "Raid/knightRaidSubsystem.h"
+#include "Settings/knightGameUserSettings.h"
+#include "knight.h"
 
 void UKnightGameInstance::Init()
 {
 	Super::Init();
+	if (!GIsEditor)
+	{
+		if (UknightGameUserSettings* const Graphics = UknightGameUserSettings::Get())
+		{
+			const bool bHadPendingGraphics = Graphics->HasPendingGraphics();
+			const bool bApplied = Graphics->ApplyPendingGraphicsAtStartup();
+			UE_LOG(Logknight, Log, TEXT("Game settings startup: pending=%d applied=%d"), bHadPendingGraphics, bApplied);
+		}
+	}
 	GetSubsystem<UknightSaveSubsystem>();
 	GetSubsystem<UknightRaidSubsystem>();
 	GetSubsystem<UknightProgressionSubsystem>();

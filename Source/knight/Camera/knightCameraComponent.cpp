@@ -6,6 +6,11 @@
 #include "Camera/knightCameraMode.h"
 #include "Camera/knightCameraOcclusionHandler.h"
 #include "Engine/World.h"
+#include "Engine/LocalPlayer.h"
+#include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerController.h"
+#include "Settings/knightSettingsSubsystem.h"
+#include "Settings/knightSharedSettings.h"
 
 UknightCameraComponent::UknightCameraComponent(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -37,6 +42,7 @@ void UknightCameraComponent::GetCameraView(float DeltaTime, FMinimalViewInfo& De
 	if (!DefaultCameraMode || !ModeStack)
 	{
 		Super::GetCameraView(DeltaTime, DesiredView);
+		ApplyUserViewSettings(DesiredView);
 		return;
 	}
 
@@ -45,6 +51,7 @@ void UknightCameraComponent::GetCameraView(float DeltaTime, FMinimalViewInfo& De
 	if (!ModeStack->EvaluateStack(DeltaTime, ModeView))
 	{
 		Super::GetCameraView(DeltaTime, DesiredView);
+		ApplyUserViewSettings(DesiredView);
 		return;
 	}
 
@@ -75,6 +82,23 @@ void UknightCameraComponent::GetCameraView(float DeltaTime, FMinimalViewInfo& De
 	{
 		DesiredView.PostProcessSettings = PostProcessSettings;
 	}
+	ApplyUserViewSettings(DesiredView);
+}
+
+void UknightCameraComponent::ApplyUserViewSettings(FMinimalViewInfo& View) const
+{
+	const APawn* const Pawn = Cast<APawn>(GetOwner());
+	const APlayerController* const Controller = Pawn ? Cast<APlayerController>(Pawn->GetController()) : nullptr;
+	const ULocalPlayer* const LocalPlayer = Controller ? Controller->GetLocalPlayer() : nullptr;
+	UknightSettingsSubsystem* const Subsystem = LocalPlayer ? LocalPlayer->GetSubsystem<UknightSettingsSubsystem>() : nullptr;
+	const UknightSharedSettings* const Settings = Subsystem ? Subsystem->GetSharedSettings() : nullptr;
+	if (!Settings) return;
+	View.FOV = FMath::Clamp(View.FOV + Settings->FieldOfViewOffset, 60.f, 110.f);
+	View.PostProcessBlendWeight = 1.f;
+	View.PostProcessSettings.bOverride_ColorGain = true;
+	View.PostProcessSettings.ColorGain = FVector4(Settings->Brightness, Settings->Brightness, Settings->Brightness, 1.f);
+	View.PostProcessSettings.bOverride_ColorGamma = true;
+	View.PostProcessSettings.ColorGamma = FVector4(Settings->Gamma, Settings->Gamma, Settings->Gamma, 1.f);
 }
 
 TSubclassOf<UknightCameraMode> UknightCameraComponent::DetermineCameraMode() const

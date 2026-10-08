@@ -6,6 +6,8 @@
 
 class UAudioComponent;
 class USoundBase;
+class USoundClass;
+class USoundMix;
 class UWorld;
 
 /**
@@ -51,10 +53,19 @@ public:
 private:
 	void HandlePostLoadMap(UWorld* LoadedWorld);
 	void ApplyAllVolumes(UWorld* World);
-	void ApplyVolume(UWorld* World, FName Category, float Volume) const;
+	void ApplyVolume(UWorld* World, FName Category, float Volume);
+	USoundMix* GetUserSoundMix();
+	USoundClass* GetSoundClass(FName Category);
 	float ResolveFadeTime(float FadeTime) const;
 
 	TMap<FName, float> Volumes;
+	// The audio device keeps raw sound-class pointers in its async mix overrides.
+	// Keep dynamically loaded assets alive for as long as this subsystem can use them.
+	UPROPERTY(Transient)
+	TObjectPtr<USoundMix> LoadedUserSoundMix;
+	UPROPERTY(Transient)
+	TMap<FName, TObjectPtr<USoundClass>> LoadedSoundClasses;
+	TWeakObjectPtr<UWorld> SoundMixWorld;
 	TWeakObjectPtr<UAudioComponent> MusicComponent;
 	int32 MusicState = 0;
 	FDelegateHandle PostLoadMapHandle;
