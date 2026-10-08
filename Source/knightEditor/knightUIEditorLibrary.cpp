@@ -23,6 +23,8 @@ namespace
 	const FLinearColor Navy900(FColor(0x10, 0x1A, 0x2A));
 	const FLinearColor FrostDim(FColor(0x5F, 0x7F, 0xA8));
 	const FLinearColor White(FColor(0xF4, 0xF8, 0xFC));
+	const FLinearColor Frost(FColor(0xA8, 0xC8, 0xF0));
+	const FLinearColor Ember(FColor(0xFF, 0x7A, 0x1A));
 
 	/** 트리가 비어 있을 때만 작업을 시작한다. 디자이너에서 손댄 블루프린트는 덮어쓰지 않는다. */
 	bool BeginBuild(UWidgetBlueprint* WidgetBlueprint, const TCHAR* Caller)
@@ -155,6 +157,20 @@ namespace
 		Slot->SetPadding(Padding);
 	}
 
+	/**
+	 * HUD용 단색 이미지. 마우스를 받지 않고, 픽셀 스냅을 끈다: 1080p보다 작은 창에서는 UI가 축소되어
+	 * 1px 선이 1px보다 얇아지는데, 스냅이 켜져 있으면 위치에 따라 선이 통째로 사라진다.
+	 */
+	UImage* NewHUDImage(UWidgetBlueprint* WidgetBlueprint, const FName Name, const FLinearColor& Color, const FVector2D& Size, bool bVariable = false)
+	{
+		UImage* const Image = NewWidget<UImage>(WidgetBlueprint, Name, bVariable);
+		Image->SetBrush(SolidBrush(FLinearColor::White, Size));
+		Image->SetColorAndOpacity(Color);
+		Image->SetVisibility(ESlateVisibility::HitTestInvisible);
+		Image->SetPixelSnapping(EWidgetPixelSnapping::Disabled);
+		return Image;
+	}
+
 	/** 1080p 기준 세이프존 4.5% (86 x 49)보다 조금 안쪽. */
 	const FVector2D HUDMargin(96.f, 64.f);
 }
@@ -256,15 +272,82 @@ bool UknightUIEditorLibrary::BuildHUDRaidTimer(UWidgetBlueprint* WidgetBlueprint
 	return true;
 }
 
-bool UknightUIEditorLibrary::BuildHUDLayout(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> PlayerStatusClass, TSubclassOf<UUserWidget> RaidTimerClass)
+bool UknightUIEditorLibrary::BuildHUDLockOnMarker(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> NameStyle)
 {
-	if (!PlayerStatusClass || !RaidTimerClass || !BeginBuild(WidgetBlueprint, TEXT("BuildHUDLayout")))
+	if (!BeginBuild(WidgetBlueprint, TEXT("BuildHUDLockOnMarker")))
 	{
 		return false;
 	}
 
 	UCanvasPanel* const Root = NewWidget<UCanvasPanel>(WidgetBlueprint, TEXT("Canvas_Root"));
 	WidgetBlueprint->WidgetTree->RootWidget = Root;
+	// 디자이너에서 보이도록 놓는 자리. 실행 중에는 C++가 대상 위치로 옮긴다.
+	const FVector2D Preview(400.f, 300.f);
+
+	// 주황 귀퉁이 4개(각 2px L자) + 가운데 마름모. 버튼의 포커스 브래킷과 같은 형태 언어.
+	USizeBox* const Box = NewSizeBox(WidgetBlueprint, TEXT("Box"), 64.f, 64.f);
+	Box->bIsVariable = true;
+	UOverlay* const Corners = NewWidget<UOverlay>(WidgetBlueprint, TEXT("Overlay_Corners"));
+	Box->AddChild(Corners);
+	struct FCorner { const TCHAR* Name; EHorizontalAlignment H; EVerticalAlignment V; };
+	for (const FCorner& Corner : { FCorner{ TEXT("TL"), HAlign_Left, VAlign_Top }, FCorner{ TEXT("TR"), HAlign_Right, VAlign_Top },
+		FCorner{ TEXT("BL"), HAlign_Left, VAlign_Bottom }, FCorner{ TEXT("BR"), HAlign_Right, VAlign_Bottom } })
+	{
+		AddToOverlay(Corners, NewHUDImage(WidgetBlueprint, *FString::Printf(TEXT("Img_Corner%s_H"), Corner.Name), Ember, FVector2D(14.f, 2.f)), Corner.H, Corner.V);
+		AddToOverlay(Corners, NewHUDImage(WidgetBlueprint, *FString::Printf(TEXT("Img_Corner%s_V"), Corner.Name), Ember, FVector2D(2.f, 14.f)), Corner.H, Corner.V);
+	}
+	UImage* const Diamond = NewHUDImage(WidgetBlueprint, TEXT("Img_Center"), Ember, FVector2D(5.f, 5.f));
+	Diamond->SetRenderTransformAngle(45.f);
+	AddToOverlay(Corners, Diamond, HAlign_Center, VAlign_Center);
+	UCanvasPanelSlot* const BoxSlot = Root->AddChildToCanvas(Box);
+	BoxSlot->SetAutoSize(true);
+	BoxSlot->SetAlignment(FVector2D(0.5f, 0.5f));
+	BoxSlot->SetPosition(Preview);
+
+	// 가지선: 길이는 C++의 DiagonalLength / ShelfLength가 매 프레임 덮어쓴다.
+	UCanvasPanelSlot* const DiagonalSlot = Root->AddChildToCanvas(NewHUDImage(WidgetBlueprint, TEXT("Line_Diagonal"), Frost, FVector2D(48.f, 1.f), true));
+	DiagonalSlot->SetSize(FVector2D(48.f, 1.f));
+	DiagonalSlot->SetAlignment(FVector2D(0.f, 0.5f));
+	DiagonalSlot->SetPosition(Preview + FVector2D(32.f, -32.f));
+	UCanvasPanelSlot* const ShelfSlot = Root->AddChildToCanvas(NewHUDImage(WidgetBlueprint, TEXT("Line_Shelf"), Frost, FVector2D(150.f, 1.f), true));
+	ShelfSlot->SetSize(FVector2D(150.f, 1.f));
+	ShelfSlot->SetAlignment(FVector2D(0.f, 0.5f));
+	ShelfSlot->SetPosition(Preview + FVector2D(56.f, -74.f));
+
+	// 이름표: TARGET LOCK + 주황 눈금 + 몬스터 이름.
+	UVerticalBox* const Plate = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("Plate"), true);
+	Plate->SetVisibility(ESlateVisibility::HitTestInvisible);
+	AddToColumn(Plate, NewText(WidgetBlueprint, TEXT("Txt_LockCaption"), CaptionStyle, INVTEXT("TARGET LOCK"), false), HAlign_Left);
+	UHorizontalBox* const NameRow = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("HorizontalBox_Name"));
+	UHorizontalBoxSlot* const TickSlot = NameRow->AddChildToHorizontalBox(NewHUDImage(WidgetBlueprint, TEXT("Img_PlateTick"), Ember, FVector2D(4.f, 20.f)));
+	TickSlot->SetVerticalAlignment(VAlign_Center);
+	TickSlot->SetPadding(FMargin(0.f, 0.f, 8.f, 0.f));
+	UHorizontalBoxSlot* const NameSlot = NameRow->AddChildToHorizontalBox(NewText(WidgetBlueprint, TEXT("Txt_TargetName"), NameStyle, INVTEXT("TARGET"), true));
+	NameSlot->SetVerticalAlignment(VAlign_Center);
+	AddToColumn(Plate, NameRow, HAlign_Left);
+	UCanvasPanelSlot* const PlateSlot = Root->AddChildToCanvas(Plate);
+	PlateSlot->SetAutoSize(true);
+	PlateSlot->SetAlignment(FVector2D(0.f, 1.f));
+	PlateSlot->SetPosition(Preview + FVector2D(64.f, -78.f));
+
+	EndBuild(WidgetBlueprint);
+	return true;
+}
+
+bool UknightUIEditorLibrary::BuildHUDLayout(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> PlayerStatusClass, TSubclassOf<UUserWidget> RaidTimerClass, TSubclassOf<UUserWidget> LockOnMarkerClass)
+{
+	if (!PlayerStatusClass || !RaidTimerClass || !LockOnMarkerClass || !BeginBuild(WidgetBlueprint, TEXT("BuildHUDLayout")))
+	{
+		return false;
+	}
+
+	UCanvasPanel* const Root = NewWidget<UCanvasPanel>(WidgetBlueprint, TEXT("Canvas_Root"));
+	WidgetBlueprint->WidgetTree->RootWidget = Root;
+
+	// 화면 전체를 덮고 맨 아래에 그려진다. 마커가 플레이어 패널이나 타이머를 가리지 않는다.
+	UCanvasPanelSlot* const LockOnSlot = Root->AddChildToCanvas(NewWidget<UUserWidget>(WidgetBlueprint, LockOnMarkerClass, TEXT("LockOnMarker"), true));
+	LockOnSlot->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f));
+	LockOnSlot->SetOffsets(FMargin(0.f));
 
 	UCanvasPanelSlot* const PlayerSlot = Root->AddChildToCanvas(NewWidget<UUserWidget>(WidgetBlueprint, PlayerStatusClass, TEXT("PlayerStatus"), true));
 	PlayerSlot->SetAnchors(FAnchors(0.f, 0.f));
@@ -283,15 +366,8 @@ bool UknightUIEditorLibrary::BuildHUDLayout(UWidgetBlueprint* WidgetBlueprint, T
 	UOverlay* const Cross = NewWidget<UOverlay>(WidgetBlueprint, TEXT("Overlay_Reticle"));
 	Reticle->AddChild(Cross);
 	const FLinearColor ReticleColor(White.R, White.G, White.B, 0.8f);
-	UImage* const Horizontal = NewWidget<UImage>(WidgetBlueprint, TEXT("Img_ReticleH"));
-	// 이미지 크기가 선 굵기를 정한다. 기본값(32x32)이면 사각형이 된다.
-	Horizontal->SetBrush(SolidBrush(FLinearColor::White, FVector2D(24.f, 1.f)));
-	Horizontal->SetColorAndOpacity(ReticleColor);
-	AddToOverlay(Cross, Horizontal, HAlign_Center, VAlign_Center);
-	UImage* const Vertical = NewWidget<UImage>(WidgetBlueprint, TEXT("Img_ReticleV"));
-	Vertical->SetBrush(SolidBrush(FLinearColor::White, FVector2D(1.f, 24.f)));
-	Vertical->SetColorAndOpacity(ReticleColor);
-	AddToOverlay(Cross, Vertical, HAlign_Center, VAlign_Center);
+	AddToOverlay(Cross, NewHUDImage(WidgetBlueprint, TEXT("Img_ReticleH"), ReticleColor, FVector2D(24.f, 1.f)), HAlign_Center, VAlign_Center);
+	AddToOverlay(Cross, NewHUDImage(WidgetBlueprint, TEXT("Img_ReticleV"), ReticleColor, FVector2D(1.f, 24.f)), HAlign_Center, VAlign_Center);
 
 	UCanvasPanelSlot* const ReticleSlot = Root->AddChildToCanvas(Reticle);
 	ReticleSlot->SetAnchors(FAnchors(0.5f, 0.5f));
