@@ -436,3 +436,58 @@ bool UknightUIEditorLibrary::BuildConfirmModal(UWidgetBlueprint* WidgetBlueprint
 	EndBuild(WidgetBlueprint);
 	return true;
 }
+
+bool UknightUIEditorLibrary::BuildPauseMenu(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> ButtonClass, TSubclassOf<UCommonButtonStyle> SecondaryButtonStyle,
+	TSubclassOf<UCommonTextStyle> TitleStyle, TSubclassOf<UCommonTextStyle> CaptionStyle)
+{
+	if (!ButtonClass || !ButtonClass->IsChildOf<UknightButtonBase>() || !BeginBuild(WidgetBlueprint, TEXT("BuildPauseMenu")))
+	{
+		return false;
+	}
+
+	UOverlay* const Root = NewWidget<UOverlay>(WidgetBlueprint, TEXT("Overlay_Root"));
+	WidgetBlueprint->WidgetTree->RootWidget = Root;
+
+	// 확인창보다 옅게: 멈춘 전투 화면이 비쳐 보이도록.
+	UImage* const Dim = NewWidget<UImage>(WidgetBlueprint, TEXT("Img_Dim"));
+	Dim->SetBrush(SolidBrush(FLinearColor::White));
+	Dim->SetColorAndOpacity(FLinearColor(0.f, 0.f, 0.f, 0.45f));
+	AddToOverlay(Root, Dim, HAlign_Fill, VAlign_Fill);
+
+	// 왼쪽 세로 패널. 안쪽 왼쪽 여백 96은 HUD와 같은 세이프존.
+	USizeBox* const Panel = NewSizeBox(WidgetBlueprint, TEXT("SizeBox_Panel"), 440.f, 0.f);
+	AddToOverlay(Root, Panel, HAlign_Left, VAlign_Fill);
+	UBorder* const Frame = NewWidget<UBorder>(WidgetBlueprint, TEXT("Border_Frame"));
+	Frame->SetBrush(FrameBrush(0.88f));
+	Frame->SetPadding(FMargin(HUDMargin.X, 0.f, 48.f, 0.f));
+	Frame->SetVerticalAlignment(VAlign_Center);
+	Frame->SetHorizontalAlignment(HAlign_Fill);
+	Panel->AddChild(Frame);
+
+	UVerticalBox* const Column = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("VerticalBox_Content"));
+	Frame->SetContent(Column);
+	AddToColumn(Column, NewText(WidgetBlueprint, TEXT("Txt_Caption"), CaptionStyle, INVTEXT("SYSTEM PAUSE"), false), HAlign_Left);
+	AddToColumn(Column, NewHUDImage(WidgetBlueprint, TEXT("Img_Accent"), Frost, FVector2D(32.f, 2.f)), HAlign_Left, FMargin(0.f, 10.f, 0.f, 14.f));
+	AddToColumn(Column, NewText(WidgetBlueprint, TEXT("Txt_Title"), TitleStyle, NSLOCTEXT("knightUI", "PauseTitle", "일시정지"), false), HAlign_Left);
+
+	// 계속하기만 주 버튼. 나머지는 보조 스타일(뒤로 가기 소리).
+	struct FEntry { const TCHAR* Name; FText Label; bool bPrimary; float Top; };
+	for (const FEntry& Entry : {
+		FEntry{ TEXT("Btn_Resume"), NSLOCTEXT("knightUI", "PauseResume", "계속하기"), true, 40.f },
+		FEntry{ TEXT("Btn_Settings"), NSLOCTEXT("knightUI", "PauseSettings", "설정"), false, 12.f },
+		FEntry{ TEXT("Btn_Abandon"), NSLOCTEXT("knightUI", "PauseAbandon", "레이드 포기"), false, 12.f } })
+	{
+		UknightButtonBase* const Button = NewWidget<UknightButtonBase>(WidgetBlueprint, TSubclassOf<UknightButtonBase>(ButtonClass), Entry.Name, true);
+		Button->SetButtonText(Entry.Label);
+		if (!Entry.bPrimary && SecondaryButtonStyle)
+		{
+			Button->SetStyle(SecondaryButtonStyle);
+		}
+		AddToColumn(Column, Button, HAlign_Fill, FMargin(0.f, Entry.Top, 0.f, 0.f));
+	}
+
+	AddToColumn(Column, NewText(WidgetBlueprint, TEXT("Txt_Hint"), CaptionStyle, NSLOCTEXT("knightUI", "PauseHint", "ESC   계속하기"), false), HAlign_Left, FMargin(0.f, 40.f, 0.f, 0.f));
+
+	EndBuild(WidgetBlueprint);
+	return true;
+}

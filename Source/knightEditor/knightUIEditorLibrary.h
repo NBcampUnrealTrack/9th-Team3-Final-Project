@@ -50,4 +50,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
 	static bool BuildConfirmModal(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> ButtonClass, TSubclassOf<UCommonButtonStyle> CancelButtonStyle,
 		TSubclassOf<UCommonTextStyle> TitleStyle, TSubclassOf<UCommonTextStyle> BodyStyle);
+
+	/** WBP_KnightPauseMenu: 어두운 막 + 왼쪽 세로 패널(SYSTEM PAUSE, 제목, 계속하기 / 설정 / 레이드 포기, Esc 안내). */
+	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
+	static bool BuildPauseMenu(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> ButtonClass, TSubclassOf<UCommonButtonStyle> SecondaryButtonStyle,
+		TSubclassOf<UCommonTextStyle> TitleStyle, TSubclassOf<UCommonTextStyle> CaptionStyle);
 };
