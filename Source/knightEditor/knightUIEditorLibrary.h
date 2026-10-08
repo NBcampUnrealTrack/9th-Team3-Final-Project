@@ -42,9 +42,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
 	static bool BuildHUDLockOnMarker(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> NameStyle);
 
-	/** WBP_HUDLayout: 화면 전체의 락온 마커(맨 아래), 1080p 세이프존(4.5%) 안쪽에 플레이어 상태(좌상), 타이머(우상), 화면 중앙 조준점. */
+	/** WBP_HUDLayout: 화면 전체의 락온 마커(맨 아래), 1080p 세이프존(4.5%) 안쪽에 플레이어 상태(좌상), 타이머(우상). */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
 	static bool BuildHUDLayout(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> PlayerStatusClass, TSubclassOf<UUserWidget> RaidTimerClass, TSubclassOf<UUserWidget> LockOnMarkerClass);
+
+	/** 이름으로 위젯 하나를 자식째 지운다. 이미 만든 블루프린트에서 요소를 빼낼 때 쓴다. 없으면 false. */
+	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
+	static bool RemoveWidget(UWidgetBlueprint* WidgetBlueprint, FName WidgetName);
 
 	/** WBP_KnightConfirmModal: 화면을 덮는 어두운 막(클릭 차단), 가운데 패널(제목, 본문, 오른쪽 아래 [취소] [확인]). */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")

@@ -369,21 +369,29 @@ bool UknightUIEditorLibrary::BuildHUDLayout(UWidgetBlueprint* WidgetBlueprint, T
 	TimerSlot->SetPosition(FVector2D(-HUDMargin.X, HUDMargin.Y));
 	TimerSlot->SetAutoSize(true);
 
-	// 조준점: 24px 십자, 1px 선.
-	USizeBox* const Reticle = NewSizeBox(WidgetBlueprint, TEXT("Reticle"), 24.f, 24.f);
-	UOverlay* const Cross = NewWidget<UOverlay>(WidgetBlueprint, TEXT("Overlay_Reticle"));
-	Reticle->AddChild(Cross);
-	const FLinearColor ReticleColor(White.R, White.G, White.B, 0.8f);
-	AddToOverlay(Cross, NewHUDImage(WidgetBlueprint, TEXT("Img_ReticleH"), ReticleColor, FVector2D(24.f, 1.f)), HAlign_Center, VAlign_Center);
-	AddToOverlay(Cross, NewHUDImage(WidgetBlueprint, TEXT("Img_ReticleV"), ReticleColor, FVector2D(1.f, 24.f)), HAlign_Center, VAlign_Center);
-
-	UCanvasPanelSlot* const ReticleSlot = Root->AddChildToCanvas(Reticle);
-	ReticleSlot->SetAnchors(FAnchors(0.5f, 0.5f));
-	ReticleSlot->SetAlignment(FVector2D(0.5f, 0.5f));
-	ReticleSlot->SetPosition(FVector2D::ZeroVector);
-	ReticleSlot->SetAutoSize(true);
-
 	EndBuild(WidgetBlueprint);
+	return true;
+}
+
+bool UknightUIEditorLibrary::RemoveWidget(UWidgetBlueprint* WidgetBlueprint, FName WidgetName)
+{
+	UWidget* const Widget = WidgetBlueprint && WidgetBlueprint->WidgetTree ? WidgetBlueprint->WidgetTree->FindWidget(WidgetName) : nullptr;
+	if (!Widget)
+	{
+		return false;
+	}
+	WidgetBlueprint->Modify();
+	WidgetBlueprint->WidgetTree->Modify();
+
+	// 자식까지 함께 지운다. GUID 표에 이름이 남으면 컴파일러가 없는 위젯을 찾으므로 같이 뺀다.
+	TArray<UWidget*> Removed = { Widget };
+	UWidgetTree::GetChildWidgets(Widget, Removed);
+	WidgetBlueprint->WidgetTree->RemoveWidget(Widget);
+	for (UWidget* const Each : Removed)
+	{
+		WidgetBlueprint->OnVariableRemoved(Each->GetFName());
+	}
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBlueprint);
 	return true;
 }
 
