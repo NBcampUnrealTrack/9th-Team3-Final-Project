@@ -160,17 +160,20 @@ void UknightAbilitySystemComponent::ProcessAbilityInput(float DeltaTime, bool bG
 			continue;
 		}
 		Spec->InputPressed = true;
+		const UknightGameplayAbility* const AbilityCDO = Cast<UknightGameplayAbility>(Spec->Ability);
+		const bool bTriggeredByPress = AbilityCDO && AbilityCDO->GetActivationPolicy() == EknightAbilityActivationPolicy::OnInputTriggered;
 		if (Spec->IsActive())
 		{
 			AbilitySpecInputPressed(*Spec);
-		}
-		else
-		{
-			const UknightGameplayAbility* const AbilityCDO = Cast<UknightGameplayAbility>(Spec->Ability);
-			if (AbilityCDO && AbilityCDO->GetActivationPolicy() == EknightAbilityActivationPolicy::OnInputTriggered)
+			// 재발동을 허용하는 어빌리티(퀵스텝)는 실행 중에도 발동을 시도한다. 받아들일지는 어빌리티의 CanActivateAbility가 정한다. (2026-10-08)
+			if (bTriggeredByPress && AbilityCDO->CanRetriggerWhileActive())
 			{
 				AbilitiesToActivate.AddUnique(Spec->Handle);
 			}
+		}
+		else if (bTriggeredByPress)
+		{
+			AbilitiesToActivate.AddUnique(Spec->Handle);
 		}
 	}
 
@@ -233,7 +236,10 @@ bool UknightAbilitySystemComponent::TryActivateAbilityByInputTag(const FGameplay
 	TArray<FGameplayAbilitySpecHandle, TInlineAllocator<4>> Candidates;
 	for (const FGameplayAbilitySpec& Spec : ActivatableAbilities.Items)
 	{
-		if (Spec.Ability && !Spec.IsActive() && Spec.GetDynamicSpecSourceTags().HasTagExact(InputTag))
+		// 실행 중인 어빌리티는 재발동을 허용할 때만 후보로 둔다 (ProcessAbilityInput과 같은 규칙).
+		const UknightGameplayAbility* const AbilityCDO = Cast<UknightGameplayAbility>(Spec.Ability);
+		const bool bCanTry = !Spec.IsActive() || (AbilityCDO && AbilityCDO->CanRetriggerWhileActive());
+		if (Spec.Ability && bCanTry && Spec.GetDynamicSpecSourceTags().HasTagExact(InputTag))
 		{
 			Candidates.Add(Spec.Handle);
 		}
