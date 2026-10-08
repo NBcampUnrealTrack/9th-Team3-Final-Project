@@ -6,11 +6,15 @@
 #include "Raid/knightRaidSubsystem.h"
 #include "Progression/knightSaveSubsystem.h"
 #include "Components/Button.h"
+#include "Components/CanvasPanelSlot.h"
+#include "Components/HorizontalBoxSlot.h"
 #include "Components/PanelWidget.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
+#include "Components/VerticalBoxSlot.h"
 #include "knight.h"
 #include "Settings/KnightSettingsWidget.h"
+#include "Codex/KnightCodexWidget.h"
 
 #define LOCTEXT_NAMESPACE "KnightMainMenu"
 
@@ -73,6 +77,7 @@ void UKnightMainMenuWidget::NativeConstruct()
 void UKnightMainMenuWidget::NativeDestruct()
 {
 	if (SettingsWidget) SettingsWidget->OnClosed.RemoveDynamic(this, &ThisClass::HandleSettingsClosed);
+	if (CodexWidget) CodexWidget->OnClosed.RemoveDynamic(this, &ThisClass::HandleCodexClosed);
 	RemoveStageEntries();
 	Super::NativeDestruct();
 }
@@ -114,10 +119,16 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 		return false;
 	}
 	CurrentPage = NewPage;
+	if (NewPage != EKnightMainMenuPage::Home) bRestoreCodexFocus = false;
 	if (NewPage == EKnightMainMenuPage::Settings)
 	{
 		EnsureSettingsWidget();
 		if (SettingsWidget) SettingsWidget->Open();
+	}
+	if (NewPage == EKnightMainMenuPage::Codex)
+	{
+		EnsureCodexWidget();
+		if (CodexWidget) CodexWidget->Open();
 	}
 	UpdateBackVisibility(NewPage == EKnightMainMenuPage::Home || NewPage == EKnightMainMenuPage::Settings);
 	RefreshTravelControls();
@@ -135,12 +146,17 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 	}
 	FocusCurrentPage();
 	if (NewPage == EKnightMainMenuPage::Settings && SettingsWidget) SettingsWidget->FocusSettings();
+	if (NewPage == EKnightMainMenuPage::Codex && CodexWidget && CodexWidget->GetFocusButton())
+	{
+		CodexWidget->GetFocusButton()->SetUserFocus(GetOwningPlayer());
+	}
 	return true;
 }
 
 bool UKnightMainMenuWidget::HandleBackRequested()
 {
 	if (CurrentPage == EKnightMainMenuPage::Settings && SettingsWidget) { SettingsWidget->RequestClose(); return true; }
+	if (CurrentPage == EKnightMainMenuPage::Codex) { HandleCodexClosed(); return true; }
 	if (CurrentPage == EKnightMainMenuPage::StageDetails)
 	{
 		return ShowPage(EKnightMainMenuPage::Stage);
@@ -165,8 +181,50 @@ void UKnightMainMenuWidget::EnsureSettingsWidget()
 
 void UKnightMainMenuWidget::HandleSettingsClosed() { ShowPage(EKnightMainMenuPage::Home); }
 
+void UKnightMainMenuWidget::EnsureCodexWidget()
+{
+	if (CodexWidget || !Panel_Codex || !GetOwningPlayer()) return;
+	CodexWidget = CreateWidget<UKnightCodexWidget>(GetOwningPlayer(), UKnightCodexWidget::GetSharedWidgetClass());
+	if (!CodexWidget) return;
+	Panel_Codex->ClearChildren();
+	UPanelSlot* const AddedSlot = Panel_Codex->AddChild(CodexWidget);
+	if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(AddedSlot))
+	{
+		CanvasSlot->SetAnchors(FAnchors(0, 0, 1, 1));
+		CanvasSlot->SetOffsets(FMargin(0, 0, 0, 0));
+	}
+	else if (UVerticalBoxSlot* VerticalSlot = Cast<UVerticalBoxSlot>(AddedSlot))
+	{
+		VerticalSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+	}
+	else if (UHorizontalBoxSlot* HorizontalSlot = Cast<UHorizontalBoxSlot>(AddedSlot))
+	{
+		HorizontalSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+	}
+	CodexWidget->OnClosed.AddUniqueDynamic(this, &ThisClass::HandleCodexClosed);
+}
+
+void UKnightMainMenuWidget::HandleCodexClosed()
+{
+	bRestoreCodexFocus = true;
+	ShowPage(EKnightMainMenuPage::Home);
+}
+
+bool UKnightMainMenuWidget::IsCodexButtonFocused() const
+{
+	return Button_Codex && GetOwningPlayer() && Button_Codex->HasUserFocus(GetOwningPlayer());
+}
+
 UWidget* UKnightMainMenuWidget::GetPreferredFocusTarget() const
 {
+	if (CurrentPage == EKnightMainMenuPage::Home && bRestoreCodexFocus && Button_Codex)
+	{
+		return Button_Codex;
+	}
+	if (CurrentPage == EKnightMainMenuPage::Codex && CodexWidget)
+	{
+		return CodexWidget->GetFocusButton();
+	}
 	if (CurrentPage == EKnightMainMenuPage::StageDetails && Button_LaunchStage
 		&& Button_LaunchStage->GetIsFocusable() && Button_LaunchStage->IsVisible() && Button_LaunchStage->GetIsEnabled())
 	{

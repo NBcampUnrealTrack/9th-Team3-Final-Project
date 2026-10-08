@@ -71,6 +71,7 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Event_PoiseBroken, "Event.PoiseBroken", "Poise reached zero.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Event_PartBroken, "Event.PartBroken", "A monster part was broken.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Event_Death, "Event.Death", "Health reached zero.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Event_Monster_Engaged, "Event.Monster.Engaged", "A monster found its first target (once per life; plays the encounter roar).");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(SetByCaller_Damage, "SetByCaller.Damage", "Base damage magnitude.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(SetByCaller_PoiseDamage, "SetByCaller.PoiseDamage", "Base poise damage magnitude.");

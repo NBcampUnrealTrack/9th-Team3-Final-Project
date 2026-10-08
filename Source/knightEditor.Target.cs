@@ -10,6 +10,6 @@ public class knightEditorTarget : TargetRules
 		Type = TargetType.Editor;
 		DefaultBuildSettings = BuildSettingsVersion.V7;
 		IncludeOrderVersion = EngineIncludeOrderVersion.Unreal5_8;
-		ExtraModuleNames.AddRange(new string[] { "knight", "knightUI", "knightEditor", "knightDev" });
+		ExtraModuleNames.AddRange(new string[] { "knight", "knightUI", "knightEditor", "knightAnimGraph", "knightDev" });
 	}
 }

@@ -83,6 +83,10 @@ protected:
 	void HandleStaminaDepleted(AActor* EffectInstigator, AActor* EffectCauser, const FGameplayEffectSpec* EffectSpec,
 		float Magnitude, float OldValue, float NewValue);
 
+	/** The first target of this life sends Event.Monster.Engaged (an encounter roar ability triggers on it). */
+	UFUNCTION()
+	void HandleTargetChanged(AActor* OldTarget, AActor* NewTarget);
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Knight|Monster")
 	TObjectPtr<const UknightMonsterDefinition> MonsterDefinition;
 
@@ -119,6 +123,7 @@ private:
 
 	bool bAbilitySystemInitialized = false;
 	bool bIsDying = false;
+	bool bHasEngaged = false;
 	/** Counted in the Monster.Alive perf gauge. */
 	bool bCountedAlive = false;
 

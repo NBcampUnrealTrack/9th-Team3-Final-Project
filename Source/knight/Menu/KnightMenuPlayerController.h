@@ -14,6 +14,9 @@ class KNIGHT_API AKnightMenuPlayerController : public APlayerController
 
 public:
 	AKnightMenuPlayerController();
+	/** The root currently displayed by this controller. */
+	UFUNCTION(BlueprintPure, Category="Knight|Menu")
+	UKnightMenuWidgetBase* GetMenuWidget() const { return MenuWidget; }
 
 	/** Editor validation commands; the retail menu uses the widget buttons. */
 	UFUNCTION(Exec) void KnightCoreLaunchTwice(FName StageId);

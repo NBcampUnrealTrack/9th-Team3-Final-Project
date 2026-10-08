@@ -25,6 +25,11 @@
 			"LoadingPhase": "Default"
 		},
 		{
+			"Name": "knightAnimGraph",
+			"Type": "UncookedOnly",
+			"LoadingPhase": "Default"
+		},
+		{
 			"Name": "knightDev",
 			"Type": "DeveloperTool",
 			"LoadingPhase": "Default"
