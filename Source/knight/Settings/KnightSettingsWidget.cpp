@@ -1,46 +1,26 @@
 #include "Settings/KnightSettingsWidget.h"
 
-#include "Blueprint/WidgetTree.h"
-#include "Components/Border.h"
-#include "Components/Button.h"
-#include "Components/CheckBox.h"
-#include "Components/ComboBoxString.h"
-#include "Components/HorizontalBox.h"
-#include "Components/HorizontalBoxSlot.h"
-#include "Components/InputKeySelector.h"
-#include "Components/ScrollBox.h"
-#include "Components/SizeBox.h"
-#include "Components/Slider.h"
-#include "Components/TextBlock.h"
-#include "Components/VerticalBox.h"
-#include "Components/VerticalBoxSlot.h"
+#include "Engine/GameInstance.h"
 #include "Engine/LocalPlayer.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputCoreTypes.h"
+#include "knightAudioSubsystem.h"
 #include "Settings/knightSettingsSubsystem.h"
 #include "Settings/knightSharedSettings.h"
 #include "UserSettings/EnhancedInputUserSettings.h"
 
 #define LOCTEXT_NAMESPACE "KnightSettingsScreen"
 
+const FString UKnightSettingsWidget::OnText(TEXT("켜기"));
+const FString UKnightSettingsWidget::OffText(TEXT("끄기"));
+
 namespace
 {
-	UTextBlock* MakeText(UWidgetTree* Tree, const FText& Text)
-	{
-		UTextBlock* const Widget = Tree->ConstructWidget<UTextBlock>();
-		Widget->SetText(Text);
-		Widget->SetColorAndOpacity(FSlateColor(FLinearColor::White));
-		return Widget;
-	}
+	const TCHAR* const SettingsWidgetPath = TEXT("/Game/Knight/UI/Screens/WBP_KnightSettings.WBP_KnightSettings_C");
 
-	UButton* MakeButton(UWidgetTree* Tree, const FText& Text)
-	{
-		UButton* const Button = Tree->ConstructWidget<UButton>();
-		Button->AddChild(MakeText(Tree, Text));
-		return Button;
-	}
+	FString OnOff(bool bValue) { return bValue ? UKnightSettingsWidget::OnText : UKnightSettingsWidget::OffText; }
+	FString Number(float Value) { return FString::SanitizeFloat(FMath::RoundToFloat(Value)); }
 
-	FString BoolText(bool bValue) { return bValue ? TEXT("true") : TEXT("false"); }
 	int32 QualityFromText(const FString& Text)
 	{
 		if (Text == TEXT("낮음")) return 0;
@@ -60,155 +40,68 @@ namespace
 		if (bPreset) Values.Add(TEXT("사용자 지정"));
 		return Values;
 	}
-}
-
-void UKnightSettingRow::Configure(UKnightSettingsWidget* InOwner, FName InId, const FText& Label,
-	EKnightSettingControl Type, const TArray<FString>& Options, const FString& Value, float Min, float Max)
-{
-	Owner = InOwner;
-	Id = InId;
-	MinValue = Min;
-	MaxValue = Max;
-	UHorizontalBox* const Root = WidgetTree->ConstructWidget<UHorizontalBox>();
-	WidgetTree->RootWidget = Root;
-	UTextBlock* const NameText = MakeText(WidgetTree, Label);
-	UHorizontalBoxSlot* const NameSlot = Root->AddChildToHorizontalBox(NameText);
-	NameSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-	NameSlot->SetPadding(FMargin(8.f, 10.f));
-	if (Type == EKnightSettingControl::Combo)
+	FString WindowModeText(EWindowMode::Type Mode)
 	{
-		Combo = WidgetTree->ConstructWidget<UComboBoxString>();
-		for (const FString& Option : Options) Combo->AddOption(Option);
-		Root->AddChildToHorizontalBox(Combo)->SetPadding(FMargin(8.f));
-		Combo->OnSelectionChanged.AddUniqueDynamic(this, &ThisClass::HandleCombo);
+		return Mode == EWindowMode::Fullscreen ? TEXT("전체 화면") : Mode == EWindowMode::Windowed ? TEXT("창 모드") : TEXT("테두리 없는 창");
 	}
-	else if (Type == EKnightSettingControl::Slider)
+	bool IsUniformQuality(const FKnightGraphicsChoice& Graphics)
 	{
-		Slider = WidgetTree->ConstructWidget<USlider>();
-		USlider* const Control = Slider;
-		USizeBox* const Width = WidgetTree->ConstructWidget<USizeBox>();
-		Width->SetWidthOverride(220.f);
-		Width->AddChild(Control);
-		Root->AddChildToHorizontalBox(Width)->SetPadding(FMargin(8.f));
-		ValueText = MakeText(WidgetTree, FText::GetEmpty());
-		Root->AddChildToHorizontalBox(ValueText)->SetPadding(FMargin(8.f));
-		Slider->OnValueChanged.AddUniqueDynamic(this, &ThisClass::HandleSlider);
+		const int32 Q = Graphics.AntiAliasing;
+		return Graphics.Shadows == Q && Graphics.Textures == Q && Graphics.Effects == Q && Graphics.PostProcess == Q && Graphics.ViewDistance == Q;
 	}
-	else if (Type == EKnightSettingControl::Check)
+
+	FKnightSettingItem Rotator(FName Id, const FText& Label, const FText& Description, const TArray<FString>& Options)
 	{
-		Check = WidgetTree->ConstructWidget<UCheckBox>();
-		Root->AddChildToHorizontalBox(Check)->SetPadding(FMargin(8.f));
-		Check->OnCheckStateChanged.AddUniqueDynamic(this, &ThisClass::HandleCheck);
+		FKnightSettingItem Item;
+		Item.Id = Id;
+		Item.Label = Label;
+		Item.Description = Description;
+		Item.Type = EKnightSettingControl::Rotator;
+		Item.Options = Options;
+		return Item;
 	}
-	else
+	FKnightSettingItem Toggle(FName Id, const FText& Label, const FText& Description)
 	{
-		KeySelector = WidgetTree->ConstructWidget<UInputKeySelector>();
-		KeySelector->SetAllowGamepadKeys(false);
-		KeySelector->SetEscapeKeys({EKeys::Escape});
-		Root->AddChildToHorizontalBox(KeySelector)->SetPadding(FMargin(8.f));
-		KeySelector->OnKeySelected.AddUniqueDynamic(this, &ThisClass::HandleKey);
+		return Rotator(Id, Label, Description, {UKnightSettingsWidget::OffText, UKnightSettingsWidget::OnText});
 	}
-	SetValue(Value);
-}
-
-void UKnightSettingRow::SetValue(const FString& Value)
-{
-	bUpdating = true;
-	if (Combo) Combo->SetSelectedOption(Value);
-	if (Slider)
+	FKnightSettingItem Slider(FName Id, const FText& Label, const FText& Description, float Min, float Max)
 	{
-		const float Number = FCString::Atof(*Value);
-		Slider->SetValue(FMath::GetRangePct(MinValue, MaxValue, Number));
-		UpdateValueText(Number);
+		FKnightSettingItem Item;
+		Item.Id = Id;
+		Item.Label = Label;
+		Item.Description = Description;
+		Item.Type = EKnightSettingControl::Slider;
+		Item.Min = Min;
+		Item.Max = Max;
+		return Item;
 	}
-	if (Check) Check->SetIsChecked(Value == TEXT("true"));
-	if (KeySelector) KeySelector->SetSelectedKey(FInputChord(FKey(*Value)));
-	bUpdating = false;
 }
 
-bool UKnightSettingRow::IsCapturingKey() const { return KeySelector && KeySelector->GetIsSelectingKey(); }
-
-void UKnightSettingRow::UpdateValueText(float Value)
+TSubclassOf<UKnightSettingsWidget> UKnightSettingsWidget::GetSharedWidgetClass()
 {
-	if (ValueText) ValueText->SetText(FText::AsNumber(FMath::RoundToInt(Value)));
+	return LoadClass<UKnightSettingsWidget>(nullptr, SettingsWidgetPath);
 }
 
-void UKnightSettingRow::Notify(const FString& Value)
+FText UKnightSettingsWidget::GetTabLabel(int32 Index)
 {
-	if (!bUpdating && Owner.IsValid()) Owner->OptionEdited(Id, Value);
+	switch (Index)
+	{
+	case 0: return LOCTEXT("TabGraphics", "그래픽");
+	case 1: return LOCTEXT("TabControls", "조작");
+	case 2: return LOCTEXT("TabAudio", "소리");
+	default: return LOCTEXT("TabCalibration", "화면 보정");
+	}
 }
 
-void UKnightSettingRow::HandleCombo(FString Selected, ESelectInfo::Type) { Notify(Selected); }
-void UKnightSettingRow::HandleSlider(float Value)
+FText UKnightSettingsWidget::GetTabCaption(int32 Index)
 {
-	const float Actual = FMath::Lerp(MinValue, MaxValue, Value);
-	UpdateValueText(Actual);
-	Notify(FString::SanitizeFloat(Actual));
-}
-void UKnightSettingRow::HandleCheck(bool bChecked) { Notify(BoolText(bChecked)); }
-void UKnightSettingRow::HandleKey(FInputChord SelectedKey) { Notify(SelectedKey.Key.GetFName().ToString()); }
-
-bool UKnightSettingsWidget::Initialize()
-{
-	if (!Super::Initialize()) return false;
-	SetIsFocusable(true);
-	BuildLayout();
-	return true;
-}
-
-void UKnightSettingsWidget::BuildLayout()
-{
-	USizeBox* const Frame = WidgetTree->ConstructWidget<USizeBox>();
-	Frame->SetWidthOverride(800.f);
-	Frame->SetHeightOverride(620.f);
-	WidgetTree->RootWidget = Frame;
-	UBorder* const Backdrop = WidgetTree->ConstructWidget<UBorder>();
-	Backdrop->SetBrushColor(FLinearColor(0.025f, 0.035f, 0.055f, 0.98f));
-	Frame->AddChild(Backdrop);
-	UVerticalBox* const Column = WidgetTree->ConstructWidget<UVerticalBox>();
-	Backdrop->SetContent(Column);
-	Column->AddChildToVerticalBox(MakeText(WidgetTree, LOCTEXT("Header", "설정")))->SetPadding(FMargin(24.f, 14.f));
-	UHorizontalBox* const Tabs = WidgetTree->ConstructWidget<UHorizontalBox>();
-	Column->AddChildToVerticalBox(Tabs)->SetPadding(FMargin(18.f, 4.f));
-	UButton* const Graphics = MakeButton(WidgetTree, LOCTEXT("Graphics", "그래픽"));
-	UButton* const Controls = MakeButton(WidgetTree, LOCTEXT("Controls", "조작"));
-	UButton* const Audio = MakeButton(WidgetTree, LOCTEXT("Audio", "오디오"));
-	UButton* const Display = MakeButton(WidgetTree, LOCTEXT("Display", "화면 보정"));
-	for (UButton* Button : {Graphics, Controls, Audio, Display})
-		Tabs->AddChildToHorizontalBox(Button)->SetPadding(FMargin(8.f));
-	Graphics->OnClicked.AddUniqueDynamic(this, &ThisClass::TabGraphics);
-	Controls->OnClicked.AddUniqueDynamic(this, &ThisClass::TabControls);
-	Audio->OnClicked.AddUniqueDynamic(this, &ThisClass::TabAudio);
-	Display->OnClicked.AddUniqueDynamic(this, &ThisClass::TabDisplay);
-	UScrollBox* const Scroll = WidgetTree->ConstructWidget<UScrollBox>();
-	Column->AddChildToVerticalBox(Scroll)->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-	RowsBox = WidgetTree->ConstructWidget<UVerticalBox>();
-	Scroll->AddChild(RowsBox);
-	StatusText = MakeText(WidgetTree, FText::GetEmpty());
-	Column->AddChildToVerticalBox(StatusText)->SetPadding(FMargin(24.f, 8.f));
-	UHorizontalBox* const Footer = WidgetTree->ConstructWidget<UHorizontalBox>();
-	Column->AddChildToVerticalBox(Footer)->SetPadding(FMargin(18.f, 12.f));
-	ApplyButton = MakeButton(WidgetTree, LOCTEXT("Apply", "적용"));
-	UButton* const CancelButton = MakeButton(WidgetTree, LOCTEXT("Cancel", "취소"));
-	UButton* const DefaultsButton = MakeButton(WidgetTree, LOCTEXT("Defaults", "기본값 복원"));
-	UButton* const CloseButton = MakeButton(WidgetTree, LOCTEXT("Close", "닫기"));
-	for (UButton* Button : {ApplyButton.Get(), CancelButton, DefaultsButton, CloseButton})
-		Footer->AddChildToHorizontalBox(Button)->SetPadding(FMargin(8.f));
-	ApplyButton->OnClicked.AddUniqueDynamic(this, &ThisClass::ClickApply);
-	CancelButton->OnClicked.AddUniqueDynamic(this, &ThisClass::ClickCancel);
-	DefaultsButton->OnClicked.AddUniqueDynamic(this, &ThisClass::ClickDefaults);
-	CloseButton->OnClicked.AddUniqueDynamic(this, &ThisClass::ClickClose);
-	ConfirmBox = WidgetTree->ConstructWidget<UHorizontalBox>();
-	Column->AddChildToVerticalBox(ConfirmBox)->SetPadding(FMargin(18.f, 6.f));
-	UButton* const ConfirmSave = MakeButton(WidgetTree, LOCTEXT("ConfirmSave", "적용하고 닫기"));
-	UButton* const ConfirmDrop = MakeButton(WidgetTree, LOCTEXT("ConfirmDrop", "버리고 닫기"));
-	UButton* const ConfirmStay = MakeButton(WidgetTree, LOCTEXT("ConfirmStay", "계속 편집"));
-	for (UButton* Button : {ConfirmSave, ConfirmDrop, ConfirmStay})
-		ConfirmBox->AddChildToHorizontalBox(Button)->SetPadding(FMargin(8.f));
-	ConfirmSave->OnClicked.AddUniqueDynamic(this, &ThisClass::ConfirmApply);
-	ConfirmDrop->OnClicked.AddUniqueDynamic(this, &ThisClass::ConfirmDiscard);
-	ConfirmStay->OnClicked.AddUniqueDynamic(this, &ThisClass::ConfirmContinue);
-	ShowConfirm(false);
+	switch (Index)
+	{
+	case 0: return INVTEXT("GRAPHICS");
+	case 1: return INVTEXT("CONTROLS");
+	case 2: return INVTEXT("AUDIO");
+	default: return INVTEXT("CALIBRATION");
+	}
 }
 
 void UKnightSettingsWidget::Open()
@@ -222,6 +115,7 @@ void UKnightSettingsWidget::Open()
 		SetStatus(LOCTEXT("Unavailable", "설정을 불러오지 못했습니다."));
 		return;
 	}
+	HandleOpened();
 	SavedGraphics = Graphics->GetDisplayedGraphics();
 	DraftGraphics = SavedGraphics;
 	SavedPersonal = NewObject<UknightSharedSettings>(this);
@@ -247,7 +141,7 @@ void UKnightSettingsWidget::Open()
 							SavedKeys.Add(Entry.Key, Mapping.GetCurrentKey());
 							DraftKeys.Add(Entry.Key, Mapping.GetCurrentKey());
 							DefaultKeys.Add(Entry.Key, Mapping.GetDefaultKey());
-							KeyLabels.Add(Entry.Key, Mapping.GetDisplayName().IsEmpty() ? Entry.Key.ToString() : Mapping.GetDisplayName().ToString());
+							KeyLabels.Add(Entry.Key, Mapping.GetDisplayName().IsEmpty() ? FText::FromName(Entry.Key) : Mapping.GetDisplayName());
 							break;
 						}
 					}
@@ -255,11 +149,11 @@ void UKnightSettingsWidget::Open()
 			}
 		}
 	}
-	SetTab(0);
+	CurrentTab = 0;
+	HandleTabChanged();
 	SetStatus(Graphics->HasPendingGraphics()
 		? LOCTEXT("Pending", "그래픽 설정은 게임을 다시 시작하면 적용됩니다.") : FText::GetEmpty());
-	ShowConfirm(false);
-	RefreshApply();
+	ShowUnsavedPrompt(false);
 }
 
 void UKnightSettingsWidget::CopyPersonal(UknightSharedSettings* To, const UknightSharedSettings* From) const
@@ -281,6 +175,154 @@ void UKnightSettingsWidget::CopyPersonal(UknightSharedSettings* To, const Uknigh
 	To->VoiceVolume = From->VoiceVolume;
 }
 
+FString UKnightSettingsWidget::GetValue(FName Id, bool bSaved) const
+{
+	const FKnightGraphicsChoice& G = bSaved ? SavedGraphics : DraftGraphics;
+	const UknightSharedSettings* const P = bSaved ? SavedPersonal.Get() : DraftPersonal.Get();
+	if (Id == TEXT("WindowMode")) return WindowModeText(G.WindowMode);
+	if (Id == TEXT("Resolution")) return FString::Printf(TEXT("%dx%d"), G.Resolution.X, G.Resolution.Y);
+	if (Id == TEXT("FPS")) return FString::FromInt(G.FrameRateLimit);
+	if (Id == TEXT("VSync")) return OnOff(G.bVSync);
+	if (Id == TEXT("Preset")) return IsUniformQuality(G) ? QualityText(G.AntiAliasing) : QualityText(4);
+	if (Id == TEXT("AA")) return QualityText(G.AntiAliasing);
+	if (Id == TEXT("Shadows")) return QualityText(G.Shadows);
+	if (Id == TEXT("Textures")) return QualityText(G.Textures);
+	if (Id == TEXT("Effects")) return QualityText(G.Effects);
+	if (Id == TEXT("PostProcess")) return QualityText(G.PostProcess);
+	if (Id == TEXT("ViewDistance")) return QualityText(G.ViewDistance);
+	if (Id == TEXT("MotionBlur")) return OnOff(G.bMotionBlur);
+	if (const TMap<FName, FKey>& Keys = bSaved ? SavedKeys : DraftKeys; Keys.Contains(Id)) return Keys.FindRef(Id).GetFName().ToString();
+	if (!P) return FString();
+	if (Id == TEXT("MouseSensitivity")) return Number(P->MouseSensitivity * 100.f);
+	if (Id == TEXT("MouseAcceleration")) return OnOff(P->bMouseAcceleration);
+	if (Id == TEXT("Master")) return Number(P->MasterVolume * 100.f);
+	if (Id == TEXT("Music")) return Number(P->MusicVolume * 100.f);
+	if (Id == TEXT("SFX")) return Number(P->SFXVolume * 100.f);
+	if (Id == TEXT("Voice")) return Number(P->VoiceVolume * 100.f);
+	if (Id == TEXT("Subtitles")) return OnOff(P->bSubtitlesEnabled);
+	if (Id == TEXT("FOV")) return Number(80.f + P->FieldOfViewOffset);
+	if (Id == TEXT("Gamma")) return Number(P->Gamma * 100.f);
+	if (Id == TEXT("Brightness")) return Number(P->Brightness * 100.f);
+	return FString();
+}
+
+bool UKnightSettingsWidget::IsItemDirty(FName Id) const { return GetValue(Id, false) != GetValue(Id, true); }
+
+void UKnightSettingsWidget::GetTabSections(int32 Tab, TArray<FKnightSettingSection>& OutSections) const
+{
+	OutSections.Reset();
+	if (!DraftPersonal) return;
+
+	const auto AddSection = [&OutSections](const FText& Caption) -> FKnightSettingSection& {
+		FKnightSettingSection& Section = OutSections.AddDefaulted_GetRef();
+		Section.Caption = Caption;
+		return Section;
+	};
+
+	if (Tab == 0)
+	{
+		FKnightSettingSection& Display = AddSection(INVTEXT("DISPLAY"));
+		Display.Items.Add(Rotator(TEXT("WindowMode"), LOCTEXT("WindowMode", "화면 모드"),
+			LOCTEXT("WindowModeDesc", "전체 화면: 화면을 독점해 지연이 가장 적습니다.\n창 모드: 다른 창과 함께 씁니다.\n테두리 없는 창: 데스크톱 해상도로 전환이 빠릅니다."),
+			{TEXT("전체 화면"), TEXT("창 모드"), TEXT("테두리 없는 창")}));
+		TArray<FIntPoint> Resolutions;
+		UknightGameUserSettings::GetSupportedResolutions(Resolutions);
+		TArray<FString> ResolutionOptions;
+		for (const FIntPoint& Size : Resolutions) ResolutionOptions.Add(FString::Printf(TEXT("%dx%d"), Size.X, Size.Y));
+		FKnightSettingItem& Resolution = Display.Items.Add_GetRef(Rotator(TEXT("Resolution"), LOCTEXT("Resolution", "해상도"),
+			LOCTEXT("ResolutionDesc", "화면을 그리는 해상도입니다. 테두리 없는 창에서는 데스크톱 해상도를 씁니다."), ResolutionOptions));
+		Resolution.bEnabled = DraftGraphics.WindowMode != EWindowMode::WindowedFullscreen;
+		Display.Items.Add(Rotator(TEXT("FPS"), LOCTEXT("FPS", "FPS 제한"), LOCTEXT("FPSDesc", "초당 프레임 상한입니다. 모니터 주사율에 맞추면 안정적입니다."),
+			{TEXT("30"), TEXT("60"), TEXT("90"), TEXT("120"), TEXT("144"), TEXT("165"), TEXT("240")}));
+		Display.Items.Add(Toggle(TEXT("VSync"), INVTEXT("V-Sync"), LOCTEXT("VSyncDesc", "화면 찢어짐을 막습니다. 입력 지연이 조금 늘어납니다.")));
+
+		FKnightSettingSection& Quality = AddSection(INVTEXT("QUALITY"));
+		Quality.Items.Add(Rotator(TEXT("Preset"), LOCTEXT("Preset", "전체 품질"), LOCTEXT("PresetDesc", "아래 품질 항목을 한 번에 바꿉니다."), QualityOptions(true)));
+		Quality.Items.Add(Rotator(TEXT("AA"), LOCTEXT("AA", "안티앨리어싱"), LOCTEXT("AADesc", "물체 가장자리의 계단 현상을 줄입니다."), QualityOptions()));
+		Quality.Items.Add(Rotator(TEXT("Shadows"), LOCTEXT("Shadows", "그림자"), LOCTEXT("ShadowsDesc", "그림자의 선명도와 거리입니다. 성능 영향이 큽니다."), QualityOptions()));
+		Quality.Items.Add(Rotator(TEXT("Textures"), LOCTEXT("Textures", "텍스처"), LOCTEXT("TexturesDesc", "표면 이미지의 해상도입니다. 그래픽 메모리를 씁니다."), QualityOptions()));
+		Quality.Items.Add(Rotator(TEXT("Effects"), LOCTEXT("Effects", "이펙트"), LOCTEXT("EffectsDesc", "불꽃, 연기, 파편 같은 효과의 품질입니다."), QualityOptions()));
+		Quality.Items.Add(Rotator(TEXT("PostProcess"), LOCTEXT("Post", "후처리"), LOCTEXT("PostDesc", "블룸, 피사계 심도 같은 화면 효과의 품질입니다."), QualityOptions()));
+		Quality.Items.Add(Rotator(TEXT("ViewDistance"), LOCTEXT("View", "시야 거리"), LOCTEXT("ViewDesc", "먼 물체를 얼마나 자세히 그릴지 정합니다."), QualityOptions()));
+		Quality.Items.Add(Toggle(TEXT("MotionBlur"), LOCTEXT("Motion", "모션 블러"), LOCTEXT("MotionDesc", "빠르게 움직일 때 화면을 흐리게 합니다.")));
+		Quality.Note = LOCTEXT("GraphicsNote", "그래픽 설정은 게임을 다시 시작하면 적용됩니다.");
+	}
+	else if (Tab == 1)
+	{
+		FKnightSettingSection& Mouse = AddSection(INVTEXT("MOUSE"));
+		Mouse.Items.Add(Slider(TEXT("MouseSensitivity"), LOCTEXT("Sensitivity", "마우스 감도"), LOCTEXT("SensitivityDesc", "시점이 도는 속도입니다. 100이 기본값입니다."), 10.f, 500.f));
+		Mouse.Items.Add(Toggle(TEXT("MouseAcceleration"), LOCTEXT("Acceleration", "마우스 가속"), LOCTEXT("AccelerationDesc", "마우스를 빠르게 움직일수록 시점이 더 많이 돕니다.")));
+
+		FKnightSettingSection& Keys = AddSection(INVTEXT("KEY BINDINGS"));
+		TArray<FName> Names;
+		DraftKeys.GetKeys(Names);
+		Names.Sort(FNameLexicalLess());
+		for (const FName& Name : Names)
+		{
+			FKnightSettingItem Item;
+			Item.Id = Name;
+			Item.Label = KeyLabels.FindRef(Name);
+			Item.Description = LOCTEXT("KeyDesc", "Enter 또는 클릭 후 새 키를 누르세요. Esc를 누르면 취소합니다.");
+			Item.Type = EKnightSettingControl::Key;
+			Keys.Items.Add(Item);
+		}
+		Keys.Note = Names.IsEmpty()
+			? LOCTEXT("NoMappings", "변경 가능한 입력이 없습니다. Input Mapping Context의 Player Mappable 설정을 확인해 주세요.")
+			: LOCTEXT("ReservedEscape", "Esc는 메뉴 열기와 닫기에 예약되어 있습니다.");
+	}
+	else if (Tab == 2)
+	{
+		FKnightSettingSection& Volume = AddSection(INVTEXT("VOLUME"));
+		Volume.Items.Add(Slider(TEXT("Master"), LOCTEXT("Master", "마스터"), LOCTEXT("MasterDesc", "모든 소리의 크기입니다."), 0.f, 100.f));
+		Volume.Items.Add(Slider(TEXT("Music"), INVTEXT("BGM"), LOCTEXT("MusicDesc", "전투와 탐색 음악의 크기입니다."), 0.f, 100.f));
+		Volume.Items.Add(Slider(TEXT("SFX"), LOCTEXT("SFX", "효과음"), LOCTEXT("SFXDesc", "공격, 타격, 인터페이스 소리의 크기입니다."), 0.f, 100.f));
+		Volume.Items.Add(Slider(TEXT("Voice"), LOCTEXT("Voice", "음성"), LOCTEXT("VoiceDesc", "대사와 무전의 크기입니다."), 0.f, 100.f));
+		Volume.Note = LOCTEXT("VolumeNote", "조절하는 동안 바로 들립니다. 적용을 눌러야 저장됩니다.");
+
+		FKnightSettingSection& Subtitle = AddSection(INVTEXT("SUBTITLE"));
+		Subtitle.Items.Add(Toggle(TEXT("Subtitles"), LOCTEXT("Subtitles", "자막"), LOCTEXT("SubtitlesDesc", "대사를 화면 아래에 글자로 표시합니다.")));
+	}
+	else
+	{
+		FKnightSettingSection& View = AddSection(INVTEXT("VIEW"));
+		View.Items.Add(Slider(TEXT("FOV"), LOCTEXT("FOV", "시야각"), LOCTEXT("FOVDesc", "카메라가 보여 주는 범위입니다. 넓을수록 주변이 잘 보이지만 멀미가 날 수 있습니다."), 60.f, 110.f));
+
+		FKnightSettingSection& Light = AddSection(INVTEXT("BRIGHTNESS"));
+		Light.Items.Add(Slider(TEXT("Gamma"), LOCTEXT("Gamma", "감마"), LOCTEXT("GammaDesc", "중간 밝기를 조절합니다. 오른쪽 계조표의 칸이 모두 구별되게 맞추세요."), 80.f, 120.f));
+		Light.Items.Add(Slider(TEXT("Brightness"), LOCTEXT("Brightness", "밝기"), LOCTEXT("BrightnessDesc", "화면 전체의 밝기입니다."), 80.f, 120.f));
+	}
+
+	for (FKnightSettingSection& Section : OutSections)
+	{
+		for (FKnightSettingItem& Item : Section.Items)
+		{
+			Item.Value = GetValue(Item.Id, false);
+			Item.bDirty = IsItemDirty(Item.Id);
+		}
+	}
+}
+
+int32 UKnightSettingsWidget::GetDirtyCount() const
+{
+	// Every id GetValue knows except the preset, which only mirrors the quality rows. Listed rather than built from
+	// GetTabSections, which queries the display modes and runs on every slider step.
+	static const FName Ids[] = {
+		TEXT("WindowMode"), TEXT("Resolution"), TEXT("FPS"), TEXT("VSync"), TEXT("AA"), TEXT("Shadows"), TEXT("Textures"),
+		TEXT("Effects"), TEXT("PostProcess"), TEXT("ViewDistance"), TEXT("MotionBlur"), TEXT("MouseSensitivity"),
+		TEXT("MouseAcceleration"), TEXT("Master"), TEXT("Music"), TEXT("SFX"), TEXT("Voice"), TEXT("Subtitles"),
+		TEXT("FOV"), TEXT("Gamma"), TEXT("Brightness") };
+	int32 Count = 0;
+	for (const FName Id : Ids)
+	{
+		Count += IsItemDirty(Id) ? 1 : 0;
+	}
+	for (const TPair<FName, FKey>& Entry : DraftKeys)
+	{
+		Count += SavedKeys.FindRef(Entry.Key) != Entry.Value ? 1 : 0;
+	}
+	return Count;
+}
+
 bool UKnightSettingsWidget::IsPersonalDirty() const
 {
 	if (!SavedPersonal || !DraftPersonal) return false;
@@ -300,118 +342,16 @@ bool UKnightSettingsWidget::IsKeyDirty() const
 }
 
 bool UKnightSettingsWidget::IsDirty() const { return DraftGraphics != SavedGraphics || IsPersonalDirty() || IsKeyDirty(); }
-void UKnightSettingsWidget::RefreshApply() { if (ApplyButton) ApplyButton->SetIsEnabled(IsDirty()); }
-void UKnightSettingsWidget::SetStatus(const FText& Text) { if (StatusText) StatusText->SetText(Text); }
-void UKnightSettingsWidget::ShowConfirm(bool bShow) { if (ConfirmBox) ConfirmBox->SetVisibility(bShow ? ESlateVisibility::Visible : ESlateVisibility::Collapsed); }
-void UKnightSettingsWidget::FocusSettings() { SetKeyboardFocus(); }
 
-void UKnightSettingsWidget::AddRow(FName Id, const FText& Label, EKnightSettingControl Type,
-	const TArray<FString>& Options, const FString& Value, float Min, float Max)
-{
-	UKnightSettingRow* const Row = CreateWidget<UKnightSettingRow>(GetOwningPlayer(), UKnightSettingRow::StaticClass());
-	if (!Row || !RowsBox) return;
-	Row->Configure(this, Id, Label, Type, Options, Value, Min, Max);
-	RowsBox->AddChildToVerticalBox(Row)->SetPadding(FMargin(18.f, 2.f));
-	Rows.Add(Id, Row);
-}
-void UKnightSettingsWidget::AddCombo(FName Id, const FText& Label, const TArray<FString>& Options, const FString& Value)
-{ AddRow(Id, Label, EKnightSettingControl::Combo, Options, Value); }
-void UKnightSettingsWidget::AddSlider(FName Id, const FText& Label, float Value, float Min, float Max)
-{ AddRow(Id, Label, EKnightSettingControl::Slider, {}, FString::SanitizeFloat(Value), Min, Max); }
-void UKnightSettingsWidget::AddCheck(FName Id, const FText& Label, bool bChecked)
-{ AddRow(Id, Label, EKnightSettingControl::Check, {}, BoolText(bChecked)); }
-void UKnightSettingsWidget::AddKey(FName Id, const FText& Label, const FKey& Key)
-{ AddRow(Id, Label, EKnightSettingControl::Key, {}, Key.GetFName().ToString()); }
+void UKnightSettingsWidget::SetStatus(const FText& Text) { HandleStatusChanged(Text); }
+void UKnightSettingsWidget::FocusSettings() { HandleFocusRequested(); }
 
 void UKnightSettingsWidget::SetTab(int32 Index)
 {
-	CurrentTab = Index;
-	BuildTab();
-}
-
-void UKnightSettingsWidget::BuildTab()
-{
-	if (!RowsBox || !DraftPersonal) return;
-	RowsBox->ClearChildren();
-	Rows.Reset();
-	if (CurrentTab == 0)
-	{
-		const FString Mode = DraftGraphics.WindowMode == EWindowMode::Fullscreen ? TEXT("전체 화면")
-			: DraftGraphics.WindowMode == EWindowMode::Windowed ? TEXT("창모드") : TEXT("테두리 없는 창모드");
-		AddCombo(TEXT("WindowMode"), LOCTEXT("WindowMode", "화면 모드"),
-			{TEXT("전체 화면"), TEXT("창모드"), TEXT("테두리 없는 창모드")}, Mode);
-		TArray<FIntPoint> Resolutions;
-		UknightGameUserSettings::GetSupportedResolutions(Resolutions);
-		TArray<FString> Values;
-		for (const FIntPoint& Size : Resolutions) Values.Add(FString::Printf(TEXT("%dx%d"), Size.X, Size.Y));
-		AddCombo(TEXT("Resolution"), LOCTEXT("Resolution", "해상도"), Values,
-			FString::Printf(TEXT("%dx%d"), DraftGraphics.Resolution.X, DraftGraphics.Resolution.Y));
-		if (DraftGraphics.WindowMode == EWindowMode::WindowedFullscreen)
-		{
-			if (UKnightSettingRow* const Row = Rows.FindRef(TEXT("Resolution"))) Row->SetIsEnabled(false);
-			RowsBox->AddChildToVerticalBox(MakeText(WidgetTree, LOCTEXT("DesktopRes", "테두리 없는 창모드는 데스크톱 해상도를 사용합니다.")));
-		}
-		AddCombo(TEXT("FPS"), LOCTEXT("FPS", "FPS 제한"),
-			{TEXT("30"), TEXT("60"), TEXT("90"), TEXT("120"), TEXT("144"), TEXT("165"), TEXT("240")},
-			FString::FromInt(DraftGraphics.FrameRateLimit));
-		AddCheck(TEXT("VSync"), LOCTEXT("VSync", "V-Sync"), DraftGraphics.bVSync);
-		const int32 Q = DraftGraphics.AntiAliasing;
-		const bool bSame = DraftGraphics.Shadows == Q && DraftGraphics.Textures == Q && DraftGraphics.Effects == Q
-			&& DraftGraphics.PostProcess == Q && DraftGraphics.ViewDistance == Q;
-		AddCombo(TEXT("Preset"), LOCTEXT("Preset", "전체 품질"), QualityOptions(true), bSame ? QualityText(Q) : TEXT("사용자 지정"));
-		AddCombo(TEXT("AA"), LOCTEXT("AA", "안티앨리어싱"), QualityOptions(), QualityText(DraftGraphics.AntiAliasing));
-		AddCombo(TEXT("Shadows"), LOCTEXT("Shadows", "그림자"), QualityOptions(), QualityText(DraftGraphics.Shadows));
-		AddCombo(TEXT("Textures"), LOCTEXT("Textures", "텍스처"), QualityOptions(), QualityText(DraftGraphics.Textures));
-		AddCombo(TEXT("Effects"), LOCTEXT("Effects", "이펙트"), QualityOptions(), QualityText(DraftGraphics.Effects));
-		AddCombo(TEXT("PostProcess"), LOCTEXT("Post", "후처리"), QualityOptions(), QualityText(DraftGraphics.PostProcess));
-		AddCombo(TEXT("ViewDistance"), LOCTEXT("View", "시야 거리"), QualityOptions(), QualityText(DraftGraphics.ViewDistance));
-		AddCheck(TEXT("MotionBlur"), LOCTEXT("Motion", "모션 블러"), DraftGraphics.bMotionBlur);
-		RowsBox->AddChildToVerticalBox(MakeText(WidgetTree, LOCTEXT("Tessellation", "테셀레이션: 현재 렌더링 구성에서 지원하지 않습니다.")));
-	}
-	else if (CurrentTab == 1)
-	{
-		AddSlider(TEXT("MouseSensitivity"), LOCTEXT("Sensitivity", "마우스 감도"), DraftPersonal->MouseSensitivity * 100.f, 10.f, 500.f);
-		AddCheck(TEXT("MouseAcceleration"), LOCTEXT("Acceleration", "마우스 시점 가속"), DraftPersonal->bMouseAcceleration);
-		TArray<FName> Names;
-		DraftKeys.GetKeys(Names);
-		Names.Sort(FNameLexicalLess());
-		for (const FName& Name : Names)
-			AddKey(Name, FText::FromString(KeyLabels.FindRef(Name)), DraftKeys.FindRef(Name));
-		if (Names.IsEmpty()) RowsBox->AddChildToVerticalBox(MakeText(WidgetTree,
-			LOCTEXT("NoMappings", "변경 가능한 입력이 없습니다. Input Mapping Context의 Player Mappable 설정을 확인해 주세요.")));
-		RowsBox->AddChildToVerticalBox(MakeText(WidgetTree, LOCTEXT("ReservedEscape", "Esc는 설정 열기와 닫기에 예약되어 있습니다.")));
-	}
-	else if (CurrentTab == 2)
-	{
-		AddSlider(TEXT("Master"), LOCTEXT("Master", "마스터"), DraftPersonal->MasterVolume * 100.f, 0.f, 100.f);
-		AddSlider(TEXT("Music"), LOCTEXT("Music", "BGM"), DraftPersonal->MusicVolume * 100.f, 0.f, 100.f);
-		AddSlider(TEXT("SFX"), LOCTEXT("SFX", "SFX"), DraftPersonal->SFXVolume * 100.f, 0.f, 100.f);
-		AddSlider(TEXT("Voice"), LOCTEXT("Voice", "Voice"), DraftPersonal->VoiceVolume * 100.f, 0.f, 100.f);
-		AddCheck(TEXT("Subtitles"), LOCTEXT("Subtitles", "자막"), DraftPersonal->bSubtitlesEnabled);
-		UButton* const SubtitleExample = MakeButton(WidgetTree, LOCTEXT("SubtitleExample", "저장된 자막 설정 확인"));
-		RowsBox->AddChildToVerticalBox(SubtitleExample)->SetPadding(FMargin(18.f, 8.f));
-		SubtitleExample->OnClicked.AddUniqueDynamic(this, &ThisClass::ClickSubtitleExample);
-	}
-	else
-	{
-		AddSlider(TEXT("FOV"), LOCTEXT("FOV", "FOV"), 80.f + DraftPersonal->FieldOfViewOffset, 60.f, 110.f);
-		AddSlider(TEXT("Gamma"), LOCTEXT("Gamma", "감마"), DraftPersonal->Gamma * 100.f, 80.f, 120.f);
-		AddSlider(TEXT("Brightness"), LOCTEXT("Brightness", "밝기"), DraftPersonal->Brightness * 100.f, 80.f, 120.f);
-		UHorizontalBox* const Chart = WidgetTree->ConstructWidget<UHorizontalBox>();
-		RowsBox->AddChildToVerticalBox(Chart)->SetPadding(FMargin(20.f, 12.f));
-		for (int32 Step = 0; Step <= 10; ++Step)
-		{
-			UBorder* const Block = WidgetTree->ConstructWidget<UBorder>();
-			const float Gray = Step / 10.f;
-			Block->SetBrushColor(FLinearColor(Gray, Gray, Gray));
-			USizeBox* const Size = WidgetTree->ConstructWidget<USizeBox>();
-			Size->SetWidthOverride(40.f);
-			Size->SetHeightOverride(40.f);
-			Size->AddChild(Block);
-			Chart->AddChildToHorizontalBox(Size);
-		}
-		RowsBox->AddChildToVerticalBox(MakeText(WidgetTree, LOCTEXT("Chart", "어두운 칸부터 밝은 칸까지 구별되는지 확인하세요.")));
-	}
+	const int32 NewTab = (Index % TabCount + TabCount) % TabCount;
+	if (NewTab == CurrentTab) return;
+	CurrentTab = NewTab;
+	HandleTabChanged();
 }
 
 void UKnightSettingsWidget::ApplyPreset(int32 Quality)
@@ -422,37 +362,36 @@ void UKnightSettingsWidget::ApplyPreset(int32 Quality)
 	DraftGraphics.Effects = Quality;
 	DraftGraphics.PostProcess = Quality;
 	DraftGraphics.ViewDistance = Quality;
-	for (const FName Id : {FName(TEXT("AA")), FName(TEXT("Shadows")), FName(TEXT("Textures")),
-		FName(TEXT("Effects")), FName(TEXT("PostProcess")), FName(TEXT("ViewDistance"))})
-		if (UKnightSettingRow* const Row = Rows.FindRef(Id)) Row->SetValue(QualityText(Quality));
 }
-void UKnightSettingsWidget::RefreshPresetRows()
+
+void UKnightSettingsWidget::PreviewAudio(const UknightSharedSettings* Settings) const
 {
-	const int32 Q = DraftGraphics.AntiAliasing;
-	const bool bSame = DraftGraphics.Shadows == Q && DraftGraphics.Textures == Q && DraftGraphics.Effects == Q
-		&& DraftGraphics.PostProcess == Q && DraftGraphics.ViewDistance == Q;
-	if (UKnightSettingRow* const Row = Rows.FindRef(TEXT("Preset"))) Row->SetValue(bSame ? QualityText(Q) : TEXT("사용자 지정"));
+	const UGameInstance* const GameInstance = GetGameInstance();
+	UknightAudioSubsystem* const Audio = GameInstance ? GameInstance->GetSubsystem<UknightAudioSubsystem>() : nullptr;
+	if (!Audio || !Settings) return;
+	Audio->SetCategoryVolume(TEXT("Master"), Settings->MasterVolume);
+	Audio->SetCategoryVolume(TEXT("Music"), Settings->MusicVolume);
+	Audio->SetCategoryVolume(TEXT("SFX"), Settings->SFXVolume);
+	Audio->SetCategoryVolume(TEXT("Voice"), Settings->VoiceVolume);
 }
 
 void UKnightSettingsWidget::OptionEdited(FName Id, const FString& Value)
 {
 	if (!DraftPersonal) return;
-	const bool bOn = Value == TEXT("true");
+	const bool bOn = Value == OnText;
 	if (Id == TEXT("WindowMode"))
 	{
 		DraftGraphics.WindowMode = Value == TEXT("전체 화면") ? EWindowMode::Fullscreen
-			: Value == TEXT("창모드") ? EWindowMode::Windowed : EWindowMode::WindowedFullscreen;
+			: Value == TEXT("창 모드") ? EWindowMode::Windowed : EWindowMode::WindowedFullscreen;
 		if (DraftGraphics.WindowMode == EWindowMode::WindowedFullscreen)
 			if (const UknightGameUserSettings* const Settings = UknightGameUserSettings::Get()) DraftGraphics.Resolution = Settings->GetDesktopResolution();
-		if (UKnightSettingRow* const Row = Rows.FindRef(TEXT("Resolution")))
-		{
-			Row->SetIsEnabled(DraftGraphics.WindowMode != EWindowMode::WindowedFullscreen);
-			Row->SetValue(FString::Printf(TEXT("%dx%d"), DraftGraphics.Resolution.X, DraftGraphics.Resolution.Y));
-		}
 	}
-	else if (Id == TEXT("Resolution")) {
-		TArray<FString> Parts; Value.ParseIntoArray(Parts, TEXT("x"));
-		if (Parts.Num() == 2) DraftGraphics.Resolution = FIntPoint(FCString::Atoi(*Parts[0]), FCString::Atoi(*Parts[1])); }
+	else if (Id == TEXT("Resolution"))
+	{
+		TArray<FString> Parts;
+		Value.ParseIntoArray(Parts, TEXT("x"));
+		if (Parts.Num() == 2) DraftGraphics.Resolution = FIntPoint(FCString::Atoi(*Parts[0]), FCString::Atoi(*Parts[1]));
+	}
 	else if (Id == TEXT("FPS")) DraftGraphics.FrameRateLimit = FCString::Atoi(*Value);
 	else if (Id == TEXT("VSync")) DraftGraphics.bVSync = bOn;
 	else if (Id == TEXT("Preset")) { const int32 Q = QualityFromText(Value); if (Q < 4) ApplyPreset(Q); }
@@ -479,24 +418,26 @@ void UKnightSettingsWidget::OptionEdited(FName Id, const FString& Value)
 		if (!NewKey.IsValid() || NewKey == EKeys::Escape || NewKey.IsGamepadKey() || NewKey.IsTouch() || !NewKey.IsDigital())
 		{
 			SetStatus(LOCTEXT("InvalidKey", "이 키는 지정할 수 없습니다. Esc는 예약되어 있습니다."));
-			Rows.FindRef(Id)->SetValue(DraftKeys.FindRef(Id).GetFName().ToString());
+			HandleValuesChanged();
 			return;
 		}
 		for (const TPair<FName, FKey>& Other : DraftKeys)
 		{
 			if (Other.Key != Id && Other.Value == NewKey)
 			{
-				SetStatus(FText::Format(LOCTEXT("KeyConflict", "{0}에 이미 지정된 키입니다."), FText::FromName(Other.Key)));
-				Rows.FindRef(Id)->SetValue(DraftKeys.FindRef(Id).GetFName().ToString());
+				SetStatus(FText::Format(LOCTEXT("KeyConflict", "{0}에 이미 지정된 키입니다."), KeyLabels.FindRef(Other.Key)));
+				HandleValuesChanged();
 				return;
 			}
 		}
 		DraftKeys.Add(Id, NewKey);
 	}
-	if (Id == TEXT("AA") || Id == TEXT("Shadows") || Id == TEXT("Textures") || Id == TEXT("Effects")
-		|| Id == TEXT("PostProcess") || Id == TEXT("ViewDistance")) RefreshPresetRows();
+	if (Id == TEXT("Master") || Id == TEXT("Music") || Id == TEXT("SFX") || Id == TEXT("Voice"))
+	{
+		PreviewAudio(DraftPersonal);
+	}
 	SetStatus(FText::GetEmpty());
-	RefreshApply();
+	HandleValuesChanged();
 }
 
 void UKnightSettingsWidget::Apply()
@@ -520,6 +461,7 @@ void UKnightSettingsWidget::Apply()
 			return;
 		}
 		CopyPersonal(SavedPersonal, DraftPersonal);
+		Settings->ApplyAudioSettings();
 	}
 	if (IsKeyDirty())
 	{
@@ -552,17 +494,17 @@ void UKnightSettingsWidget::Apply()
 		SetStatus(LOCTEXT("GraphicsQueued", "그래픽 설정은 게임을 다시 시작하면 적용됩니다."));
 	}
 	else SetStatus(LOCTEXT("Saved", "설정을 저장했습니다."));
-	RefreshApply();
+	HandleValuesChanged();
 }
 
-void UKnightSettingsWidget::Cancel()
+void UKnightSettingsWidget::Revert()
 {
 	DraftGraphics = SavedGraphics;
 	CopyPersonal(DraftPersonal, SavedPersonal);
 	DraftKeys = SavedKeys;
-	BuildTab();
-	RefreshApply();
-	ShowConfirm(false);
+	PreviewAudio(SavedPersonal);
+	HandleTabChanged();
+	ShowUnsavedPrompt(false);
 	SetStatus(LOCTEXT("Discarded", "편집한 내용을 버렸습니다."));
 }
 
@@ -573,61 +515,48 @@ void UKnightSettingsWidget::RestoreDefaults()
 	UknightSharedSettings* const Defaults = NewObject<UknightSharedSettings>(this);
 	CopyPersonal(DraftPersonal, Defaults);
 	DraftKeys = DefaultKeys;
-	BuildTab();
-	RefreshApply();
-	SetStatus(LOCTEXT("DefaultsStaged", "기본값을 편집 값으로 불러왔습니다. 적용을 누르면 저장됩니다."));
+	PreviewAudio(DraftPersonal);
+	HandleTabChanged();
+	SetStatus(LOCTEXT("DefaultsStaged", "기본값을 불러왔습니다. 적용을 누르면 저장됩니다."));
 }
 
 void UKnightSettingsWidget::RequestClose()
 {
 	if (IsDirty())
 	{
-		ShowConfirm(true);
-		SetStatus(LOCTEXT("Unsaved", "저장하지 않은 변경 사항이 있습니다."));
+		ShowUnsavedPrompt(true);
+		SetStatus(LOCTEXT("Unsaved", "적용하지 않은 변경 사항이 있습니다."));
 	}
 	else CloseNow();
 }
-bool UKnightSettingsWidget::IsCapturingKey() const
+
+void UKnightSettingsWidget::ShowUnsavedPrompt(bool bShow)
 {
-	for (const TPair<FName, TObjectPtr<UKnightSettingRow>>& Entry : Rows)
-		if (Entry.Value && Entry.Value->IsCapturingKey()) return true;
-	return false;
+	bUnsavedPromptShown = bShow;
+	HandleUnsavedPrompt(bShow);
 }
-TSubclassOf<UKnightSettingsWidget> UKnightSettingsWidget::GetSharedWidgetClass()
+
+void UKnightSettingsWidget::CloseNow()
 {
-	if (UClass* const AssetClass = LoadClass<UKnightSettingsWidget>(nullptr, TEXT("/Game/Knight/UI/WBP_Settings.WBP_Settings_C")))
-		return AssetClass;
-	return StaticClass();
+	ShowUnsavedPrompt(false);
+	OnClosed.Broadcast();
 }
-void UKnightSettingsWidget::CloseNow() { OnClosed.Broadcast(); }
+
+void UKnightSettingsWidget::ConfirmApply() { Apply(); if (!IsDirty()) CloseNow(); }
+void UKnightSettingsWidget::ConfirmDiscard() { Revert(); CloseNow(); }
+void UKnightSettingsWidget::ConfirmContinue() { ShowUnsavedPrompt(false); SetStatus(FText::GetEmpty()); HandleFocusRequested(); }
+
 FReply UKnightSettingsWidget::NativeOnPreviewKeyDown(const FGeometry& Geometry, const FKeyEvent& Event)
 {
 	if (Event.GetKey() == EKeys::Escape)
 	{
 		if (IsCapturingKey()) return FReply::Unhandled();
-		RequestClose();
+		// A second Esc on the unsaved-changes prompt means "keep editing", not "close anyway".
+		if (bUnsavedPromptShown) ConfirmContinue();
+		else if (!HandleBackRequested()) RequestClose();
 		return FReply::Handled();
 	}
 	return Super::NativeOnPreviewKeyDown(Geometry, Event);
-}
-void UKnightSettingsWidget::TabGraphics() { SetTab(0); }
-void UKnightSettingsWidget::TabControls() { SetTab(1); }
-void UKnightSettingsWidget::TabAudio() { SetTab(2); }
-void UKnightSettingsWidget::TabDisplay() { SetTab(3); }
-void UKnightSettingsWidget::ClickApply() { Apply(); }
-void UKnightSettingsWidget::ClickCancel() { Cancel(); }
-void UKnightSettingsWidget::ClickDefaults() { RestoreDefaults(); }
-void UKnightSettingsWidget::ClickClose() { RequestClose(); }
-void UKnightSettingsWidget::ConfirmApply() { Apply(); if (!IsDirty()) CloseNow(); }
-void UKnightSettingsWidget::ConfirmDiscard() { Cancel(); CloseNow(); }
-void UKnightSettingsWidget::ConfirmContinue() { ShowConfirm(false); }
-void UKnightSettingsWidget::ClickSubtitleExample()
-{
-	const ULocalPlayer* const Player = GetOwningLocalPlayer();
-	UknightSettingsSubsystem* const Settings = Player ? Player->GetSubsystem<UknightSettingsSubsystem>() : nullptr;
-	SetStatus(Settings && Settings->AreSubtitlesEnabled()
-		? LOCTEXT("SubtitleOnExample", "[자막 예시] 기사의 여정이 시작됩니다.")
-		: LOCTEXT("SubtitleOffExample", "자막이 꺼져 있어 예시를 표시하지 않습니다."));
 }
 
 #undef LOCTEXT_NAMESPACE

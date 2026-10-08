@@ -54,7 +54,11 @@ void UKnightTitleMenuWidget::NativeConstruct()
 
 void UKnightTitleMenuWidget::NativeDestruct()
 {
-	if (SettingsWidget) SettingsWidget->OnClosed.RemoveDynamic(this, &ThisClass::HandleSettingsClosed);
+	if (SettingsWidget)
+	{
+		SettingsWidget->OnClosed.RemoveDynamic(this, &ThisClass::HandleSettingsClosed);
+		SettingsWidget->RemoveFromParent();
+	}
 	if (UknightSaveSubsystem* const Save = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr)
 	{
 		Save->OnSaveFinished.RemoveDynamic(this, &ThisClass::HandleSaveFinished);
@@ -91,7 +95,13 @@ bool UKnightTitleMenuWidget::ApplyPage(EKnightTitlePage NewPage, bool bAllowDuri
 	if (NewPage == EKnightTitlePage::Settings)
 	{
 		EnsureSettingsWidget();
+		// The settings screen is laid out for the whole screen, so it goes over the menu rather than into Panel_Settings.
+		if (SettingsWidget && !SettingsWidget->IsInViewport()) SettingsWidget->AddToViewport(50);
 		if (SettingsWidget) SettingsWidget->Open();
+	}
+	else if (SettingsWidget && SettingsWidget->IsInViewport())
+	{
+		SettingsWidget->RemoveFromParent();
 	}
 	UpdateBackVisibility(NewPage == EKnightTitlePage::Home || NewPage == EKnightTitlePage::Settings);
 	RefreshTravelControls();
@@ -121,8 +131,8 @@ void UKnightTitleMenuWidget::EnsureSettingsWidget()
 	if (SettingsWidget || !Panel_Settings || !GetOwningPlayer()) return;
 	SettingsWidget = CreateWidget<UKnightSettingsWidget>(GetOwningPlayer(), UKnightSettingsWidget::GetSharedWidgetClass());
 	if (!SettingsWidget) return;
+	// The page stays as the menu's "settings" state but shows nothing; its placeholder would show through.
 	Panel_Settings->ClearChildren();
-	Panel_Settings->AddChild(SettingsWidget);
 	SettingsWidget->OnClosed.AddUniqueDynamic(this, &ThisClass::HandleSettingsClosed);
 }
 
