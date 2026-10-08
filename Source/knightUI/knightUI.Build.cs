@@ -18,6 +18,7 @@ public class knightUI : ModuleRules
 			"CommonUI",
 			"CommonInput",
 			"ModelViewViewModel",
+			"FieldNotification",
 			"GameplayTags",
 			"GameplayAbilities",
 			"UIExtension",
