@@ -15,11 +15,19 @@
 //   knight.Monster.FreezeAI [0|1]                     모든 몬스터의 StateTree를 멈추거나 재개한다. 인자가 없으면 토글한다
 //   knight.Monster.Status [all]                       속성, 상태 태그, 타깃, 부위를 로그로 출력한다
 //   knight.Player.Invulnerable [0|1]                  플레이어에 State.Invulnerable을 건다. 인자가 없으면 토글한다
+//   knight.Monster.Spawn <Name|/Game/Path> [Distance] 플레이어 앞 지면에 몬스터를 스폰한다 (Janyeol 또는 BP_Janyeol)
+//   knight.Monster.Revive [all]                       죽은 몬스터를 지우고 그 자리에 같은 몬스터를 새로 스폰한다
+//
+// 스폰·부활한 몬스터는 레이드의 배치 몬스터 바인딩(클리어 판정)에 들어가지 않는다. 테스트 전용이다.
 //
 // 부위 인자는 전체 태그(Monster.Part.Test.Head)나 마지막 구간(Head)과 대소문자 구분 없이 비교한다.
 
 #include "AIController.h"
 #include "AbilitySystemComponent.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "Components/CapsuleComponent.h"
+#include "Engine/Blueprint.h"
+#include "Misc/PackageName.h"
 #include "AbilitySystemGlobals.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
 #include "AbilitySystem/Attributes/knightMonsterAttributeSet.h"
@@ -494,6 +502,161 @@ namespace knightMonsterCheats
 		UE_LOG(LogknightDev, Display, TEXT("knight.Player.Invulnerable: %d (hits on the player now resolve as Evaded)."), bWant ? 1 : 0);
 	}
 
+	// knight.Monster.Spawn <Name|/Game/Path> [Distance]
+
+	/** BP 경로, 또는 /Game 아래 몬스터 Blueprint 이름(BP_ 생략 가능, 대소문자 무시). */
+	static UClass* FindMonsterClass(const FString& Name)
+	{
+		if (Name.StartsWith(TEXT("/")))
+		{
+			const FString ClassPath = Name.EndsWith(TEXT("_C")) ? Name : Name + TEXT(".") + FPackageName::GetShortName(Name) + TEXT("_C");
+			UClass* const Class = LoadClass<AknightMonsterCharacterBase>(nullptr, *ClassPath);
+			if (!Class)
+			{
+				UE_LOG(LogknightDev, Warning, TEXT("knight.Monster.Spawn: %s is not a monster Blueprint."), *Name);
+			}
+			return Class;
+		}
+
+		const IAssetRegistry& Registry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+		FARFilter Filter;
+		Filter.ClassPaths.Add(UBlueprint::StaticClass()->GetClassPathName());
+		Filter.PackagePaths.Add(TEXT("/Game"));
+		Filter.bRecursivePaths = true;
+		TArray<FAssetData> Assets;
+		Registry.GetAssets(Filter, Assets);
+
+		TArray<FString> Known;
+		for (const FAssetData& Asset : Assets)
+		{
+			const FString AssetName = Asset.AssetName.ToString();
+			if (AssetName.Equals(Name, ESearchCase::IgnoreCase) || AssetName.Equals(TEXT("BP_") + Name, ESearchCase::IgnoreCase))
+			{
+				// 쿡 빌드에는 UBlueprint가 없으므로 생성 클래스를 경로로 로드한다.
+				const FSoftClassPath ClassPath(Asset.PackageName.ToString() + TEXT(".") + AssetName + TEXT("_C"));
+				UClass* const Class = ClassPath.TryLoadClass<AknightMonsterCharacterBase>();
+				if (Class && !Class->HasAnyClassFlags(CLASS_Abstract))
+				{
+					return Class;
+				}
+			}
+			// 안내 목록에는 몬스터 Blueprint만 넣는다(부모 클래스 태그로 판별, 로드하지 않음).
+			if (Asset.GetTagValueRef<FString>(FBlueprintTags::NativeParentClassPath).Contains(TEXT("knightMonsterCharacterBase")))
+			{
+				Known.Add(AssetName);
+			}
+		}
+		UE_LOG(LogknightDev, Warning, TEXT("knight.Monster.Spawn: no monster Blueprint named '%s'. Monsters: %s"), *Name,
+			Known.IsEmpty() ? TEXT("(none)") : *FString::Join(Known, TEXT(" ")));
+		return nullptr;
+	}
+
+	/** Location 아래(위로 넉넉히 올려서) 지면을 찾아 캡슐이 바닥에 서는 높이를 돌려준다. 못 찾으면 Location 그대로. */
+	static FVector PlaceOnGround(UWorld* World, const FVector& Location, float CapsuleHalfHeight)
+	{
+		// 폰이 아니라 지형·정적 메시에만 맞춘다.
+		const FCollisionObjectQueryParams ObjectParams(ECC_WorldStatic);
+		const FCollisionQueryParams Params(SCENE_QUERY_STAT(knightDevMonsterSpawn), false);
+		FHitResult Hit;
+		const FVector Start = Location + FVector(0.f, 0.f, CapsuleHalfHeight * 2.f + 500.f);
+		const FVector End = Location - FVector(0.f, 0.f, 5000.f);
+		if (World->LineTraceSingleByObjectType(Hit, Start, End, ObjectParams, Params))
+		{
+			return Hit.ImpactPoint + FVector(0.f, 0.f, CapsuleHalfHeight + 5.f);
+		}
+		return Location;
+	}
+
+	static AknightMonsterCharacterBase* SpawnMonster(UWorld* World, UClass* Class, const FVector& GroundLocation, const FRotator& Rotation)
+	{
+		const AknightMonsterCharacterBase* const Defaults = Class->GetDefaultObject<AknightMonsterCharacterBase>();
+		const float HalfHeight = Defaults->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+		// AutoPossessAI(PlacedInWorldOrSpawned)가 AI 컨트롤러를 붙인다.
+		return World->SpawnActor<AknightMonsterCharacterBase>(Class, PlaceOnGround(World, GroundLocation, HalfHeight), Rotation, Params);
+	}
+
+	static void SpawnCommand(const TArray<FString>& Args, UWorld* World)
+	{
+		if (!Args.IsValidIndex(0))
+		{
+			UE_LOG(LogknightDev, Warning, TEXT("Usage: knight.Monster.Spawn <Name|/Game/Path> [Distance]"));
+			return;
+		}
+		UClass* const Class = FindMonsterClass(Args[0]);
+		const APawn* const Player = GetPlayerPawn(World);
+		if (!Class || !Player)
+		{
+			if (Class)
+			{
+				UE_LOG(LogknightDev, Warning, TEXT("knight.Monster.Spawn: no player pawn to spawn in front of."));
+			}
+			return;
+		}
+		// 기본 거리: 몬스터 캡슐 반지름 두 배 + 여유. 큰 몬스터가 플레이어와 겹쳐 생기지 않게 한다.
+		const float Radius = Class->GetDefaultObject<AknightMonsterCharacterBase>()->GetCapsuleComponent()->GetScaledCapsuleRadius();
+		const float Distance = Args.IsValidIndex(1) ? FCString::Atof(*Args[1]) : Radius * 2.f + 600.f;
+		const FVector Forward = Player->GetActorForwardVector().GetSafeNormal2D();
+		const FVector Location = Player->GetActorLocation() + Forward * Distance;
+		AknightMonsterCharacterBase* const Monster = SpawnMonster(World, Class, Location, (-Forward).Rotation());
+		UE_LOG(LogknightDev, Display, TEXT("knight.Monster.Spawn: %s at %s (%.0f cm in front)."),
+			Monster ? *Monster->GetName() : TEXT("FAILED"), Monster ? *Monster->GetActorLocation().ToCompactString() : TEXT("-"), Distance);
+	}
+
+	// knight.Monster.Revive [all]
+
+	static void ReviveCommand(const TArray<FString>& Args, UWorld* World)
+	{
+		const bool bAll = Args.IsValidIndex(0) && Args[0].Equals(TEXT("all"), ESearchCase::IgnoreCase);
+		const APawn* const Player = GetPlayerPawn(World);
+
+		TArray<AknightMonsterCharacterBase*> Dead;
+		for (TActorIterator<AknightMonsterCharacterBase> It(World); It; ++It)
+		{
+			if (IsValid(*It) && It->IsDead())
+			{
+				Dead.Add(*It);
+			}
+		}
+		if (Dead.IsEmpty())
+		{
+			UE_LOG(LogknightDev, Warning, TEXT("knight.Monster.Revive: no dead monster in this world."));
+			return;
+		}
+		if (!bAll && Player)
+		{
+			// 기본은 플레이어에게 가장 가까운 시체 하나.
+			const FVector From = Player->GetActorLocation();
+			Dead.Sort([&From](const AknightMonsterCharacterBase& A, const AknightMonsterCharacterBase& B)
+				{ return FVector::DistSquared(From, A.GetActorLocation()) < FVector::DistSquared(From, B.GetActorLocation()); });
+			Dead.SetNum(1);
+		}
+
+		for (AknightMonsterCharacterBase* const Corpse : Dead)
+		{
+			// 부위 파괴·죽음 어빌리티·꺼진 감지를 하나씩 되돌리는 대신 새 몬스터로 바꾼다. 시체를 먼저 지워 스폰 위치가 막히지 않게 한다.
+			UClass* const Class = Corpse->GetClass();
+			const FVector Location = Corpse->GetActorLocation();
+			const FRotator Rotation(0.f, Corpse->GetActorRotation().Yaw, 0.f);
+			const FString OldName = Corpse->GetName();
+			if (AController* const Controller = Corpse->GetController())
+			{
+				Controller->Destroy();
+			}
+			Corpse->Destroy();
+			AknightMonsterCharacterBase* const Monster = SpawnMonster(World, Class, Location, Rotation);
+			UE_LOG(LogknightDev, Display, TEXT("knight.Monster.Revive: %s -> %s (not bound to the raid clear check)."),
+				*OldName, Monster ? *Monster->GetName() : TEXT("FAILED"));
+		}
+	}
+
+	static FAutoConsoleCommandWithWorldAndArgs SpawnCmd(TEXT("knight.Monster.Spawn"),
+		TEXT("knight.Monster.Spawn <Name|/Game/Path> [Distance]. Spawns a monster Blueprint (e.g. Janyeol) on the ground in front of the player."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&SpawnCommand), ECVF_Cheat);
+	static FAutoConsoleCommandWithWorldAndArgs ReviveCmd(TEXT("knight.Monster.Revive"),
+		TEXT("knight.Monster.Revive [all]. Replaces the nearest dead monster (or all) with a fresh one at the same spot."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&ReviveCommand), ECVF_Cheat);
 	static FAutoConsoleCommandWithWorldAndArgs HitCmd(TEXT("knight.Monster.Hit"),
 		TEXT("knight.Monster.Hit [Damage=50] [Part] [Poise=10]. One weapon-style hit on the target monster through ApplyMeleeHit."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&HitCommand), ECVF_Cheat);
