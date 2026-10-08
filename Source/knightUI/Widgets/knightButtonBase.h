@@ -48,6 +48,7 @@ protected:
 	virtual void NativeOnCurrentTextStyleChanged() override;
 	virtual void HandleFocusReceived() override;
 	virtual void HandleFocusLost() override;
+	virtual void NativeOnAddedToFocusPath(const FFocusEvent& InFocusEvent) override;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Knight|Button", meta=(ExposeOnSpawn=true))
 	FText ButtonText;

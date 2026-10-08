@@ -1,6 +1,8 @@
 #include "Widgets/knightButtonBase.h"
 
+#include "CommonButtonBase.h"
 #include "CommonTextBlock.h"
+#include "Framework/Application/SlateApplication.h"
 
 void UknightButtonBase::SetButtonText(const FText& InText)
 {
@@ -95,6 +97,23 @@ void UknightButtonBase::HandleFocusReceived()
 	Super::HandleFocusReceived();
 	bFocusedVisual = true;
 	RefreshTargets();
+}
+
+void UknightButtonBase::NativeOnAddedToFocusPath(const FFocusEvent& InFocusEvent)
+{
+	Super::NativeOnAddedToFocusPath(InFocusEvent);
+
+	// The style plays the hover sound for the mouse only. Keyboard navigation gets the same sound here; focus set
+	// by code (a screen opening) or by a click stays silent, so nothing plays twice.
+	if (InFocusEvent.GetCause() != EFocusCause::Navigation || IsHovered())
+	{
+		return;
+	}
+	if (const UCommonButtonStyle* const ButtonStyle = GetStyleCDO())
+	{
+		const FSlateSound& Sound = GetLocked() && ButtonStyle->LockedHoveredSlateSound ? ButtonStyle->LockedHoveredSlateSound.Sound : ButtonStyle->HoveredSlateSound;
+		FSlateApplication::Get().PlaySound(Sound);
+	}
 }
 
 void UknightButtonBase::HandleFocusLost()
