@@ -29,6 +29,7 @@ public class knightUI : ModuleRules
 			"Slate",
 			"SlateCore",
 			"InputCore",
+			"knightInventory",
 			"DeveloperSettings"
 		});
 	}
