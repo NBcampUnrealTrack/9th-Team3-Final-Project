@@ -16,9 +16,6 @@ namespace
 {
 	// 이동 캔슬 검사 간격. 짧게 뗐다 누르는 입력도 놓치지 않게 짧게 둔다. (2026-10-07 0.05 → 0.02)
 	constexpr float MoveCancelCheckInterval = 0.02f;
-
-	// 누른 채로 방향이 이 각도보다 많이 바뀌면 새 누름으로 본다. W → W+D가 45도라 그보다 작게 둔다.
-	constexpr float FreshMovePressAngleDegrees = 30.f;
 }
 
 UknightGameplayAbility_MeleeAttack::UknightGameplayAbility_MeleeAttack(const FObjectInitializer& ObjectInitializer)
@@ -29,6 +26,18 @@ UknightGameplayAbility_MeleeAttack::UknightGameplayAbility_MeleeAttack(const FOb
 	SetAssetTags(FGameplayTagContainer(knightGameplayTags::Ability_Attack));
 	ActivationBlockedTags.AddTag(knightGameplayTags::State_Dead);
 	ActivationBlockedTags.AddTag(knightGameplayTags::State_HitReact);
+	// 한 번 휘두를 때 쓰는 행동 에너지. 2026-10-09 임시값(최대 100, 회복 초당 25 기준), 공격 BP마다 조절.
+	StaminaCost = 10.f;
+}
+
+void UknightGameplayAbility_MeleeAttack::ApplyCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayAbilityActivationInfo ActivationInfo) const
+{
+	// 검을 뽑기만 하는 누름(bAttackAfterDraw가 꺼져 있을 때)은 행동 에너지를 쓰지 않는다. (2026-10-09)
+	if (!bDrawOnlyActivation)
+	{
+		Super::ApplyCost(Handle, ActorInfo, ActivationInfo);
+	}
 }
 
 void UknightGameplayAbility_MeleeAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
@@ -42,11 +51,15 @@ void UknightGameplayAbility_MeleeAttack::ActivateAbility(const FGameplayAbilityS
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
+	bDrawOnlyActivation = DrawMontage && !bAttackAfterDraw && !IsWeaponInHand();
 	if (!CommitAbility(Handle, ActorInfo, ActivationInfo))
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
+
+	// 방향키를 누른 채 공격하면 그 방향을 바로 보고 공격한다(락온 중 제외). 자동 조준(소프트 타깃)은 원래 같은 입력 방향으로 적을 찾는다. (2026-10-08)
+	FaceMoveInputDirection();
 
 	bAttackStarted = false;
 	if (DrawMontage && !IsWeaponInHand())
@@ -176,9 +189,10 @@ void UknightGameplayAbility_MeleeAttack::StartAttack()
 	if (bCancelRecoveryOnMove)
 	{
 		// 공격 시작 때 누르고 있던 방향은 새 누름이 아니다.
-		bFreshMovePress = false;
-		const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
-		MoveInputBaseline = Character ? GetLocalMoveInput(*Character) : FVector2D::ZeroVector;
+		if (const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
+		{
+			MovePress.Reset(*Character);
+		}
 		if (UWorld* const World = GetWorld())
 		{
 			World->GetTimerManager().SetTimer(MoveCancelTimer, this, &ThisClass::CheckMoveCancel, MoveCancelCheckInterval, true);
@@ -195,7 +209,7 @@ void UknightGameplayAbility_MeleeAttack::CheckMoveCancel()
 		return;
 	}
 	// 캔슬 창 밖에서도 새 누름은 계속 추적한다 → 창이 열리기 전에 다시 눌러 둔 것도 창이 열리면 캔슬한다. (2026-10-07)
-	UpdateFreshMovePress(*Character);
+	MovePress.Update(*Character);
 	if (!ASC->HasMatchingGameplayTag(knightGameplayTags::Window_Cancel))
 	{
 		return;
@@ -205,7 +219,7 @@ void UknightGameplayAbility_MeleeAttack::CheckMoveCancel()
 		return;
 	}
 	// 공격 전부터 누르고 있던 방향키로는 캔슬하지 않는다. 새로 누른 이동 입력만 캔슬한다.
-	if (!bFreshMovePress || Character->GetLastMovementInputVector().IsNearlyZero())
+	if (!MovePress.HasFreshPress() || Character->GetLastMovementInputVector().IsNearlyZero())
 	{
 		return;
 	}
@@ -227,38 +241,6 @@ void UknightGameplayAbility_MeleeAttack::CheckMoveCancel()
 	if (IsActive())
 	{
 		EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, false);
-	}
-}
-
-FVector2D UknightGameplayAbility_MeleeAttack::GetLocalMoveInput(const ACharacter& Character)
-{
-	// 월드 기준 입력을 컨트롤 회전(yaw) 기준으로 되돌린다. 공격 중 카메라를 돌려도 같은 키는 같은 방향으로 읽힌다.
-	const FRotator YawRotation(0.f, Character.GetControlRotation().Yaw, 0.f);
-	const FVector LocalInput = YawRotation.UnrotateVector(Character.GetLastMovementInputVector());
-	return FVector2D(LocalInput.X, LocalInput.Y);
-}
-
-void UknightGameplayAbility_MeleeAttack::UpdateFreshMovePress(const ACharacter& Character)
-{
-	const FVector2D Input = GetLocalMoveInput(Character);
-	if (Input.IsNearlyZero())
-	{
-		// 키를 뗐다 → 다음에 들어오는 입력은 새 누름.
-		MoveInputBaseline = FVector2D::ZeroVector;
-		return;
-	}
-	if (MoveInputBaseline.IsNearlyZero())
-	{
-		// 뗐다가 다시 누름 (또는 공격 시작 때 안 누르고 있다가 누름).
-		bFreshMovePress = true;
-		MoveInputBaseline = Input;
-		return;
-	}
-	// 누른 채로 다른 키를 더 누르거나 바꿈(W → W+D, W → D 등): 처음 방향에서 크게 바뀌면 새 누름.
-	const float MinDot = FMath::Cos(FMath::DegreesToRadians(FreshMovePressAngleDegrees));
-	if (FVector2D::DotProduct(Input.GetSafeNormal(), MoveInputBaseline.GetSafeNormal()) < MinDot)
-	{
-		bFreshMovePress = true;
 	}
 }
 

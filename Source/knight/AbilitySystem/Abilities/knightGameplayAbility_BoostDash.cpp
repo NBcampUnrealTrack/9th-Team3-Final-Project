@@ -26,6 +26,9 @@ UknightGameplayAbility_BoostDash::UknightGameplayAbility_BoostDash(const FObject
 
 	// 경직 중 대시 캔슬: 실행 중에 다시 발동되면 지금 대시를 끝내고 새로 시작한다. 언제 허용할지는 CanActivateAbility가 정한다.
 	bRetriggerInstancedAbility = true;
+
+	// 퀵스텝은 행동 에너지가 비용만큼 있어야 나간다(2026-10-09 사용자 결정). 비용 값은 BP의 StaminaCost(전에는 Cost GE).
+	bRequireFullStaminaCost = true;
 }
 
 float UknightGameplayAbility_BoostDash::GetMechAttributeValue(const FGameplayAttribute& Attribute, float Fallback) const

@@ -64,7 +64,29 @@ public:
 		const FGameplayTagContainer* SourceTags = nullptr, const FGameplayTagContainer* TargetTags = nullptr,
 		FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
 
+	/** 기본 비용(Cost GE)에 더해 StaminaCost만큼 행동 에너지가 있는지 본다. (2026-10-09) */
+	virtual bool CheckCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+		FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
+
+	/** 기본 비용(Cost GE)에 더해 StaminaCost만큼 행동 에너지를 쓴다. CommitAbility에서 불린다. (2026-10-09) */
+	virtual void ApplyCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+		const FGameplayAbilityActivationInfo ActivationInfo) const override;
+
 protected:
+	/**
+	 * 발동할 때(CommitAbility) 쓰는 행동 에너지(BoostGauge, 화면 이름 행동 에너지/스테미너). 0이면 소모 없음. (2026-10-09)
+	 * 어빌리티 BP에서 행동마다 조절한다. 행동 에너지가 없는 액터(몬스터)는 무시한다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Knight|Cost", meta=(ClampMin=0))
+	float StaminaCost = 0.f;
+
+	/**
+	 * 켜면 StaminaCost만큼 남아 있어야 발동한다(퀵스텝). 끄면(기본) 조금이라도 남아 있으면 발동하고 0까지만 깎는다.
+	 * (2026-10-09 사용자 결정: 공격·가드는 조금이라도 있으면 발동, 퀵스텝은 전부 있어야 발동)
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Knight|Cost")
+	bool bRequireFullStaminaCost = false;
+
 	virtual void OnGiveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec) override;
 
 	/** Adds the tag relationship mapping's required and blocked tags to the engine checks. */
@@ -78,6 +100,12 @@ protected:
 	 * 메카 속성 세트가 없는 액터(몬스터 등)는 1.0.
 	 */
 	float GetActionSpeed() const;
+
+	/**
+	 * 락온 중이 아니고 이동 입력이 있으면 아바타를 그 방향으로 즉시 돌린다. 돌렸으면 true. (2026-10-08)
+	 * 퀵스텝과 같은 규칙으로, 방향키를 누른 채 공격·가드를 시작하면 그 방향을 보고 나가게 한다.
+	 */
+	bool FaceMoveInputDirection() const;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Knight|Ability Activation")
 	EknightAbilityActivationPolicy ActivationPolicy = EknightAbilityActivationPolicy::OnInputTriggered;

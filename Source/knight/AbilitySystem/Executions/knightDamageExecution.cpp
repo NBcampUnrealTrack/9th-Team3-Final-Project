@@ -98,7 +98,8 @@ void UknightDamageExecution::Execute_Implementation(const FGameplayEffectCustomE
 	EvaluateParams.TargetTags = Spec.CapturedTargetTags.GetAggregatedTags();
 
 	const FGameplayTagContainer* const TargetTags = EvaluateParams.TargetTags;
-	if (TargetTags && (TargetTags->HasTag(knightGameplayTags::State_Invulnerable) || TargetTags->HasTag(knightGameplayTags::State_Parrying)))
+	// 퍼펙트 가드(State.Parrying)는 여기서 보지 않는다. ApplyMeleeHit이 이펙트 적용 전에 판정한다(헤더 주석 참고).
+	if (TargetTags && TargetTags->HasTag(knightGameplayTags::State_Invulnerable))
 	{
 		return;
 	}

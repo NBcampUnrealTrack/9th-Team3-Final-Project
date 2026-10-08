@@ -66,9 +66,11 @@ public:
 
 	/**
 	 * 이동 입력으로 가속하지 못하게 막는다. 입력 값은 그대로 들어오므로 방향은 읽을 수 있고,
-	 * 가속이 0이라 지금 속도에서 제동으로 미끄러지며 멈춘다. 퀵스텝 경직에서 쓴다.
+	 * 가속이 0이라 지금 속도에서 제동으로 미끄러지며 멈춘다(이동 방향으로 몸도 돌지 않는다). 퀵스텝 경직·가드에서 쓴다.
+	 * (2026-10-08) 잠금 요청 수를 센다: true로 켠 쪽이 반드시 false로 한 번 끈다. 퀵스텝 경직 중 가드를 올리는 것처럼
+	 * 겹쳐도 먼저 끝난 쪽이 다른 쪽의 잠금을 풀지 않게 하려는 것.
 	 */
-	void SetMoveInputLocked(bool bLocked) { bMoveInputLocked = bLocked; }
+	void SetMoveInputLocked(bool bLocked) { MoveInputLockCount = FMath::Max(0, MoveInputLockCount + (bLocked ? 1 : -1)); }
 
 	virtual float GetMaxSpeed() const override;
 	virtual float GetMaxAcceleration() const override;
@@ -104,5 +106,5 @@ protected:
 
 private:
 	bool bWantsToRun = false;
-	bool bMoveInputLocked = false;
+	int32 MoveInputLockCount = 0;
 };

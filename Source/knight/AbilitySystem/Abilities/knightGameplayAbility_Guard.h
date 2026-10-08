@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "AbilitySystem/Abilities/knightGameplayAbility.h"
+#include "Input/knightMovePressTracker.h"
 #include "knightGameplayAbility_Guard.generated.h"
 
 class UAnimMontage;
@@ -20,6 +21,22 @@ class UGameplayEffect;
  * can start the counter.
  *
  * (2026-10-08) 행동 속도(ActionSpeed): GuardMontage는 행동 속도 배속으로 재생한다. ParryWindow는 초 단위 그대로.
+ *
+ * (2026-10-08) 퍼펙트 가드 = 이 클래스의 패리(Parry). 태그·이벤트 이름은 그대로 Parry를 쓴다.
+ *   판정 시간: 메카 속성 PerfectGuardWindow(기본 0.25초, 파츠로 변경 가능)를 가드를 누를 때 읽는다. 메카 속성이 없으면 ParryWindow.
+ *   판정: 패리 가능한 공격(bCanBeParried)을 가드 범위(정면) 안에서 막았을 때만 (UknightCombatLibrary::ApplyMeleeHit). 그 외는 일반 가드·피격.
+ *   결과: 받는 피해 0 + 반격 창(위) + 공격한 적에게 그로기 피해
+ *         그로기 = (PerfectGuardPoiseDamage + 내 공격력 x PerfectGuardPoiseMotionValue / 100) x 내 경직치(StaggerPower)
+ *         피해 실행(UknightDamageExecution)을 그대로 거치므로 적의 그로기가 0이 되면 평소처럼 그로기 반응이 나온다.
+ *   ParrySucceededEventTag가 비어 있으면 반격 창과 그로기 피해 둘 다 없다(같은 이벤트로 받는다).
+ *   키를 떼면 판정 시간 중이라도 바로 가드를 내린다(사용자 결정). 전에는 판정 시간이 끝날 때까지 가드가 유지됐다(짧게 눌러도 패리 유지).
+ *
+ * (2026-10-08) 가드 중 다른 입력 (사용자 결정):
+ *   - 가드 중에는 Window.Cancel을 켜 두어 공격·강공격·퀵스텝(나중에 점프 어빌리티)이 바로 가드를 대신한다.
+ *   - 가드 중에는 이동을 잠근다(제자리, 몸도 돌지 않음). 새로 누른 이동 입력이 들어오면 가드를 내리고 이동한다.
+ *     가드를 올릴 때 누르고 있던 방향키는 새 입력이 아니다: 그 방향을 바로 바라보는 데에만 쓴다(락온 중 제외).
+ *   - 가드 키를 누른 채 다른 행동을 하고 나도 가드는 자동으로 다시 올라가지 않는다
+ *     (자동으로 올라가면 키를 새로 누르지 않아도 퍼펙트 가드 판정 시간이 다시 생기므로).
  */
 UCLASS()
 class KNIGHT_API UknightGameplayAbility_Guard : public UknightGameplayAbility
@@ -35,7 +52,10 @@ public:
 		const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
 
 protected:
-	/** Seconds after the press during which an incoming hit is parried. Zero disables parrying. */
+	/**
+	 * Seconds after the press during which an incoming hit is parried. Zero disables parrying.
+	 * (2026-10-08) 메카 속성 PerfectGuardWindow가 있으면(플레이어) 그 값을 쓰고, 이 값은 속성 세트가 없을 때만 쓰는 예비값이다.
+	 */
 	UPROPERTY(EditDefaultsOnly, Category="Guard", meta=(ClampMin=0, Units="s"))
 	float ParryWindow = 0.2f;
 
@@ -58,7 +78,28 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Guard|Parry Counter")
 	TSubclassOf<UGameplayEffect> ParryCounterEffect;
 
+	/** 퍼펙트 가드 때 공격한 적에게 주는 기본 그로기 피해. 일반 공격 기본값(10)의 2배로 시작 (2026-10-08 임시값, 조정 대상). */
+	UPROPERTY(EditDefaultsOnly, Category="Guard|Perfect Guard", meta=(ClampMin=0))
+	float PerfectGuardPoiseDamage = 20.f;
+
+	/**
+	 * 퍼펙트 가드 그로기에 더하는 공격력 계수(%). 그로기 += 내 공격력 x 이 값 / 100.
+	 * 피해 공식의 모션 계수와 같은 방식. 일반 공격 모션 계수 기본값(30)으로 시작 (2026-10-08 임시값, 조정 대상).
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Guard|Perfect Guard", meta=(ClampMin=0))
+	float PerfectGuardPoiseMotionValue = 30.f;
+
+	/** 퍼펙트 가드 그로기 피해에 쓰는 이펙트. 실행이 UknightDamageExecution이어야 한다. 기본은 C++ 기본 피해 이펙트. */
+	UPROPERTY(EditDefaultsOnly, Category="Guard|Perfect Guard")
+	TSubclassOf<UGameplayEffect> PerfectGuardDamageEffect;
+
 private:
+	/** 이번 가드의 퍼펙트 가드 판정 시간(초). 메카 속성 PerfectGuardWindow, 없으면 ParryWindow. */
+	float GetPerfectGuardWindow() const;
+
+	/** 공격한 적에게 퍼펙트 가드 그로기 피해를 준다 (피해는 0). */
+	void ApplyPerfectGuardPoiseDamage(const AActor* Attacker) const;
+
 	UFUNCTION()
 	void OnParrySucceeded(FGameplayEventData Payload);
 
@@ -71,5 +112,20 @@ private:
 	void RemoveParryTag();
 	void WaitForRelease();
 
+	/** 가드 자세 상태를 켠다: 캔슬 창(다른 행동이 가드를 대신), 이동 잠금, 새 이동 입력 감시. */
+	void EnterGuardStance();
+
+	/** EnterGuardStance로 켠 것을 끈다. */
+	void ExitGuardStance();
+
+	/** 새로 누른 이동 입력이 들어오면 가드를 내린다(잠금이 풀리며 그대로 이동). */
+	void CheckMoveCancel();
+
 	bool bParryTagApplied = false;
+	bool bCancelWindowApplied = false;
+	bool bMoveLockApplied = false;
+
+	/** 가드를 올릴 때 누르고 있던 방향은 새 이동 입력이 아니다(방향 전환에만 씀). */
+	FknightMovePressTracker MovePress;
+	FTimerHandle MoveCancelTimer;
 };

@@ -12,8 +12,8 @@ class UCurveFloat;
  * 부스트 대시 / 회피 부스트(퀵스텝). 현재 이동 입력 방향으로(입력이 없으면 뒤로) 일정한 힘의
  * 루트 모션 소스로 나이트를 움직이고, 처음 InvulnerableDuration초 동안 State.Invulnerable을 건다.
  *
- * 게이지 비용은 어빌리티의 Cost Gameplay Effect(BoostGauge 모디파이어)에 두므로,
- * 게이지가 모자라면 Ability.ActivateFail.Cost로 발동에 실패한다.
+ * 게이지 비용은 BP의 StaminaCost(기본 클래스 UknightGameplayAbility, 모든 행동이 같은 칸)로 낸다. bRequireFullStaminaCost가 켜져 있어
+ * 게이지가 비용보다 모자라면 Ability.ActivateFail.Cost로 발동에 실패한다. (2026-10-09, 전에는 Cost Gameplay Effect GE_Knight_BoostCost)
  *
  * 방향과 자세: 락온이 아니면 이동 입력이 있는 대시는 먼저 나이트를 대시 방향으로 돌리고 DashMontage(정면)를 재생한다.
  * 락온 중(State.LockedOn)이거나 입력 없는 백스텝이면 바라보는 방향을 유지하고, 그 방향 기준의 대시 방향으로

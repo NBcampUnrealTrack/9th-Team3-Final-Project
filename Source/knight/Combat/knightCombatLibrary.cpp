@@ -18,7 +18,29 @@
 #include "MotionWarpingComponent.h"
 #include "Perception/AISense_Hearing.h"
 #include "System/knightGameplayTags.h"
+#include "AbilitySystem/Executions/knightDamageExecution.h"
 #include "knight.h"
+
+namespace
+{
+	// 공격의 피해 이펙트가 쓰는 피해 실행(UknightDamageExecution)의 가드 범위로 판정한다. 퍼펙트 가드가 일반 가드와 같은 각도를 쓰게 하려는 것.
+	// 피해 이펙트가 없거나 다른 실행을 쓰면 기본 피해 실행의 각도를 쓴다.
+	bool IsAttackerInGuardArc(const TSubclassOf<UGameplayEffect>& DamageEffect, const AActor* Target, const AActor* Attacker)
+	{
+		if (const UGameplayEffect* const Effect = DamageEffect ? DamageEffect->GetDefaultObject<UGameplayEffect>() : nullptr)
+		{
+			for (const FGameplayEffectExecutionDefinition& Execution : Effect->Executions)
+			{
+				const UObject* const CalculationCDO = Execution.CalculationClass ? Execution.CalculationClass->GetDefaultObject() : nullptr;
+				if (const UknightDamageExecution* const DamageExecution = Cast<UknightDamageExecution>(CalculationCDO))
+				{
+					return DamageExecution->IsAttackerInGuardArc(Target, Attacker);
+				}
+			}
+		}
+		return GetDefault<UknightDamageExecution>()->IsAttackerInGuardArc(Target, Attacker);
+	}
+}
 
 EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FHitResult& Hit, const FknightMeleeHitParams& Params)
 {
@@ -44,7 +66,16 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 	}
 
 	// 패링할 수 없는 공격은 패링 판정을 건너뛴다. 패링 구간에도 State.Guarding이 붙어 있어 아래 가드로 처리된다.
-	if (Params.bCanBeParried && TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_Parrying))
+	// 패링(퍼펙트 가드)도 일반 가드처럼 가드 범위(정면) 안에서 들어온 공격만 막는다. 범위 밖이면 아래에서 그냥 맞는다. (2026-10-08)
+	const bool bInParryWindow = TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_Parrying);
+	const bool bInGuardArc = bInParryWindow && IsAttackerInGuardArc(Params.DamageEffect, Target, Attacker);
+	if (bInParryWindow && !(Params.bCanBeParried && bInGuardArc))
+	{
+		// 판정 시간 중인데 퍼펙트 가드가 안 된 이유. 플레이 테스트에서 '판정이 이상하다'를 가려내려고 남긴다.
+		UE_LOG(LogknightCombat, Log, TEXT("%s: perfect guard missed against %s (%s)."), *GetNameSafe(Target), *GetNameSafe(Attacker),
+			!Params.bCanBeParried ? TEXT("unparryable attack") : TEXT("outside guard arc"));
+	}
+	if (Params.bCanBeParried && bInGuardArc)
 	{
 		FGameplayEventData Payload;
 		Payload.EventTag = knightGameplayTags::Event_Parried;

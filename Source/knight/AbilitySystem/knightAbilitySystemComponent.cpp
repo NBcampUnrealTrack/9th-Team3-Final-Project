@@ -1,6 +1,7 @@
 #include "AbilitySystem/knightAbilitySystemComponent.h"
 
 #include "AbilitySystem/knightAbilityTagRelationshipMapping.h"
+#include "AbilitySystem/Attributes/knightAttributeSet.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
 #include "Engine/World.h"
 #include "System/knightGameplayTags.h"
@@ -22,6 +23,21 @@ namespace knightPoiseRecovery
 	}
 }
 
+// ---- 행동 에너지 자연 회복: 순수 계산 (테스트 대상, 2026-10-09) ----
+
+namespace knightBoostRecovery
+{
+	float Step(float CurrentGauge, float MaxGauge, float RecoveryRate, float DeltaSeconds,
+		float SecondsSinceLastSpend, float RecoveryDelay)
+	{
+		if (RecoveryRate <= 0.f || CurrentGauge >= MaxGauge || SecondsSinceLastSpend < RecoveryDelay)
+		{
+			return CurrentGauge;
+		}
+		return FMath::Min(MaxGauge, CurrentGauge + RecoveryRate * FMath::Max(0.f, DeltaSeconds));
+	}
+}
+
 UknightAbilitySystemComponent::UknightAbilitySystemComponent(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
@@ -40,6 +56,7 @@ void UknightAbilitySystemComponent::InitAbilityActorInfo(AActor* InOwnerActor, A
 		TryActivateAbilitiesOnSpawn();
 	}
 	StartPoiseRecovery();
+	StartBoostRecovery();
 }
 
 void UknightAbilitySystemComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -47,8 +64,40 @@ void UknightAbilitySystemComponent::EndPlay(const EEndPlayReason::Type EndPlayRe
 	if (const UWorld* const World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(PoiseRecoveryTimer);
+		World->GetTimerManager().ClearTimer(BoostRecoveryTimer);
 	}
 	Super::EndPlay(EndPlayReason);
+}
+
+void UknightAbilitySystemComponent::StartBoostRecovery()
+{
+	UWorld* const World = GetWorld();
+	// 에디터의 BP 미리보기 같은 게임 밖 월드에서는 켜지 않는다.
+	if (!World || !World->IsGameWorld() || World->GetTimerManager().IsTimerActive(BoostRecoveryTimer))
+	{
+		return;
+	}
+	World->GetTimerManager().SetTimer(BoostRecoveryTimer, this, &ThisClass::TickBoostRecovery, BoostRecoveryInterval, true);
+}
+
+void UknightAbilitySystemComponent::TickBoostRecovery()
+{
+	// 행동 에너지는 나이트(메카 속성 세트)만 있다. 몬스터는 여기서 끝난다.
+	const UknightAttributeSet* const MechSet = GetSet<UknightAttributeSet>();
+	const UWorld* const World = GetWorld();
+	if (!MechSet || !World || HasMatchingGameplayTag(knightGameplayTags::State_Dead))
+	{
+		return;
+	}
+
+	const FGameplayAttribute GaugeAttribute = UknightAttributeSet::GetBoostGaugeAttribute();
+	const float CurrentGauge = GetNumericAttributeBase(GaugeAttribute);
+	const float NewGauge = knightBoostRecovery::Step(CurrentGauge, MechSet->GetMaxBoostGauge(), MechSet->GetBoostRecoveryRate(),
+		BoostRecoveryInterval, World->GetTimeSeconds() - MechSet->GetLastBoostSpendTime(), MechSet->GetBoostRecoveryDelay());
+	if (NewGauge != CurrentGauge)
+	{
+		SetNumericAttributeBase(GaugeAttribute, NewGauge);
+	}
 }
 
 void UknightAbilitySystemComponent::StartPoiseRecovery()

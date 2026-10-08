@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "AbilitySystem/Abilities/knightGameplayAbility.h"
 #include "Combat/knightCombatTypes.h"
+#include "Input/knightMovePressTracker.h"
 #include "knightGameplayAbility_MeleeAttack.generated.h"
 
 class ACharacter;
@@ -52,6 +53,10 @@ public:
 		const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData) override;
 	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 		const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
+
+	/** 검을 뽑기만 하는 누름이면 행동 에너지를 쓰지 않는다. (2026-10-09) */
+	virtual void ApplyCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+		const FGameplayAbilityActivationInfo ActivationInfo) const override;
 
 protected:
 	/** Called after each resolved hit. Override for on-hit effects (gauge gain, combo counters). */
@@ -160,19 +165,13 @@ private:
 	bool IsWeaponInHand() const;
 	void CheckMoveCancel();
 
-	/** 이동 입력을 컨트롤 회전 기준 2D 방향으로 읽는다(카메라를 돌려도 같은 키는 같은 방향). 입력이 없으면 영벡터. */
-	static FVector2D GetLocalMoveInput(const ACharacter& Character);
-
-	/** 이번 공격에서 이동 키를 새로 눌렀는지 갱신한다. 공격 전부터 누르고 있던 방향은 무시한다. */
-	void UpdateFreshMovePress(const ACharacter& Character);
-
 	FTimerHandle MoveCancelTimer;
 	FTimerHandle DrawTimer;
 	bool bAttackStarted = false;
 
-	/** 새 누름 판정 기준 방향: 공격 시작 때 누르고 있던 방향. 키를 떼면 0이 된다. */
-	FVector2D MoveInputBaseline = FVector2D::ZeroVector;
+	/** 이번 발동이 검을 뽑기만 하는지(공격 없음). 비용을 내기 전에 정한다. */
+	bool bDrawOnlyActivation = false;
 
-	/** 이번 공격 중 이동 키를 새로 눌렀는지(뗐다가 다시 누름, 또는 누른 채로 방향을 크게 바꿈). */
-	bool bFreshMovePress = false;
+	/** 이번 공격 중 이동 키를 새로 눌렀는지. 공격 전부터 누르고 있던 방향은 무시한다. (2026-10-08 가드와 같이 쓰려고 공용 구조체로 옮김) */
+	FknightMovePressTracker MovePress;
 };
