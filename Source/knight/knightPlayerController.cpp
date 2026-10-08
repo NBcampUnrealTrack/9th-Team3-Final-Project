@@ -156,11 +156,8 @@ void AknightPlayerController::OpenSettings(bool bFromMenu)
 	bSettingsOpenedFromMenu = bFromMenu;
 	bCursorBeforeSettings = bShowMouseCursor;
 	bSettingsPausedGame = !GetWorld()->IsPaused();
+	// Full screen: the settings screen lays out its own panels.
 	SettingsWidget->AddToViewport(100);
-	SettingsWidget->SetPositionInViewport(FVector2D::ZeroVector, false);
-	SettingsWidget->SetDesiredSizeInViewport(FVector2D(800.f, 620.f));
-	SettingsWidget->SetAnchorsInViewport(FAnchors(0.5f, 0.5f));
-	SettingsWidget->SetAlignmentInViewport(FVector2D(0.5f, 0.5f));
 	SettingsWidget->Open();
 	if (bSettingsPausedGame && !SetPause(true)) bSettingsPausedGame = false;
 	if (bFromMenu)

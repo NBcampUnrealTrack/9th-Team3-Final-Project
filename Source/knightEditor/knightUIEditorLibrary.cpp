@@ -4,6 +4,7 @@
 #include "CommonButtonBase.h"
 #include "CommonTextBlock.h"
 #include "Components/Border.h"
+#include "Components/Button.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/HorizontalBox.h"
@@ -12,11 +13,15 @@
 #include "Components/Overlay.h"
 #include "Components/OverlaySlot.h"
 #include "Components/ProgressBar.h"
+#include "Components/ScrollBox.h"
+#include "Components/ScrollBoxSlot.h"
 #include "Components/SizeBox.h"
+#include "Components/Slider.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "WidgetBlueprint.h"
+#include "Screens/knightSettingsScreen.h"
 #include "Widgets/knightButtonBase.h"
 #include "Widgets/CommonActivatableWidgetContainer.h"
 
@@ -582,6 +587,336 @@ bool UknightUIEditorLibrary::BuildRaidResult(UWidgetBlueprint* WidgetBlueprint, 
 	Return->SetButtonText(NSLOCTEXT("knightUI", "ResultReturn", "지금 귀환"));
 	Footer->AddChildToHorizontalBox(Return)->SetVerticalAlignment(VAlign_Center);
 	AddToColumn(Column, Footer, HAlign_Fill, FMargin(0.f, 32.f, 0.f, 0.f));
+
+	EndBuild(WidgetBlueprint);
+	return true;
+}
+
+namespace
+{
+	/** 배경 없는 화살표 버튼. 포커스는 줄이 갖고 이 버튼은 마우스만 받는다. */
+	UButton* NewArrowButton(UWidgetBlueprint* WidgetBlueprint, const FName Name, const FText& Glyph, TSubclassOf<UCommonTextStyle> Style)
+	{
+		UButton* const Button = NewWidget<UButton>(WidgetBlueprint, Name, true);
+		FButtonStyle ButtonStyle;
+		ButtonStyle.SetNormal(NoBrush());
+		ButtonStyle.SetHovered(NoBrush());
+		ButtonStyle.SetPressed(NoBrush());
+		ButtonStyle.SetDisabled(NoBrush());
+		ButtonStyle.SetNormalPadding(FMargin(8.f, 0.f));
+		ButtonStyle.SetPressedPadding(FMargin(8.f, 0.f));
+		Button->SetStyle(ButtonStyle);
+		// Set before the Slate widget exists; there is no public setter for that.
+		PRAGMA_DISABLE_DEPRECATION_WARNINGS
+		Button->IsFocusable = false;
+		PRAGMA_ENABLE_DEPRECATION_WARNINGS
+		UCommonTextBlock* const Text = NewText(WidgetBlueprint, *(Name.ToString() + TEXT("_Glyph")), Style, Glyph, false);
+		Text->SetColorAndOpacity(FrostDim);
+		Button->AddChild(Text);
+		return Button;
+	}
+
+	UHorizontalBoxSlot* AddCentered(UHorizontalBox* Box, UWidget* Widget, bool bFill, EVerticalAlignment VAlign = VAlign_Center, const FMargin& Padding = FMargin())
+	{
+		UHorizontalBoxSlot* const Slot = Box->AddChildToHorizontalBox(Widget);
+		Slot->SetSize(FSlateChildSize(bFill ? ESlateSizeRule::Fill : ESlateSizeRule::Automatic));
+		Slot->SetVerticalAlignment(VAlign);
+		Slot->SetPadding(Padding);
+		return Slot;
+	}
+
+	UImage* NewLine(UWidgetBlueprint* WidgetBlueprint, const FName Name, bool bVertical)
+	{
+		return NewHUDImage(WidgetBlueprint, Name, FrostDim, bVertical ? FVector2D(1.f, 8.f) : FVector2D(8.f, 1.f));
+	}
+}
+
+namespace
+{
+	/** 바닥 키 안내 한 묶음: [키][키] 설명. 키는 1px 틀 안의 글자(키캡). */
+	struct FKeyHint
+	{
+		TArray<FText> Keys;
+		FText Label;
+	};
+
+	UHorizontalBox* NewKeyHints(UWidgetBlueprint* WidgetBlueprint, const FName Name, TSubclassOf<UCommonTextStyle> Style, const TArray<FKeyHint>& Hints)
+	{
+		UHorizontalBox* const Panel = NewWidget<UHorizontalBox>(WidgetBlueprint, Name, true);
+		int32 Index = 0;
+		for (const FKeyHint& Hint : Hints)
+		{
+			for (int32 KeyIndex = 0; KeyIndex < Hint.Keys.Num(); ++KeyIndex)
+			{
+				USizeBox* const Cap = NewSizeBox(WidgetBlueprint, *FString::Printf(TEXT("%s_Key%d_%d"), *Name.ToString(), Index, KeyIndex), 0.f, 24.f);
+				Cap->SetMinDesiredWidth(24.f);
+				UBorder* const Frame = NewWidget<UBorder>(WidgetBlueprint, *FString::Printf(TEXT("%s_Cap%d_%d"), *Name.ToString(), Index, KeyIndex));
+				Frame->SetBrush(FrameBrush(0.f));
+				Frame->SetPadding(FMargin(6.f, 0.f));
+				Frame->SetHorizontalAlignment(HAlign_Center);
+				Frame->SetVerticalAlignment(VAlign_Center);
+				Frame->SetContent(NewText(WidgetBlueprint, *FString::Printf(TEXT("%s_KeyText%d_%d"), *Name.ToString(), Index, KeyIndex), Style, Hint.Keys[KeyIndex], false));
+				Cap->AddChild(Frame);
+				AddCentered(Panel, Cap, false, VAlign_Center, FMargin(Index > 0 && KeyIndex == 0 ? 20.f : (KeyIndex > 0 ? 4.f : 0.f), 0.f, 0.f, 0.f));
+			}
+			AddCentered(Panel, NewText(WidgetBlueprint, *FString::Printf(TEXT("%s_Label%d"), *Name.ToString(), Index), Style, Hint.Label, false), false, VAlign_Center, FMargin(8.f, 0.f, 0.f, 0.f));
+			++Index;
+		}
+		return Panel;
+	}
+}
+
+bool UknightUIEditorLibrary::BuildSettingRow(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> BracketClass, int32 ControlType,
+	TSubclassOf<UCommonTextStyle> LabelStyle, TSubclassOf<UCommonTextStyle> ValueStyle)
+{
+	if (!BracketClass || !BeginBuild(WidgetBlueprint, TEXT("BuildSettingRow")))
+	{
+		return false;
+	}
+
+	UOverlay* const Root = NewWidget<UOverlay>(WidgetBlueprint, TEXT("Overlay_Root"));
+	WidgetBlueprint->WidgetTree->RootWidget = Root;
+
+	// 줄 높이: 이 28 + 버튼 스타일 위아래 여백.
+	USizeBox* const Height = NewSizeBox(WidgetBlueprint, TEXT("SizeBox_Height"), 0.f, 28.f);
+	AddToOverlay(Root, Height, HAlign_Fill, VAlign_Center, FMargin(12.f, 0.f));
+	UHorizontalBox* const Row = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("HorizontalBox_Row"));
+	Height->AddChild(Row);
+
+	AddCentered(Row, NewText(WidgetBlueprint, TEXT("Txt_Label"), LabelStyle, NSLOCTEXT("knightUI", "SettingRowPlaceholder", "항목"), true), true);
+	// 적용하지 않은 변경 표시.
+	AddCentered(Row, NewHUDImage(WidgetBlueprint, TEXT("Img_Dirty"), Frost, FVector2D(6.f, 6.f), true), false, VAlign_Center, FMargin(0.f, 0.f, 16.f, 0.f));
+
+	USizeBox* const Control = NewSizeBox(WidgetBlueprint, TEXT("SizeBox_Control"), 320.f, 0.f);
+	AddCentered(Row, Control, false);
+	if (ControlType == 1)
+	{
+		UHorizontalBox* const SliderRow = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("HorizontalBox_Slider"));
+		Control->AddChild(SliderRow);
+		USlider* const Slider = NewWidget<USlider>(WidgetBlueprint, TEXT("Slider_Value"), true);
+		FSliderStyle SliderStyle;
+		SliderStyle.SetNormalBarImage(SolidBrush(FrostDim, FVector2D(8.f, 1.f)));
+		SliderStyle.SetHoveredBarImage(SolidBrush(Frost, FVector2D(8.f, 1.f)));
+		SliderStyle.SetDisabledBarImage(SolidBrush(FrostDim, FVector2D(8.f, 1.f)));
+		SliderStyle.SetNormalThumbImage(SolidBrush(White, FVector2D(4.f, 14.f)));
+		SliderStyle.SetHoveredThumbImage(SolidBrush(Ember, FVector2D(4.f, 14.f)));
+		SliderStyle.SetDisabledThumbImage(SolidBrush(FrostDim, FVector2D(4.f, 14.f)));
+		SliderStyle.SetBarThickness(1.f);
+		Slider->SetWidgetStyle(SliderStyle);
+		Slider->IsFocusable = false;
+		AddCentered(SliderRow, Slider, true);
+		USizeBox* const ValueBox = NewSizeBox(WidgetBlueprint, TEXT("SizeBox_Value"), 56.f, 0.f);
+		UCommonTextBlock* const Value = NewText(WidgetBlueprint, TEXT("Txt_Value"), ValueStyle, INVTEXT("80"), true);
+		Value->SetJustification(ETextJustify::Right);
+		ValueBox->AddChild(Value);
+		AddCentered(SliderRow, ValueBox, false, VAlign_Center, FMargin(16.f, 0.f, 0.f, 0.f));
+	}
+	else if (ControlType == 2)
+	{
+		// 키는 1px 틀 안에.
+		UBorder* const KeyFrame = NewWidget<UBorder>(WidgetBlueprint, TEXT("Border_Key"));
+		KeyFrame->SetBrush(FrameBrush(0.f));
+		KeyFrame->SetPadding(FMargin(12.f, 2.f));
+		KeyFrame->SetHorizontalAlignment(HAlign_Center);
+		KeyFrame->SetVerticalAlignment(VAlign_Center);
+		KeyFrame->SetContent(NewText(WidgetBlueprint, TEXT("Txt_Value"), ValueStyle, INVTEXT("Space Bar"), true));
+		Control->AddChild(KeyFrame);
+	}
+	else
+	{
+		UHorizontalBox* const Rotator = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("HorizontalBox_Rotator"));
+		Control->AddChild(Rotator);
+		AddCentered(Rotator, NewArrowButton(WidgetBlueprint, TEXT("Btn_Prev"), INVTEXT("<"), ValueStyle), false);
+		UCommonTextBlock* const Value = NewText(WidgetBlueprint, TEXT("Txt_Value"), ValueStyle, NSLOCTEXT("knightUI", "SettingValuePlaceholder", "켜기"), true);
+		Value->SetJustification(ETextJustify::Center);
+		AddCentered(Rotator, Value, true);
+		AddCentered(Rotator, NewArrowButton(WidgetBlueprint, TEXT("Btn_Next"), INVTEXT(">"), ValueStyle), false);
+	}
+
+	AddToOverlay(Root, NewWidget<UUserWidget>(WidgetBlueprint, BracketClass, TEXT("Bracket_L"), true), HAlign_Left, VAlign_Center);
+	AddToOverlay(Root, NewWidget<UUserWidget>(WidgetBlueprint, BracketClass, TEXT("Bracket_R"), true), HAlign_Right, VAlign_Center);
+
+	EndBuild(WidgetBlueprint);
+	return true;
+}
+
+bool UknightUIEditorLibrary::BuildSettingsTab(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> LabelStyle)
+{
+	if (!BeginBuild(WidgetBlueprint, TEXT("BuildSettingsTab")))
+	{
+		return false;
+	}
+
+	UOverlay* const Root = NewWidget<UOverlay>(WidgetBlueprint, TEXT("Overlay_Root"));
+	WidgetBlueprint->WidgetTree->RootWidget = Root;
+
+	// 선택 표시: 옅은 바탕 + 왼쪽 주황 세로선. C++가 선택된 탭에서만 보이게 한다.
+	UOverlay* const Selected = NewWidget<UOverlay>(WidgetBlueprint, TEXT("Img_Selected"), true);
+	AddToOverlay(Root, Selected, HAlign_Fill, VAlign_Fill);
+	AddToOverlay(Selected, NewHUDImage(WidgetBlueprint, TEXT("Img_SelectedFill"), FLinearColor(Frost.R, Frost.G, Frost.B, 0.10f), FVector2D(8.f, 8.f)), HAlign_Fill, VAlign_Fill);
+	AddToOverlay(Selected, NewHUDImage(WidgetBlueprint, TEXT("Img_SelectedBar"), Ember, FVector2D(2.f, 8.f)), HAlign_Left, VAlign_Fill);
+
+	UVerticalBox* const Column = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("VerticalBox_Text"));
+	AddToOverlay(Root, Column, HAlign_Fill, VAlign_Center, FMargin(16.f, 8.f));
+	AddToColumn(Column, NewText(WidgetBlueprint, TEXT("Txt_Caption"), CaptionStyle, INVTEXT("AUDIO"), true), HAlign_Left);
+	AddToColumn(Column, NewText(WidgetBlueprint, TEXT("Txt_Label"), LabelStyle, NSLOCTEXT("knightUI", "SettingsTabPlaceholder", "소리"), true), HAlign_Left, FMargin(0.f, 2.f, 0.f, 0.f));
+
+	EndBuild(WidgetBlueprint);
+	return true;
+}
+
+bool UknightUIEditorLibrary::BuildSettingsSectionHeader(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> CaptionStyle)
+{
+	if (!BeginBuild(WidgetBlueprint, TEXT("BuildSettingsSectionHeader")))
+	{
+		return false;
+	}
+
+	UBorder* const Band = NewWidget<UBorder>(WidgetBlueprint, TEXT("Border_Band"));
+	Band->SetBrush(SolidBrush(FLinearColor(FrostDim.R, FrostDim.G, FrostDim.B, 0.25f)));
+	Band->SetPadding(FMargin(12.f, 4.f));
+	WidgetBlueprint->WidgetTree->RootWidget = Band;
+	Band->SetContent(NewText(WidgetBlueprint, TEXT("Txt_Caption"), CaptionStyle, INVTEXT("VOLUME"), true));
+
+	EndBuild(WidgetBlueprint);
+	return true;
+}
+
+bool UknightUIEditorLibrary::BuildSettingsScreen(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> ButtonClass, TSubclassOf<UUserWidget> TabClass,
+	TSubclassOf<UCommonButtonStyle> SecondaryButtonStyle, TSubclassOf<UCommonTextStyle> TitleStyle, TSubclassOf<UCommonTextStyle> SubheadStyle,
+	TSubclassOf<UCommonTextStyle> BodyDimStyle, TSubclassOf<UCommonTextStyle> CaptionStyle)
+{
+	if (!ButtonClass || !ButtonClass->IsChildOf<UknightButtonBase>() || !TabClass || !TabClass->IsChildOf<UknightSettingsTab>()
+		|| !BeginBuild(WidgetBlueprint, TEXT("BuildSettingsScreen")))
+	{
+		return false;
+	}
+
+	UOverlay* const Root = NewWidget<UOverlay>(WidgetBlueprint, TEXT("Overlay_Root"));
+	WidgetBlueprint->WidgetTree->RootWidget = Root;
+
+	// 뒤의 메뉴나 전투 화면이 살짝 비친다.
+	UImage* const Backdrop = NewWidget<UImage>(WidgetBlueprint, TEXT("Img_Backdrop"));
+	Backdrop->SetBrush(SolidBrush(FLinearColor::White));
+	Backdrop->SetColorAndOpacity(FLinearColor(Navy900.R, Navy900.G, Navy900.B, 0.94f));
+	AddToOverlay(Root, Backdrop, HAlign_Fill, VAlign_Fill);
+
+	UVerticalBox* const Page = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("VerticalBox_Page"));
+	AddToOverlay(Root, Page, HAlign_Fill, VAlign_Fill, FMargin(HUDMargin.X, HUDMargin.Y, HUDMargin.X, 48.f));
+
+	// 머리.
+	UHorizontalBox* const Header = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("HorizontalBox_Header"));
+	UVerticalBox* const TitleColumn = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("VerticalBox_Title"));
+	AddToColumn(TitleColumn, NewText(WidgetBlueprint, TEXT("Txt_Caption"), CaptionStyle, INVTEXT("SYSTEM / CONFIG"), false), HAlign_Left);
+	AddToColumn(TitleColumn, NewText(WidgetBlueprint, TEXT("Txt_Title"), TitleStyle, NSLOCTEXT("knightUI", "SettingsTitle", "설정"), false), HAlign_Left, FMargin(0.f, 4.f, 0.f, 0.f));
+	AddCentered(Header, TitleColumn, true, VAlign_Bottom);
+	AddCentered(Header, NewText(WidgetBlueprint, TEXT("Txt_DirtyCount"), CaptionStyle, NSLOCTEXT("knightUI", "SettingsDirtyPlaceholder", "적용하지 않은 변경 2"), true), false, VAlign_Bottom);
+	AddToColumn(Page, Header, HAlign_Fill);
+	AddToColumn(Page, NewLine(WidgetBlueprint, TEXT("Img_HeaderLine"), false), HAlign_Fill, FMargin(0.f, 14.f, 0.f, 0.f));
+
+	// 본문: 분류 | 항목 | 설명.
+	UHorizontalBox* const Body = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("HorizontalBox_Body"));
+	UVerticalBoxSlot* const BodySlot = Page->AddChildToVerticalBox(Body);
+	BodySlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+	BodySlot->SetPadding(FMargin(0.f, 28.f, 0.f, 0.f));
+
+	USizeBox* const TabsWidth = NewSizeBox(WidgetBlueprint, TEXT("SizeBox_Tabs"), 220.f, 0.f);
+	UVerticalBox* const Tabs = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("VerticalBox_Tabs"));
+	TabsWidth->AddChild(Tabs);
+	for (int32 Index = 0; Index < UKnightSettingsWidget::TabCount; ++Index)
+	{
+		UUserWidget* const Tab = NewWidget<UUserWidget>(WidgetBlueprint, TabClass, *FString::Printf(TEXT("Tab_%d"), Index), true);
+		AddToColumn(Tabs, Tab, HAlign_Fill, FMargin(0.f, Index == 0 ? 0.f : 4.f, 0.f, 0.f));
+	}
+	AddCentered(Body, TabsWidth, false, VAlign_Top);
+
+	UScrollBox* const Scroll = NewWidget<UScrollBox>(WidgetBlueprint, TEXT("Scroll_Rows"), true);
+	// 넘칠 때만 보이는 얇은 스크롤바. 설명 패널 구분선 바로 왼쪽에 붙는다.
+	FScrollBarStyle BarStyle;
+	BarStyle.SetVerticalBackgroundImage(SolidBrush(FLinearColor(FrostDim.R, FrostDim.G, FrostDim.B, 0.25f), FVector2D(3.f, 3.f)));
+	BarStyle.SetNormalThumbImage(SolidBrush(FrostDim, FVector2D(3.f, 3.f)));
+	BarStyle.SetHoveredThumbImage(SolidBrush(Frost, FVector2D(3.f, 3.f)));
+	BarStyle.SetDraggedThumbImage(SolidBrush(Frost, FVector2D(3.f, 3.f)));
+	// 위아래 칸은 그리지 않지만 크기는 남는다. 기본 32px이면 바가 그만큼 넓어진다.
+	FSlateBrush SlotBrush = NoBrush();
+	SlotBrush.ImageSize = FVector2D(3.f, 3.f);
+	BarStyle.SetVerticalTopSlotImage(SlotBrush);
+	BarStyle.SetVerticalBottomSlotImage(SlotBrush);
+	BarStyle.SetThickness(3.f);
+	Scroll->SetWidgetBarStyle(BarStyle);
+	Scroll->SetScrollBarVisibility(ESlateVisibility::Visible);
+	Scroll->SetScrollbarThickness(FVector2D(3.f, 3.f));
+	// 바 쪽 여백은 스크롤바 패딩이 아니라 목록 쪽에 둔다. 스크롤바 패딩에는 바 배경색이 같이 칠해진다.
+	Scroll->SetScrollbarPadding(FMargin(0.f));
+	Scroll->SetNavigationDestination(EDescendantScrollDestination::IntoView);
+	if (UScrollBoxSlot* const RowsSlot = Cast<UScrollBoxSlot>(Scroll->AddChild(NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("Box_Rows"), true))))
+	{
+		RowsSlot->SetPadding(FMargin(0.f, 0.f, 16.f, 0.f));
+	}
+	AddCentered(Body, Scroll, true, VAlign_Fill, FMargin(40.f, 0.f, 24.f, 0.f));
+
+	AddCentered(Body, NewLine(WidgetBlueprint, TEXT("Img_DetailLine"), true), false, VAlign_Fill);
+	USizeBox* const DetailWidth = NewSizeBox(WidgetBlueprint, TEXT("SizeBox_Detail"), 400.f, 0.f);
+	UVerticalBox* const Detail = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("VerticalBox_Detail"));
+	DetailWidth->AddChild(Detail);
+	AddToColumn(Detail, NewText(WidgetBlueprint, TEXT("Txt_DetailCaption"), CaptionStyle, INVTEXT("DETAIL"), false), HAlign_Left);
+	UCommonTextBlock* const DetailTitle = NewText(WidgetBlueprint, TEXT("Txt_DetailTitle"), SubheadStyle, INVTEXT("BGM"), true);
+	DetailTitle->SetColorAndOpacity(Ember);
+	AddToColumn(Detail, DetailTitle, HAlign_Left, FMargin(0.f, 8.f, 0.f, 0.f));
+	UCommonTextBlock* const DetailBody = NewText(WidgetBlueprint, TEXT("Txt_DetailBody"), BodyDimStyle,
+		NSLOCTEXT("knightUI", "SettingsDetailPlaceholder", "전투와 탐색 음악의 크기입니다."), true);
+	DetailBody->SetAutoWrapText(true);
+	AddToColumn(Detail, DetailBody, HAlign_Fill, FMargin(0.f, 10.f, 0.f, 0.f));
+	// 감마 계조표: 검정부터 흰색까지 11칸.
+	UHorizontalBox* const Chart = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("Panel_Chart"), true);
+	for (int32 Step = 0; Step <= 10; ++Step)
+	{
+		const float Gray = Step / 10.f;
+		AddCentered(Chart, NewHUDImage(WidgetBlueprint, *FString::Printf(TEXT("Img_Chart%02d"), Step), FLinearColor(Gray, Gray, Gray), FVector2D(30.f, 30.f)), false, VAlign_Top);
+	}
+	AddToColumn(Detail, Chart, HAlign_Left, FMargin(0.f, 24.f, 0.f, 0.f));
+	AddCentered(Body, DetailWidth, false, VAlign_Top, FMargin(28.f, 0.f, 0.f, 0.f));
+
+	// 바닥: 키 안내 | 상태 | 버튼. 저장하지 않고 닫으려 하면 버튼 묶음이 확인 버튼으로 바뀐다.
+	AddToColumn(Page, NewLine(WidgetBlueprint, TEXT("Img_FooterLine"), false), HAlign_Fill, FMargin(0.f, 20.f, 0.f, 0.f));
+	UHorizontalBox* const Footer = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("HorizontalBox_Footer"));
+	// 포커스가 분류에 있을 때와 항목에 있을 때 안내가 다르다. C++가 둘 중 하나만 보이게 한다.
+	UOverlay* const Hints = NewWidget<UOverlay>(WidgetBlueprint, TEXT("Overlay_Hints"));
+	AddToOverlay(Hints, NewKeyHints(WidgetBlueprint, TEXT("Panel_HintsTabs"), CaptionStyle, {
+		{ { INVTEXT("↑"), INVTEXT("↓") }, NSLOCTEXT("knightUI", "HintCategory", "분류") },
+		{ { INVTEXT("Enter") }, NSLOCTEXT("knightUI", "HintSelect", "선택") },
+		{ { INVTEXT("Esc") }, NSLOCTEXT("knightUI", "HintClose", "닫기") } }), HAlign_Left, VAlign_Center);
+	AddToOverlay(Hints, NewKeyHints(WidgetBlueprint, TEXT("Panel_HintsRows"), CaptionStyle, {
+		{ { INVTEXT("↑"), INVTEXT("↓") }, NSLOCTEXT("knightUI", "HintItem", "항목") },
+		{ { INVTEXT("←"), INVTEXT("→") }, NSLOCTEXT("knightUI", "HintValue", "값") },
+		{ { INVTEXT("Q"), INVTEXT("E") }, NSLOCTEXT("knightUI", "HintCategory", "분류") },
+		{ { INVTEXT("R") }, NSLOCTEXT("knightUI", "HintDefaults", "기본값") },
+		{ { INVTEXT("F") }, NSLOCTEXT("knightUI", "HintApply", "적용") },
+		{ { INVTEXT("Esc") }, NSLOCTEXT("knightUI", "HintBack", "뒤로") } }), HAlign_Left, VAlign_Center);
+	AddCentered(Footer, Hints, false);
+	AddCentered(Footer, NewText(WidgetBlueprint, TEXT("Txt_Status"), BodyDimStyle, FText::GetEmpty(), true), true, VAlign_Center, FMargin(32.f, 0.f, 24.f, 0.f));
+
+	const auto NewFooterButton = [&](const TCHAR* Name, const FText& Label, bool bSecondary)
+	{
+		UknightButtonBase* const Button = NewWidget<UknightButtonBase>(WidgetBlueprint, TSubclassOf<UknightButtonBase>(ButtonClass), Name, true);
+		Button->SetButtonText(Label);
+		if (bSecondary && SecondaryButtonStyle)
+		{
+			Button->SetStyle(SecondaryButtonStyle);
+		}
+		return Button;
+	};
+	UHorizontalBox* const Buttons = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("Panel_Footer"), true);
+	AddCentered(Buttons, NewFooterButton(TEXT("Btn_Defaults"), NSLOCTEXT("knightUI", "SettingsDefaults", "기본값"), true), false);
+	AddCentered(Buttons, NewFooterButton(TEXT("Btn_Revert"), NSLOCTEXT("knightUI", "SettingsRevert", "되돌리기"), true), false, VAlign_Center, FMargin(12.f, 0.f, 0.f, 0.f));
+	AddCentered(Buttons, NewFooterButton(TEXT("Btn_Apply"), NSLOCTEXT("knightUI", "SettingsApply", "적용"), false), false, VAlign_Center, FMargin(12.f, 0.f, 0.f, 0.f));
+	AddCentered(Footer, Buttons, false);
+	UHorizontalBox* const Prompt = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("Panel_Prompt"), true);
+	AddCentered(Prompt, NewFooterButton(TEXT("Btn_PromptContinue"), NSLOCTEXT("knightUI", "SettingsPromptContinue", "계속 편집"), true), false);
+	AddCentered(Prompt, NewFooterButton(TEXT("Btn_PromptDiscard"), NSLOCTEXT("knightUI", "SettingsPromptDiscard", "버리고 닫기"), true), false, VAlign_Center, FMargin(12.f, 0.f, 0.f, 0.f));
+	AddCentered(Prompt, NewFooterButton(TEXT("Btn_PromptApply"), NSLOCTEXT("knightUI", "SettingsPromptApply", "적용하고 닫기"), false), false, VAlign_Center, FMargin(12.f, 0.f, 0.f, 0.f));
+	AddCentered(Footer, Prompt, false);
+	AddToColumn(Page, Footer, HAlign_Fill, FMargin(0.f, 14.f, 0.f, 0.f));
 
 	EndBuild(WidgetBlueprint);
 	return true;

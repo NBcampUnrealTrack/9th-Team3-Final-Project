@@ -61,4 +61,23 @@ public:
 	static bool BuildRaidResult(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> ButtonClass, TSubclassOf<UCommonTextStyle> DisplayStyle,
 		TSubclassOf<UCommonTextStyle> TitleStyle, TSubclassOf<UCommonTextStyle> SubheadStyle, TSubclassOf<UCommonTextStyle> BodyStyle,
 		TSubclassOf<UCommonTextStyle> BodyDimStyle, TSubclassOf<UCommonTextStyle> NumberStyle, TSubclassOf<UCommonTextStyle> CaptionStyle);
+
+	/** WBP_KnightSettingRow_*: 왼쪽 항목 이름 + 미적용 점 + 오른쪽 조작부. ControlType 0 = 회전식(‹ 값 ›), 1 = 슬라이더, 2 = 키. */
+	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
+	static bool BuildSettingRow(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> BracketClass, int32 ControlType,
+		TSubclassOf<UCommonTextStyle> LabelStyle, TSubclassOf<UCommonTextStyle> ValueStyle);
+
+	/** WBP_KnightSettingsTab: 선택 표시(주황 세로선 + 옅은 바탕) + 영문 캡션 + 이름. */
+	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
+	static bool BuildSettingsTab(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> LabelStyle);
+
+	/** WBP_KnightSettingsSection: 섹션 띠 ("VOLUME"). */
+	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
+	static bool BuildSettingsSectionHeader(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> CaptionStyle);
+
+	/** WBP_KnightSettings: 머리(제목, 미적용 개수) / 왼쪽 분류 / 가운데 항목 / 오른쪽 설명 / 아래 키 안내, 상태, 버튼. */
+	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
+	static bool BuildSettingsScreen(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> ButtonClass, TSubclassOf<UUserWidget> TabClass,
+		TSubclassOf<UCommonButtonStyle> SecondaryButtonStyle, TSubclassOf<UCommonTextStyle> TitleStyle, TSubclassOf<UCommonTextStyle> SubheadStyle,
+		TSubclassOf<UCommonTextStyle> BodyDimStyle, TSubclassOf<UCommonTextStyle> CaptionStyle);
 };
