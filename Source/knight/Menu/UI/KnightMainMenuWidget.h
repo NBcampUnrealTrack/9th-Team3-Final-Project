@@ -10,6 +10,7 @@ class UTextBlock;
 class UVerticalBox;
 class UKnightStageEntryWidget;
 class UKnightSettingsWidget;
+class UKnightCodexWidget;
 
 UENUM(BlueprintType)
 enum class EKnightMainMenuPage : uint8
@@ -31,6 +32,9 @@ class KNIGHT_API UKnightMainMenuWidget : public UKnightMenuWidgetBase
 public:
 	UFUNCTION(BlueprintPure, Category="Knight|Menu")
 	EKnightMainMenuPage GetCurrentPage() const { return CurrentPage; }
+	UFUNCTION(BlueprintPure, Category="Knight|Codex")
+	UKnightCodexWidget* GetCodexWidget() const { return CodexWidget; }
+	UFUNCTION(BlueprintPure, Category="Knight|Codex") bool IsCodexButtonFocused() const;
 
 	UFUNCTION(BlueprintCallable, Category="Knight|Menu")
 	bool ShowPage(EKnightMainMenuPage NewPage);
@@ -124,6 +128,7 @@ private:
 
 	UFUNCTION()
 	void HandleCodexClicked();
+	UFUNCTION() void HandleCodexClosed();
 
 	UFUNCTION()
 	void HandleStageEntrySelected(FName StageId);
@@ -135,9 +140,13 @@ private:
 	bool RefreshStageDetails();
 	void RemoveStageEntries();
 	void EnsureSettingsWidget();
+	void EnsureCodexWidget();
 
 	UPROPERTY(Transient)
 	TObjectPtr<UKnightSettingsWidget> SettingsWidget;
+	UPROPERTY(Transient)
+	TObjectPtr<UKnightCodexWidget> CodexWidget;
+	bool bRestoreCodexFocus = false;
 
 	EKnightMainMenuPage CurrentPage = EKnightMainMenuPage::Home;
 	FName SelectedStageId;
