@@ -10,7 +10,8 @@ class UCommonActivatableWidget;
 
 /**
  * Root widget of the gameplay UI: one activatable widget stack per layer (UI.Layer.Game, GameMenu, Menu, Modal).
- * The Blueprint subclass places the stacks and registers each with RegisterLayer in its Construct.
+ * Stacks named Layer_Game, Layer_GameMenu, Layer_Menu and Layer_Modal in the Blueprint subclass register themselves;
+ * other containers can still be registered with RegisterLayer.
  * Widgets are pushed by layer tag, never added to the viewport directly.
  *
  * Replaces Lyra's CommonGame PrimaryGameLayout, which this project does not include.
@@ -41,6 +42,21 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="Knight|UI")
 	UCommonActivatableWidgetContainerBase* GetLayer(FGameplayTag LayerTag) const;
+
+protected:
+	virtual void NativeOnInitialized() override;
+
+	UPROPERTY(BlueprintReadOnly, Category="Knight|UI", meta=(BindWidgetOptional))
+	TObjectPtr<UCommonActivatableWidgetContainerBase> Layer_Game;
+
+	UPROPERTY(BlueprintReadOnly, Category="Knight|UI", meta=(BindWidgetOptional))
+	TObjectPtr<UCommonActivatableWidgetContainerBase> Layer_GameMenu;
+
+	UPROPERTY(BlueprintReadOnly, Category="Knight|UI", meta=(BindWidgetOptional))
+	TObjectPtr<UCommonActivatableWidgetContainerBase> Layer_Menu;
+
+	UPROPERTY(BlueprintReadOnly, Category="Knight|UI", meta=(BindWidgetOptional))
+	TObjectPtr<UCommonActivatableWidgetContainerBase> Layer_Modal;
 
 private:
 	UPROPERTY(Transient)
