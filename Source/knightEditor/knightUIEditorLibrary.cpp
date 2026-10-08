@@ -1,7 +1,9 @@
 #include "knightUIEditorLibrary.h"
 
 #include "Blueprint/WidgetTree.h"
+#include "CommonButtonBase.h"
 #include "CommonTextBlock.h"
+#include "Components/Border.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/HorizontalBox.h"
@@ -15,6 +17,7 @@
 #include "Components/VerticalBoxSlot.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "WidgetBlueprint.h"
+#include "Widgets/knightButtonBase.h"
 #include "Widgets/CommonActivatableWidgetContainer.h"
 
 namespace
@@ -95,11 +98,11 @@ namespace
 	}
 
 	/** 남색 반투명 바탕 + 1px 테두리. */
-	FSlateBrush FrameBrush()
+	FSlateBrush FrameBrush(float Opacity = 0.8f)
 	{
 		FSlateBrush Brush;
 		Brush.DrawAs = ESlateBrushDrawType::RoundedBox;
-		Brush.TintColor = FSlateColor(FLinearColor(Navy900.R, Navy900.G, Navy900.B, 0.8f));
+		Brush.TintColor = FSlateColor(FLinearColor(Navy900.R, Navy900.G, Navy900.B, Opacity));
 		Brush.OutlineSettings = FSlateBrushOutlineSettings(FVector4(0.f, 0.f, 0.f, 0.f), FSlateColor(FrostDim), 1.f);
 		Brush.OutlineSettings.RoundingType = ESlateBrushRoundingType::FixedRadius;
 		return Brush;
@@ -374,6 +377,61 @@ bool UknightUIEditorLibrary::BuildHUDLayout(UWidgetBlueprint* WidgetBlueprint, T
 	ReticleSlot->SetAlignment(FVector2D(0.5f, 0.5f));
 	ReticleSlot->SetPosition(FVector2D::ZeroVector);
 	ReticleSlot->SetAutoSize(true);
+
+	EndBuild(WidgetBlueprint);
+	return true;
+}
+
+bool UknightUIEditorLibrary::BuildConfirmModal(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> ButtonClass, TSubclassOf<UCommonButtonStyle> CancelButtonStyle,
+	TSubclassOf<UCommonTextStyle> TitleStyle, TSubclassOf<UCommonTextStyle> BodyStyle)
+{
+	if (!ButtonClass || !ButtonClass->IsChildOf<UknightButtonBase>() || !BeginBuild(WidgetBlueprint, TEXT("BuildConfirmModal")))
+	{
+		return false;
+	}
+
+	UOverlay* const Root = NewWidget<UOverlay>(WidgetBlueprint, TEXT("Overlay_Root"));
+	WidgetBlueprint->WidgetTree->RootWidget = Root;
+
+	// 화면 전체를 어둡게 덮고 클릭을 막는다. 바깥을 눌러도 닫히지 않는다: 되돌릴 수 없는 행동이라 답을 꼭 고르게 한다.
+	UImage* const Dim = NewWidget<UImage>(WidgetBlueprint, TEXT("Img_Dim"));
+	Dim->SetBrush(SolidBrush(FLinearColor::White));
+	Dim->SetColorAndOpacity(FLinearColor(0.f, 0.f, 0.f, 0.6f));
+	AddToOverlay(Root, Dim, HAlign_Fill, VAlign_Fill);
+
+	// Panel은 C++가 등장 연출에서 크기를 키운다.
+	USizeBox* const Panel = NewSizeBox(WidgetBlueprint, TEXT("Panel"), 560.f, 0.f);
+	Panel->bIsVariable = true;
+	AddToOverlay(Root, Panel, HAlign_Center, VAlign_Center);
+
+	// 메뉴 위에 뜨므로 HUD 패널보다 진하게.
+	UBorder* const Frame = NewWidget<UBorder>(WidgetBlueprint, TEXT("Border_Frame"));
+	Frame->SetBrush(FrameBrush(0.94f));
+	Frame->SetPadding(FMargin(32.f, 28.f, 32.f, 24.f));
+	Panel->AddChild(Frame);
+
+	UVerticalBox* const Column = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("VerticalBox_Content"));
+	Frame->SetContent(Column);
+	AddToColumn(Column, NewHUDImage(WidgetBlueprint, TEXT("Img_Accent"), Frost, FVector2D(32.f, 2.f)), HAlign_Left, FMargin(0.f, 0.f, 0.f, 14.f));
+	AddToColumn(Column, NewText(WidgetBlueprint, TEXT("Txt_Title"), TitleStyle, NSLOCTEXT("knightUI", "ConfirmTitlePlaceholder", "레이드 포기"), true), HAlign_Left);
+	UCommonTextBlock* const Message = NewText(WidgetBlueprint, TEXT("Txt_Message"), BodyStyle,
+		NSLOCTEXT("knightUI", "ConfirmMessagePlaceholder", "지금 포기하면 이번 레이드의 보상을 받을 수 없습니다.\n기지로 돌아가시겠습니까?"), true);
+	Message->SetAutoWrapText(true);
+	AddToColumn(Column, Message, HAlign_Fill, FMargin(0.f, 12.f, 0.f, 0.f));
+
+	// 오른쪽 아래 [취소] [확인]. 기본 포커스는 C++가 취소에 둔다.
+	UHorizontalBox* const Buttons = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("HorizontalBox_Buttons"));
+	UknightButtonBase* const Cancel = NewWidget<UknightButtonBase>(WidgetBlueprint, TSubclassOf<UknightButtonBase>(ButtonClass), TEXT("Btn_Cancel"), true);
+	Cancel->SetButtonText(NSLOCTEXT("knightUI", "ConfirmCancel", "취소"));
+	if (CancelButtonStyle)
+	{
+		Cancel->SetStyle(CancelButtonStyle);
+	}
+	UknightButtonBase* const Confirm = NewWidget<UknightButtonBase>(WidgetBlueprint, TSubclassOf<UknightButtonBase>(ButtonClass), TEXT("Btn_Confirm"), true);
+	Confirm->SetButtonText(NSLOCTEXT("knightUI", "ConfirmOk", "확인"));
+	AddToRow(Buttons, Cancel, false, HAlign_Right);
+	AddToRow(Buttons, Confirm, false, HAlign_Right, FMargin(12.f, 0.f, 0.f, 0.f));
+	AddToColumn(Column, Buttons, HAlign_Right, FMargin(0.f, 28.f, 0.f, 0.f));
 
 	EndBuild(WidgetBlueprint);
 	return true;
