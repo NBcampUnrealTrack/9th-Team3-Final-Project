@@ -56,6 +56,12 @@ public:
 	static bool BuildPauseMenu(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> ButtonClass, TSubclassOf<UCommonButtonStyle> SecondaryButtonStyle,
 		TSubclassOf<UCommonTextStyle> TitleStyle, TSubclassOf<UCommonTextStyle> CaptionStyle);
 
+	/** WBP_KnightRaidResult: 어두운 막 + 가로 배너(성공/실패) + 가운데 보고 패널(시간, 최고 기록, 부위 파괴, 보상, 귀환 카운트다운, 지금 귀환). */
+	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
+	static bool BuildRaidResult(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> ButtonClass, TSubclassOf<UCommonTextStyle> DisplayStyle,
+		TSubclassOf<UCommonTextStyle> TitleStyle, TSubclassOf<UCommonTextStyle> SubheadStyle, TSubclassOf<UCommonTextStyle> BodyStyle,
+		TSubclassOf<UCommonTextStyle> BodyDimStyle, TSubclassOf<UCommonTextStyle> NumberStyle, TSubclassOf<UCommonTextStyle> CaptionStyle);
+
 	/** WBP_KnightSettingRow_*: 왼쪽 항목 이름 + 미적용 점 + 오른쪽 조작부. ControlType 0 = 회전식(‹ 값 ›), 1 = 슬라이더, 2 = 키. */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
 	static bool BuildSettingRow(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> BracketClass, int32 ControlType,

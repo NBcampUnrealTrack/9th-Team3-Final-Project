@@ -7,7 +7,11 @@
 #include "Foundation/knightUISubsystem.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
+#include "Engine/GameInstance.h"
+#include "Raid/knightRaidSubsystem.h"
 #include "Screens/knightPauseMenu.h"
+#include "Screens/knightRaidResultScreen.h"
+#include "ViewModels/knightVM_Raid.h"
 #include "Widgets/CommonActivatableWidgetContainer.h"
 #include "knightPlayerController.h"
 #include "knightUI.h"
@@ -34,6 +38,59 @@ void AknightHUD::BeginPlay()
 	if (AknightPlayerController* const KnightPC = Cast<AknightPlayerController>(PC))
 	{
 		KnightPC->PauseMenuRequestHandler.BindUObject(this, &ThisClass::TogglePauseMenu);
+	}
+
+	if (UknightVM_Raid* const VM = UI->GetRaidViewModel())
+	{
+		RaidViewModel = VM;
+		VM->AddFieldValueChangedDelegate(UknightVM_Raid::FFieldNotificationClassDescriptor::Phase,
+			INotifyFieldValueChanged::FFieldValueChangedDelegate::CreateUObject(this, &ThisClass::HandleRaidViewModelChanged));
+	}
+}
+
+void AknightHUD::HandleRaidViewModelChanged(UObject* InViewModel, UE::FieldNotification::FFieldId FieldId)
+{
+	const UknightVM_Raid* const VM = RaidViewModel.Get();
+	const EknightRaidPhase Phase = VM ? VM->GetPhase() : EknightRaidPhase::None;
+	if (Phase != EknightRaidPhase::Success && Phase != EknightRaidPhase::Failed)
+	{
+		return;
+	}
+	// Abandoning travels back in the same frame; the menu shows that result instead.
+	const UGameInstance* const GameInstance = GetGameInstance();
+	const UknightRaidSubsystem* const RaidSubsystem = GameInstance ? GameInstance->GetSubsystem<UknightRaidSubsystem>() : nullptr;
+	FknightRaidResult Result;
+	if (RaidSubsystem && RaidSubsystem->GetLastResult(Result) && Result.FailReason == EknightRaidFailReason::Abandoned)
+	{
+		return;
+	}
+	OpenRaidResult();
+}
+
+void AknightHUD::OpenRaidResult()
+{
+	if (UCommonActivatableWidget* const Open = RaidResult.Get(); Open && Open->IsActivated())
+	{
+		return;
+	}
+	APlayerController* const PC = GetOwningPlayerController();
+	const ULocalPlayer* const LocalPlayer = PC ? PC->GetLocalPlayer() : nullptr;
+	UknightUISubsystem* const UI = LocalPlayer ? LocalPlayer->GetSubsystem<UknightUISubsystem>() : nullptr;
+	if (!UI || !UI->GetLayout())
+	{
+		return;
+	}
+	if (UCommonActivatableWidget* const Menu = PauseMenu.Get())
+	{
+		Menu->DeactivateWidget();
+	}
+	if (UClass* const ScreenClass = GetDefault<UknightUISettings>()->RaidResultScreenClass.LoadSynchronous())
+	{
+		RaidResult = UI->PushWidgetToLayer(knightUIGameplayTags::UI_Layer_Menu, ScreenClass);
+	}
+	else
+	{
+		UE_LOG(LogknightUI, Error, TEXT("Knight UI settings have no RaidResultScreenClass."));
 	}
 }
 
@@ -93,6 +150,16 @@ void AknightHUD::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{
 		KnightPC->PauseMenuRequestHandler.Unbind();
 	}
+	if (UknightVM_Raid* const VM = RaidViewModel.Get())
+	{
+		VM->RemoveAllFieldValueChangedDelegates(this);
+	}
+	RaidViewModel.Reset();
+	if (UCommonActivatableWidget* const Screen = RaidResult.Get())
+	{
+		Screen->DeactivateWidget();
+	}
+	RaidResult.Reset();
 	if (UCommonActivatableWidget* const Menu = PauseMenu.Get())
 	{
 		Menu->DeactivateWidget();
