@@ -79,7 +79,7 @@ public:
 	static FGameplayTag GetPartTag(EknightBodyPart Part);
 
 protected:
-	/** 본 이름 → 부위. BP_Knight 디테일에서 스켈레톤 본 이름으로 채운다. 없는 본은 DefaultHitPart. */
+	/** 본 이름 → 부위. 기본값은 생성자에 나이트 메시 기준으로 들어 있다(메시가 바뀌면 BP에서 수정). 없는 본은 DefaultHitPart. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|PartHealth")
 	TMap<FName, EknightBodyPart> BoneToPart;
 
