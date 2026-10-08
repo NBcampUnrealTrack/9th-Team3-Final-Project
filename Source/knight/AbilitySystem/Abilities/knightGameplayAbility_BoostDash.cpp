@@ -25,6 +25,7 @@ UknightGameplayAbility_BoostDash::UknightGameplayAbility_BoostDash(const FObject
 	ActivationBlockedTags.AddTag(knightGameplayTags::State_Dead);
 	ActivationBlockedTags.AddTag(knightGameplayTags::State_HitReact);
 	ActivationBlockedTags.AddTag(knightGameplayTags::State_Overheated);
+	DashCueTag = knightGameplayTags::GameplayCue_Boost_Dash;
 }
 
 float UknightGameplayAbility_BoostDash::GetMechAttributeValue(const FGameplayAttribute& Attribute, float Fallback) const
@@ -120,13 +121,14 @@ void UknightGameplayAbility_BoostDash::StartDash(ACharacter& Character)
 	DashTask->OnFinish.AddDynamic(this, &ThisClass::OnDashFinished);
 	DashTask->ReadyForActivation();
 
-	if (UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo())
+	UAbilitySystemComponent* const CueASC = DashCueTag.IsValid() ? GetAbilitySystemComponentFromActorInfo() : nullptr;
+	if (UAbilitySystemComponent* const ASC = CueASC)
 	{
 		FGameplayCueParameters CueParams;
 		CueParams.Location = Character.GetActorLocation();
 		CueParams.Normal = Direction;
 		CueParams.Instigator = &Character;
-		ASC->ExecuteGameplayCue(knightGameplayTags::GameplayCue_Boost_Dash, CueParams);
+		ASC->ExecuteGameplayCue(DashCueTag, CueParams);
 	}
 
 	// 추진기는 시끄럽다: 아직 나이트를 못 본 몬스터도 소리를 들을 수 있다 (AI 청각).
