@@ -42,6 +42,30 @@ void UknightAudioSubsystem::HandlePostLoadMap(UWorld* LoadedWorld)
 	}
 }
 
+USoundMix* UknightAudioSubsystem::GetUserSoundMix()
+{
+	if (!LoadedUserSoundMix)
+	{
+		LoadedUserSoundMix = Cast<USoundMix>(GetDefault<UknightAudioSettings>()->UserSoundMix.TryLoad());
+	}
+	return LoadedUserSoundMix;
+}
+
+USoundClass* UknightAudioSubsystem::GetSoundClass(FName Category)
+{
+	if (const TObjectPtr<USoundClass>* Loaded = LoadedSoundClasses.Find(Category))
+	{
+		return Loaded->Get();
+	}
+	const FSoftObjectPath* ClassPath = GetDefault<UknightAudioSettings>()->SoundClasses.Find(Category);
+	USoundClass* SoundClass = ClassPath ? Cast<USoundClass>(ClassPath->TryLoad()) : nullptr;
+	if (SoundClass)
+	{
+		LoadedSoundClasses.Add(Category, SoundClass);
+	}
+	return SoundClass;
+}
+
 void UknightAudioSubsystem::ApplyAllVolumes(UWorld* World)
 {
 	if (!World)
@@ -49,7 +73,7 @@ void UknightAudioSubsystem::ApplyAllVolumes(UWorld* World)
 		return;
 	}
 	const UknightAudioSettings* const Settings = GetDefault<UknightAudioSettings>();
-	if (USoundMix* const SoundMix = Cast<USoundMix>(Settings->UserSoundMix.TryLoad()))
+	if (USoundMix* const SoundMix = GetUserSoundMix())
 	{
 		if (SoundMixWorld.Get() != World)
 		{
@@ -87,9 +111,8 @@ void UknightAudioSubsystem::ApplyVolume(UWorld* World, FName Category, float Vol
 		return;
 	}
 	const UknightAudioSettings* const Settings = GetDefault<UknightAudioSettings>();
-	USoundMix* const SoundMix = Cast<USoundMix>(Settings->UserSoundMix.TryLoad());
-	const FSoftObjectPath* const ClassPath = Settings->SoundClasses.Find(Category);
-	USoundClass* const SoundClass = ClassPath ? Cast<USoundClass>(ClassPath->TryLoad()) : nullptr;
+	USoundMix* const SoundMix = GetUserSoundMix();
+	USoundClass* const SoundClass = GetSoundClass(Category);
 	if (SoundMix && SoundClass)
 	{
 		if (SoundMixWorld.Get() != World)
@@ -136,10 +159,7 @@ void UknightAudioSubsystem::PlayMusic(USoundBase* Music, float FadeTime)
 	{
 		return;
 	}
-	if (const FSoftObjectPath* const MusicClassPath = GetDefault<UknightAudioSettings>()->SoundClasses.Find(TEXT("Music")))
-	{
-		NewMusic->SoundClassOverride = Cast<USoundClass>(MusicClassPath->TryLoad());
-	}
+	NewMusic->SoundClassOverride = GetSoundClass(TEXT("Music"));
 	NewMusic->SetIntParameter(GetDefault<UknightAudioSettings>()->MusicStateParameter, MusicState);
 	NewMusic->FadeIn(Fade);
 	MusicComponent = NewMusic;
