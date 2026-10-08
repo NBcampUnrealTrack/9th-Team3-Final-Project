@@ -51,10 +51,11 @@ public:
 private:
 	void HandlePostLoadMap(UWorld* LoadedWorld);
 	void ApplyAllVolumes(UWorld* World);
-	void ApplyVolume(UWorld* World, FName Category, float Volume) const;
+	void ApplyVolume(UWorld* World, FName Category, float Volume);
 	float ResolveFadeTime(float FadeTime) const;
 
 	TMap<FName, float> Volumes;
+	TWeakObjectPtr<UWorld> SoundMixWorld;
 	TWeakObjectPtr<UAudioComponent> MusicComponent;
 	int32 MusicState = 0;
 	FDelegateHandle PostLoadMapHandle;

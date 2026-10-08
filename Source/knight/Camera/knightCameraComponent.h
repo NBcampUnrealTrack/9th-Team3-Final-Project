@@ -72,6 +72,7 @@ protected:
 
 private:
 	TSubclassOf<UknightCameraMode> DetermineCameraMode() const;
+	void ApplyUserViewSettings(FMinimalViewInfo& View) const;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UknightCameraModeStack> ModeStack;

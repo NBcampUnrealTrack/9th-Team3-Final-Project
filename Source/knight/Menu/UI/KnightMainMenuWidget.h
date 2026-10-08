@@ -9,6 +9,7 @@ class UPanelWidget;
 class UTextBlock;
 class UVerticalBox;
 class UKnightStageEntryWidget;
+class UKnightSettingsWidget;
 
 UENUM(BlueprintType)
 enum class EKnightMainMenuPage : uint8
@@ -49,6 +50,7 @@ protected:
 	virtual void NativeConstruct() override;
 	virtual EKnightFlowState GetExpectedFlowState() const override { return EKnightFlowState::MainMenu; }
 	virtual bool HandleBackRequested() override;
+	virtual bool ShouldAllowEscapeToChild() const override;
 	virtual UWidget* GetPreferredFocusTarget() const override;
 	virtual void SetTravelControlsEnabled(bool bEnabled) override;
 
@@ -118,6 +120,7 @@ private:
 
 	UFUNCTION()
 	void HandleSettingsClicked();
+	UFUNCTION() void HandleSettingsClosed();
 
 	UFUNCTION()
 	void HandleCodexClicked();
@@ -131,6 +134,10 @@ private:
 	bool ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDuringTravel);
 	bool RefreshStageDetails();
 	void RemoveStageEntries();
+	void EnsureSettingsWidget();
+
+	UPROPERTY(Transient)
+	TObjectPtr<UKnightSettingsWidget> SettingsWidget;
 
 	EKnightMainMenuPage CurrentPage = EKnightMainMenuPage::Home;
 	FName SelectedStageId;

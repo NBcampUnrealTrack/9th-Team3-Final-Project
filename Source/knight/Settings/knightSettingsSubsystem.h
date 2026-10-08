@@ -17,13 +17,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|Settings")
 	UknightSharedSettings* GetSharedSettings();
 
-	/** Applies and writes the shared settings asynchronously. Call after the settings screen applies changes. */
+	/** Synchronous save, so the settings screen can report failures accurately. */
 	UFUNCTION(BlueprintCallable, Category="Knight|Settings")
-	void SaveSharedSettings();
+	bool SaveSharedSettings();
 
 	/** Pushes the volume settings to UknightAudioSubsystem. */
 	UFUNCTION(BlueprintCallable, Category="Knight|Settings")
 	void ApplyAudioSettings();
+
+	UFUNCTION(BlueprintPure, Category="Knight|Settings")
+	bool AreSubtitlesEnabled();
 
 	static const FString SlotName;
 
@@ -32,6 +35,8 @@ protected:
 	virtual void PlayerControllerChanged(APlayerController* NewPlayerController) override;
 
 private:
+	void RegisterMappableContexts();
+	bool bMappableContextsRegistered = false;
 	UPROPERTY(Transient)
 	TObjectPtr<UknightSharedSettings> SharedSettings;
 };

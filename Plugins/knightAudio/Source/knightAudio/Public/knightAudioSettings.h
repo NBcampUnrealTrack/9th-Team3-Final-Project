@@ -14,9 +14,18 @@ class KNIGHTAUDIO_API UknightAudioSettings : public UDeveloperSettings
 	GENERATED_BODY()
 
 public:
+	UknightAudioSettings();
+
 	/** Mix holding the user volume buses. Activated in every world. */
 	UPROPERTY(EditAnywhere, Config, Category="Volume", meta=(AllowedClasses="/Script/AudioModulation.SoundControlBusMix"))
 	FSoftObjectPath UserVolumeMix;
+
+	/** Runtime volume overrides for the Knight sound-class hierarchy. */
+	UPROPERTY(EditAnywhere, Config, Category="Volume", meta=(AllowedClasses="/Script/Engine.SoundMix"))
+	FSoftObjectPath UserSoundMix;
+
+	UPROPERTY(EditAnywhere, Config, Category="Volume", meta=(AllowedClasses="/Script/Engine.SoundClass"))
+	TMap<FName, FSoftObjectPath> SoundClasses;
 
 	/** Volume category (Master, Music, SFX, Voice, UI) to the control bus that sounds of that category are routed through. */
 	UPROPERTY(EditAnywhere, Config, Category="Volume", meta=(AllowedClasses="/Script/AudioModulation.SoundControlBus"))

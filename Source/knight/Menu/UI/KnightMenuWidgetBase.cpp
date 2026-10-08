@@ -61,6 +61,7 @@ FReply UKnightMenuWidgetBase::NativeOnPreviewKeyDown(const FGeometry& InGeometry
 {
 	if (InKeyEvent.GetKey() == EKeys::Escape)
 	{
+		if (ShouldAllowEscapeToChild()) return FReply::Unhandled();
 		RequestBack();
 		return FReply::Handled();
 	}

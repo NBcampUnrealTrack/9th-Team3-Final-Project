@@ -7,6 +7,7 @@
 class UButton;
 class UPanelWidget;
 class UTextBlock;
+class UKnightSettingsWidget;
 
 UENUM(BlueprintType)
 enum class EKnightTitlePage : uint8
@@ -38,6 +39,7 @@ protected:
 	virtual void NativeDestruct() override;
 	virtual EKnightFlowState GetExpectedFlowState() const override { return EKnightFlowState::Title; }
 	virtual bool HandleBackRequested() override;
+	virtual bool ShouldAllowEscapeToChild() const override;
 	virtual UWidget* GetPreferredFocusTarget() const override;
 	virtual void SetTravelControlsEnabled(bool bEnabled) override;
 
@@ -101,6 +103,7 @@ private:
 
 	UFUNCTION()
 	void HandleSettingsClicked();
+	UFUNCTION() void HandleSettingsClosed();
 
 	UFUNCTION()
 	void HandleQuitClicked();
@@ -108,6 +111,10 @@ private:
 	bool ApplyPage(EKnightTitlePage NewPage, bool bAllowDuringTravel);
 	void RefreshSlots();
 	void OpenLobby();
+	void EnsureSettingsWidget();
+
+	UPROPERTY(Transient)
+	TObjectPtr<UKnightSettingsWidget> SettingsWidget;
 
 	EKnightTitlePage CurrentPage = EKnightTitlePage::Home;
 	bool bAwaitingInitialSave = false;
