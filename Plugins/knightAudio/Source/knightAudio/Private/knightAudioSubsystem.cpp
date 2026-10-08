@@ -8,9 +8,19 @@
 #include "SoundControlBus.h"
 #include "SoundControlBusMix.h"
 #include "Sound/SoundBase.h"
+#include "Sound/SoundClass.h"
+#include "Sound/SoundMix.h"
 #include "UObject/UObjectGlobals.h"
 #include "knightAudioModule.h"
 #include "knightAudioSettings.h"
+
+UknightAudioSettings::UknightAudioSettings()
+{
+	SoundClasses.Add(TEXT("Master"), FSoftObjectPath(TEXT("/Game/Knight/Audio/Settings/SC_Knight_Master.SC_Knight_Master")));
+	SoundClasses.Add(TEXT("Music"), FSoftObjectPath(TEXT("/Game/Knight/Audio/Settings/SC_Knight_BGM.SC_Knight_BGM")));
+	SoundClasses.Add(TEXT("SFX"), FSoftObjectPath(TEXT("/Game/Knight/Audio/Settings/SC_Knight_SFX.SC_Knight_SFX")));
+	SoundClasses.Add(TEXT("Voice"), FSoftObjectPath(TEXT("/Game/Knight/Audio/Settings/SC_Knight_Voice.SC_Knight_Voice")));
+}
 
 void UknightAudioSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -39,6 +49,14 @@ void UknightAudioSubsystem::ApplyAllVolumes(UWorld* World)
 		return;
 	}
 	const UknightAudioSettings* const Settings = GetDefault<UknightAudioSettings>();
+	if (USoundMix* const SoundMix = Cast<USoundMix>(Settings->UserSoundMix.TryLoad()))
+	{
+		if (SoundMixWorld.Get() != World)
+		{
+			UGameplayStatics::PushSoundMixModifier(World, SoundMix);
+			SoundMixWorld = World;
+		}
+	}
 	if (USoundControlBusMix* const Mix = Cast<USoundControlBusMix>(Settings->UserVolumeMix.TryLoad()))
 	{
 		UAudioModulationStatics::ActivateBusMix(World, Mix);
@@ -62,13 +80,27 @@ float UknightAudioSubsystem::GetCategoryVolume(FName Category) const
 	return Volume ? *Volume : 1.f;
 }
 
-void UknightAudioSubsystem::ApplyVolume(UWorld* World, FName Category, float Volume) const
+void UknightAudioSubsystem::ApplyVolume(UWorld* World, FName Category, float Volume)
 {
 	if (!World)
 	{
 		return;
 	}
-	const FSoftObjectPath* const BusPath = GetDefault<UknightAudioSettings>()->VolumeBuses.Find(Category);
+	const UknightAudioSettings* const Settings = GetDefault<UknightAudioSettings>();
+	USoundMix* const SoundMix = Cast<USoundMix>(Settings->UserSoundMix.TryLoad());
+	const FSoftObjectPath* const ClassPath = Settings->SoundClasses.Find(Category);
+	USoundClass* const SoundClass = ClassPath ? Cast<USoundClass>(ClassPath->TryLoad()) : nullptr;
+	if (SoundMix && SoundClass)
+	{
+		if (SoundMixWorld.Get() != World)
+		{
+			UGameplayStatics::PushSoundMixModifier(World, SoundMix);
+			SoundMixWorld = World;
+		}
+		UGameplayStatics::SetSoundMixClassOverride(World, SoundMix, SoundClass, Volume, 1.f, 0.1f, false);
+		return;
+	}
+	const FSoftObjectPath* const BusPath = Settings->VolumeBuses.Find(Category);
 	USoundControlBus* const Bus = BusPath ? Cast<USoundControlBus>(BusPath->TryLoad()) : nullptr;
 	if (!Bus)
 	{
@@ -103,6 +135,10 @@ void UknightAudioSubsystem::PlayMusic(USoundBase* Music, float FadeTime)
 	if (!NewMusic)
 	{
 		return;
+	}
+	if (const FSoftObjectPath* const MusicClassPath = GetDefault<UknightAudioSettings>()->SoundClasses.Find(TEXT("Music")))
+	{
+		NewMusic->SoundClassOverride = Cast<USoundClass>(MusicClassPath->TryLoad());
 	}
 	NewMusic->SetIntParameter(GetDefault<UknightAudioSettings>()->MusicStateParameter, MusicState);
 	NewMusic->FadeIn(Fade);

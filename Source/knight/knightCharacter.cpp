@@ -273,6 +273,12 @@ void AknightCharacter::ApplyLookInput(FVector2D LookAxisVector, bool bFromMouse)
 	UknightSettingsSubsystem* const Settings = LocalPlayer ? LocalPlayer->GetSubsystem<UknightSettingsSubsystem>() : nullptr;
 	if (const UknightSharedSettings* const Shared = Settings ? Settings->GetSharedSettings() : nullptr)
 	{
+		if (bFromMouse && Shared->bMouseAcceleration)
+		{
+			const float Seconds = FMath::Max(GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f, 0.001f);
+			const float Speed = LookAxisVector.Size() / Seconds;
+			LookAxisVector *= 1.f + 0.75f * FMath::Clamp(Speed / 900.f, 0.f, 1.f);
+		}
 		LookAxisVector *= bFromMouse ? Shared->MouseSensitivity : Shared->GamepadSensitivity;
 		if (Shared->bInvertLookY)
 		{
