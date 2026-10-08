@@ -68,6 +68,7 @@ void AknightMonsterCharacterBase::BeginPlay()
 	CoreAttributeSet->OnOutOfHealth.AddUObject(this, &ThisClass::HandleOutOfHealth);
 	MonsterAttributeSet->OnRageMaxed.AddUObject(this, &ThisClass::HandleRageMaxed);
 	MonsterAttributeSet->OnStaminaDepleted.AddUObject(this, &ThisClass::HandleStaminaDepleted);
+	TargetingComponent->OnTargetChanged.AddUniqueDynamic(this, &ThisClass::HandleTargetChanged);
 
 	// 배치된 몬스터는 빙의 전에 BeginPlay가 불릴 수 있다. 부위와 위협도는 어느 쪽이든 동작한다.
 	InitializeAbilitySystem();
@@ -231,6 +232,22 @@ void AknightMonsterCharacterBase::HandleRageMaxed(AActor* EffectInstigator, AAct
 		AbilitySystemComponent->ApplyGameplayEffectToSelf(MonsterDefinition->EnrageEffect->GetDefaultObject<UGameplayEffect>(), 1.f,
 			AbilitySystemComponent->MakeEffectContext());
 	}
+}
+
+void AknightMonsterCharacterBase::HandleTargetChanged(AActor* OldTarget, AActor* NewTarget)
+{
+	// 타깃을 잃었다 다시 찾는 것은 첫 조우가 아니다. 포효는 한 생에 한 번만.
+	if (bHasEngaged || !NewTarget || IsDead())
+	{
+		return;
+	}
+	bHasEngaged = true;
+
+	FGameplayEventData Payload;
+	Payload.EventTag = knightGameplayTags::Event_Monster_Engaged;
+	Payload.Instigator = NewTarget;
+	Payload.Target = this;
+	AbilitySystemComponent->HandleGameplayEvent(Payload.EventTag, &Payload);
 }
 
 void AknightMonsterCharacterBase::HandleStaminaDepleted(AActor* EffectInstigator, AActor* EffectCauser, const FGameplayEffectSpec* EffectSpec,
