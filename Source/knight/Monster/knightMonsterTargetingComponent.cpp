@@ -140,9 +140,15 @@ void UknightMonsterTargetingComponent::EvaluateTarget()
 	AActor* Best = nullptr;
 	float BestScore = 0.f;
 	float CurrentScore = 0.f;
+	const FVector OwnerLocation = GetOwner()->GetActorLocation();
 	for (FCandidate& Candidate : Candidates)
 	{
 		Candidate.Threat *= Decay;
+		if (CloseAwarenessRadius > 0.f && !Candidate.bObjective
+			&& FVector::DistSquared2D(OwnerLocation, Candidate.Actor->GetActorLocation()) <= FMath::Square(CloseAwarenessRadius))
+		{
+			Candidate.LastSensedTime = Now;
+		}
 		if (!IsCandidateValid(Candidate, Now))
 		{
 			continue;

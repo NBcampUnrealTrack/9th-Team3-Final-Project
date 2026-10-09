@@ -16,7 +16,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FknightMonsterTargetChanged, AActor
  * 후보는 AI Perception(UknightBossAIController가 시야/청각/피해를 전달)과 AddObjective에서 들어온다.
  * 점수 = Priority / (1 + 거리 / DistanceFalloff) + 최근 피해 위협도.
  * 피해 위협도는 시간이 지나며 줄어들므로, 몬스터를 때리면 한동안 어그로가 끌린다. 더 이상 감지되지
- * 않는 후보도 LoseTargetDelay초 동안은 유효하다.
+ * 않는 후보도 LoseTargetDelay초 동안은 유효하다. CloseAwarenessRadius 안에 있는 후보는 시야 밖(등 뒤)이어도 감지한 것으로 본다.
  */
 UCLASS(ClassGroup=(Knight), meta=(BlueprintSpawnableComponent))
 class KNIGHT_API UknightMonsterTargetingComponent : public UActorComponent
@@ -85,6 +85,14 @@ protected:
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Monster", meta=(ClampMin=0, Units="s"))
 	float LoseTargetDelay = 8.f;
+
+	/**
+	 * 이 수평 거리(몬스터 중심 기준) 안에 있는 후보는 시야 밖이어도 계속 감지한 것으로 본다. 0이면 끈다.
+	 * 시야는 앞쪽만 보므로, 공격하지 않고 등 뒤에 머무는 플레이어를 LoseTargetDelay 뒤에 잊어버리는 것을 막는다.
+	 * 이미 한 번 감지한 후보에만 적용된다(처음 발견은 여전히 시야·청각·피해로).
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Monster", meta=(ClampMin=0, Units="cm"))
+	float CloseAwarenessRadius = 2500.f;
 
 private:
 	struct FCandidate
