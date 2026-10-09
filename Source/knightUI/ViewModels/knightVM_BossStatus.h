@@ -7,7 +7,6 @@
 #include "knightVM_BossStatus.generated.h"
 
 class AknightMonsterCharacterBase;
-class UAbilitySystemComponent;
 
 /**
  * Status of the raid's target monster. Registered as "BossStatus". Health is exposed for designers who want

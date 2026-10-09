@@ -146,31 +146,6 @@ UButton* UKnightCodexWidget::GetFocusButton() const
 	}
 }
 
-FText UKnightCodexWidget::GetDisplayedBossName() const
-{
-	return Text_BossName ? Text_BossName->GetText() : FText::GetEmpty();
-}
-
-FText UKnightCodexWidget::GetDisplayedBossDescription() const
-{
-	return Text_BossDescription ? Text_BossDescription->GetText() : FText::GetEmpty();
-}
-
-UTexture2D* UKnightCodexWidget::GetDisplayedPortrait() const
-{
-	return Image_Portrait ? Cast<UTexture2D>(Image_Portrait->GetBrush().GetResourceObject()) : nullptr;
-}
-
-FText UKnightCodexWidget::GetDisplayedWorldBody() const
-{
-	return Text_WorldBody ? Text_WorldBody->GetText() : FText::GetEmpty();
-}
-
-int32 UKnightCodexWidget::GetDropRowCount() const
-{
-	return Box_Drops ? Box_Drops->GetChildrenCount() : 0;
-}
-
 const FKnightCodexBossEntry* UKnightCodexWidget::FindBoss(FName BossId) const
 {
 	if (!LoadedData) return nullptr;

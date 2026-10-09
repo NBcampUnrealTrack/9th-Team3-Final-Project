@@ -17,9 +17,9 @@ class UknightVM_Raid;
  * Owns the local player's gameplay UI: the primary layout (one per world) and the HUD view models.
  *
  * View models live for the whole session and are registered in the MVVM global view model collection as
- * "PlayerStatus", "BossStatus" and "Raid". Widgets use the Global View Model Collection creation type with
- * those names, so no widget ever finds its data by itself. They are rebound when a new world's HUD starts
- * and when the possessed pawn changes.
+ * "PlayerStatus", "BossStatus" and "Raid", so MVVM bindings can use the Global View Model Collection creation type.
+ * The current HUD widgets read them through the Get*ViewModel getters instead. They are rebound when a new world's
+ * HUD starts and when the possessed pawn changes.
  */
 UCLASS()
 class KNIGHTUI_API UknightUISubsystem : public ULocalPlayerSubsystem
