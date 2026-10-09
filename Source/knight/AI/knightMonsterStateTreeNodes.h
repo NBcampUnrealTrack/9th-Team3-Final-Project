@@ -157,6 +157,12 @@ struct FknightFaceTargetTaskInstanceData
 
 	UPROPERTY(EditAnywhere, Category="Parameter", meta=(ClampMin=0, Units="deg"))
 	float Tolerance = 10.f;
+
+	/** 이 시간이 지나면 다 돌지 못해도 성공으로 끝낸다(타깃이 계속 옆으로 돌 때 공격이 영영 안 나가지 않게). 0이면 제한 없음. */
+	UPROPERTY(EditAnywhere, Category="Parameter", meta=(ClampMin=0, Units="s"))
+	float MaxTime = 1.5f;
+
+	float ElapsedTime = 0.f;
 };
 
 /** 몬스터를 제자리에서 타깃 쪽으로 돌리고, 타깃을 바라보면 성공한다. 회전 몽타주가 필요하면 Activate Ability를 쓴다. */

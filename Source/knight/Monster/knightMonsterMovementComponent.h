@@ -29,7 +29,8 @@ public:
 	/**
 	 * 이번 프레임에 소유자를 WorldLocation 쪽으로 초당 최대 TurnRate도만큼 회전시킨다.
 	 * TurnAcceleration이 있으면 회전 속도를 서서히 올리고, 목표 각도에 가까워지면 서서히 줄여 멈춘다(큰 몸이 툭 돌았다 툭 서지 않게).
-	 * ToleranceDegrees 이내로 바라보면 true를 반환한다. 잠긴 동안에는 아무것도 하지 않고 false를 반환한다.
+	 * ToleranceDegrees 이내로 바라보면 true를 반환한다. 그때 남은 회전 속도는 TickComponent가 관성으로 줄여 멈춘다
+	 * (움직이는 타깃을 따라 도는 중에도 허용 각도에만 들어오면 끝나므로, 회전이 끝나지 않는 일이 없다). 잠긴 동안에는 아무것도 하지 않고 false를 반환한다.
 	 * 몽타주가 있는 회전이라면 이 함수 대신 몽타주를 재생한다.
 	 */
 	bool TurnTowards(const FVector& WorldLocation, float DeltaTime, float TurnRate, float ToleranceDegrees);
@@ -37,6 +38,7 @@ public:
 	/** 소유자에게 LockTags 중 하나라도 있으면 true. */
 	bool IsMovementLocked() const;
 
+	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 	virtual float GetMaxSpeed() const override;
 	virtual void PhysicsRotation(float DeltaTime) override;
 
@@ -51,7 +53,9 @@ protected:
 private:
 	mutable TWeakObjectPtr<UAbilitySystemComponent> CachedASC;
 
-	/** 지금 회전 속도(도/초, 부호 = 방향). 회전이 끝나거나 TurnTowards가 한동안 불리지 않으면 0부터 다시 시작한다. */
+	/** 지금 회전 속도(도/초, 부호 = 방향). TurnTowards가 회전을 끝냈거나 더 불리지 않으면 TickComponent가 0까지 줄인다. */
 	float TurnSpeed = 0.f;
 	double LastTurnTime = -1.0;
+	/** TurnTowards가 허용 각도에 들어와 회전을 넘겼다. 남은 속도는 관성으로 감속한다. */
+	bool bCoastingTurn = false;
 };

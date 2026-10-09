@@ -48,6 +48,32 @@ void UknightMonsterMovementComponent::PhysicsRotation(float DeltaTime)
 	}
 }
 
+void UknightMonsterMovementComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	if (FMath::IsNearlyZero(TurnSpeed))
+	{
+		return;
+	}
+	// 회전이 끝났거나(허용 각도 도달) 회전을 요청하던 쪽이 멈췄으면(최대 시간 등) 남은 속도를 관성으로 줄인다.
+	const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	if (!bCoastingTurn && Now - LastTurnTime < 0.1)
+	{
+		return;
+	}
+	AActor* const Owner = GetOwner();
+	if (!Owner || IsMovementLocked() || TurnAcceleration <= 0.f)
+	{
+		TurnSpeed = 0.f;
+		return;
+	}
+	const float NewSpeed = FMath::FInterpConstantTo(TurnSpeed, 0.f, DeltaTime, TurnAcceleration);
+	const float Step = 0.5f * (TurnSpeed + NewSpeed) * DeltaTime;
+	TurnSpeed = NewSpeed;
+	Owner->SetActorRotation(FRotator(0.f, Owner->GetActorRotation().Yaw + Step, 0.f));
+}
+
 bool UknightMonsterMovementComponent::TurnTowards(const FVector& WorldLocation, float DeltaTime, float TurnRate, float ToleranceDegrees)
 {
 	AActor* const Owner = GetOwner();
@@ -68,20 +94,18 @@ bool UknightMonsterMovementComponent::TurnTowards(const FVector& WorldLocation, 
 	const float DesiredYaw = ToTarget.Rotation().Yaw;
 	const float Delta = FRotator::NormalizeAxis(DesiredYaw - CurrentYaw);
 
-	// 지난 프레임에 돌지 않았다면 새 회전이다. 정지 상태에서 다시 가속한다.
-	const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
-	if (Now - LastTurnTime > 0.1)
+	LastTurnTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	if (FMath::Abs(Delta) <= ToleranceDegrees)
 	{
-		TurnSpeed = 0.f;
-	}
-	LastTurnTime = Now;
-
-	// 허용 각도 안이라도 아직 돌고 있으면 감속이 끝날 때까지 마저 돈다(툭 멈추지 않게).
-	if (FMath::Abs(Delta) <= ToleranceDegrees && (TurnAcceleration <= 0.f || FMath::IsNearlyZero(TurnSpeed)))
-	{
-		TurnSpeed = 0.f;
+		// 남은 속도는 TickComponent가 줄인다. 감속 곡선(v = sqrt(2 a d)) 덕분에 관성으로 돈 만큼이 남은 각도와 거의 같다.
+		bCoastingTurn = TurnAcceleration > 0.f;
+		if (!bCoastingTurn)
+		{
+			TurnSpeed = 0.f;
+		}
 		return true;
 	}
+	bCoastingTurn = false;
 
 	float Step;
 	if (TurnAcceleration > 0.f)
@@ -106,9 +130,9 @@ bool UknightMonsterMovementComponent::TurnTowards(const FVector& WorldLocation, 
 		Step = FMath::Clamp(Delta, -TurnRate * DeltaTime, TurnRate * DeltaTime);
 	}
 	Owner->SetActorRotation(FRotator(0.f, CurrentYaw + Step, 0.f));
-	const bool bStopped = TurnAcceleration <= 0.f || FMath::Abs(TurnSpeed) <= TurnAcceleration * DeltaTime;
-	const bool bDone = FMath::Abs(Delta - Step) <= ToleranceDegrees && bStopped;
-	if (bDone)
+	const bool bDone = FMath::Abs(Delta - Step) <= ToleranceDegrees;
+	bCoastingTurn = bDone && TurnAcceleration > 0.f;
+	if (bDone && !bCoastingTurn)
 	{
 		TurnSpeed = 0.f;
 	}

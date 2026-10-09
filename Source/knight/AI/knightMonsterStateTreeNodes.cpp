@@ -198,21 +198,30 @@ void FknightStateTreeActivateAbilityTask::ExitState(FStateTreeExecutionContext& 
 
 EStateTreeRunStatus FknightStateTreeFaceTargetTask::EnterState(FStateTreeExecutionContext& Context, const FStateTreeTransitionResult& Transition) const
 {
-	const FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
+	FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
+	InstanceData.ElapsedTime = 0.f;
 	return InstanceData.Monster && InstanceData.Target ? EStateTreeRunStatus::Running : EStateTreeRunStatus::Failed;
 }
 
 EStateTreeRunStatus FknightStateTreeFaceTargetTask::Tick(FStateTreeExecutionContext& Context, const float DeltaTime) const
 {
-	const FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
+	FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
 	UknightMonsterMovementComponent* const Movement = InstanceData.Monster ? InstanceData.Monster->GetMonsterMovementComponent() : nullptr;
 	if (!Movement || !InstanceData.Target)
 	{
 		return EStateTreeRunStatus::Failed;
 	}
-	return Movement->TurnTowards(InstanceData.Target->GetActorLocation(), DeltaTime, InstanceData.TurnRate, InstanceData.Tolerance)
-		? EStateTreeRunStatus::Succeeded
-		: EStateTreeRunStatus::Running;
+	if (Movement->TurnTowards(InstanceData.Target->GetActorLocation(), DeltaTime, InstanceData.TurnRate, InstanceData.Tolerance))
+	{
+		return EStateTreeRunStatus::Succeeded;
+	}
+	InstanceData.ElapsedTime += DeltaTime;
+	if (InstanceData.MaxTime > 0.f && InstanceData.ElapsedTime >= InstanceData.MaxTime)
+	{
+		UE_LOG(LogknightAI, Verbose, TEXT("%s: Face Target gave up after %.1fs."), *GetNameSafe(InstanceData.Monster), InstanceData.ElapsedTime);
+		return EStateTreeRunStatus::Succeeded;
+	}
+	return EStateTreeRunStatus::Running;
 }
 
 // Knight Has Gameplay Tag
