@@ -16,7 +16,7 @@ const FString UKnightSettingsWidget::OffText(TEXT("끄기"));
 
 namespace
 {
-	const TCHAR* const SettingsWidgetPath = TEXT("/Game/Knight/UI/Screens/WBP_KnightSettings.WBP_KnightSettings_C");
+	const TCHAR* const SettingsWidgetPath = TEXT("/Game/Knight/UI/Screens/Settings/WBP_KnightSettings.WBP_KnightSettings_C");
 
 	FString OnOff(bool bValue) { return bValue ? UKnightSettingsWidget::OnText : UKnightSettingsWidget::OffText; }
 	FString Number(float Value) { return FString::SanitizeFloat(FMath::RoundToFloat(Value)); }

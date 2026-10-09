@@ -1,10 +1,14 @@
 #include "KnightTitleMenuWidget.h"
 
 #include "GameFlow/KnightGameFlowSubsystem.h"
-#include "Components/Button.h"
+#include "CommonButtonBase.h"
 #include "Components/PanelWidget.h"
-#include "Components/TextBlock.h"
+#include "HAL/FileManager.h"
+#include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "KnightSaveSlotCard.h"
+#include "Misc/Paths.h"
+#include "Progression/knightSaveGame.h"
 #include "Progression/knightSaveSubsystem.h"
 #include "knight.h"
 #include "Settings/KnightSettingsWidget.h"
@@ -23,18 +27,15 @@ void UKnightTitleMenuWidget::NativeOnInitialized()
 	ValidateRequiredWidget(Button_Slot1, TEXT("Button_Slot1"));
 	ValidateRequiredWidget(Button_Slot2, TEXT("Button_Slot2"));
 	ValidateRequiredWidget(Button_Slot3, TEXT("Button_Slot3"));
-	ValidateRequiredWidget(Text_Slot1, TEXT("Text_Slot1"));
-	ValidateRequiredWidget(Text_Slot2, TEXT("Text_Slot2"));
-	ValidateRequiredWidget(Text_Slot3, TEXT("Text_Slot3"));
 	ValidateRequiredWidget(Button_Settings, TEXT("Button_Settings"));
 	ValidateRequiredWidget(Button_Quit, TEXT("Button_Quit"));
-	if (Button_StartGame) Button_StartGame->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleStartGameClicked);
-	if (Button_SaveSelect) Button_SaveSelect->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleSaveSelectClicked);
-	if (Button_Slot1) Button_Slot1->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleSlot1Clicked);
-	if (Button_Slot2) Button_Slot2->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleSlot2Clicked);
-	if (Button_Slot3) Button_Slot3->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleSlot3Clicked);
-	if (Button_Settings) Button_Settings->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleSettingsClicked);
-	if (Button_Quit) Button_Quit->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleQuitClicked);
+	if (Button_StartGame) Button_StartGame->OnClicked().AddUObject(this, &ThisClass::HandleStartGameClicked);
+	if (Button_SaveSelect) Button_SaveSelect->OnClicked().AddUObject(this, &ThisClass::HandleSaveSelectClicked);
+	if (Button_Slot1) Button_Slot1->OnClicked().AddUObject(this, &ThisClass::HandleSlot1Clicked);
+	if (Button_Slot2) Button_Slot2->OnClicked().AddUObject(this, &ThisClass::HandleSlot2Clicked);
+	if (Button_Slot3) Button_Slot3->OnClicked().AddUObject(this, &ThisClass::HandleSlot3Clicked);
+	if (Button_Settings) Button_Settings->OnClicked().AddUObject(this, &ThisClass::HandleSettingsClicked);
+	if (Button_Quit) Button_Quit->OnClicked().AddUObject(this, &ThisClass::HandleQuitClicked);
 }
 
 void UKnightTitleMenuWidget::NativeConstruct()
@@ -142,12 +143,20 @@ UWidget* UKnightTitleMenuWidget::GetPreferredFocusTarget() const
 {
 	if (CurrentPage != EKnightTitlePage::Home)
 	{
-		if (CurrentPage == EKnightTitlePage::SaveSelect && Button_Slot1 && Button_Slot1->GetIsEnabled()) return Button_Slot1;
+		if (CurrentPage == EKnightTitlePage::SaveSelect)
+		{
+			// Start on the slot being played, otherwise the first one.
+			for (UKnightSaveSlotCard* Card : { Button_Slot1.Get(), Button_Slot2.Get(), Button_Slot3.Get() })
+			{
+				if (Card && Card->GetSlotView().bActive && CanFocusButton(Card)) return Card;
+			}
+			if (CanFocusButton(Button_Slot1)) return Button_Slot1;
+		}
 		return Button_Back;
 	}
-	for (UButton* Button : { Button_StartGame.Get(), Button_SaveSelect.Get(), Button_Settings.Get(), Button_Quit.Get() })
+	for (UCommonButtonBase* Button : { Button_StartGame.Get(), Button_SaveSelect.Get(), Button_Settings.Get(), Button_Quit.Get() })
 	{
-		if (Button && Button->GetIsFocusable() && Button->IsVisible() && Button->GetIsEnabled())
+		if (CanFocusButton(Button))
 		{
 			return Button;
 		}
@@ -164,7 +173,7 @@ void UKnightTitleMenuWidget::SetTravelControlsEnabled(bool bEnabled)
 	if (Button_SaveSelect) Button_SaveSelect->SetIsEnabled(bReady);
 	if (Button_Settings) Button_Settings->SetIsEnabled(bReady);
 	if (Button_Quit) Button_Quit->SetIsEnabled(bReady);
-	for (UButton* Button : { Button_Slot1.Get(), Button_Slot2.Get(), Button_Slot3.Get() })
+	for (UKnightSaveSlotCard* Button : { Button_Slot1.Get(), Button_Slot2.Get(), Button_Slot3.Get() })
 	{
 		if (Button) Button->SetIsEnabled(bReady);
 	}
@@ -173,6 +182,12 @@ void UKnightTitleMenuWidget::SetTravelControlsEnabled(bool bEnabled)
 
 void UKnightTitleMenuWidget::HandleStartGameClicked()
 {
+	// Slot choice is asked only the first time; after that the last played slot continues.
+	if (const int32 Latest = FindLatestSlot(); Latest > 0)
+	{
+		SelectFixedSlot(Latest);
+		return;
+	}
 	ShowPage(EKnightTitlePage::SaveSelect);
 }
 
@@ -185,34 +200,84 @@ void UKnightTitleMenuWidget::HandleSlot1Clicked() { SelectFixedSlot(1); }
 void UKnightTitleMenuWidget::HandleSlot2Clicked() { SelectFixedSlot(2); }
 void UKnightTitleMenuWidget::HandleSlot3Clicked() { SelectFixedSlot(3); }
 
+namespace
+{
+	/**
+	 * Read-only access to a fixed slot's file. Mirrors the slot names in UknightSaveSubsystem (1 = KnightProgress,
+	 * 2/3 = KnightProgress_Slot2/3). Editor save tests use their own namespace and simply show as empty here.
+	 */
+	FString FixedSlotFileName(int32 SlotNumber)
+	{
+		return SlotNumber == 1 ? FString(TEXT("KnightProgress")) : FString::Printf(TEXT("KnightProgress_Slot%d"), SlotNumber);
+	}
+
+	/** Local time the slot was last written; the save has no timestamp of its own. */
+	FDateTime GetSlotFileTime(int32 SlotNumber)
+	{
+		const FString Path = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("SaveGames"), FixedSlotFileName(SlotNumber) + TEXT(".sav"));
+		const FDateTime Utc = IFileManager::Get().GetTimeStamp(*Path);
+		return Utc == FDateTime::MinValue() ? Utc : Utc + (FDateTime::Now() - FDateTime::UtcNow());
+	}
+}
+
 void UKnightTitleMenuWidget::RefreshSlots()
 {
 	const UknightSaveSubsystem* const Save = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
-	UTextBlock* Labels[] = { Text_Slot1.Get(), Text_Slot2.Get(), Text_Slot3.Get() };
+	// "Game start" continues this slot, so the card marks it.
+	const int32 LatestSlot = FindLatestSlot();
+	UKnightSaveSlotCard* const Cards[] = { Button_Slot1.Get(), Button_Slot2.Get(), Button_Slot3.Get() };
 	for (int32 Number = 1; Number <= 3; ++Number)
 	{
-		if (!Labels[Number - 1]) continue;
+		UKnightSaveSlotCard* const Card = Cards[Number - 1];
 		bool bExists = false;
 		bool bReadable = false;
 		float Seconds = 0.f;
-		if (!Save || !Save->GetFixedSlotInfo(Number, bExists, bReadable, Seconds)) continue;
-		FString Description;
-		if (!bExists)
+		if (!Card || !Save || !Save->GetFixedSlotInfo(Number, bExists, bReadable, Seconds)) continue;
+
+		FKnightSaveSlotView View;
+		View.SlotNumber = Number;
+		View.State = !bExists ? EKnightSaveSlotState::Empty : (bReadable ? EKnightSaveSlotState::Ready : EKnightSaveSlotState::Unreadable);
+		if (View.State == EKnightSaveSlotState::Ready)
 		{
-			Description = FString::Printf(TEXT("세이브 %d / 빈 슬롯 / 새 게임"), Number);
+			View.PlayTimeSeconds = Seconds;
+			View.LastPlayed = GetSlotFileTime(Number);
+			const UknightSaveGame* const Data = Cast<UknightSaveGame>(UGameplayStatics::LoadGameFromSlot(FixedSlotFileName(Number), UknightSaveSubsystem::UserIndex));
+			if (Data)
+			{
+				for (const TPair<FName, FknightStageRecord>& Record : Data->StageRecords)
+				{
+					if (Record.Value.ClearCount > 0)
+					{
+						++View.ClearedStages;
+						View.TotalClears += Record.Value.ClearCount;
+					}
+				}
+			}
+			View.bActive = Number == LatestSlot;
 		}
-		else if (!bReadable)
-		{
-			Description = FString::Printf(TEXT("세이브 %d / 저장 파일 오류 / 재시도"), Number);
-		}
-		else
-		{
-			const int64 WholeSeconds = FMath::Max<int64>(0, FMath::FloorToInt64(Seconds));
-			Description = FString::Printf(TEXT("세이브 %d / 플레이타임 %02lld:%02lld:%02lld / 이어하기"),
-				Number, WholeSeconds / 3600, (WholeSeconds / 60) % 60, WholeSeconds % 60);
-		}
-		Labels[Number - 1]->SetText(FText::FromString(Description));
+		Card->SetSlotView(View);
 	}
+}
+
+int32 UKnightTitleMenuWidget::FindLatestSlot() const
+{
+	const UknightSaveSubsystem* const Save = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
+	int32 Latest = 0;
+	FDateTime LatestTime = FDateTime::MinValue();
+	for (int32 Number = 1; Number <= 3 && Save; ++Number)
+	{
+		bool bExists = false;
+		bool bReadable = false;
+		float Seconds = 0.f;
+		if (!Save->GetFixedSlotInfo(Number, bExists, bReadable, Seconds) || !bExists || !bReadable) continue;
+		const FDateTime FileTime = GetSlotFileTime(Number);
+		if (Latest == 0 || FileTime > LatestTime)
+		{
+			Latest = Number;
+			LatestTime = FileTime;
+		}
+	}
+	return Latest;
 }
 
 void UKnightTitleMenuWidget::SelectFixedSlot(int32 SlotNumber)

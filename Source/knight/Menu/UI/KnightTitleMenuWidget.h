@@ -4,9 +4,9 @@
 #include "KnightMenuWidgetBase.h"
 #include "KnightTitleMenuWidget.generated.h"
 
-class UButton;
+class UCommonButtonBase;
 class UPanelWidget;
-class UTextBlock;
+class UKnightSaveSlotCard;
 class UKnightSettingsWidget;
 
 UENUM(BlueprintType)
@@ -53,34 +53,25 @@ protected:
 	TObjectPtr<UPanelWidget> Panel_Settings;
 
 	UPROPERTY(meta=(BindWidget))
-	TObjectPtr<UButton> Button_StartGame;
+	TObjectPtr<UCommonButtonBase> Button_StartGame;
 
 	UPROPERTY(meta=(BindWidget))
-	TObjectPtr<UButton> Button_SaveSelect;
+	TObjectPtr<UCommonButtonBase> Button_SaveSelect;
 
 	UPROPERTY(meta=(BindWidget))
-	TObjectPtr<UButton> Button_Slot1;
+	TObjectPtr<UKnightSaveSlotCard> Button_Slot1;
 
 	UPROPERTY(meta=(BindWidget))
-	TObjectPtr<UButton> Button_Slot2;
+	TObjectPtr<UKnightSaveSlotCard> Button_Slot2;
 
 	UPROPERTY(meta=(BindWidget))
-	TObjectPtr<UButton> Button_Slot3;
+	TObjectPtr<UKnightSaveSlotCard> Button_Slot3;
 
 	UPROPERTY(meta=(BindWidget))
-	TObjectPtr<UTextBlock> Text_Slot1;
+	TObjectPtr<UCommonButtonBase> Button_Settings;
 
 	UPROPERTY(meta=(BindWidget))
-	TObjectPtr<UTextBlock> Text_Slot2;
-
-	UPROPERTY(meta=(BindWidget))
-	TObjectPtr<UTextBlock> Text_Slot3;
-
-	UPROPERTY(meta=(BindWidget))
-	TObjectPtr<UButton> Button_Settings;
-
-	UPROPERTY(meta=(BindWidget))
-	TObjectPtr<UButton> Button_Quit;
+	TObjectPtr<UCommonButtonBase> Button_Quit;
 
 private:
 	UFUNCTION()
@@ -110,6 +101,8 @@ private:
 
 	bool ApplyPage(EKnightTitlePage NewPage, bool bAllowDuringTravel);
 	void RefreshSlots();
+	/** The slot whose file was written last, or 0 when no slot has been saved yet. */
+	int32 FindLatestSlot() const;
 	void OpenLobby();
 	void EnsureSettingsWidget();
 

@@ -19,6 +19,8 @@
 #include "Components/Slider.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
+#include "Components/WidgetSwitcher.h"
+#include "Engine/Texture2D.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "WidgetBlueprint.h"
 #include "Screens/knightSettingsScreen.h"
@@ -390,6 +392,8 @@ bool UknightUIEditorLibrary::RemoveWidget(UWidgetBlueprint* WidgetBlueprint, FNa
 	for (UWidget* const Each : Removed)
 	{
 		WidgetBlueprint->OnVariableRemoved(Each->GetFName());
+		// Frees the name, so a rebuilt tree can reuse it.
+		Each->Rename(nullptr, GetTransientPackage(), REN_DontCreateRedirectors | REN_NonTransactional);
 	}
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBlueprint);
 	return true;
@@ -926,6 +930,370 @@ bool UknightUIEditorLibrary::BuildSettingsScreen(UWidgetBlueprint* WidgetBluepri
 	AddCentered(Footer, Prompt, false);
 	AddToColumn(Page, Footer, HAlign_Fill, FMargin(0.f, 14.f, 0.f, 0.f));
 
+	EndBuild(WidgetBlueprint);
+	return true;
+}
+
+namespace
+{
+	/** Offsets mean position + size for point anchors, and edge distances for stretched anchors. */
+	UCanvasPanelSlot* AddToCanvas(UCanvasPanel* Canvas, UWidget* Widget, const FAnchors& Anchors, const FVector2D& Alignment, const FMargin& Offsets, bool bAutoSize = false)
+	{
+		UCanvasPanelSlot* const Slot = Canvas->AddChildToCanvas(Widget);
+		Slot->SetAnchors(Anchors);
+		Slot->SetAlignment(Alignment);
+		Slot->SetOffsets(Offsets);
+		Slot->SetAutoSize(bAutoSize);
+		return Slot;
+	}
+
+	void AddFill(UCanvasPanel* Canvas, UWidget* Widget)
+	{
+		AddToCanvas(Canvas, Widget, FAnchors(0.f, 0.f, 1.f, 1.f), FVector2D::ZeroVector, FMargin(0.f));
+	}
+
+	UImage* NewTextureImage(UWidgetBlueprint* WidgetBlueprint, const FName Name, UTexture2D* Texture, const FLinearColor& Tint, const FVector2D& Size)
+	{
+		UImage* const Image = NewWidget<UImage>(WidgetBlueprint, Name);
+		FSlateBrush Brush;
+		Brush.SetResourceObject(Texture);
+		Brush.ImageSize = Size;
+		Brush.DrawAs = ESlateBrushDrawType::Image;
+		Image->SetBrush(Brush);
+		Image->SetColorAndOpacity(Tint);
+		Image->SetVisibility(ESlateVisibility::HitTestInvisible);
+		return Image;
+	}
+
+	/** Navy fade from the left edge so the menu text reads over the 3D scene, which stays visible on the right. */
+	UImage* NewLeftFade(UWidgetBlueprint* WidgetBlueprint, const FName Name, UTexture2D* Gradient)
+	{
+		return NewTextureImage(WidgetBlueprint, Name, Gradient, FLinearColor(Navy900.R, Navy900.G, Navy900.B, 0.85f), FVector2D(512.f, 8.f));
+	}
+
+	UVerticalBox* NewTextMenu(UWidgetBlueprint* WidgetBlueprint, const FName Name, TSubclassOf<UUserWidget> ItemClass, std::initializer_list<TPair<const TCHAR*, FText>> Items)
+	{
+		UVerticalBox* const Menu = NewWidget<UVerticalBox>(WidgetBlueprint, Name);
+		for (const TPair<const TCHAR*, FText>& Item : Items)
+		{
+			UknightButtonBase* const Button = NewWidget<UknightButtonBase>(WidgetBlueprint, TSubclassOf<UknightButtonBase>(ItemClass), Item.Key, true);
+			Button->SetButtonText(Item.Value);
+			// Grow from the left edge, like the text itself.
+			Button->SetRenderTransformPivot(FVector2D(0.f, 0.5f));
+			AddToColumn(Menu, Button, HAlign_Left, FMargin(0.f, 4.f));
+		}
+		return Menu;
+	}
+
+	/** Caption above a value, for the info panels. */
+	void AddCaptionedValue(UWidgetBlueprint* WidgetBlueprint, UVerticalBox* Column, const TCHAR* ValueName, const FText& Caption, const FText& Placeholder,
+		TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> ValueStyle, float Top)
+	{
+		AddToColumn(Column, NewText(WidgetBlueprint, *FString::Printf(TEXT("%s_Caption"), ValueName), CaptionStyle, Caption, false), HAlign_Left, FMargin(0.f, Top, 0.f, 0.f));
+		AddToColumn(Column, NewText(WidgetBlueprint, ValueName, ValueStyle, Placeholder, true), HAlign_Left, FMargin(0.f, 4.f, 0.f, 0.f));
+	}
+
+	/** Back button shared by both menus: bottom right, outside the page switcher. */
+	void AddBackAndStatus(UWidgetBlueprint* WidgetBlueprint, UCanvasPanel* Canvas, TSubclassOf<UUserWidget> ButtonClass, TSubclassOf<UCommonButtonStyle> SecondaryStyle,
+		TSubclassOf<UCommonTextStyle> StatusStyle)
+	{
+		UknightButtonBase* const Back = NewWidget<UknightButtonBase>(WidgetBlueprint, TSubclassOf<UknightButtonBase>(ButtonClass), TEXT("Button_Back"), true);
+		Back->SetButtonText(NSLOCTEXT("knightUI", "MenuBack", "ESC   돌아가기"));
+		if (SecondaryStyle)
+		{
+			Back->SetStyle(SecondaryStyle);
+		}
+		AddToCanvas(Canvas, Back, FAnchors(1.f, 1.f), FVector2D(1.f, 1.f), FMargin(-HUDMargin.X, -48.f, 0.f, 0.f), true);
+		AddToCanvas(Canvas, NewText(WidgetBlueprint, TEXT("Text_Status"), StatusStyle, FText::GetEmpty(), true),
+			FAnchors(0.f, 1.f), FVector2D(0.f, 1.f), FMargin(HUDMargin.X, -56.f, 0.f, 0.f), true);
+	}
+}
+
+bool UknightUIEditorLibrary::BuildKnightMenuItem(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> LabelStyle)
+{
+	if (!BeginBuild(WidgetBlueprint, TEXT("BuildKnightMenuItem")))
+	{
+		return false;
+	}
+	UHorizontalBox* const Root = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("HorizontalBox_Root"));
+	WidgetBlueprint->WidgetTree->RootWidget = Root;
+
+	// Orange bar in front of the focused item. The button base fades and opens it like the button brackets.
+	AddCentered(Root, NewHUDImage(WidgetBlueprint, TEXT("Bracket_L"), Ember, FVector2D(3.f, 26.f), true), false, VAlign_Center);
+	AddCentered(Root, NewText(WidgetBlueprint, TEXT("Txt_Label"), LabelStyle, NSLOCTEXT("knightUI", "MenuItemPlaceholder", "메뉴 항목"), true),
+		false, VAlign_Center, FMargin(18.f, 0.f, 0.f, 0.f));
+
+	EndBuild(WidgetBlueprint);
+	return true;
+}
+
+bool UknightUIEditorLibrary::BuildSaveSlotCard(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> TitleStyle,
+	TSubclassOf<UCommonTextStyle> SubheadStyle, TSubclassOf<UCommonTextStyle> BodyDimStyle, TSubclassOf<UCommonTextStyle> NumberStyle)
+{
+	if (!BeginBuild(WidgetBlueprint, TEXT("BuildSaveSlotCard")))
+	{
+		return false;
+	}
+	USizeBox* const Root = NewSizeBox(WidgetBlueprint, TEXT("SizeBox_Card"), 420.f, 600.f);
+	WidgetBlueprint->WidgetTree->RootWidget = Root;
+	UOverlay* const Layers = NewWidget<UOverlay>(WidgetBlueprint, TEXT("Overlay_Card"));
+	Root->AddChild(Layers);
+
+	UImage* const Background = NewWidget<UImage>(WidgetBlueprint, TEXT("Img_Background"));
+	Background->SetBrush(FrameBrush(0.92f));
+	Background->SetVisibility(ESlateVisibility::HitTestInvisible);
+	AddToOverlay(Layers, Background, HAlign_Fill, VAlign_Fill);
+
+	// Orange 2px frame for hover / focus; C++ shows it.
+	FSlateBrush FocusBrush;
+	FocusBrush.DrawAs = ESlateBrushDrawType::RoundedBox;
+	FocusBrush.TintColor = FSlateColor(FLinearColor::Transparent);
+	FocusBrush.OutlineSettings = FSlateBrushOutlineSettings(FVector4(0.f, 0.f, 0.f, 0.f), FSlateColor(Ember), 2.f);
+	FocusBrush.OutlineSettings.RoundingType = ESlateBrushRoundingType::FixedRadius;
+	UImage* const Focus = NewWidget<UImage>(WidgetBlueprint, TEXT("Img_FocusFrame"), true);
+	Focus->SetBrush(FocusBrush);
+	Focus->SetVisibility(ESlateVisibility::Collapsed);
+	AddToOverlay(Layers, Focus, HAlign_Fill, VAlign_Fill);
+
+	UVerticalBox* const Column = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("VerticalBox_Content"));
+	AddToOverlay(Layers, Column, HAlign_Fill, VAlign_Fill, FMargin(36.f, 32.f));
+
+	// Header: caption + name on the left, "최근 플레이" tag on the right.
+	UHorizontalBox* const Header = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("HorizontalBox_Header"));
+	UVerticalBox* const Names = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("VerticalBox_Names"));
+	AddToColumn(Names, NewText(WidgetBlueprint, TEXT("Txt_SlotCaption"), CaptionStyle, INVTEXT("SLOT 01"), true), HAlign_Left);
+	AddToColumn(Names, NewText(WidgetBlueprint, TEXT("Txt_SlotName"), TitleStyle, NSLOCTEXT("knightUI", "SlotNamePlaceholder", "저장 1"), true), HAlign_Left, FMargin(0.f, 4.f, 0.f, 0.f));
+	AddCentered(Header, Names, true, VAlign_Top);
+	UBorder* const Active = NewWidget<UBorder>(WidgetBlueprint, TEXT("Panel_Active"), true);
+	FSlateBrush ActiveBrush = FrameBrush(0.f);
+	ActiveBrush.OutlineSettings.Color = FSlateColor(Ember);
+	Active->SetBrush(ActiveBrush);
+	Active->SetPadding(FMargin(10.f, 4.f));
+	UCommonTextBlock* const ActiveText = NewText(WidgetBlueprint, TEXT("Txt_Active"), CaptionStyle, NSLOCTEXT("knightUI", "SlotRecent", "최근 플레이"), false);
+	ActiveText->SetColorAndOpacity(Ember);
+	Active->SetContent(ActiveText);
+	AddCentered(Header, Active, false, VAlign_Top);
+	AddToColumn(Column, Header, HAlign_Fill);
+	AddToColumn(Column, NewHUDImage(WidgetBlueprint, TEXT("Img_Accent"), Frost, FVector2D(32.f, 2.f)), HAlign_Left, FMargin(0.f, 16.f, 0.f, 0.f));
+
+	// Filled slot: four records, caption above value.
+	UVerticalBox* const Filled = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("Panel_Filled"), true);
+	AddCaptionedValue(WidgetBlueprint, Filled, TEXT("Txt_PlayTime"), NSLOCTEXT("knightUI", "SlotPlayTime", "총 플레이 시간"), INVTEXT("00:00:00"), BodyDimStyle, NumberStyle, 32.f);
+	AddCaptionedValue(WidgetBlueprint, Filled, TEXT("Txt_LastPlayed"), NSLOCTEXT("knightUI", "SlotLastPlayed", "마지막 플레이"), INVTEXT("2026-10-09  16:45"), BodyDimStyle, NumberStyle, 20.f);
+	AddToColumn(Filled, NewLine(WidgetBlueprint, TEXT("Img_Divider"), false), HAlign_Fill, FMargin(0.f, 28.f, 0.f, 0.f));
+	AddCaptionedValue(WidgetBlueprint, Filled, TEXT("Txt_ClearedStages"), NSLOCTEXT("knightUI", "SlotClearedStages", "토벌한 지역"), NSLOCTEXT("knightUI", "SlotClearedPlaceholder", "0곳"), BodyDimStyle, SubheadStyle, 28.f);
+	AddCaptionedValue(WidgetBlueprint, Filled, TEXT("Txt_TotalClears"), NSLOCTEXT("knightUI", "SlotTotalClears", "총 토벌 횟수"), NSLOCTEXT("knightUI", "SlotTotalPlaceholder", "0회"), BodyDimStyle, SubheadStyle, 20.f);
+	AddToColumn(Column, Filled, HAlign_Fill);
+
+	// Empty or unreadable slot.
+	UVerticalBox* const Empty = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("Panel_Empty"), true);
+	AddToColumn(Empty, NewText(WidgetBlueprint, TEXT("Txt_EmptyTitle"), SubheadStyle, NSLOCTEXT("knightUI", "SlotEmptyPlaceholder", "빈 슬롯"), true), HAlign_Left, FMargin(0.f, 32.f, 0.f, 0.f));
+	UCommonTextBlock* const EmptyBody = NewText(WidgetBlueprint, TEXT("Txt_EmptyBody"), BodyDimStyle, NSLOCTEXT("knightUI", "SlotEmptyBodyPlaceholder", "선택하면 새 게임을 시작합니다."), true);
+	EmptyBody->SetAutoWrapText(true);
+	AddToColumn(Empty, EmptyBody, HAlign_Fill, FMargin(0.f, 10.f, 0.f, 0.f));
+	AddToColumn(Column, Empty, HAlign_Fill);
+
+	EndBuild(WidgetBlueprint);
+	return true;
+}
+
+bool UknightUIEditorLibrary::BuildTitleMenu(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> MenuItemClass, TSubclassOf<UUserWidget> ButtonClass,
+	TSubclassOf<UCommonButtonStyle> SecondaryButtonStyle, TSubclassOf<UUserWidget> SaveCardClass, UTexture2D* Logo, UTexture2D* Gradient,
+	TSubclassOf<UCommonTextStyle> TitleStyle, TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> BodyDimStyle)
+{
+	if (!MenuItemClass || !MenuItemClass->IsChildOf<UknightButtonBase>() || !ButtonClass || !ButtonClass->IsChildOf<UknightButtonBase>() || !SaveCardClass
+		|| !BeginBuild(WidgetBlueprint, TEXT("BuildTitleMenu")))
+	{
+		return false;
+	}
+	UCanvasPanel* const Root = NewWidget<UCanvasPanel>(WidgetBlueprint, TEXT("Canvas_Root"));
+	WidgetBlueprint->WidgetTree->RootWidget = Root;
+
+	UWidgetSwitcher* const Pages = NewWidget<UWidgetSwitcher>(WidgetBlueprint, TEXT("Switcher_Pages"), true);
+	AddFill(Root, Pages);
+
+	// Home: left column over a fade; the right side is left clear for the 3D scene.
+	UCanvasPanel* const Home = NewWidget<UCanvasPanel>(WidgetBlueprint, TEXT("Panel_Home"), true);
+	Pages->AddChild(Home);
+	AddToCanvas(Home, NewLeftFade(WidgetBlueprint, TEXT("Img_Fade"), Gradient), FAnchors(0.f, 0.f, 0.f, 1.f), FVector2D::ZeroVector, FMargin(0.f, 0.f, 960.f, 0.f));
+	AddToCanvas(Home, NewTextureImage(WidgetBlueprint, TEXT("Img_Logo"), Logo, FLinearColor::White, FVector2D(776.f, 150.f)),
+		FAnchors(0.f, 0.5f), FVector2D(0.f, 1.f), FMargin(HUDMargin.X - 30.f, -40.f, 776.f, 150.f));
+	AddToCanvas(Home, NewTextMenu(WidgetBlueprint, TEXT("VerticalBox_Menu"), MenuItemClass, {
+		{ TEXT("Button_StartGame"), NSLOCTEXT("knightUI", "TitleStart", "게임 시작") },
+		{ TEXT("Button_SaveSelect"), NSLOCTEXT("knightUI", "TitleSaveSelect", "저장 파일 선택") },
+		{ TEXT("Button_Settings"), NSLOCTEXT("knightUI", "TitleSettings", "설정") },
+		{ TEXT("Button_Quit"), NSLOCTEXT("knightUI", "TitleQuit", "게임 종료") } }),
+		FAnchors(0.f, 0.5f), FVector2D(0.f, 0.f), FMargin(HUDMargin.X, 20.f, 0.f, 0.f), true);
+	AddToCanvas(Home, NewText(WidgetBlueprint, TEXT("Txt_Build"), CaptionStyle, INVTEXT("PROJECT KNIGHT  /  ALPHA BUILD"), false),
+		FAnchors(0.5f, 1.f), FVector2D(0.5f, 1.f), FMargin(0.f, -40.f, 0.f, 0.f), true);
+
+	// Save select: header band, three cards, footer band with key hints.
+	UOverlay* const SaveSelect = NewWidget<UOverlay>(WidgetBlueprint, TEXT("Panel_SaveSelect"), true);
+	Pages->AddChild(SaveSelect);
+	UImage* const Dim = NewWidget<UImage>(WidgetBlueprint, TEXT("Img_SaveDim"));
+	Dim->SetBrush(SolidBrush(FLinearColor::White));
+	Dim->SetColorAndOpacity(FLinearColor(0.f, 0.f, 0.f, 0.6f));
+	AddToOverlay(SaveSelect, Dim, HAlign_Fill, VAlign_Fill);
+	UVerticalBox* const SaveColumn = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("VerticalBox_Save"));
+	AddToOverlay(SaveSelect, SaveColumn, HAlign_Fill, VAlign_Fill);
+
+	UBorder* const Header = NewWidget<UBorder>(WidgetBlueprint, TEXT("Border_SaveHeader"));
+	Header->SetBrush(SolidBrush(FLinearColor(Navy900.R, Navy900.G, Navy900.B, 0.92f)));
+	Header->SetPadding(FMargin(0.f, 22.f, 0.f, 20.f));
+	Header->SetHorizontalAlignment(HAlign_Center);
+	UVerticalBox* const HeaderColumn = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("VerticalBox_SaveHeader"));
+	AddToColumn(HeaderColumn, NewText(WidgetBlueprint, TEXT("Txt_SaveCaption"), CaptionStyle, INVTEXT("SELECT SAVE DATA"), false), HAlign_Center);
+	AddToColumn(HeaderColumn, NewText(WidgetBlueprint, TEXT("Txt_SaveTitle"), TitleStyle, NSLOCTEXT("knightUI", "SaveSelectTitle", "저장 파일 선택"), false), HAlign_Center, FMargin(0.f, 6.f, 0.f, 0.f));
+	Header->SetContent(HeaderColumn);
+	AddToColumn(SaveColumn, Header, HAlign_Fill);
+	AddToColumn(SaveColumn, NewLine(WidgetBlueprint, TEXT("Img_SaveHeaderLine"), false), HAlign_Fill);
+
+	UHorizontalBox* const Cards = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("HorizontalBox_Cards"));
+	for (int32 Number = 1; Number <= 3; ++Number)
+	{
+		UUserWidget* const Card = NewWidget<UUserWidget>(WidgetBlueprint, SaveCardClass, *FString::Printf(TEXT("Button_Slot%d"), Number), true);
+		AddCentered(Cards, Card, false, VAlign_Center, FMargin(Number > 1 ? 36.f : 0.f, 0.f, 0.f, 0.f));
+	}
+	UVerticalBoxSlot* const CardsSlot = SaveColumn->AddChildToVerticalBox(Cards);
+	CardsSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+	CardsSlot->SetHorizontalAlignment(HAlign_Center);
+	CardsSlot->SetVerticalAlignment(VAlign_Center);
+
+	AddToColumn(SaveColumn, NewLine(WidgetBlueprint, TEXT("Img_SaveFooterLine"), false), HAlign_Fill);
+	UBorder* const Footer = NewWidget<UBorder>(WidgetBlueprint, TEXT("Border_SaveFooter"));
+	Footer->SetBrush(SolidBrush(FLinearColor(Navy900.R, Navy900.G, Navy900.B, 0.92f)));
+	Footer->SetPadding(FMargin(HUDMargin.X, 0.f));
+	Footer->SetVerticalAlignment(VAlign_Center);
+	Footer->SetHorizontalAlignment(HAlign_Left);
+	USizeBox* const FooterHeight = NewSizeBox(WidgetBlueprint, TEXT("SizeBox_SaveFooter"), 0.f, 96.f);
+	FooterHeight->AddChild(NewKeyHints(WidgetBlueprint, TEXT("Panel_SaveHints"), CaptionStyle, {
+		{ { INVTEXT("←"), INVTEXT("→") }, NSLOCTEXT("knightUI", "HintSlot", "슬롯") },
+		{ { INVTEXT("Enter") }, NSLOCTEXT("knightUI", "HintSelect", "선택") } }));
+	Footer->SetContent(FooterHeight);
+	AddToColumn(SaveColumn, Footer, HAlign_Fill);
+
+	// Settings opens as its own full-screen widget; this page only marks the state.
+	Pages->AddChild(NewWidget<UOverlay>(WidgetBlueprint, TEXT("Panel_Settings"), true));
+
+	AddBackAndStatus(WidgetBlueprint, Root, ButtonClass, SecondaryButtonStyle, BodyDimStyle);
+	EndBuild(WidgetBlueprint);
+	return true;
+}
+
+bool UknightUIEditorLibrary::BuildMainMenu(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> MenuItemClass, TSubclassOf<UUserWidget> ButtonClass,
+	TSubclassOf<UCommonButtonStyle> SecondaryButtonStyle, TSubclassOf<UUserWidget> GlobeClass, UTexture2D* Gradient,
+	TSubclassOf<UCommonTextStyle> TitleStyle, TSubclassOf<UCommonTextStyle> BodyStyle, TSubclassOf<UCommonTextStyle> BodyDimStyle,
+	TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> WarningStyle, TSubclassOf<UCommonTextStyle> NumberStyle)
+{
+	if (!MenuItemClass || !MenuItemClass->IsChildOf<UknightButtonBase>() || !ButtonClass || !ButtonClass->IsChildOf<UknightButtonBase>() || !GlobeClass
+		|| !BeginBuild(WidgetBlueprint, TEXT("BuildMainMenu")))
+	{
+		return false;
+	}
+	UCanvasPanel* const Root = NewWidget<UCanvasPanel>(WidgetBlueprint, TEXT("Canvas_Root"));
+	WidgetBlueprint->WidgetTree->RootWidget = Root;
+	UWidgetSwitcher* const Pages = NewWidget<UWidgetSwitcher>(WidgetBlueprint, TEXT("Switcher_Pages"), true);
+	AddFill(Root, Pages);
+
+	// Home (hangar): same text menu as the title.
+	UCanvasPanel* const Home = NewWidget<UCanvasPanel>(WidgetBlueprint, TEXT("Panel_Home"), true);
+	Pages->AddChild(Home);
+	AddToCanvas(Home, NewLeftFade(WidgetBlueprint, TEXT("Img_Fade"), Gradient), FAnchors(0.f, 0.f, 0.f, 1.f), FVector2D::ZeroVector, FMargin(0.f, 0.f, 960.f, 0.f));
+	UVerticalBox* const HomeHeader = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("VerticalBox_HomeHeader"));
+	AddToColumn(HomeHeader, NewText(WidgetBlueprint, TEXT("Txt_HomeCaption"), CaptionStyle, INVTEXT("HANGAR"), false), HAlign_Left);
+	AddToColumn(HomeHeader, NewHUDImage(WidgetBlueprint, TEXT("Img_HomeAccent"), Frost, FVector2D(32.f, 2.f)), HAlign_Left, FMargin(0.f, 10.f, 0.f, 12.f));
+	AddToColumn(HomeHeader, NewText(WidgetBlueprint, TEXT("Text_ActiveProfile"), BodyDimStyle, NSLOCTEXT("knightUI", "ActiveProfilePlaceholder", "저장 1"), true), HAlign_Left);
+	AddToCanvas(Home, HomeHeader, FAnchors(0.f, 0.5f), FVector2D(0.f, 1.f), FMargin(HUDMargin.X, -16.f, 0.f, 0.f), true);
+	AddToCanvas(Home, NewTextMenu(WidgetBlueprint, TEXT("VerticalBox_Menu"), MenuItemClass, {
+		{ TEXT("Button_Stage"), NSLOCTEXT("knightUI", "LobbySortie", "출격") },
+		{ TEXT("Button_Maintenance"), NSLOCTEXT("knightUI", "LobbyMaintenance", "정비") },
+		{ TEXT("Button_Codex"), NSLOCTEXT("knightUI", "LobbyCodex", "도감") },
+		{ TEXT("Button_Settings"), NSLOCTEXT("knightUI", "LobbySettings", "설정") },
+		{ TEXT("Button_ReturnToTitle"), NSLOCTEXT("knightUI", "LobbyTitle", "타이틀로") } }),
+		FAnchors(0.f, 0.5f), FVector2D(0.f, 0.f), FMargin(HUDMargin.X, 8.f, 0.f, 0.f), true);
+
+	// Stage: globe in the middle, info panel beside it (C++ picks the side).
+	UCanvasPanel* const Stage = NewWidget<UCanvasPanel>(WidgetBlueprint, TEXT("Panel_Stage"), true);
+	Pages->AddChild(Stage);
+	UImage* const StageDim = NewWidget<UImage>(WidgetBlueprint, TEXT("Img_StageDim"));
+	StageDim->SetBrush(SolidBrush(FLinearColor::White));
+	StageDim->SetColorAndOpacity(FLinearColor(Navy900.R * 0.6f, Navy900.G * 0.6f, Navy900.B * 0.6f, 0.82f));
+	AddFill(Stage, StageDim);
+	UVerticalBox* const StageHeader = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("VerticalBox_StageHeader"));
+	AddToColumn(StageHeader, NewText(WidgetBlueprint, TEXT("Txt_StageCaption"), CaptionStyle, INVTEXT("OPERATION MAP"), false), HAlign_Left);
+	AddToColumn(StageHeader, NewHUDImage(WidgetBlueprint, TEXT("Img_StageAccent"), Frost, FVector2D(32.f, 2.f)), HAlign_Left, FMargin(0.f, 10.f, 0.f, 12.f));
+	AddToColumn(StageHeader, NewText(WidgetBlueprint, TEXT("Txt_StageHeading"), TitleStyle, NSLOCTEXT("knightUI", "StageHeading", "작전 지역 선택"), false), HAlign_Left);
+	AddToCanvas(Stage, StageHeader, FAnchors(0.f, 0.f), FVector2D::ZeroVector, FMargin(HUDMargin.X, HUDMargin.Y, 0.f, 0.f), true);
+
+	UUserWidget* const Globe = NewWidget<UUserWidget>(WidgetBlueprint, GlobeClass, TEXT("Globe_Stages"), true);
+	AddToCanvas(Stage, Globe, FAnchors(0.5f, 0.5f), FVector2D(0.5f, 0.5f), FMargin(0.f, 10.f, 700.f, 700.f));
+
+	USizeBox* const Info = NewSizeBox(WidgetBlueprint, TEXT("Panel_StageInfo"), 420.f, 0.f);
+	Info->bIsVariable = true;
+	AddToCanvas(Stage, Info, FAnchors(0.5f, 0.5f), FVector2D(0.f, 0.5f), FMargin(414.f, 10.f, 0.f, 0.f), true);
+	UBorder* const InfoFrame = NewWidget<UBorder>(WidgetBlueprint, TEXT("Border_StageInfo"));
+	InfoFrame->SetBrush(FrameBrush(0.92f));
+	InfoFrame->SetPadding(FMargin(32.f, 28.f, 32.f, 28.f));
+	Info->AddChild(InfoFrame);
+	UVerticalBox* const InfoColumn = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("VerticalBox_StageInfo"));
+	InfoFrame->SetContent(InfoColumn);
+	AddToColumn(InfoColumn, NewText(WidgetBlueprint, TEXT("Txt_InfoCaption"), CaptionStyle, INVTEXT("MISSION INFO"), false), HAlign_Left);
+	AddToColumn(InfoColumn, NewHUDImage(WidgetBlueprint, TEXT("Img_InfoAccent"), Ember, FVector2D(32.f, 2.f)), HAlign_Left, FMargin(0.f, 10.f, 0.f, 12.f));
+	UCommonTextBlock* const StageTitle = NewText(WidgetBlueprint, TEXT("Text_StageTitle"), TitleStyle, NSLOCTEXT("knightUI", "StageTitlePlaceholder", "잔열 방어전"), true);
+	StageTitle->SetAutoWrapText(true);
+	AddToColumn(InfoColumn, StageTitle, HAlign_Fill);
+	UImage* const Thumbnail = NewWidget<UImage>(WidgetBlueprint, TEXT("Img_StageThumbnail"), true);
+	Thumbnail->SetBrush(SolidBrush(FrostDim, FVector2D(356.f, 180.f)));
+	Thumbnail->SetVisibility(ESlateVisibility::Collapsed);
+	AddToColumn(InfoColumn, Thumbnail, HAlign_Fill, FMargin(0.f, 16.f, 0.f, 0.f));
+	AddCaptionedValue(WidgetBlueprint, InfoColumn, TEXT("Text_StageRegion"), INVTEXT("COMBAT ZONE"), NSLOCTEXT("knightUI", "StageRegionPlaceholder", "북부 폐허 도시"), CaptionStyle, BodyStyle, 20.f);
+	AddCaptionedValue(WidgetBlueprint, InfoColumn, TEXT("Text_StageTarget"), INVTEXT("TARGET"), NSLOCTEXT("knightUI", "StageTargetPlaceholder", "잔열"), CaptionStyle, BodyStyle, 14.f);
+	UHorizontalBox* const Numbers = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("HorizontalBox_StageNumbers"));
+	UVerticalBox* const TimeColumn = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("VerticalBox_StageTime"));
+	AddCaptionedValue(WidgetBlueprint, TimeColumn, TEXT("Text_StageTimeLimit"), INVTEXT("TIME LIMIT"), INVTEXT("15:00"), CaptionStyle, NumberStyle, 0.f);
+	AddCentered(Numbers, TimeColumn, true, VAlign_Top);
+	UVerticalBox* const RecordColumn = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("VerticalBox_StageRecord"));
+	AddCaptionedValue(WidgetBlueprint, RecordColumn, TEXT("Text_StageRecord"), INVTEXT("BEST RECORD"), INVTEXT("03:42.15"), CaptionStyle, NumberStyle, 0.f);
+	AddCentered(Numbers, RecordColumn, true, VAlign_Top);
+	AddToColumn(InfoColumn, Numbers, HAlign_Fill, FMargin(0.f, 14.f, 0.f, 0.f));
+	AddToColumn(InfoColumn, NewLine(WidgetBlueprint, TEXT("Img_InfoDivider"), false), HAlign_Fill, FMargin(0.f, 18.f, 0.f, 0.f));
+	AddToColumn(InfoColumn, NewText(WidgetBlueprint, TEXT("Txt_DetailCaption"), CaptionStyle, INVTEXT("DETAIL"), false), HAlign_Left, FMargin(0.f, 16.f, 0.f, 0.f));
+	UCommonTextBlock* const Description = NewText(WidgetBlueprint, TEXT("Text_StageDescription"), BodyDimStyle, NSLOCTEXT("knightUI", "StageDescriptionPlaceholder", "잔열 방어전의 전투 지역으로 출격합니다."), true);
+	Description->SetAutoWrapText(true);
+	AddToColumn(InfoColumn, Description, HAlign_Fill, FMargin(0.f, 6.f, 0.f, 0.f));
+	UCommonTextBlock* const Lock = NewText(WidgetBlueprint, TEXT("Text_StageLock"), WarningStyle, NSLOCTEXT("knightUI", "StageLockPlaceholder", "이전 지역을 먼저 토벌해야 합니다."), true);
+	Lock->SetAutoWrapText(true);
+	Lock->SetVisibility(ESlateVisibility::Collapsed);
+	AddToColumn(InfoColumn, Lock, HAlign_Fill, FMargin(0.f, 16.f, 0.f, 0.f));
+	UknightButtonBase* const Launch = NewWidget<UknightButtonBase>(WidgetBlueprint, TSubclassOf<UknightButtonBase>(ButtonClass), TEXT("Button_LaunchStage"), true);
+	Launch->SetButtonText(NSLOCTEXT("knightUI", "StageLaunch", "출격"));
+	AddToColumn(InfoColumn, Launch, HAlign_Fill, FMargin(0.f, 24.f, 0.f, 0.f));
+
+	AddToCanvas(Stage, NewKeyHints(WidgetBlueprint, TEXT("Panel_StageHints"), CaptionStyle, {
+		{ { NSLOCTEXT("knightUI", "KeyDrag", "드래그") }, NSLOCTEXT("knightUI", "HintRotate", "회전") },
+		{ { NSLOCTEXT("knightUI", "KeyClick", "클릭") }, NSLOCTEXT("knightUI", "HintSelectRegion", "지역 선택") },
+		{ { INVTEXT("←"), INVTEXT("→") }, NSLOCTEXT("knightUI", "HintCycleRegion", "지역 전환") } }),
+		FAnchors(0.f, 1.f), FVector2D(0.f, 1.f), FMargin(HUDMargin.X, -96.f, 0.f, 0.f), true);
+
+	// Placeholder pages; codex fills Panel_Codex at runtime, settings opens over everything.
+	struct FPlaceholder { const TCHAR* Name; FText Label; };
+	for (const FPlaceholder& Page : {
+		FPlaceholder{ TEXT("Panel_Maintenance"), NSLOCTEXT("knightUI", "MaintenanceSoon", "정비 기능 준비 중") },
+		FPlaceholder{ TEXT("Panel_Settings"), FText::GetEmpty() },
+		FPlaceholder{ TEXT("Panel_Codex"), NSLOCTEXT("knightUI", "CodexSoon", "도감 기능 준비 중") } })
+	{
+		UVerticalBox* const Panel = NewWidget<UVerticalBox>(WidgetBlueprint, Page.Name, true);
+		Pages->AddChild(Panel);
+		if (!Page.Label.IsEmpty())
+		{
+			UVerticalBoxSlot* const LabelSlot = Panel->AddChildToVerticalBox(NewText(WidgetBlueprint, *FString::Printf(TEXT("Txt_%s"), Page.Name + 6), BodyDimStyle, Page.Label, false));
+			LabelSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+			LabelSlot->SetHorizontalAlignment(HAlign_Center);
+			LabelSlot->SetVerticalAlignment(VAlign_Center);
+		}
+	}
+
+	AddBackAndStatus(WidgetBlueprint, Root, ButtonClass, SecondaryButtonStyle, BodyDimStyle);
 	EndBuild(WidgetBlueprint);
 	return true;
 }

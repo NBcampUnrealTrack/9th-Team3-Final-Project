@@ -6,6 +6,7 @@
 
 class UCommonButtonStyle;
 class UCommonTextStyle;
+class UTexture2D;
 class UUserWidget;
 class UWidgetBlueprint;
 
@@ -84,4 +85,26 @@ public:
 	static bool BuildSettingsScreen(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> ButtonClass, TSubclassOf<UUserWidget> TabClass,
 		TSubclassOf<UCommonButtonStyle> SecondaryButtonStyle, TSubclassOf<UCommonTextStyle> TitleStyle, TSubclassOf<UCommonTextStyle> SubheadStyle,
 		TSubclassOf<UCommonTextStyle> BodyDimStyle, TSubclassOf<UCommonTextStyle> CaptionStyle);
+
+	/** WBP_KnightMenuItem: 주황 세로 막대(Bracket_L) + 글자(Txt_Label). 배경 없는 글자 메뉴 항목. */
+	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
+	static bool BuildKnightMenuItem(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> LabelStyle);
+
+	/** WBP_KnightSaveSlotCard: 세로 카드(이름, 최근 플레이 표시, 기록 네 줄 / 빈 슬롯 안내) + 포커스 주황 틀. */
+	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
+	static bool BuildSaveSlotCard(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> TitleStyle,
+		TSubclassOf<UCommonTextStyle> SubheadStyle, TSubclassOf<UCommonTextStyle> BodyDimStyle, TSubclassOf<UCommonTextStyle> NumberStyle);
+
+	/** WBP_KnightTitleMenu: 왼쪽 로고 + 글자 메뉴(오른쪽은 3D 화면), 저장 파일 선택(카드 3장), 설정 자리. */
+	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
+	static bool BuildTitleMenu(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> MenuItemClass, TSubclassOf<UUserWidget> ButtonClass,
+		TSubclassOf<UCommonButtonStyle> SecondaryButtonStyle, TSubclassOf<UUserWidget> SaveCardClass, UTexture2D* Logo, UTexture2D* Gradient,
+		TSubclassOf<UCommonTextStyle> TitleStyle, TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> BodyDimStyle);
+
+	/** WBP_KnightMainMenu: 로비 글자 메뉴, 지구본 스테이지 선택(가운데 지구본 + 옆 정보 패널), 정비/설정/도감 자리. */
+	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
+	static bool BuildMainMenu(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> MenuItemClass, TSubclassOf<UUserWidget> ButtonClass,
+		TSubclassOf<UCommonButtonStyle> SecondaryButtonStyle, TSubclassOf<UUserWidget> GlobeClass, UTexture2D* Gradient,
+		TSubclassOf<UCommonTextStyle> TitleStyle, TSubclassOf<UCommonTextStyle> BodyStyle, TSubclassOf<UCommonTextStyle> BodyDimStyle,
+		TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> WarningStyle, TSubclassOf<UCommonTextStyle> NumberStyle);
 };
