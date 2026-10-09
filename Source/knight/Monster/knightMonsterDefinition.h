@@ -40,6 +40,13 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="States")
 	TSubclassOf<UGameplayEffect> ExhaustEffect;
 
+	/**
+	 * 퍼펙트 가드를 당할 때마다 깎이는 경직도. 최대 경직도에 대한 비율(0.25 = 4번에 다운). 0이면 깎지 않는다.
+	 * 일반 타격의 경직도 피해와 같은 게이지를 쓰므로 섞어서 쌓인다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="States", meta=(ClampMin=0, ClampMax=1))
+	float ParriedPoiseDamageRatio = 0.f;
+
 	/** Rough radius for lock-on camera framing. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Targeting", meta=(ClampMin=0, Units="cm"))
 	float TargetRadius = 600.f;
