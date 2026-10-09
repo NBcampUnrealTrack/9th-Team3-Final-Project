@@ -7,6 +7,7 @@ The PNGs in Tools/UI/Textures are the import sources of /Game/Knight/UI/Menu/Tex
 T_UI_GlobeLand.png   equirectangular 2048x1024. R = land (soft edge), G = coastline band, B = terrain detail.
 T_UI_Logo.png        "PROJECT KNIGHT" with a blue glow, 2x resolution, transparent background.
 T_UI_GradientLeft.png  white with alpha fading left to right, tinted in UMG.
+T_UI_LoadingMark.png   placeholder emblem for the loading screen: tall four-point star through a ring, white on transparent.
 
 Continents are random but seeded, and pushed up under the stage-select sample regions so markers sit on land.
 """
@@ -119,6 +120,32 @@ def make_gradient(out_dir):
     Image.fromarray((rgba * 255).astype(np.uint8), "RGBA").save(os.path.join(out_dir, "T_UI_GradientLeft.png"))
 
 
+def make_loading_mark(out_dir):
+    # Drawn 4x larger and scaled down for smooth edges.
+    scale = 4
+    width, height = 192, 256
+    cx, cy = width * scale / 2, height * scale / 2
+    s = lambda v: v * scale
+
+    def star(reach_y, reach_x, waist):
+        return [(cx, cy - s(reach_y)), (cx + s(waist), cy - s(waist)), (cx + s(reach_x), cy), (cx + s(waist), cy + s(waist)),
+                (cx, cy + s(reach_y)), (cx - s(waist), cy + s(waist)), (cx - s(reach_x), cy), (cx - s(waist), cy - s(waist))]
+
+    img = Image.new("L", (width * scale, height * scale), 0)
+    draw = ImageDraw.Draw(img)
+    ring_r, ring_w = 54, 5
+    draw.ellipse([cx - s(ring_r), cy - s(ring_r), cx + s(ring_r), cy + s(ring_r)], outline=255, width=s(ring_w))
+    # Clear a margin around the star so its points cross the ring cleanly.
+    draw.polygon(star(124, 70, 22), fill=0)
+    draw.polygon(star(118, 62, 14), fill=255)
+    # Small diamond cut out of the centre.
+    draw.polygon([(cx, cy - s(16)), (cx + s(9), cy), (cx, cy + s(16)), (cx - s(9), cy)], fill=0)
+    alpha = img.resize((width, height), Image.LANCZOS)
+    rgba = Image.new("RGBA", (width, height), (255, 255, 255, 0))
+    rgba.putalpha(alpha)
+    rgba.save(os.path.join(out_dir, "T_UI_LoadingMark.png"))
+
+
 if __name__ == "__main__":
     if len(sys.argv) not in (2, 3):
         sys.exit(__doc__)
@@ -128,3 +155,4 @@ if __name__ == "__main__":
     make_land(out_dir)
     make_logo(font_dir, out_dir)
     make_gradient(out_dir)
+    make_loading_mark(out_dir)
