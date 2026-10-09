@@ -4,6 +4,7 @@
 #include "Engine/DataAsset.h"
 #include "KnightStageCatalog.generated.h"
 
+class UTexture2D;
 class UWorld;
 class UknightRaidDefinition;
 
@@ -20,6 +21,18 @@ struct KNIGHT_API FKnightStageDefinition
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stage", meta=(MultiLine=true))
 	FText Description;
+
+	/** Region shown on the stage-select globe panel (e.g. "북부 폐허 도시"). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stage|Globe")
+	FText RegionName;
+
+	/** Marker position on the stage-select globe in degrees: X = longitude (-180..180), Y = latitude (-90..90). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stage|Globe")
+	FVector2D GlobeLocation = FVector2D::ZeroVector;
+
+	/** Optional picture for the globe panel. The panel hides the image area when empty. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stage|Globe")
+	TSoftObjectPtr<UTexture2D> Thumbnail;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stage")
 	TSoftObjectPtr<UWorld> GameplayMap;

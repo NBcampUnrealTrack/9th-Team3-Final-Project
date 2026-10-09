@@ -49,6 +49,11 @@ void UknightButtonBase::NativeDestruct()
 void UknightButtonBase::NativeOnHovered()
 {
 	Super::NativeOnHovered();
+	// Focus sits on the inner Slate button, so check descendants too.
+	if (bFocusOnHover && GetIsEnabled() && !HasAnyUserFocus() && !HasFocusedDescendants())
+	{
+		SetFocus();
+	}
 	RefreshTargets();
 }
 
@@ -97,6 +102,7 @@ void UknightButtonBase::HandleFocusReceived()
 	Super::HandleFocusReceived();
 	bFocusedVisual = true;
 	RefreshTargets();
+	ApplyLabelStyle();
 }
 
 void UknightButtonBase::NativeOnAddedToFocusPath(const FFocusEvent& InFocusEvent)
@@ -121,6 +127,7 @@ void UknightButtonBase::HandleFocusLost()
 	Super::HandleFocusLost();
 	bFocusedVisual = false;
 	RefreshTargets();
+	ApplyLabelStyle();
 }
 
 void UknightButtonBase::HandleLockClicked()
@@ -166,6 +173,10 @@ void UknightButtonBase::ApplyLabelStyle()
 	if (GetLocked() && LockedTextStyle)
 	{
 		Txt_Label->SetStyle(LockedTextStyle);
+	}
+	else if (bFocusedVisual && FocusedTextStyle && GetIsEnabled())
+	{
+		Txt_Label->SetStyle(FocusedTextStyle);
 	}
 	else if (const TSubclassOf<UCommonTextStyle> StyleClass = GetCurrentTextStyleClass())
 	{

@@ -1,7 +1,7 @@
 #include "KnightMenuWidgetBase.h"
 
 #include "GameFlow/KnightGameFlowSubsystem.h"
-#include "Components/Button.h"
+#include "CommonButtonBase.h"
 #include "Components/PanelWidget.h"
 #include "Components/TextBlock.h"
 #include "Components/WidgetSwitcher.h"
@@ -22,7 +22,7 @@ void UKnightMenuWidgetBase::NativeOnInitialized()
 	ValidateRequiredWidget(Text_Status, TEXT("Text_Status"));
 	if (Button_Back)
 	{
-		Button_Back->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleBackClicked);
+		Button_Back->OnClicked().AddUObject(this, &ThisClass::HandleBackClicked);
 	}
 	if (IsInsideSwitcher(Button_Back) || IsInsideSwitcher(Text_Status))
 	{
@@ -87,7 +87,7 @@ void UKnightMenuWidgetBase::FocusCurrentPage()
 	}
 
 	UWidget* FocusTarget = GetPreferredFocusTarget();
-	if (const UButton* const PreferredButton = Cast<UButton>(FocusTarget))
+	if (const UCommonButtonBase* const PreferredButton = Cast<UCommonButtonBase>(FocusTarget))
 	{
 		if (!PreferredButton->GetIsFocusable())
 		{
@@ -96,11 +96,7 @@ void UKnightMenuWidgetBase::FocusCurrentPage()
 	}
 	if (!FocusTarget || !FocusTarget->IsVisible() || !FocusTarget->GetIsEnabled())
 	{
-		FocusTarget = this;
-		if (Button_Back && Button_Back->GetIsFocusable() && Button_Back->IsVisible() && Button_Back->GetIsEnabled())
-		{
-			FocusTarget = Button_Back;
-		}
+		FocusTarget = CanFocusButton(Button_Back) ? static_cast<UWidget*>(Button_Back) : this;
 	}
 	FocusTarget->SetUserFocus(OwningPlayer);
 }
@@ -108,6 +104,11 @@ void UKnightMenuWidgetBase::FocusCurrentPage()
 UWidget* UKnightMenuWidgetBase::GetPreferredFocusTarget() const
 {
 	return Button_Back;
+}
+
+bool UKnightMenuWidgetBase::CanFocusButton(const UCommonButtonBase* Button)
+{
+	return Button && Button->GetIsFocusable() && Button->IsVisible() && Button->GetIsEnabled();
 }
 
 void UKnightMenuWidgetBase::SetTravelControlsEnabled(bool bEnabled)

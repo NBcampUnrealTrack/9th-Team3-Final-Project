@@ -61,6 +61,14 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Knight|Button")
 	TSubclassOf<UCommonTextStyle> LockedTextStyle;
 
+	/** Text style while the button has keyboard focus. The style asset only knows mouse hover. Unset = no change. */
+	UPROPERTY(EditAnywhere, Category="Knight|Button")
+	TSubclassOf<UCommonTextStyle> FocusedTextStyle;
+
+	/** Hovering moves focus here, so a list highlights one item whether the mouse or the keyboard is used. */
+	UPROPERTY(EditAnywhere, Category="Knight|Button")
+	bool bFocusOnHover = false;
+
 	/** Opacity of the whole button while locked. */
 	UPROPERTY(EditAnywhere, Category="Knight|Button", meta=(ClampMin=0, ClampMax=1))
 	float LockedOpacity = 0.55f;
