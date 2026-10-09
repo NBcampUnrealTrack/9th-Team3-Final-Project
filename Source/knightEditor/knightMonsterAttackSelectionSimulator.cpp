@@ -1,6 +1,7 @@
 #include "knightMonsterAttackSelectionSimulator.h"
 
 #include "AbilitySystem/Abilities/knightGameplayAbility_MonsterAttack.h"
+#include "GameplayTagsManager.h"
 #include "System/knightGameplayTags.h"
 
 bool FknightMonsterAttackSelectionSimulator::Supports(const UClass* AbilityClass) const
@@ -98,7 +99,23 @@ FknightSelectionShape FknightMonsterAttackSelectionSimulator::GetShape(const UGa
 
 TArray<FGameplayTag> FknightMonsterAttackSelectionSimulator::GetSimulatedStateTags() const
 {
-	return { knightGameplayTags::State_Monster_Enraged, knightGameplayTags::State_Monster_Exhausted };
+	TArray<FGameplayTag> Tags = { knightGameplayTags::State_Monster_Enraged, knightGameplayTags::State_Monster_Exhausted };
+	// 부위 파괴 태그(Monster.State.Broken.<몬스터>.<부위>)도 켜 보며 어떤 공격이 봉인되는지 본다.
+	const FGameplayTag BrokenRoot = FGameplayTag::RequestGameplayTag(TEXT("Monster.State.Broken"), false);
+	if (BrokenRoot.IsValid())
+	{
+		const FGameplayTagContainer BrokenTags = UGameplayTagsManager::Get().RequestGameplayTagChildren(BrokenRoot);
+		for (const FGameplayTag& Tag : BrokenTags)
+		{
+			// 몬스터 단위 중간 태그(Monster.State.Broken.Janyeol)는 빼고 부위 태그만.
+			const TSharedPtr<FGameplayTagNode> Node = UGameplayTagsManager::Get().FindTagNode(Tag);
+			if (Node.IsValid() && Node->GetChildTagNodes().IsEmpty())
+			{
+				Tags.Add(Tag);
+			}
+		}
+	}
+	return Tags;
 }
 
 FName FknightMonsterAttackSelectionSimulator::GetSelectionPropertyName() const

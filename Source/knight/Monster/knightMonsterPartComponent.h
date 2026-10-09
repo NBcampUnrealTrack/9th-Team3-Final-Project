@@ -12,7 +12,21 @@ class UPrimitiveComponent;
 struct FGameplayEffectSpec;
 struct FknightMonsterPartDefinition;
 
+/** 락온 UI가 부위 표시를 고르는 상태. 내구 비율과 데이터의 CriticalRatio로 정한다. */
+UENUM(BlueprintType)
+enum class EknightPartCondition : uint8
+{
+	/** 파괴할 수 없는 부위(몸통 등). 내구 게이지가 없다. */
+	Unbreakable,
+	Normal,
+	/** 남은 내구 비율이 CriticalRatio 이하. 곧 부서진다. */
+	Critical,
+	Broken
+};
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FknightMonsterPartBroken, FGameplayTag, PartTag, AActor*, BreakInstigator);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FknightMonsterPartDamaged, FGameplayTag, PartTag, float, RemainingRatio);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FknightMonsterPartConditionChanged, FGameplayTag, PartTag, EknightPartCondition, NewCondition);
 
 /** 부위 하나의 런타임 상태. */
 USTRUCT(BlueprintType)
@@ -58,6 +72,14 @@ public:
 	UFUNCTION(BlueprintPure, Category="Knight|Monster")
 	bool IsPartBroken(FGameplayTag PartTag) const;
 
+	/** 남은 내구 비율(1 = 멀쩡, 0 = 파괴). 파괴할 수 없는 부위와 모르는 태그는 1. */
+	UFUNCTION(BlueprintPure, Category="Knight|Monster")
+	float GetPartHealthRatio(FGameplayTag PartTag) const;
+
+	/** 모르는 태그는 Unbreakable. */
+	UFUNCTION(BlueprintPure, Category="Knight|Monster")
+	EknightPartCondition GetPartCondition(FGameplayTag PartTag) const;
+
 	UFUNCTION(BlueprintPure, Category="Knight|Monster")
 	const TArray<FknightMonsterPartState>& GetPartStates() const { return PartStates; }
 
@@ -74,6 +96,14 @@ public:
 	UPROPERTY(BlueprintAssignable, Category="Knight|Monster")
 	FknightMonsterPartBroken OnPartBroken;
 
+	/** 파괴 가능한 부위가 피해를 받을 때마다. 파괴하는 타격도 포함한다(RemainingRatio 0). 파괴된 뒤와 파괴할 수 없는 부위는 보내지 않는다. */
+	UPROPERTY(BlueprintAssignable, Category="Knight|Monster")
+	FknightMonsterPartDamaged OnPartDamaged;
+
+	/** Normal → Critical, Normal/Critical → Broken. 한 타격에 빈사를 건너뛰고 파괴되면 Broken만 보낸다. OnPartBroken보다 먼저 온다. */
+	UPROPERTY(BlueprintAssignable, Category="Knight|Monster")
+	FknightMonsterPartConditionChanged OnPartConditionChanged;
+
 protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
@@ -82,6 +112,8 @@ private:
 		float Magnitude, float OldValue, float NewValue);
 	void BreakPart(int32 PartIndex, AActor* BreakInstigator);
 	int32 FindPartIndex(const FGameplayTag& PartTag) const;
+	float GetHealthRatio(int32 PartIndex) const;
+	EknightPartCondition GetCondition(int32 PartIndex) const;
 	const FknightMonsterPartDefinition* GetDefinition(int32 PartIndex) const;
 	/** 부위의 ComponentTags 중 하나를 가진 소유자 컴포넌트들. */
 	void GetPartComponents(int32 PartIndex, TArray<UPrimitiveComponent*>& OutComponents) const;
