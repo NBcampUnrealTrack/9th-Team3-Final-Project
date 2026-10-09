@@ -110,11 +110,24 @@ bool UknightGameUserSettings::ValidateGraphics(const FKnightGraphicsChoice& Choi
 	return true;
 }
 
+bool UknightGameUserSettings::IsRestorableGraphics(const FKnightGraphicsChoice& Choice)
+{
+	const bool bMode = Choice.WindowMode == EWindowMode::Fullscreen || Choice.WindowMode == EWindowMode::Windowed
+		|| Choice.WindowMode == EWindowMode::WindowedFullscreen;
+	return bMode && Choice.Resolution.X >= 640 && Choice.Resolution.Y >= 480;
+}
+
 FKnightGraphicsChoice UknightGameUserSettings::GetActiveGraphics() const
 {
 	FKnightGraphicsChoice Result;
 	Result.WindowMode = GetFullscreenMode();
 	Result.Resolution = GetScreenResolution();
+	// Borderless always covers the desktop; the stored size can be stale (engine defaults keep the windowed size).
+	if (Result.WindowMode == EWindowMode::WindowedFullscreen)
+	{
+		const FIntPoint Desktop = GetDesktopResolution();
+		if (Desktop.X > 0 && Desktop.Y > 0) Result.Resolution = Desktop;
+	}
 	Result.FrameRateLimit = GetFrameRateLimit() > 0.f ? FMath::RoundToInt(GetFrameRateLimit()) : 60;
 	Result.bVSync = IsVSyncEnabled();
 	Result.AntiAliasing = GetAntiAliasingQuality();
@@ -127,30 +140,51 @@ FKnightGraphicsChoice UknightGameUserSettings::GetActiveGraphics() const
 	return Result;
 }
 
-FKnightGraphicsChoice UknightGameUserSettings::GetDisplayedGraphics() const
+bool UknightGameUserSettings::ApplyGraphicsNow(const FKnightGraphicsChoice& Choice, const FKnightGraphicsChoice* RevertTo, FText& Error, bool bRestoring)
 {
-	return bHasPendingGraphics ? PendingGraphics : GetActiveGraphics();
-}
-
-bool UknightGameUserSettings::QueueGraphicsForNextProcess(const FKnightGraphicsChoice& Choice, FText& Error)
-{
-	if (!ValidateGraphics(Choice, Error)) return false;
-	const FKnightGraphicsChoice Previous = PendingGraphics;
-	const bool bPreviouslyPending = bHasPendingGraphics;
-	const int32 PreviousSerial = PendingGraphicsSaveSerial;
-	PendingGraphics = Choice;
-	bHasPendingGraphics = true;
-	PendingGraphicsSaveSerial = PendingGraphicsSaveSerial == MAX_int32 ? 1 : PendingGraphicsSaveSerial + 1;
-	SaveSettings();
-	if (!IsGraphicsStateSaved(PendingGraphicsSaveSerial, true))
+	if (bRestoring ? !IsRestorableGraphics(Choice) : !ValidateGraphics(Choice, Error))
 	{
-		PendingGraphics = Previous;
-		bHasPendingGraphics = bPreviouslyPending;
-		PendingGraphicsSaveSerial = PreviousSerial;
+		if (bRestoring) Error = NSLOCTEXT("KnightSettings", "RestoreInvalid", "이전 화면 설정을 복구하지 못했습니다.");
+		return false;
+	}
+	if (RevertTo)
+	{
+		PendingGraphics = *RevertTo;
+	}
+	bHasPendingGraphics = RevertTo != nullptr;
+	bKnightGraphicsInitialized = true;
+	PendingGraphicsSaveSerial = PendingGraphicsSaveSerial == MAX_int32 ? 1 : PendingGraphicsSaveSerial + 1;
+	SetGraphics(Choice);
+	// ApplySettings also saves GameUserSettings.ini.
+	ApplySettings(false);
+	if (!IsGraphicsStateSaved(PendingGraphicsSaveSerial, bHasPendingGraphics))
+	{
 		Error = NSLOCTEXT("KnightSettings", "GraphicsSaveFailed", "그래픽 설정을 저장하지 못했습니다. 저장 위치를 확인해 주세요.");
 		return false;
 	}
 	return true;
+}
+
+void UknightGameUserSettings::ConfirmGraphics()
+{
+	if (!bHasPendingGraphics) return;
+	bHasPendingGraphics = false;
+	SaveSettings();
+}
+
+void UknightGameUserSettings::SetGraphics(const FKnightGraphicsChoice& Choice)
+{
+	SetFullscreenMode(Choice.WindowMode);
+	SetScreenResolution(Choice.Resolution);
+	SetFrameRateLimit(Choice.FrameRateLimit);
+	SetVSyncEnabled(Choice.bVSync);
+	SetAntiAliasingQuality(Choice.AntiAliasing);
+	SetShadowQuality(Choice.Shadows);
+	SetTextureQuality(Choice.Textures);
+	SetVisualEffectQuality(Choice.Effects);
+	SetPostProcessingQuality(Choice.PostProcess);
+	SetViewDistanceQuality(Choice.ViewDistance);
+	bMotionBlurEnabled = Choice.bMotionBlur;
 }
 
 bool UknightGameUserSettings::ApplyPendingGraphicsAtStartup()
@@ -166,24 +200,16 @@ bool UknightGameUserSettings::ApplyPendingGraphicsAtStartup()
 		SaveSettings();
 		return IsGraphicsStateSaved(PendingGraphicsSaveSerial, false);
 	}
-	FText Error;
-	if (!ValidateGraphics(PendingGraphics, Error))
+	// Pending values are the display the game ran with before an unkept change, so only the loose check applies.
+	if (!IsRestorableGraphics(PendingGraphics))
 	{
-		UE_LOG(Logknight, Warning, TEXT("Pending graphics validation failed: %s"), *Error.ToString());
+		UE_LOG(Logknight, Warning, TEXT("Pending graphics are not restorable; keeping the current ones."));
+		bHasPendingGraphics = false;
+		SaveSettings();
 		return false;
 	}
 	const FKnightGraphicsChoice Desired = PendingGraphics;
-	SetFullscreenMode(Desired.WindowMode);
-	SetScreenResolution(Desired.Resolution);
-	SetFrameRateLimit(Desired.FrameRateLimit);
-	SetVSyncEnabled(Desired.bVSync);
-	SetAntiAliasingQuality(Desired.AntiAliasing);
-	SetShadowQuality(Desired.Shadows);
-	SetTextureQuality(Desired.Textures);
-	SetVisualEffectQuality(Desired.Effects);
-	SetPostProcessingQuality(Desired.PostProcess);
-	SetViewDistanceQuality(Desired.ViewDistance);
-	bMotionBlurEnabled = Desired.bMotionBlur;
+	SetGraphics(Desired);
 	ApplySettings(false);
 	const FKnightGraphicsChoice Applied = GetActiveGraphics();
 	if (Applied != Desired)
@@ -200,14 +226,14 @@ bool UknightGameUserSettings::ApplyPendingGraphicsAtStartup()
 		UE_LOG(Logknight, Warning, TEXT("Applied graphics could not be confirmed on disk."));
 		return false;
 	}
-	bGraphicsAppliedNotice = true;
+	bGraphicsRevertedNotice = true;
 	return true;
 }
 
-bool UknightGameUserSettings::ConsumeGraphicsAppliedNotice()
+bool UknightGameUserSettings::ConsumeGraphicsRevertedNotice()
 {
-	const bool bResult = bGraphicsAppliedNotice;
-	bGraphicsAppliedNotice = false;
+	const bool bResult = bGraphicsRevertedNotice;
+	bGraphicsRevertedNotice = false;
 	return bResult;
 }
 

@@ -130,7 +130,7 @@ bool UknightHUDPlayerStatus::NeedsTick() const
 
 void UknightHUDPlayerStatus::UpdateTicker()
 {
-	if (NeedsTick() && !AnimTicker.IsValid() && !IsDesignTime())
+	if (!AnimTicker.IsValid() && !IsDesignTime())
 	{
 		AnimTicker = FTSTicker::GetCoreTicker().AddTicker(
 			FTickerDelegate::CreateWeakLambda(this, [this](float DeltaTime) { return TickAnimation(DeltaTime); }));

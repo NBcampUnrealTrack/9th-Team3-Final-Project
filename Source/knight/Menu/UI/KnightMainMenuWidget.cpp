@@ -250,11 +250,6 @@ void UKnightMainMenuWidget::HandleCodexClosed()
 	ShowPage(EKnightMainMenuPage::Home);
 }
 
-bool UKnightMainMenuWidget::IsCodexButtonFocused() const
-{
-	return Button_Codex && GetOwningPlayer() && Button_Codex->HasUserFocus(GetOwningPlayer());
-}
-
 UWidget* UKnightMainMenuWidget::GetPreferredFocusTarget() const
 {
 	if (CurrentPage == EKnightMainMenuPage::Home && bRestoreCodexFocus && Button_Codex)

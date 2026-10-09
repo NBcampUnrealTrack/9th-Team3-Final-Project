@@ -92,6 +92,8 @@ protected:
 	virtual void HandleValuesChanged() override;
 	virtual void HandleStatusChanged(const FText& Status) override;
 	virtual void HandleUnsavedPrompt(bool bShow) override;
+	/** Reuses Panel_Prompt: Btn_PromptApply keeps, Btn_PromptDiscard reverts, Btn_PromptContinue hides. */
+	virtual void HandleDisplayConfirm(bool bShow) override;
 	virtual void HandleFocusRequested() override;
 	virtual void HandleOpened() override;
 	virtual bool HandleBackRequested() override;
@@ -196,8 +198,11 @@ private:
 	/** Focuses the first enabled footer button. False when none can take focus. */
 	bool FocusFooter();
 	void SetRowsLevel(bool bRows);
+	void ShowPrompt(bool bShow, UknightButtonBase* FocusTarget);
 
 	bool bRowsLevel = false;
+	FText PromptApplyText;
+	FText PromptDiscardText;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UknightSettingRow>> Rows;

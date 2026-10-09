@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Containers/Ticker.h"
 #include "Settings/knightGameUserSettings.h"
 #include "KnightSettingsWidget.generated.h"
 
@@ -56,8 +57,10 @@ struct KNIGHT_API FKnightSettingSection
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FKnightSettingsClosed);
 
 /**
- * Settings model shared by title, lobby and raid: graphics (queued for the next launch), personal settings
+ * Settings model shared by title, lobby and raid: graphics (UknightGameUserSettings), personal settings
  * (UknightSharedSettings) and key bindings (Enhanced Input user settings), each edited as a draft and saved by Apply.
+ * Graphics apply at once. A window mode or resolution change then waits DisplayConfirmSeconds for Keep and goes back to
+ * the previous values otherwise, so a mode the monitor cannot show recovers by itself.
  *
  * This class has no layout. The screen is a Blueprint of a knightUI subclass (UknightSettingsScreen) found through
  * GetSharedWidgetClass; it lists GetTabSections, sends edits to OptionEdited and redraws in the Handle* hooks.
@@ -103,11 +106,19 @@ public:
 	void ConfirmDiscard();
 	void ConfirmContinue();
 
+	static constexpr double DisplayConfirmSeconds = 15.0;
+	/** True while a new window mode or resolution waits for KeepDisplay. Editing is locked meanwhile. */
+	bool IsDisplayConfirmShown() const { return bDisplayConfirmShown; }
+	void KeepDisplay();
+	/** Goes back to the window mode and resolution from before Apply. Also runs when the countdown ends. */
+	void RevertDisplay();
+
 	static const FString OnText;
 	static const FString OffText;
 
 protected:
 	virtual FReply NativeOnPreviewKeyDown(const FGeometry& Geometry, const FKeyEvent& Event) override;
+	virtual void NativeDestruct() override;
 
 	/** The tab changed or its rows changed shape (Open, Revert, defaults): rebuild the list. */
 	virtual void HandleTabChanged() {}
@@ -115,6 +126,8 @@ protected:
 	virtual void HandleValuesChanged() {}
 	virtual void HandleStatusChanged(const FText& Status) {}
 	virtual void HandleUnsavedPrompt(bool bShow) {}
+	/** Show or hide the keep / revert choice after a display change. The countdown arrives through HandleStatusChanged. */
+	virtual void HandleDisplayConfirm(bool bShow) {}
 	/** Called when FocusSettings runs; put focus on the first row. */
 	virtual void HandleFocusRequested() { SetKeyboardFocus(); }
 	/** Start of Open, before the first HandleTabChanged. */
@@ -135,9 +148,22 @@ private:
 	void ApplyPreset(int32 Quality);
 
 	void ShowUnsavedPrompt(bool bShow);
+	void StartDisplayConfirm(const FKnightGraphicsChoice& Previous);
+	void StopDisplayConfirm();
+	bool TickDisplayConfirm(float DeltaTime);
+	void UpdateDisplayCountdown();
+	/** bRefreshScreen is false while the widget is being destroyed. */
+	void RestoreDisplay(bool bRefreshScreen);
 
 	int32 CurrentTab = 0;
 	bool bUnsavedPromptShown = false;
+	bool bDisplayConfirmShown = false;
+	/** Set when Apply came from the close prompt: keeping the display then closes the screen. */
+	bool bCloseAfterDisplayConfirm = false;
+	double DisplayConfirmDeadline = 0.0;
+	int32 DisplaySecondsShown = -1;
+	FKnightGraphicsChoice DisplayRevertGraphics;
+	FTSTicker::FDelegateHandle DisplayTicker;
 	FKnightGraphicsChoice SavedGraphics;
 	FKnightGraphicsChoice DraftGraphics;
 	UPROPERTY(Transient) TObjectPtr<UknightSharedSettings> SavedPersonal;

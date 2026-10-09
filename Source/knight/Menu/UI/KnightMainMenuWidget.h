@@ -35,9 +35,6 @@ class KNIGHT_API UKnightMainMenuWidget : public UKnightMenuWidgetBase
 public:
 	UFUNCTION(BlueprintPure, Category="Knight|Menu")
 	EKnightMainMenuPage GetCurrentPage() const { return CurrentPage; }
-	UFUNCTION(BlueprintPure, Category="Knight|Codex")
-	UKnightCodexWidget* GetCodexWidget() const { return CodexWidget; }
-	UFUNCTION(BlueprintPure, Category="Knight|Codex") bool IsCodexButtonFocused() const;
 
 	UFUNCTION(BlueprintCallable, Category="Knight|Menu")
 	bool ShowPage(EKnightMainMenuPage NewPage);

@@ -49,8 +49,8 @@ void UKnightTitleMenuWidget::NativeConstruct()
 	}
 	RefreshSlots();
 	RefreshTravelControls();
-	if (UknightGameUserSettings* const Graphics = UknightGameUserSettings::Get(); Graphics && Graphics->ConsumeGraphicsAppliedNotice())
-		SetStatusText(LOCTEXT("GraphicsApplied", "새 그래픽 설정이 적용되었습니다."));
+	if (UknightGameUserSettings* const Graphics = UknightGameUserSettings::Get(); Graphics && Graphics->ConsumeGraphicsRevertedNotice())
+		SetStatusText(LOCTEXT("GraphicsReverted", "유지하지 않은 화면 설정을 이전 값으로 되돌렸습니다."));
 }
 
 void UKnightTitleMenuWidget::NativeDestruct()

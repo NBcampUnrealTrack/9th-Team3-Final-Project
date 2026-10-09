@@ -23,7 +23,7 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	/** HUD layout widget. Usually made of UI extension points (HUD.Slot.*) bound to the HUD view models. */
+	/** HUD layout widget. Its HUD widgets read the view models from UknightUISubsystem. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|UI")
 	TSoftClassPtr<UCommonActivatableWidget> HUDLayoutClass;
 

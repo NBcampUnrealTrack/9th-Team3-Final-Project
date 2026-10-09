@@ -86,8 +86,16 @@ void UknightSettingsScreen::NativeOnInitialized()
 	Btn_Apply->OnClicked().AddUObject(this, &ThisClass::Apply);
 	Btn_Revert->OnClicked().AddUObject(this, &ThisClass::Revert);
 	if (Btn_Defaults) Btn_Defaults->OnClicked().AddUObject(this, &ThisClass::RestoreDefaults);
-	if (Btn_PromptApply) Btn_PromptApply->OnClicked().AddUObject(this, &ThisClass::ConfirmApply);
-	if (Btn_PromptDiscard) Btn_PromptDiscard->OnClicked().AddUObject(this, &ThisClass::ConfirmDiscard);
+	if (Btn_PromptApply)
+	{
+		PromptApplyText = Btn_PromptApply->GetButtonText();
+		Btn_PromptApply->OnClicked().AddWeakLambda(this, [this] { IsDisplayConfirmShown() ? KeepDisplay() : ConfirmApply(); });
+	}
+	if (Btn_PromptDiscard)
+	{
+		PromptDiscardText = Btn_PromptDiscard->GetButtonText();
+		Btn_PromptDiscard->OnClicked().AddWeakLambda(this, [this] { IsDisplayConfirmShown() ? RevertDisplay() : ConfirmDiscard(); });
+	}
 	if (Btn_PromptContinue) Btn_PromptContinue->OnClicked().AddUObject(this, &ThisClass::ConfirmContinue);
 	HandleUnsavedPrompt(false);
 }
@@ -237,6 +245,28 @@ void UknightSettingsScreen::HandleStatusChanged(const FText& Status)
 
 void UknightSettingsScreen::HandleUnsavedPrompt(bool bShow)
 {
+	if (Btn_PromptApply) Btn_PromptApply->SetButtonText(PromptApplyText);
+	if (Btn_PromptDiscard) Btn_PromptDiscard->SetButtonText(PromptDiscardText);
+	if (Btn_PromptContinue) Btn_PromptContinue->SetVisibility(ESlateVisibility::Visible);
+	ShowPrompt(bShow, Btn_PromptApply);
+}
+
+void UknightSettingsScreen::HandleDisplayConfirm(bool bShow)
+{
+	if (!bShow)
+	{
+		HandleUnsavedPrompt(false);
+		return;
+	}
+	if (Btn_PromptApply) Btn_PromptApply->SetButtonText(LOCTEXT("SettingsDisplayKeep", "유지"));
+	if (Btn_PromptDiscard) Btn_PromptDiscard->SetButtonText(LOCTEXT("SettingsDisplayRevert", "되돌리기"));
+	if (Btn_PromptContinue) Btn_PromptContinue->SetVisibility(ESlateVisibility::Collapsed);
+	// Focus starts on revert: a stray Enter on a screen the player cannot read must not keep it.
+	ShowPrompt(true, Btn_PromptDiscard);
+}
+
+void UknightSettingsScreen::ShowPrompt(bool bShow, UknightButtonBase* FocusTarget)
+{
 	if (Panel_Prompt)
 	{
 		Panel_Prompt->SetVisibility(bShow ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
@@ -245,9 +275,9 @@ void UknightSettingsScreen::HandleUnsavedPrompt(bool bShow)
 	{
 		Panel_Footer->SetVisibility(bShow ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 	}
-	if (bShow && Btn_PromptApply)
+	if (bShow && FocusTarget)
 	{
-		Btn_PromptApply->SetFocus();
+		FocusTarget->SetFocus();
 	}
 }
 
@@ -398,6 +428,10 @@ FReply UknightSettingsScreen::NativeOnPreviewKeyDown(const FGeometry& InGeometry
 FReply UknightSettingsScreen::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
 {
 	const FKey Key = InKeyEvent.GetKey();
+	if (IsDisplayConfirmShown())
+	{
+		return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
+	}
 	if (Key == EKeys::Q || Key == EKeys::E)
 	{
 		SwitchTab(Key == EKeys::E ? 1 : -1);

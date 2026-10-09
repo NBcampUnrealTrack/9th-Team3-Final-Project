@@ -4,6 +4,7 @@
 #include "Engine/LocalPlayer.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputCoreTypes.h"
+#include "knight.h"
 #include "knightAudioSubsystem.h"
 #include "Settings/knightSettingsSubsystem.h"
 #include "Settings/knightSharedSettings.h"
@@ -116,7 +117,7 @@ void UKnightSettingsWidget::Open()
 		return;
 	}
 	HandleOpened();
-	SavedGraphics = Graphics->GetDisplayedGraphics();
+	SavedGraphics = Graphics->GetActiveGraphics();
 	DraftGraphics = SavedGraphics;
 	SavedPersonal = NewObject<UknightSharedSettings>(this);
 	DraftPersonal = NewObject<UknightSharedSettings>(this);
@@ -151,8 +152,7 @@ void UKnightSettingsWidget::Open()
 	}
 	CurrentTab = 0;
 	HandleTabChanged();
-	SetStatus(Graphics->HasPendingGraphics()
-		? LOCTEXT("Pending", "그래픽 설정은 게임을 다시 시작하면 적용됩니다.") : FText::GetEmpty());
+	SetStatus(FText::GetEmpty());
 	ShowUnsavedPrompt(false);
 }
 
@@ -244,7 +244,8 @@ void UKnightSettingsWidget::GetTabSections(int32 Tab, TArray<FKnightSettingSecti
 		Quality.Items.Add(Rotator(TEXT("PostProcess"), LOCTEXT("Post", "후처리"), LOCTEXT("PostDesc", "블룸, 피사계 심도 같은 화면 효과의 품질입니다."), QualityOptions()));
 		Quality.Items.Add(Rotator(TEXT("ViewDistance"), LOCTEXT("View", "시야 거리"), LOCTEXT("ViewDesc", "먼 물체를 얼마나 자세히 그릴지 정합니다."), QualityOptions()));
 		Quality.Items.Add(Toggle(TEXT("MotionBlur"), LOCTEXT("Motion", "모션 블러"), LOCTEXT("MotionDesc", "빠르게 움직일 때 화면을 흐리게 합니다.")));
-		Quality.Note = LOCTEXT("GraphicsNote", "그래픽 설정은 게임을 다시 시작하면 적용됩니다.");
+		Display.Note = FText::Format(LOCTEXT("DisplayNote", "화면 모드와 해상도는 적용 후 {0}초 안에 유지를 고르지 않으면 이전 값으로 돌아갑니다."),
+			FText::AsNumber(FMath::RoundToInt(DisplayConfirmSeconds)));
 	}
 	else if (Tab == 1)
 	{
@@ -377,6 +378,7 @@ void UKnightSettingsWidget::PreviewAudio(const UknightSharedSettings* Settings) 
 void UKnightSettingsWidget::OptionEdited(FName Id, const FString& Value)
 {
 	if (!DraftPersonal) return;
+	if (bDisplayConfirmShown) { HandleValuesChanged(); return; }
 	const bool bOn = Value == OnText;
 	if (Id == TEXT("WindowMode"))
 	{
@@ -441,7 +443,7 @@ void UKnightSettingsWidget::OptionEdited(FName Id, const FString& Value)
 
 void UKnightSettingsWidget::Apply()
 {
-	if (!IsDirty()) return;
+	if (bDisplayConfirmShown || !IsDirty()) return;
 	UknightGameUserSettings* const Graphics = UknightGameUserSettings::Get();
 	ULocalPlayer* const Player = GetOwningLocalPlayer();
 	UknightSettingsSubsystem* const Settings = Player ? Player->GetSubsystem<UknightSettingsSubsystem>() : nullptr;
@@ -488,16 +490,101 @@ void UKnightSettingsWidget::Apply()
 	}
 	if (DraftGraphics != SavedGraphics)
 	{
-		if (!Graphics->QueueGraphicsForNextProcess(DraftGraphics, Error)) { SetStatus(Error); return; }
+		const FKnightGraphicsChoice Previous = SavedGraphics;
+		const bool bDisplayChanged = DraftGraphics.WindowMode != Previous.WindowMode || DraftGraphics.Resolution != Previous.Resolution;
+		if (!Graphics->ApplyGraphicsNow(DraftGraphics, bDisplayChanged ? &Previous : nullptr, Error)) { SetStatus(Error); return; }
 		SavedGraphics = DraftGraphics;
-		SetStatus(LOCTEXT("GraphicsQueued", "그래픽 설정은 게임을 다시 시작하면 적용됩니다."));
+		if (bDisplayChanged)
+		{
+			HandleValuesChanged();
+			StartDisplayConfirm(Previous);
+			return;
+		}
 	}
-	else SetStatus(LOCTEXT("Saved", "설정을 저장했습니다."));
+	SetStatus(LOCTEXT("Saved", "설정을 저장했습니다."));
 	HandleValuesChanged();
+}
+
+void UKnightSettingsWidget::StartDisplayConfirm(const FKnightGraphicsChoice& Previous)
+{
+	DisplayRevertGraphics = Previous;
+	DisplayConfirmDeadline = FPlatformTime::Seconds() + DisplayConfirmSeconds;
+	DisplaySecondsShown = -1;
+	bDisplayConfirmShown = true;
+	// Core ticker: keeps counting while the raid is paused behind the settings screen.
+	DisplayTicker = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateUObject(this, &ThisClass::TickDisplayConfirm), 0.1f);
+	UpdateDisplayCountdown();
+	HandleDisplayConfirm(true);
+}
+
+void UKnightSettingsWidget::StopDisplayConfirm()
+{
+	FTSTicker::RemoveTicker(DisplayTicker);
+	DisplayTicker.Reset();
+	bDisplayConfirmShown = false;
+}
+
+bool UKnightSettingsWidget::TickDisplayConfirm(float DeltaTime)
+{
+	if (FPlatformTime::Seconds() >= DisplayConfirmDeadline)
+	{
+		RevertDisplay();
+		return false;
+	}
+	UpdateDisplayCountdown();
+	return true;
+}
+
+void UKnightSettingsWidget::UpdateDisplayCountdown()
+{
+	const int32 Seconds = FMath::Max(0, FMath::CeilToInt(DisplayConfirmDeadline - FPlatformTime::Seconds()));
+	if (Seconds == DisplaySecondsShown) return;
+	DisplaySecondsShown = Seconds;
+	SetStatus(FText::Format(LOCTEXT("DisplayCountdown", "이 화면 설정을 유지할까요? {0}초 후 이전 설정으로 돌아갑니다."), FText::AsNumber(Seconds)));
+}
+
+void UKnightSettingsWidget::KeepDisplay()
+{
+	if (!bDisplayConfirmShown) return;
+	StopDisplayConfirm();
+	if (UknightGameUserSettings* const Graphics = UknightGameUserSettings::Get()) Graphics->ConfirmGraphics();
+	HandleDisplayConfirm(false);
+	SetStatus(LOCTEXT("DisplayKept", "화면 설정을 저장했습니다."));
+	const bool bClose = bCloseAfterDisplayConfirm && !IsDirty();
+	bCloseAfterDisplayConfirm = false;
+	if (bClose) CloseNow();
+	else HandleFocusRequested();
+}
+
+void UKnightSettingsWidget::RevertDisplay()
+{
+	if (bDisplayConfirmShown) RestoreDisplay(true);
+}
+
+void UKnightSettingsWidget::RestoreDisplay(bool bRefreshScreen)
+{
+	StopDisplayConfirm();
+	bCloseAfterDisplayConfirm = false;
+	FText Error;
+	UknightGameUserSettings* const Graphics = UknightGameUserSettings::Get();
+	const bool bRestored = Graphics && Graphics->ApplyGraphicsNow(DisplayRevertGraphics, nullptr, Error, true);
+	if (!bRestored)
+	{
+		// The pending revert stays saved, so the next launch still restores the previous display.
+		UE_LOG(Logknight, Warning, TEXT("Display revert failed: %s"), *Error.ToString());
+	}
+	SavedGraphics = DisplayRevertGraphics;
+	DraftGraphics = SavedGraphics;
+	if (!bRefreshScreen) return;
+	HandleDisplayConfirm(false);
+	HandleTabChanged();
+	SetStatus(bRestored ? LOCTEXT("DisplayReverted", "이전 화면 설정으로 되돌렸습니다.") : Error);
+	HandleFocusRequested();
 }
 
 void UKnightSettingsWidget::Revert()
 {
+	if (bDisplayConfirmShown) return;
 	DraftGraphics = SavedGraphics;
 	CopyPersonal(DraftPersonal, SavedPersonal);
 	DraftKeys = SavedKeys;
@@ -509,6 +596,7 @@ void UKnightSettingsWidget::Revert()
 
 void UKnightSettingsWidget::RestoreDefaults()
 {
+	if (bDisplayConfirmShown) return;
 	DraftGraphics = FKnightGraphicsChoice();
 	if (const UknightGameUserSettings* const Graphics = UknightGameUserSettings::Get()) DraftGraphics.Resolution = Graphics->GetDesktopResolution();
 	UknightSharedSettings* const Defaults = NewObject<UknightSharedSettings>(this);
@@ -521,6 +609,7 @@ void UKnightSettingsWidget::RestoreDefaults()
 
 void UKnightSettingsWidget::RequestClose()
 {
+	if (bDisplayConfirmShown) return;
 	if (IsDirty())
 	{
 		ShowUnsavedPrompt(true);
@@ -541,7 +630,14 @@ void UKnightSettingsWidget::CloseNow()
 	OnClosed.Broadcast();
 }
 
-void UKnightSettingsWidget::ConfirmApply() { Apply(); if (!IsDirty()) CloseNow(); }
+void UKnightSettingsWidget::ConfirmApply()
+{
+	ShowUnsavedPrompt(false);
+	Apply();
+	if (bDisplayConfirmShown) bCloseAfterDisplayConfirm = true;
+	else if (!IsDirty()) CloseNow();
+	else ShowUnsavedPrompt(true);
+}
 void UKnightSettingsWidget::ConfirmDiscard() { Revert(); CloseNow(); }
 void UKnightSettingsWidget::ConfirmContinue() { ShowUnsavedPrompt(false); SetStatus(FText::GetEmpty()); HandleFocusRequested(); }
 
@@ -549,6 +645,7 @@ FReply UKnightSettingsWidget::NativeOnPreviewKeyDown(const FGeometry& Geometry, 
 {
 	if (Event.GetKey() == EKeys::Escape)
 	{
+		if (bDisplayConfirmShown) { RevertDisplay(); return FReply::Handled(); }
 		if (IsCapturingKey()) return FReply::Unhandled();
 		// A second Esc on the unsaved-changes prompt means "keep editing", not "close anyway".
 		if (bUnsavedPromptShown) ConfirmContinue();
@@ -556,6 +653,13 @@ FReply UKnightSettingsWidget::NativeOnPreviewKeyDown(const FGeometry& Geometry, 
 		return FReply::Handled();
 	}
 	return Super::NativeOnPreviewKeyDown(Geometry, Event);
+}
+
+void UKnightSettingsWidget::NativeDestruct()
+{
+	// Leaving the map mid-countdown counts as not keeping the display.
+	if (bDisplayConfirmShown) RestoreDisplay(false);
+	Super::NativeDestruct();
 }
 
 #undef LOCTEXT_NAMESPACE
