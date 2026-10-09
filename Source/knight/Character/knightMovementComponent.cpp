@@ -97,7 +97,7 @@ float UknightMovementComponent::GetMaxSpeed() const
 float UknightMovementComponent::GetMaxAcceleration() const
 {
 	// 잠금 중에는 입력이 있어도 가속이 0 → 엔진이 제동을 걸어 미끄러지며 멈춘다. 이동 방향으로 몸도 돌지 않는다.
-	return bMoveInputLocked ? 0.f : Super::GetMaxAcceleration();
+	return MoveInputLockCount > 0 ? 0.f : Super::GetMaxAcceleration();
 }
 
 bool UknightMovementComponent::DoJump(bool bReplayingMoves, float DeltaTime)

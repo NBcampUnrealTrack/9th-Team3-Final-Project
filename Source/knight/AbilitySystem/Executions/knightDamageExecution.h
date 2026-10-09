@@ -67,8 +67,11 @@ namespace knightDamageMath
  *
  * PartMultiplier는 이펙트 컨텍스트의 히트 결과로 맞는 쪽 ICombatInterface에서 가져오므로,
  * 공격 판정 쪽에서 이펙트를 적용하기 전에 FHitResult를 컨텍스트에 넣어야 한다.
- * 맞는 쪽에 State.Invulnerable 또는 State.Parrying이 있으면 피격이 0이 된다.
+ * 맞는 쪽에 State.Invulnerable이 있으면 피격이 0이 된다.
  * State.Guarding은 공격자가 가드 범위 안에 있을 때 피해를 줄인다.
+ * 퍼펙트 가드(State.Parrying)는 UknightCombatLibrary::ApplyMeleeHit이 이펙트를 적용하기 전에 판정한다(가드 범위 안 + 패리 가능한 공격이면
+ * 이펙트 자체를 적용하지 않음). 그래서 여기까지 온 피격은 패리 구간이어도 일반 가드·피격으로 계산한다. (2026-10-08, 전에는 여기서 0으로 만들어
+ * 등 뒤 공격·패리 불가 공격도 패리 구간이면 피해가 0이었다)
  *
  * 모든 캡처는 UknightCoreAttributeSet에서 읽는다. 공격하는 쪽과 맞는 쪽 ASC 모두 이 세트가 있어야 한다:
  * GAS는 캡처 집계기를 만들 때 소유 세트를 참조하므로, 세트가 없으면 크래시한다.
@@ -86,6 +89,9 @@ public:
 	virtual void Execute_Implementation(const FGameplayEffectCustomExecutionParameters& ExecutionParams,
 		FGameplayEffectCustomExecutionOutput& OutExecutionOutput) const override;
 
+	/** 공격자가 맞는 쪽의 가드 범위(GuardArcDegrees) 안에 있는지. 퍼펙트 가드도 같은 범위를 쓰도록 공개한다(UknightCombatLibrary). */
+	bool IsAttackerInGuardArc(const AActor* Target, const AActor* Attacker) const;
+
 protected:
 	/** 가드한 피격의 피해 배율. 맞는 쪽 가드 효율이 1.0일 때의 기준값이다. */
 	UPROPERTY(EditDefaultsOnly, Category="Guard", meta=(ClampMin=0, ClampMax=1))
@@ -98,7 +104,4 @@ protected:
 	/** 가드 범위의 전체 각도(도). 맞는 쪽의 정면을 중심으로 한다. */
 	UPROPERTY(EditDefaultsOnly, Category="Guard", meta=(ClampMin=0, ClampMax=360))
 	float GuardArcDegrees = 150.f;
-
-private:
-	bool IsAttackerInGuardArc(const AActor* Target, const AActor* Attacker) const;
 };

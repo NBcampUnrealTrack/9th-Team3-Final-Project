@@ -7,11 +7,9 @@
 #include "Engine/World.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
-#include "Abilities/Tasks/AbilityTask_WaitInputPress.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/RootMotionSource.h"
-#include "Input/knightInputBufferComponent.h"
 #include "Perception/AISense_Hearing.h"
 #include "System/knightGameplayTags.h"
 
@@ -25,6 +23,12 @@ UknightGameplayAbility_BoostDash::UknightGameplayAbility_BoostDash(const FObject
 	ActivationBlockedTags.AddTag(knightGameplayTags::State_Dead);
 	ActivationBlockedTags.AddTag(knightGameplayTags::State_HitReact);
 	ActivationBlockedTags.AddTag(knightGameplayTags::State_Overheated);
+
+	// 경직 중 대시 캔슬: 실행 중에 다시 발동되면 지금 대시를 끝내고 새로 시작한다. 언제 허용할지는 CanActivateAbility가 정한다.
+	bRetriggerInstancedAbility = true;
+
+	// 퀵스텝은 행동 에너지가 비용만큼 있어야 나간다(2026-10-09 사용자 결정). 비용 값은 BP의 StaminaCost(전에는 Cost GE).
+	bRequireFullStaminaCost = true;
 }
 
 float UknightGameplayAbility_BoostDash::GetMechAttributeValue(const FGameplayAttribute& Attribute, float Fallback) const
@@ -39,6 +43,11 @@ bool UknightGameplayAbility_BoostDash::CanActivateAbility(const FGameplayAbility
 	// 퀵스텝 쿨타임 중이면 발동하지 않는다.
 	const UWorld* const World = GetWorld();
 	if (World && World->GetTimeSeconds() < CooldownEndTime)
+	{
+		return false;
+	}
+	// 이미 대시 중이면 경직 중일 때만 다시 발동(새 대시로 다시 시작)을 허용한다. 이동 도중에는 끊지 않는다.
+	if (IsActive() && !bInRecovery)
 	{
 		return false;
 	}
@@ -61,16 +70,6 @@ void UknightGameplayAbility_BoostDash::ActivateAbility(const FGameplayAbilitySpe
 
 void UknightGameplayAbility_BoostDash::StartDash(ACharacter& Character)
 {
-	// 경직 중 이어지는 대시면, 이전 대시의 무적·몽타주 태스크를 먼저 정리한다.
-	if (InvulnerableTask.IsValid())
-	{
-		InvulnerableTask->EndTask();
-	}
-	if (MontageTask.IsValid())
-	{
-		MontageTask->EndTask();
-	}
-	RemoveInvulnerability();
 	bCooldownPending = true;
 
 	FVector Direction = Character.GetCharacterMovement()->GetLastInputVector().GetSafeNormal2D();
@@ -98,7 +97,6 @@ void UknightGameplayAbility_BoostDash::StartDash(ACharacter& Character)
 		UAbilityTask_WaitDelay* const Task = UAbilityTask_WaitDelay::WaitDelay(this, InvulnerableDuration);
 		Task->OnFinish.AddDynamic(this, &ThisClass::OnInvulnerabilityEnded);
 		Task->ReadyForActivation();
-		InvulnerableTask = Task;
 	}
 
 	if (Montage)
@@ -106,7 +104,6 @@ void UknightGameplayAbility_BoostDash::StartDash(ACharacter& Character)
 		UAbilityTask_PlayMontageAndWait* const Task = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
 			this, NAME_None, Montage, GetMontagePlayRate(Montage), NAME_None, true, 0.f);
 		Task->ReadyForActivation();
-		MontageTask = Task;
 	}
 
 	// 거리 = 기본 거리 x 퀵스텝 속도 배율 x 중량 계수. 시간은 고정이라 거리가 늘면 속도도 빨라진다.
@@ -191,88 +188,15 @@ void UknightGameplayAbility_BoostDash::OnDashFinished()
 		}
 	}
 
+	// 경직 동안 대시 재발동 요청이 오면 CanActivateAbility가 허용하고, 엔진이 이 대시를 끝낸 뒤 새로 시작한다.
 	UAbilityTask_WaitDelay* const Task = UAbilityTask_WaitDelay::WaitDelay(this, RecoveryDuration);
 	Task->OnFinish.AddDynamic(this, &ThisClass::OnRecoveryFinished);
 	Task->ReadyForActivation();
-	RecoveryTask = Task;
-
-	// 대시 중에 미리 눌러 둔 대시(버퍼)가 있으면 바로 잇고, 없으면 경직 중 입력을 기다린다.
-	if (!TryChainDash(true))
-	{
-		WaitForChainInput();
-	}
 }
 
 void UknightGameplayAbility_BoostDash::OnRecoveryFinished()
 {
 	EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, false);
-}
-
-void UknightGameplayAbility_BoostDash::WaitForChainInput()
-{
-	// 대시가 실행 중이라 대시 키는 어빌리티 발동 대신 이 태스크로 들어온다 (UknightAbilitySystemComponent::AbilitySpecInputPressed).
-	UAbilityTask_WaitInputPress* const Task = UAbilityTask_WaitInputPress::WaitInputPress(this);
-	Task->OnPress.AddDynamic(this, &ThisClass::OnRecoveryInputPressed);
-	Task->ReadyForActivation();
-	ChainInputTask = Task;
-}
-
-void UknightGameplayAbility_BoostDash::OnRecoveryInputPressed(float TimeWaited)
-{
-	// 쿨타임 중이라 못 이었으면 다음 누름을 다시 기다린다.
-	if (!TryChainDash(false))
-	{
-		WaitForChainInput();
-	}
-}
-
-bool UknightGameplayAbility_BoostDash::TryChainDash(bool bRequireBufferedInput)
-{
-	if (!bInRecovery)
-	{
-		return false;
-	}
-	UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();
-	ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
-	const UWorld* const World = GetWorld();
-	if (!ASC || !Character || !World)
-	{
-		return false;
-	}
-
-	UknightInputBufferComponent* const InputBuffer = Character->FindComponentByClass<UknightInputBufferComponent>();
-	const FGameplayTag InputTag = GetInputTag();
-	if (bRequireBufferedInput && !(InputBuffer && InputBuffer->HasBufferedInput(InputTag)))
-	{
-		return false;
-	}
-
-	// 첫 발동과 같은 기준: 쿨타임, 발동 차단 태그(사망·피격·과열), 게이지 비용.
-	if (World->GetTimeSeconds() < CooldownEndTime || ASC->HasAnyMatchingGameplayTags(ActivationBlockedTags))
-	{
-		return false;
-	}
-	if (!CommitAbilityCost(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo()))
-	{
-		return false;
-	}
-
-	// 이 누름으로 이어졌으니 버퍼에서 지운다. 안 지우면 다음 경직 시작 때 같은 누름으로 한 번 더 이어질 수 있다.
-	if (InputBuffer)
-	{
-		InputBuffer->ConsumeBufferedInput(InputTag);
-	}
-	if (RecoveryTask.IsValid())
-	{
-		RecoveryTask->EndTask();
-	}
-	if (ChainInputTask.IsValid())
-	{
-		ChainInputTask->EndTask();
-	}
-	ReleaseRecoveryState();
-	StartDash(*Character);
-	return true;
 }
 
 void UknightGameplayAbility_BoostDash::ReleaseRecoveryState()
@@ -309,13 +233,6 @@ void UknightGameplayAbility_BoostDash::StartCooldown()
 	{
 		CooldownEndTime = World->GetTimeSeconds() + Cooldown;
 	}
-}
-
-FGameplayTag UknightGameplayAbility_BoostDash::GetInputTag() const
-{
-	// 동적 소스 태그에는 InputTag만 들어 있다 (UknightAbilitySet 참고).
-	const FGameplayAbilitySpec* const Spec = GetCurrentAbilitySpec();
-	return Spec ? Spec->GetDynamicSpecSourceTags().First() : FGameplayTag();
 }
 
 void UknightGameplayAbility_BoostDash::OnInvulnerabilityEnded()

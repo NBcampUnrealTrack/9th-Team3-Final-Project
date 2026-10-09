@@ -167,7 +167,6 @@ void UKnightSettingsWidget::CopyPersonal(UknightSharedSettings* To, const Uknigh
 	To->GamepadSensitivity = From->GamepadSensitivity;
 	To->bInvertLookY = From->bInvertLookY;
 	To->CameraShakeScale = From->CameraShakeScale;
-	To->bToggleRun = From->bToggleRun;
 	To->bSubtitlesEnabled = From->bSubtitlesEnabled;
 	To->MasterVolume = From->MasterVolume;
 	To->MusicVolume = From->MusicVolume;

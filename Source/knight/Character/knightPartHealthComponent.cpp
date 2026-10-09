@@ -106,6 +106,25 @@ FGameplayTag UknightPartHealthComponent::GetBrokenTag(EknightBodyPart Part)
 UknightPartHealthComponent::UknightPartHealthComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
+
+	// 나이트 메시(/Game/Knight/Character/Knights/Knight, 마네킹식 본) 기준 본 → 부위 기본값 (2026-10-08).
+	// BP_Knight에 저장해 두었더니 BP를 다른 버전으로 덮어쓸 때 사라져서 C++ 기본값으로 옮겼다.
+	// 실제로 맞는 본은 물리 에셋(Knight_PhysicsAsset)에 바디가 있는 본뿐이고, 여기 없는 본은 DefaultHitPart(몸통).
+	// 어깨(clavicle)는 팔로 친다(2026-10-06 결정). 손가락·root·attach·가상 본(VB)은 바디가 없어 뺐다.
+	auto Map = [this](std::initializer_list<const TCHAR*> Bones, EknightBodyPart Part)
+	{
+		for (const TCHAR* const Bone : Bones)
+		{
+			BoneToPart.Add(FName(Bone), Part);
+		}
+	};
+	Map({ TEXT("neck_01"), TEXT("head") }, EknightBodyPart::Head);
+	Map({ TEXT("pelvis"), TEXT("spine_01"), TEXT("spine_02"), TEXT("spine_03"), TEXT("spine_04"), TEXT("spine_05"),
+		TEXT("breast_l"), TEXT("breast_r") }, EknightBodyPart::Torso);
+	Map({ TEXT("clavicle_l"), TEXT("upperarm_l"), TEXT("upperarm_twist_01_l"), TEXT("lowerarm_l"), TEXT("lowerarm_twist_01_l"), TEXT("hand_l"),
+		TEXT("clavicle_r"), TEXT("upperarm_r"), TEXT("upperarm_twist_01_r"), TEXT("lowerarm_r"), TEXT("lowerarm_twist_01_r"), TEXT("hand_r") }, EknightBodyPart::Arms);
+	Map({ TEXT("pelvis_l"), TEXT("thigh_l"), TEXT("thigh_twist_01_l"), TEXT("calf_l"), TEXT("calf_twist_01_l"), TEXT("foot_l"), TEXT("ball_l"),
+		TEXT("pelvis_r"), TEXT("thigh_r"), TEXT("thigh_twist_01_r"), TEXT("calf_r"), TEXT("calf_twist_01_r"), TEXT("foot_r"), TEXT("ball_r") }, EknightBodyPart::Legs);
 }
 
 void UknightPartHealthComponent::InitializeWithAbilitySystem(UAbilitySystemComponent* InASC)

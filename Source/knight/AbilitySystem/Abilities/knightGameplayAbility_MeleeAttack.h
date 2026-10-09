@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "AbilitySystem/Abilities/knightGameplayAbility.h"
 #include "Combat/knightCombatTypes.h"
+#include "Input/knightMovePressTracker.h"
 #include "knightGameplayAbility_MeleeAttack.generated.h"
 
 class ACharacter;
@@ -35,6 +36,10 @@ class UAnimMontage;
  * 뗐다가 다시 누르거나 누른 채로 다른 키를 더 눌러 방향이 크게 바뀌면(W → W+D 등) 캔슬한다.
  * 방향키를 누른 채 공격하면 이동 캔슬 없이 후딜까지 재생되어, 이동-공격이 빠르게 반복되지 않는다.
  * 또 공격·가드·대시 입력이 버퍼에 남아 있으면 이동 캔슬보다 그 입력이 우선이다.
+ *
+ * (2026-10-08) 행동 속도(ActionSpeed): 공격·발도 몽타주는 PlayRate / DrawPlayRate에 행동 속도를 곱한 배속으로 재생한다.
+ * 캔슬·콤보 창과 공격 판정은 몽타주 노티파이라 같이 빨라지고, 돌진 시간과 발도 후 공격 시작 시점도 같은 배속을 따른다.
+ * 몽타주가 끝난 뒤의 콤보 유예(ComboGraceTime)는 입력 여유라서 그대로 둔다.
  */
 UCLASS()
 class KNIGHT_API UknightGameplayAbility_MeleeAttack : public UknightGameplayAbility
@@ -48,6 +53,10 @@ public:
 		const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData) override;
 	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 		const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
+
+	/** 검을 뽑기만 하는 누름이면 행동 에너지를 쓰지 않는다. (2026-10-09) */
+	virtual void ApplyCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+		const FGameplayAbilityActivationInfo ActivationInfo) const override;
 
 protected:
 	/** Called after each resolved hit. Override for on-hit effects (gauge gain, combo counters). */
@@ -156,19 +165,13 @@ private:
 	bool IsWeaponInHand() const;
 	void CheckMoveCancel();
 
-	/** 이동 입력을 컨트롤 회전 기준 2D 방향으로 읽는다(카메라를 돌려도 같은 키는 같은 방향). 입력이 없으면 영벡터. */
-	static FVector2D GetLocalMoveInput(const ACharacter& Character);
-
-	/** 이번 공격에서 이동 키를 새로 눌렀는지 갱신한다. 공격 전부터 누르고 있던 방향은 무시한다. */
-	void UpdateFreshMovePress(const ACharacter& Character);
-
 	FTimerHandle MoveCancelTimer;
 	FTimerHandle DrawTimer;
 	bool bAttackStarted = false;
 
-	/** 새 누름 판정 기준 방향: 공격 시작 때 누르고 있던 방향. 키를 떼면 0이 된다. */
-	FVector2D MoveInputBaseline = FVector2D::ZeroVector;
+	/** 이번 발동이 검을 뽑기만 하는지(공격 없음). 비용을 내기 전에 정한다. */
+	bool bDrawOnlyActivation = false;
 
-	/** 이번 공격 중 이동 키를 새로 눌렀는지(뗐다가 다시 누름, 또는 누른 채로 방향을 크게 바꿈). */
-	bool bFreshMovePress = false;
+	/** 이번 공격 중 이동 키를 새로 눌렀는지. 공격 전부터 누르고 있던 방향은 무시한다. (2026-10-08 가드와 같이 쓰려고 공용 구조체로 옮김) */
+	FknightMovePressTracker MovePress;
 };

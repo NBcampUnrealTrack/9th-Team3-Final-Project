@@ -176,8 +176,7 @@ void AknightCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 		KnightInput->BindNativeAction(InputConfig, knightGameplayTags::InputTag_LockOn_SwitchLeft, ETriggerEvent::Started, this, &ThisClass::Input_LockOnSwitchLeft, false);
 		KnightInput->BindNativeAction(InputConfig, knightGameplayTags::InputTag_LockOn_SwitchRight, ETriggerEvent::Started, this, &ThisClass::Input_LockOnSwitchRight, false);
 
-		// 달리기. InputConfig에 아직 없을 수 있어서 못 찾아도 경고를 남기지 않는다(마지막 인자 false).
-		// 키 배치(IMC·InputConfig 에셋)는 입력 담당이 InputTag.Run에 입력 액션을 연결하면 동작한다.
+		// 달리기. IA_Run(LeftShift) → InputTag.Run (DA_Knight_InputConfig). 못 찾아도 경고를 남기지 않는다(마지막 인자 false).
 		KnightInput->BindNativeAction(InputConfig, knightGameplayTags::InputTag_Run, ETriggerEvent::Started, this, &ThisClass::Input_RunPressed, false);
 		KnightInput->BindNativeAction(InputConfig, knightGameplayTags::InputTag_Run, ETriggerEvent::Completed, this, &ThisClass::Input_RunReleased, false);
 
@@ -290,34 +289,27 @@ void AknightCharacter::ApplyLookInput(FVector2D LookAxisVector, bool bFromMouse)
 	DoLook(LookAxisVector.X, LookAxisVector.Y);
 }
 
-bool AknightCharacter::IsRunToggleEnabled() const
-{
-	const APlayerController* const PC = Cast<APlayerController>(GetController());
-	const ULocalPlayer* const LocalPlayer = PC ? PC->GetLocalPlayer() : nullptr;
-	UknightSettingsSubsystem* const Settings = LocalPlayer ? LocalPlayer->GetSubsystem<UknightSettingsSubsystem>() : nullptr;
-	const UknightSharedSettings* const Shared = Settings ? Settings->GetSharedSettings() : nullptr;
-	return Shared && Shared->bToggleRun;
-}
-
 void AknightCharacter::Input_RunPressed()
 {
-	UknightMovementComponent* const KnightMovement = GetKnightMovementComponent();
-	if (!KnightMovement || IsDead())
+	if (!IsDead())
 	{
-		return;
+		SetRunning(true);
 	}
-	// 토글이면 누를 때마다 뒤집고, 아니면 누르는 동안 켠다.
-	KnightMovement->SetWantsToRun(IsRunToggleEnabled() ? !KnightMovement->GetWantsToRun() : true);
 }
 
 void AknightCharacter::Input_RunReleased()
 {
-	UknightMovementComponent* const KnightMovement = GetKnightMovementComponent();
-	// 토글이면 뗄 때는 아무것도 하지 않는다.
-	if (KnightMovement && !IsRunToggleEnabled())
+	SetRunning(false);
+}
+
+void AknightCharacter::SetRunning(bool bRun)
+{
+	if (UknightMovementComponent* const KnightMovement = GetKnightMovementComponent())
 	{
-		KnightMovement->SetWantsToRun(false);
+		KnightMovement->SetWantsToRun(bRun);
 	}
+	// 예전 Sprint 어빌리티가 붙이던 태그. 달리기 공격(GA_Knight_RunAttack)의 발동 조건이라 같이 맞춘다.
+	AbilitySystemComponent->SetLooseGameplayTagCount(knightGameplayTags::State_Sprinting, bRun ? 1 : 0);
 }
 
 void AknightCharacter::DoMove(float Right, float Forward)

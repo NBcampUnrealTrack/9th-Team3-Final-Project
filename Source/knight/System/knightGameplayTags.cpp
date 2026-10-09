@@ -40,6 +40,7 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Guarding, "State.Guarding", "Guard is raised.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Parrying, "State.Parrying", "Parry window is active.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Charging, "State.Charging", "Holding a charged attack.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Sprinting, "State.Sprinting", "Run key held, or run toggled on (AknightCharacter). The attack key does the run attack instead of light step 1.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Boosting, "State.Boosting", "Boost dash in progress.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Flying, "State.Flying", "Boost flight movement mode.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Airborne, "State.Airborne", "Not on the ground for any reason.");

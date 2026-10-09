@@ -5,7 +5,6 @@
 #include "knightGameplayAbility_BoostDash.generated.h"
 
 class ACharacter;
-class UAbilityTask;
 class UAnimMontage;
 class UCurveFloat;
 
@@ -13,8 +12,8 @@ class UCurveFloat;
  * 부스트 대시 / 회피 부스트(퀵스텝). 현재 이동 입력 방향으로(입력이 없으면 뒤로) 일정한 힘의
  * 루트 모션 소스로 나이트를 움직이고, 처음 InvulnerableDuration초 동안 State.Invulnerable을 건다.
  *
- * 게이지 비용은 어빌리티의 Cost Gameplay Effect(BoostGauge 모디파이어)에 두므로,
- * 게이지가 모자라면 Ability.ActivateFail.Cost로 발동에 실패한다.
+ * 게이지 비용은 BP의 StaminaCost(기본 클래스 UknightGameplayAbility, 모든 행동이 같은 칸)로 낸다. bRequireFullStaminaCost가 켜져 있어
+ * 게이지가 비용보다 모자라면 Ability.ActivateFail.Cost로 발동에 실패한다. (2026-10-09, 전에는 Cost Gameplay Effect GE_Knight_BoostCost)
  *
  * 방향과 자세: 락온이 아니면 이동 입력이 있는 대시는 먼저 나이트를 대시 방향으로 돌리고 DashMontage(정면)를 재생한다.
  * 락온 중(State.LockedOn)이거나 입력 없는 백스텝이면 바라보는 방향을 유지하고, 그 방향 기준의 대시 방향으로
@@ -29,9 +28,12 @@ class UCurveFloat;
  *   흐름: 대시 이동(DashDuration) → 경직(RecoveryDuration) → 종료. 몽타주는 경직까지 이어서 재생된다.
  *   경직 중에는 이동 입력으로 가속하지 않고(미끄러지며 정지) Window.Cancel을 켠다.
  *     - 공격·가드: Window.Cancel 덕분에 활성화 그룹 규칙대로 대시를 대신한다. 대시 중 미리 누른 입력은 버퍼에서 나간다.
- *     - 대시: 같은 어빌리티라 다시 발동되지 않으므로, 쿨타임이 끝났으면 이 어빌리티 안에서 새 대시를 이어서 낸다(비용 다시 냄).
- *       대시 중 미리 누른 대시(버퍼)는 경직 시작 때, 경직 중 누른 대시는 누른 순간 확인한다.
- *       쿨타임이 안 끝났을 때 누른 입력은 버퍼에 남아, 어빌리티가 끝난 뒤 쿨타임이 지나면 발동될 수 있다.
+ *     - 대시: 실행 중에 퀵스텝 키(InputTag.Boost)를 다시 누르면 입력 처리(knightAbilitySystemComponent)가 재발동을 시도한다.
+ *       경직 중이고 쿨타임이 끝났을 때만 받아들여 지금 대시를 끝내고 새 대시로 다시 시작한다(bRetriggerInstancedAbility, 비용 다시 냄).
+ *       대시 이동 도중의 요청은 거절해 이동이 끊기지 않는다(그 누름은 입력 버퍼에 남아 경직이 시작되면 다시 시도된다).
+ *
+ * 입력 (2026-10-08): 퀵스텝 키(기본 LeftControl, IA_Boost → InputTag.Boost)를 한 번 누르면 대시. 달리기는 LeftShift(InputTag.Run)로 분리했다.
+ * (전에는 Shift를 누르고 있으면 달리기, 두 번 탭하면 knightGameplayAbility_Sprint가 태그로 대시를 발동했다)
  */
 UCLASS()
 class KNIGHT_API UknightGameplayAbility_BoostDash : public UknightGameplayAbility
@@ -109,7 +111,7 @@ protected:
 private:
 	UAnimMontage* SelectDashMontage(const ACharacter& Character, const FVector& Direction) const;
 
-	/** 대시 한 번(방향·몽타주·무적·루트 모션). 첫 발동과 경직 중 이어지는 대시가 같이 쓴다. */
+	/** 대시 한 번(방향·몽타주·무적·루트 모션). */
 	void StartDash(ACharacter& Character);
 
 	/**
@@ -130,34 +132,16 @@ private:
 	UFUNCTION()
 	void OnRecoveryFinished();
 
-	UFUNCTION()
-	void OnRecoveryInputPressed(float TimeWaited);
-
-	/** 경직 중 대시 입력을 기다린다. */
-	void WaitForChainInput();
-
-	/** 경직 중 새 대시로 이어간다. bRequireBufferedInput이면 버퍼에 대시 입력이 있을 때만. 이어졌으면 true. */
-	bool TryChainDash(bool bRequireBufferedInput);
-
 	/** 경직 상태(Window.Cancel, 이동 잠금)를 푼다. */
 	void ReleaseRecoveryState();
 
 	void StartCooldown();
 	void RemoveInvulnerability();
 
-	/** 이 어빌리티에 연결된 입력 태그(InputTag.Boost 등). 버퍼에서 대시 입력을 찾을 때 쓴다. */
-	FGameplayTag GetInputTag() const;
-
 	bool bInvulnerableApplied = false;
 	bool bCancelWindowApplied = false;
 	bool bMoveLockApplied = false;
 	bool bInRecovery = false;
-
-	/** 이어지는 대시에서 이전 대시의 태스크를 정리하려고 들고 있는다. */
-	TWeakObjectPtr<UAbilityTask> InvulnerableTask;
-	TWeakObjectPtr<UAbilityTask> MontageTask;
-	TWeakObjectPtr<UAbilityTask> RecoveryTask;
-	TWeakObjectPtr<UAbilityTask> ChainInputTask;
 
 	/** 이 월드 시각(초)이 지나기 전에는 다시 발동할 수 없다. 어빌리티가 액터별 인스턴스라 액터마다 따로 기록된다. */
 	float CooldownEndTime = 0.f;
