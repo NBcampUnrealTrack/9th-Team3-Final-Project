@@ -3,7 +3,9 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystem/Attributes/knightAttributeSet.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Engine/HitResult.h"
+#include "GameFramework/Character.h"
 #include "GameplayEffect.h"
 #include "System/knightGameplayTags.h"
 #include "knight.h"
@@ -152,10 +154,36 @@ void UknightPartHealthComponent::InitializeWithAbilitySystem(UAbilitySystemCompo
 
 FGameplayTag UknightPartHealthComponent::ResolveHitPartTag(const FHitResult& Hit) const
 {
-	// 부위 바디에 맞았을 때만 부위 태그를 준다. 이동 캡슐처럼 본이 없는 히트는 빈 태그여야
-	// SelectBestHitPerActor가 같은 프레임의 부위 히트를 캡슐보다 우선 고른다. (피해 분배는 HandleDamaged가 DefaultHitPart로 처리)
-	const EknightBodyPart* const Found = BoneToPart.Find(Hit.BoneName);
-	return Found ? GetPartTag(*Found) : FGameplayTag();
+	// (2026-10-09) 캡슐 히트도 가까운 본으로 부위를 준다. 그래서 같은 프레임에 캡슐과 몸체가 함께 맞으면
+	// SelectBestHitPerActor가 먼저 온 쪽(보통 바깥의 캡슐)을 고르지만, 가까운 본 결과라 부위는 거의 같다.
+	EknightBodyPart Part = DefaultHitPart;
+	FName Bone;
+	return FindHitPart(Hit, Part, Bone) ? GetPartTag(Part) : FGameplayTag();
+}
+
+bool UknightPartHealthComponent::FindHitPart(const FHitResult& Hit, EknightBodyPart& OutPart, FName& OutBone) const
+{
+	OutBone = Hit.BoneName;
+	if (const EknightBodyPart* const Found = BoneToPart.Find(Hit.BoneName))
+	{
+		OutPart = *Found;
+		return true;
+	}
+
+	// 본이 없는 히트(이동 캡슐): 맞은 지점에서 가장 가까운 몸체 본(물리 에셋에 바디가 있는 본)으로 정한다.
+	const ACharacter* const Character = Cast<ACharacter>(GetOwner());
+	const USkeletalMeshComponent* const Mesh = Character ? Character->GetMesh() : nullptr;
+	if (!Mesh)
+	{
+		return false;
+	}
+	OutBone = Mesh->FindClosestBone(Hit.ImpactPoint, nullptr, 0.f, true);
+	if (const EknightBodyPart* const Closest = BoneToPart.Find(OutBone))
+	{
+		OutPart = *Closest;
+		return true;
+	}
+	return false;
 }
 
 float UknightPartHealthComponent::GetDamageMultiplier(const FGameplayTag& PartTag) const
@@ -204,10 +232,16 @@ void UknightPartHealthComponent::HandleDamaged(AActor* DamageInstigator, AActor*
 
 	// 히트 정보가 있으면 맞은 부위, 없으면 -1(나눠 받기).
 	int32 HitPart = -1;
+	FString HitText = TEXT("no hit info -> spread");
 	if (const FHitResult* const Hit = EffectSpec ? EffectSpec->GetContext().GetHitResult() : nullptr)
 	{
-		const EknightBodyPart* const Found = BoneToPart.Find(Hit->BoneName);
-		HitPart = static_cast<int32>(Found ? *Found : DefaultHitPart);
+		EknightBodyPart Part = DefaultHitPart;
+		FName Bone;
+		const bool bFound = FindHitPart(*Hit, Part, Bone);
+		HitPart = static_cast<int32>(bFound ? Part : DefaultHitPart);
+		HitText = FString::Printf(TEXT("bone %s%s -> %s%s"), *Hit->BoneName.ToString(),
+			bFound && Bone != Hit->BoneName ? *FString::Printf(TEXT(" (closest %s)"), *Bone.ToString()) : TEXT(""),
+			*GetPartTag(bFound ? Part : DefaultHitPart).ToString(), bFound ? TEXT("") : TEXT(" (default)"));
 	}
 
 	float Health[knightPartHealth::PartCount];
@@ -228,6 +262,10 @@ void UknightPartHealthComponent::HandleDamaged(AActor* DamageInstigator, AActor*
 			OwnerASC->SetNumericAttributeBase(GetPartHealthAttribute(PartFromIndex(Index)), Health[Index]);
 		}
 	}
+
+	// 부위 판정 확인용 (2026-10-09): 맞은 본 → 부위, 피해량, 피해 뒤 부위 체력. 본이 없거나 매핑에 없는 본이면 (default) = DefaultHitPart.
+	UE_LOG(Logknight, Log, TEXT("%s: part damage %.1f by %s, %s. Head %.1f  Torso %.1f  Arms %.1f  Legs %.1f"),
+		*GetNameSafe(GetOwner()), Magnitude, *GetNameSafe(DamageInstigator), *HitText, Health[0], Health[1], Health[2], Health[3]);
 }
 
 void UknightPartHealthComponent::HandlePartHealthChanged(const FOnAttributeChangeData& Data, EknightBodyPart Part)

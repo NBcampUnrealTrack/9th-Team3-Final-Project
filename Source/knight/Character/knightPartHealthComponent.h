@@ -44,6 +44,7 @@ namespace knightPartHealth
  *
  *   - 최대 체력(Core MaxHealth) = 네 부위 최대 체력의 합. 현재 체력은 부위와 따로 있고, 사망은 전체 체력 0일 때만.
  *   - 부위에 맞으면 그 부위 체력과 전체 체력이 같이 준다. 부위는 맞은 본 이름으로 정한다(BoneToPart).
+ *     본이 없는 히트(이동 캡슐)는 맞은 지점에서 가장 가까운 몸체 본으로 정한다(2026-10-09, FindHitPart).
  *     히트 정보가 없는 피해는 파괴되지 않은 부위에 나눠 준다.
  *   - 부위 체력 0 이하 = 파괴(State.PartBroken.* 태그 + 페널티), 1 이상 = 복구.
  *     머리: 받는 피해 증가 / 몸통: MaxPoise 감소 / 팔: 공격력 감소 / 다리: 걷기·달리기 속도 감소
@@ -64,7 +65,7 @@ public:
 	/** 소유 캐릭터의 ASC가 준비되고 파츠가 장착된 뒤 한 번 호출한다. 이벤트 연결과 MaxHealth 합산을 한다. */
 	void InitializeWithAbilitySystem(UAbilitySystemComponent* InASC);
 
-	/** 맞은 위치 → 부위 태그(Knight.Part.*). BoneToPart에 없는 본(이동 캡슐 등)이면 빈 태그. ICombatInterface::ResolveHitPart에서 쓴다. */
+	/** 맞은 위치 → 부위 태그(Knight.Part.*). 정하는 방법은 FindHitPart, 못 정하면 빈 태그. ICombatInterface::ResolveHitPart에서 쓴다. */
 	FGameplayTag ResolveHitPartTag(const FHitResult& Hit) const;
 
 	/** 맞은 부위의 피해 배율. 파괴된 부위면 크리티컬, 머리가 파괴돼 있으면 피해 증가. ICombatInterface::GetPartDamageMultiplier에서 쓴다. */
@@ -79,11 +80,11 @@ public:
 	static FGameplayTag GetPartTag(EknightBodyPart Part);
 
 protected:
-	/** 본 이름 → 부위. 기본값은 생성자에 나이트 메시 기준으로 들어 있다(메시가 바뀌면 BP에서 수정). 없는 본은 DefaultHitPart. */
+	/** 본 이름 → 부위. 기본값은 생성자에 나이트 메시 기준으로 들어 있다(메시가 바뀌면 BP에서 수정). 없는 본은 FindHitPart가 가까운 몸체 본으로 다시 찾는다. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|PartHealth")
 	TMap<FName, EknightBodyPart> BoneToPart;
 
-	/** 맞은 본이 BoneToPart에 없을 때 피해를 받을 부위(HandleDamaged). 이때 파괴 부위 크리티컬은 붙지 않는다. */
+	/** 맞은 부위를 정하지 못했을 때(FindHitPart 실패) 피해를 받을 부위(HandleDamaged). 이때 파괴 부위 크리티컬은 붙지 않는다. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|PartHealth")
 	EknightBodyPart DefaultHitPart = EknightBodyPart::Torso;
 
@@ -100,6 +101,14 @@ protected:
 	float BrokenStatPenalty = 0.15f;
 
 private:
+	/**
+	 * 히트 → 부위. BoneToPart에 있는 본에 맞았으면 그 부위.
+	 * 본이 없거나 매핑에 없는 본이면(주로 이동 캡슐) 맞은 지점에서 가장 가까운 몸체 본(물리 에셋에 바디가 있는 본)으로 정한다.
+	 * (2026-10-09 PIE: 잔열 공격이 몸체보다 바깥인 캡슐에 먼저 닿아 21번 중 11번이 몸통 기본값으로 들어가서 넣음, 사용자 결정)
+	 * OutBone = 부위를 정한 본. 못 정하면 false.
+	 */
+	bool FindHitPart(const FHitResult& Hit, EknightBodyPart& OutPart, FName& OutBone) const;
+
 	/** 피해가 Health를 줄였을 때 (Core OnDamaged). 부위 체력에 같은 양을 나눠 뺀다. */
 	void HandleDamaged(AActor* DamageInstigator, AActor* DamageCauser, const FGameplayEffectSpec* EffectSpec,
 		float Magnitude, float OldValue, float NewValue);
