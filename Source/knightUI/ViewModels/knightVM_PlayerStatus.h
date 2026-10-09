@@ -13,7 +13,8 @@ class UknightTargetLockComponent;
 DECLARE_MULTICAST_DELEGATE_OneParam(FknightLockedPartConditionChanged, EknightPartCondition /*NewCondition*/);
 
 /**
- * The Knight's status for the HUD: health, boost gauge, overheat and lock-on (target name, locked part and its condition).
+ * The Knight's status for the HUD: health, boost gauge, overheat and lock-on (target name, locked part and its condition,
+ * the target's stagger gauge).
  * Registered in the global view model collection as "PlayerStatus" by UknightUISubsystem and rebound when the
  * possessed pawn changes. Values only update on change; widgets bind to them with MVVM bindings.
  */
@@ -38,6 +39,8 @@ public:
 	bool HasLockedPart() const { return bHasLockedPart; }
 	FText GetLockedPartName() const { return LockedPartName; }
 	EknightPartCondition GetLockedPartCondition() const { return LockedPartCondition; }
+	bool LockedTargetHasStagger() const { return bLockedTargetHasStagger; }
+	float GetLockedTargetStagger() const { return LockedTargetStagger; }
 
 	/** The locked part changed condition while it stays locked (not on lock or switch). For one-shot feedback like a flash. */
 	FknightLockedPartConditionChanged OnLockedPartConditionChanged;
@@ -53,6 +56,9 @@ private:
 	void HandlePartConditionChanged(FGameplayTag PartTag, EknightPartCondition NewCondition);
 
 	void BindParts(UknightMonsterPartComponent* InParts);
+	void BindTargetPoise(UAbilitySystemComponent* InTargetASC);
+	void HandleTargetPoiseChanged(const FOnAttributeChangeData& Data);
+	void RefreshTargetStagger();
 
 	void RefreshAll();
 	void RefreshPercents();
@@ -96,7 +102,18 @@ private:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Getter, Category="Knight|Status", meta=(AllowPrivateAccess=true))
 	EknightPartCondition LockedPartCondition = EknightPartCondition::Unbreakable;
 
+	/** The locked target has poise (a stagger gauge to show). */
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Getter="LockedTargetHasStagger", Category="Knight|Status", meta=(AllowPrivateAccess=true))
+	bool bLockedTargetHasStagger = false;
+
+	/** Poise taken from the locked target, 0..1; it staggers at 1. */
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Getter, Category="Knight|Status", meta=(AllowPrivateAccess=true))
+	float LockedTargetStagger = 0.f;
+
 	TWeakObjectPtr<UAbilitySystemComponent> BoundASC;
+	TWeakObjectPtr<UAbilitySystemComponent> BoundTargetASC;
+	FDelegateHandle TargetPoiseHandle;
+	FDelegateHandle TargetMaxPoiseHandle;
 	TWeakObjectPtr<UknightTargetLockComponent> BoundTargetLock;
 	TWeakObjectPtr<UknightMonsterPartComponent> BoundParts;
 	FGameplayTag LockedPartTag;

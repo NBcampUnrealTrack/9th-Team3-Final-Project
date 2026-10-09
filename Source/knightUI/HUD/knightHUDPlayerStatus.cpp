@@ -76,6 +76,7 @@ void UknightHUDPlayerStatus::Refresh(bool bSnapGhost)
 	HealthPercent = NewHealth;
 	bLowHealth = VM->GetMaxHealth() > 0.f && HealthPercent <= LowHealthThreshold;
 	bOverheated = VM->IsOverheated();
+	bLowBoost = VM->GetMaxBoostGauge() > 0.f && VM->GetBoostPercent() <= LowBoostThreshold;
 
 	if (Bar_Health)
 	{
@@ -89,8 +90,17 @@ void UknightHUDPlayerStatus::Refresh(bool bSnapGhost)
 	}
 	if (Txt_Health)
 	{
-		Txt_Health->SetText(FText::Format(NSLOCTEXT("knightHUD", "HealthReadout", "{0} / {1}"),
-			FText::AsNumber(FMath::RoundToInt(VM->GetHealth())), FText::AsNumber(FMath::RoundToInt(VM->GetMaxHealth()))));
+		// Rounded up so a sliver of health never reads as 0.
+		Txt_Health->SetText(FText::AsNumber(FMath::CeilToInt(VM->GetHealth())));
+		Txt_Health->SetColorAndOpacity(bLowHealth ? LowHealthColor : HealthColor);
+	}
+	if (Txt_HealthMax)
+	{
+		Txt_HealthMax->SetText(FText::Format(NSLOCTEXT("knightHUD", "HealthMaxReadout", "/{0}"), FText::AsNumber(FMath::RoundToInt(VM->GetMaxHealth()))));
+	}
+	if (Img_BoostAlert)
+	{
+		Img_BoostAlert->SetVisibility(bLowBoost ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Hidden);
 	}
 	if (Bar_Boost)
 	{
@@ -125,7 +135,7 @@ void UknightHUDPlayerStatus::Refresh(bool bSnapGhost)
 
 bool UknightHUDPlayerStatus::NeedsTick() const
 {
-	return GhostPercent > HealthPercent || bLowHealth || bOverheated;
+	return GhostPercent > HealthPercent || bLowHealth || bOverheated || bLowBoost;
 }
 
 void UknightHUDPlayerStatus::UpdateTicker()
@@ -166,7 +176,7 @@ void UknightHUDPlayerStatus::ApplyAnimation(float DeltaTime)
 		}
 	}
 
-	PulseTime = (bLowHealth || bOverheated) ? FMath::Fmod(PulseTime + DeltaTime, PulsePeriod) : 0.f;
+	PulseTime = (bLowHealth || bOverheated || bLowBoost) ? FMath::Fmod(PulseTime + DeltaTime, PulsePeriod) : 0.f;
 	// Cosine starts at full opacity so a pulse never begins with a sudden dip.
 	const float Pulse = FMath::Lerp(PulseMinOpacity, 1.f, 0.5f + 0.5f * FMath::Cos(PulseTime / PulsePeriod * UE_TWO_PI));
 	if (Bar_Health)
@@ -180,5 +190,10 @@ void UknightHUDPlayerStatus::ApplyAnimation(float DeltaTime)
 	if (Txt_Overheat)
 	{
 		Txt_Overheat->SetRenderOpacity(bOverheated ? Pulse : 1.f);
+	}
+	if (Img_BoostAlert)
+	{
+		// Blinks fully out rather than dimming, so the warning reads even in the corner of the eye.
+		Img_BoostAlert->SetRenderOpacity(bLowBoost ? (Pulse - PulseMinOpacity) / FMath::Max(1.f - PulseMinOpacity, KINDA_SMALL_NUMBER) : 1.f);
 	}
 }

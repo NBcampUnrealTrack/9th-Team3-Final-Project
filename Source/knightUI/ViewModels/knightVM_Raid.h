@@ -24,6 +24,7 @@ public:
 	bool HasTimeLimit() const { return bHasTimeLimit; }
 	float GetRemainingTime() const { return RemainingTime; }
 	FText GetRemainingTimeText() const { return RemainingTimeText; }
+	FText GetObjectiveText() const { return ObjectiveText; }
 
 private:
 	UFUNCTION()
@@ -42,6 +43,10 @@ private:
 	/** "mm:ss". Empty without a time limit. */
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Getter, Category="Knight|Raid", meta=(AllowPrivateAccess=true))
 	FText RemainingTimeText;
+
+	/** "<target monster> 토벌" from the raid definition. Empty when the raid has no target monster. */
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Getter, Category="Knight|Raid", meta=(AllowPrivateAccess=true))
+	FText ObjectiveText;
 
 	TWeakObjectPtr<AknightRaidGameState> BoundRaidState;
 };
