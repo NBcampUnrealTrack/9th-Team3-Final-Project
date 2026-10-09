@@ -9,6 +9,7 @@
 class UAbilitySystemComponent;
 class UknightMonsterPartData;
 class UPrimitiveComponent;
+class USkinnedMeshComponent;
 struct FGameplayEffectSpec;
 struct FknightMonsterPartDefinition;
 
@@ -111,6 +112,8 @@ private:
 	void HandleDamaged(AActor* DamageInstigator, AActor* DamageCauser, const FGameplayEffectSpec* EffectSpec,
 		float Magnitude, float OldValue, float NewValue);
 	void BreakPart(int32 PartIndex, AActor* BreakInstigator);
+	/** 부위 정의에 BreakPieceMesh가 있으면 HideBoneOnBreak 뼈의 지금 자세 그대로 조각을 만들어 떨어뜨린다. */
+	void SpawnBreakPiece(const FknightMonsterPartDefinition& Definition, USkinnedMeshComponent* Mesh) const;
 	int32 FindPartIndex(const FGameplayTag& PartTag) const;
 	float GetHealthRatio(int32 PartIndex) const;
 	EknightPartCondition GetCondition(int32 PartIndex) const;
