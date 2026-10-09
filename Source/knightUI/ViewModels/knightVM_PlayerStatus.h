@@ -4,13 +4,16 @@
 #include "GameplayEffectTypes.h"
 #include "GameplayTagContainer.h"
 #include "MVVMViewModelBase.h"
+#include "Monster/knightMonsterPartComponent.h"
 #include "knightVM_PlayerStatus.generated.h"
 
 class UAbilitySystemComponent;
 class UknightTargetLockComponent;
 
+DECLARE_MULTICAST_DELEGATE_OneParam(FknightLockedPartConditionChanged, EknightPartCondition /*NewCondition*/);
+
 /**
- * The Knight's status for the HUD: health, boost gauge, overheat and lock-on.
+ * The Knight's status for the HUD: health, boost gauge, overheat and lock-on (target name, locked part and its condition).
  * Registered in the global view model collection as "PlayerStatus" by UknightUISubsystem and rebound when the
  * possessed pawn changes. Values only update on change; widgets bind to them with MVVM bindings.
  */
@@ -32,6 +35,12 @@ public:
 	bool IsOverheated() const { return bOverheated; }
 	bool IsLockedOn() const { return bLockedOn; }
 	FText GetLockedTargetName() const { return LockedTargetName; }
+	bool HasLockedPart() const { return bHasLockedPart; }
+	FText GetLockedPartName() const { return LockedPartName; }
+	EknightPartCondition GetLockedPartCondition() const { return LockedPartCondition; }
+
+	/** The locked part changed condition while it stays locked (not on lock or switch). For one-shot feedback like a flash. */
+	FknightLockedPartConditionChanged OnLockedPartConditionChanged;
 
 private:
 	void HandleAttributeChanged(const FOnAttributeChangeData& Data);
@@ -39,6 +48,11 @@ private:
 
 	UFUNCTION()
 	void HandleLockOnChanged(AActor* NewTarget, FGameplayTag PartTag);
+
+	UFUNCTION()
+	void HandlePartConditionChanged(FGameplayTag PartTag, EknightPartCondition NewCondition);
+
+	void BindParts(UknightMonsterPartComponent* InParts);
 
 	void RefreshAll();
 	void RefreshPercents();
@@ -72,8 +86,20 @@ private:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Getter, Category="Knight|Status", meta=(AllowPrivateAccess=true))
 	FText LockedTargetName;
 
+	/** The lock is on a monster part (false for the body point or a non-monster target). */
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Getter="HasLockedPart", Category="Knight|Status", meta=(AllowPrivateAccess=true))
+	bool bHasLockedPart = false;
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Getter, Category="Knight|Status", meta=(AllowPrivateAccess=true))
+	FText LockedPartName;
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Getter, Category="Knight|Status", meta=(AllowPrivateAccess=true))
+	EknightPartCondition LockedPartCondition = EknightPartCondition::Unbreakable;
+
 	TWeakObjectPtr<UAbilitySystemComponent> BoundASC;
 	TWeakObjectPtr<UknightTargetLockComponent> BoundTargetLock;
+	TWeakObjectPtr<UknightMonsterPartComponent> BoundParts;
+	FGameplayTag LockedPartTag;
 	TArray<TPair<FGameplayAttribute, FDelegateHandle>> AttributeHandles;
 	FDelegateHandle OverheatedHandle;
 };

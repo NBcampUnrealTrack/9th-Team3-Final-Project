@@ -4,6 +4,7 @@
 #include "Combat/knightTargetLockComponent.h"
 #include "CommonTextBlock.h"
 #include "Components/CanvasPanelSlot.h"
+#include "Components/Image.h"
 #include "Engine/LocalPlayer.h"
 #include "Foundation/knightUISubsystem.h"
 #include "GameFramework/Pawn.h"
@@ -47,6 +48,10 @@ void UknightHUDLockOnMarker::NativeConstruct()
 		using FFields = UknightVM_PlayerStatus::FFieldNotificationClassDescriptor;
 		VM->AddFieldValueChangedDelegate(FFields::bLockedOn, INotifyFieldValueChanged::FFieldValueChangedDelegate::CreateUObject(this, &ThisClass::HandleViewModelChanged));
 		VM->AddFieldValueChangedDelegate(FFields::LockedTargetName, INotifyFieldValueChanged::FFieldValueChangedDelegate::CreateUObject(this, &ThisClass::HandleViewModelChanged));
+		VM->AddFieldValueChangedDelegate(FFields::bHasLockedPart, INotifyFieldValueChanged::FFieldValueChangedDelegate::CreateUObject(this, &ThisClass::HandleViewModelChanged));
+		VM->AddFieldValueChangedDelegate(FFields::LockedPartName, INotifyFieldValueChanged::FFieldValueChangedDelegate::CreateUObject(this, &ThisClass::HandleViewModelChanged));
+		VM->AddFieldValueChangedDelegate(FFields::LockedPartCondition, INotifyFieldValueChanged::FFieldValueChangedDelegate::CreateUObject(this, &ThisClass::HandleViewModelChanged));
+		PartConditionHandle = VM->OnLockedPartConditionChanged.AddUObject(this, &ThisClass::HandleLockedPartConditionChanged);
 	}
 	RefreshLockState();
 }
@@ -56,7 +61,9 @@ void UknightHUDLockOnMarker::NativeDestruct()
 	if (UknightVM_PlayerStatus* const VM = ViewModel.Get())
 	{
 		VM->RemoveAllFieldValueChangedDelegates(this);
+		VM->OnLockedPartConditionChanged.Remove(PartConditionHandle);
 	}
+	PartConditionHandle.Reset();
 	ViewModel.Reset();
 	StopTicking();
 	Super::NativeDestruct();
@@ -91,11 +98,13 @@ void UknightHUDLockOnMarker::RefreshLockState()
 	{
 		Txt_TargetName->SetText(VM->GetLockedTargetName());
 	}
+	RefreshPart();
 	if (ShownTarget.Get() != Target)
 	{
 		// A new lock (or a switch to another target) replays the whole open motion.
 		ShownTarget = Target;
 		AnimTime = 0.f;
+		FlashElapsed = TNumericLimits<float>::Max();
 		if (LockOnSound)
 		{
 			UGameplayStatics::PlaySound2D(this, LockOnSound);
@@ -109,6 +118,45 @@ void UknightHUDLockOnMarker::RefreshLockState()
 	// Placed before the first frame so the marker never flashes at the screen origin.
 	SetVisibility(UpdateLayout() ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
 	ApplyAnimation();
+}
+
+void UknightHUDLockOnMarker::RefreshPart()
+{
+	const UknightVM_PlayerStatus* const VM = ViewModel.Get();
+	const bool bHasPart = VM && VM->HasLockedPart();
+	const ESlateVisibility FrameVisibility = bHasPart ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed;
+	if (PartFrame)
+	{
+		PartFrame->SetVisibility(FrameVisibility);
+		UImage* const Image = Cast<UImage>(PartFrame);
+		if (bHasPart && Image)
+		{
+			const EknightPartCondition Condition = VM->GetLockedPartCondition();
+			Image->SetColorAndOpacity(Condition == EknightPartCondition::Normal ? NormalColor
+				: Condition == EknightPartCondition::Critical ? CriticalColor
+				: Condition == EknightPartCondition::Broken ? BrokenColor
+				: UnbreakableColor);
+		}
+	}
+	if (PartFlash)
+	{
+		PartFlash->SetVisibility(FrameVisibility);
+	}
+	if (Txt_PartName)
+	{
+		const FText PartName = bHasPart ? VM->GetLockedPartName() : FText::GetEmpty();
+		Txt_PartName->SetText(PartName);
+		Txt_PartName->SetVisibility(PartName.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+	}
+}
+
+void UknightHUDLockOnMarker::HandleLockedPartConditionChanged(EknightPartCondition NewCondition)
+{
+	FlashElapsed = 0.f;
+	if (PartConditionSound && ShownTarget.IsValid())
+	{
+		UGameplayStatics::PlaySound2D(this, PartConditionSound);
+	}
 }
 
 void UknightHUDLockOnMarker::StopTicking()
@@ -128,7 +176,12 @@ bool UknightHUDLockOnMarker::TickMarker(float DeltaTime)
 		SetVisibility(ESlateVisibility::Collapsed);
 		return false;
 	}
-	AnimTime += FMath::Min(DeltaTime, 0.05f);
+	const float Step = FMath::Min(DeltaTime, 0.05f);
+	AnimTime += Step;
+	if (FlashElapsed < FlashTime)
+	{
+		FlashElapsed += Step;
+	}
 	SetVisibility(UpdateLayout() ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
 	ApplyAnimation();
 	return true;
@@ -166,6 +219,8 @@ bool UknightHUDLockOnMarker::UpdateLayout()
 	const FVector2D ShelfEnd = Elbow + FVector2D(Side * ShelfLength, 0.f);
 
 	PlaceInCanvas(Box, Center, FVector2D(0.5f, 0.5f));
+	PlaceInCanvas(PartFrame, Center, FVector2D(0.5f, 0.5f));
+	PlaceInCanvas(PartFlash, Center, FVector2D(0.5f, 0.5f));
 
 	// Lines start at their pivot end and are rotated around it; mirroring flips the angle to the other side.
 	PlaceInCanvas(Line_Diagonal, Corner, FVector2D(0.f, 0.5f));
@@ -208,6 +263,25 @@ void UknightHUDLockOnMarker::ApplyAnimation()
 	{
 		Box->SetRenderScale(FVector2D(FMath::Lerp(BoxStartScale, 1.f, BoxAlpha)));
 		Box->SetRenderOpacity(BoxAlpha);
+	}
+	if (PartFrame)
+	{
+		// The frame opens with the box, then blinks slowly while the part is critical.
+		const UknightVM_PlayerStatus* const VM = ViewModel.Get();
+		float Opacity = BoxAlpha;
+		if (VM && VM->GetLockedPartCondition() == EknightPartCondition::Critical)
+		{
+			const float Wave = 0.5f + 0.5f * FMath::Cos(AnimTime * UE_TWO_PI / CriticalBlinkPeriod);
+			Opacity *= FMath::Lerp(CriticalBlinkMinOpacity, 1.f, Wave);
+		}
+		PartFrame->SetRenderScale(FVector2D(FMath::Lerp(BoxStartScale, 1.f, BoxAlpha)));
+		PartFrame->SetRenderOpacity(Opacity);
+	}
+	if (PartFlash)
+	{
+		const float FlashAlpha = FlashTime > 0.f && FlashElapsed < FlashTime ? FlashElapsed / FlashTime : 1.f;
+		PartFlash->SetRenderScale(FVector2D(FMath::Lerp(FlashStartScale, 1.f, EaseOut(FlashAlpha))));
+		PartFlash->SetRenderOpacity(1.f - FlashAlpha);
 	}
 	if (Line_Diagonal)
 	{

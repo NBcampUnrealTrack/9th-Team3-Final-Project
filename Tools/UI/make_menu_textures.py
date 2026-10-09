@@ -8,6 +8,8 @@ T_UI_GlobeLand.png   equirectangular 2048x1024. R = land (soft edge), G = coastl
 T_UI_Logo.png        "PROJECT KNIGHT" with a blue glow, 2x resolution, transparent background.
 T_UI_GradientLeft.png  white with alpha fading left to right, tinted in UMG.
 T_UI_LoadingMark.png   placeholder emblem for the loading screen: tall four-point star through a ring, white on transparent.
+T_UI_PartFrame.png     lock-on part frame (/Game/Knight/UI/HUD/Textures): hexagon outline with three inward triangles,
+                       white on transparent, tinted in UMG by the part condition. Shown at 104 x 104.
 
 Continents are random but seeded, and pushed up under the stage-select sample regions so markers sit on land.
 """
@@ -146,6 +148,31 @@ def make_loading_mark(out_dir):
     rgba.save(os.path.join(out_dir, "T_UI_LoadingMark.png"))
 
 
+def make_part_frame(out_dir):
+    # 2x the on-screen size (104) for sharp edges at 4K, drawn 4x larger again and scaled down.
+    size, scale = 208, 4
+    c = size * scale / 2
+    s = lambda v: v * scale * 2  # in on-screen units
+    img = Image.new("L", (size * scale, size * scale), 0)
+    draw = ImageDraw.Draw(img)
+    # Pointy-top hexagon, radius 46: same shape as the approved mockup.
+    hexagon = [(c + s(46) * math.cos(math.radians(a)), c + s(46) * math.sin(math.radians(a))) for a in range(-90, 270, 60)]
+    draw.line(hexagon + [hexagon[0]], fill=255, width=int(s(2)), joint="curve")
+    # Solid triangles on the top, lower right and lower left corners, pointing at the centre.
+    for x, y in ((0, -46), (40, 23), (-40, 23)):
+        inward = (-x / 46.0, -y / 46.0)
+        side = (-inward[1], inward[0])
+        tip = (c + s(x + inward[0] * 16), c + s(y + inward[1] * 16))
+        base = (c + s(x), c + s(y))
+        left = (base[0] + s(side[0] * 9), base[1] + s(side[1] * 9))
+        right = (base[0] - s(side[0] * 9), base[1] - s(side[1] * 9))
+        draw.polygon([tip, left, right], fill=255)
+    alpha = img.resize((size, size), Image.LANCZOS)
+    rgba = Image.new("RGBA", (size, size), (255, 255, 255, 0))
+    rgba.putalpha(alpha)
+    rgba.save(os.path.join(out_dir, "T_UI_PartFrame.png"))
+
+
 if __name__ == "__main__":
     if len(sys.argv) not in (2, 3):
         sys.exit(__doc__)
@@ -156,3 +183,4 @@ if __name__ == "__main__":
     make_logo(font_dir, out_dir)
     make_gradient(out_dir)
     make_loading_mark(out_dir)
+    make_part_frame(out_dir)

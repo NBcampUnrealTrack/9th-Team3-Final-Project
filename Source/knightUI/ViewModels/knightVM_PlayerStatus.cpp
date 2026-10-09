@@ -6,6 +6,7 @@
 #include "Combat/knightTargetLockComponent.h"
 #include "Monster/knightMonsterCharacterBase.h"
 #include "Monster/knightMonsterDefinition.h"
+#include "Monster/knightMonsterPartData.h"
 #include "System/knightGameplayTags.h"
 
 void UknightVM_PlayerStatus::Bind(UAbilitySystemComponent* InASC, UknightTargetLockComponent* InTargetLock)
@@ -50,6 +51,7 @@ void UknightVM_PlayerStatus::Unbind()
 	{
 		TargetLock->OnLockOnTargetChanged.RemoveDynamic(this, &ThisClass::HandleLockOnChanged);
 	}
+	BindParts(nullptr);
 	AttributeHandles.Reset();
 	OverheatedHandle.Reset();
 	BoundASC.Reset();
@@ -105,17 +107,59 @@ void UknightVM_PlayerStatus::HandleOverheatedChanged(const FGameplayTag Tag, int
 
 void UknightVM_PlayerStatus::HandleLockOnChanged(AActor* NewTarget, FGameplayTag PartTag)
 {
-	UE_MVVM_SET_PROPERTY_VALUE(bLockedOn, NewTarget != nullptr);
-
 	FText Name;
-	if (const AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(NewTarget))
+	FText PartName;
+	const AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(NewTarget);
+	if (const UknightMonsterDefinition* const Definition = Monster ? Monster->GetMonsterDefinition() : nullptr)
 	{
-		const UknightMonsterDefinition* const Definition = Monster->GetMonsterDefinition();
-		Name = Definition ? Definition->DisplayName : FText::GetEmpty();
+		Name = Definition->DisplayName;
+		if (Definition->PartData && PartTag.IsValid())
+		{
+			const FknightMonsterPartDefinition* const Part = Definition->PartData->Parts.FindByPredicate(
+				[&PartTag](const FknightMonsterPartDefinition& Each) { return Each.PartTag == PartTag; });
+			PartName = Part ? Part->DisplayName : FText::GetEmpty();
+		}
 	}
 	if (Name.IsEmpty() && NewTarget)
 	{
 		Name = FText::FromString(NewTarget->GetActorNameOrLabel());
 	}
+
+	UknightMonsterPartComponent* const Parts = Monster && PartTag.IsValid() ? Monster->FindComponentByClass<UknightMonsterPartComponent>() : nullptr;
+	BindParts(Parts);
+	LockedPartTag = Parts ? PartTag : FGameplayTag();
+
+	// Part fields first: widgets refresh on bLockedOn and should already see the new part.
+	UE_MVVM_SET_PROPERTY_VALUE(LockedPartCondition, Parts ? Parts->GetPartCondition(PartTag) : EknightPartCondition::Unbreakable);
+	UE_MVVM_SET_PROPERTY_VALUE(LockedPartName, PartName);
+	UE_MVVM_SET_PROPERTY_VALUE(bHasLockedPart, Parts != nullptr);
 	UE_MVVM_SET_PROPERTY_VALUE(LockedTargetName, Name);
+	UE_MVVM_SET_PROPERTY_VALUE(bLockedOn, NewTarget != nullptr);
+}
+
+void UknightVM_PlayerStatus::BindParts(UknightMonsterPartComponent* InParts)
+{
+	if (BoundParts.Get() == InParts)
+	{
+		return;
+	}
+	if (UknightMonsterPartComponent* const Old = BoundParts.Get())
+	{
+		Old->OnPartConditionChanged.RemoveDynamic(this, &ThisClass::HandlePartConditionChanged);
+	}
+	BoundParts = InParts;
+	if (InParts)
+	{
+		InParts->OnPartConditionChanged.AddUniqueDynamic(this, &ThisClass::HandlePartConditionChanged);
+	}
+}
+
+void UknightVM_PlayerStatus::HandlePartConditionChanged(FGameplayTag PartTag, EknightPartCondition NewCondition)
+{
+	if (PartTag != LockedPartTag || NewCondition == LockedPartCondition)
+	{
+		return;
+	}
+	UE_MVVM_SET_PROPERTY_VALUE(LockedPartCondition, NewCondition);
+	OnLockedPartConditionChanged.Broadcast(NewCondition);
 }
