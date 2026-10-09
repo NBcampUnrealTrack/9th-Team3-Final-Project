@@ -35,6 +35,10 @@ struct KNIGHT_API FknightMonsterAttackSelection
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Selection", meta=(ClampMin=0, ClampMax=180, Units="deg"))
 	float MaxAngle = 60.f;
 
+	/** 몬스터 정면과 타깃 사이 |yaw|의 최솟값. 타깃이 옆이나 뒤에 있을 때만 쓰는 기술(꼬리 휩쓸기)에 쓴다. 0이면 정면도 허용. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Selection", meta=(ClampMin=0, ClampMax=180, Units="deg"))
+	float MinAngle = 0.f;
+
 	/** 지금 사용 가능한 공격들 사이의 상대 확률. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Selection", meta=(ClampMin=0))
 	float Weight = 1.f;
@@ -63,6 +67,8 @@ struct KNIGHT_API FknightMonsterAttackContext
 	float Distance = 0.f;
 	/** 타깃까지의 부호 있는 yaw(도). */
 	float AngleToTarget = 0.f;
+	/** 각도 조건(MinAngle, MaxAngle)을 검사하지 않는다. 발동 전에 몸을 돌리는 흐름에서 쓴다. */
+	bool bIgnoreAngle = false;
 	bool bTargetAirborne = false;
 	double WorldTime = 0.0;
 

@@ -199,9 +199,9 @@ void FknightGameplayDebuggerCategory_Monster::CollectLines(const AActor& Actor, 
 			}
 			const FknightMonsterAttackSelection& Selection = Attack->GetSelection();
 			const float Weight = Attack->GetSelectionWeight(AttackContext);
-			OutLines.Add(FString::Printf(TEXT("  %s%s {grey}weight %.1f  range %.0f-%.0f  angle %.0f  cooldown %.1f%s"),
+			OutLines.Add(FString::Printf(TEXT("  %s%s {grey}weight %.1f  range %.0f-%.0f  angle %.0f-%.0f  cooldown %.1f%s"),
 				Weight > 0.f ? TEXT("{green}") : TEXT("{white}"), *Attack->GetClass()->GetName(), Weight,
-				Selection.MinRange, Selection.MaxRange, Selection.MaxAngle, Attack->GetCooldownRemaining(AttackContext.WorldTime),
+				Selection.MinRange, Selection.MaxRange, Selection.MinAngle, Selection.MaxAngle, Attack->GetCooldownRemaining(AttackContext.WorldTime),
 				Spec.IsActive() ? TEXT("  {yellow}ACTIVE") : TEXT("")));
 		}
 	}

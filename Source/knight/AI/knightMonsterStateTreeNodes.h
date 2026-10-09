@@ -162,6 +162,13 @@ struct FknightFaceTargetTaskInstanceData
 	UPROPERTY(EditAnywhere, Category="Parameter", meta=(ClampMin=0, Units="s"))
 	float MaxTime = 1.5f;
 
+	/**
+	 * 지금 각도에서 쓸 수 있는 옆·뒤 전용 공격(Selection.MinAngle이 있는 공격, 예: 꼬리 휩쓸기)이 있으면 돌지 않고 바로 성공한다.
+	 * 돌아서 타깃을 정면에 두면 그런 공격은 고를 수 없게 되기 때문이다.
+	 */
+	UPROPERTY(EditAnywhere, Category="Parameter")
+	bool bSkipForSideAttacks = true;
+
 	float ElapsedTime = 0.f;
 };
 

@@ -196,11 +196,44 @@ void FknightStateTreeActivateAbilityTask::ExitState(FStateTreeExecutionContext& 
 
 // Knight Face Target
 
+namespace knightMonsterStateTree
+{
+	/** 지금 각도에서 고를 수 있는 옆·뒤 전용 공격(MinAngle > 0)이 있는가. */
+	static bool HasUsableSideAttack(const AknightMonsterCharacterBase& Monster, const AActor* Target)
+	{
+		UAbilitySystemComponent* const ASC = Monster.GetAbilitySystemComponent();
+		if (!ASC || !Target)
+		{
+			return false;
+		}
+		const FknightMonsterAttackContext AttackContext = FknightMonsterAttackContext::Make(&Monster, Target);
+		for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+		{
+			const UGameplayAbility* const Instance = Spec.GetPrimaryInstance() ? Spec.GetPrimaryInstance() : Spec.Ability.Get();
+			const UknightGameplayAbility_MonsterAttack* const Attack = Cast<UknightGameplayAbility_MonsterAttack>(Instance);
+			if (Attack && Attack->GetSelection().MinAngle > 0.f && Attack->GetSelectionWeight(AttackContext) > 0.f)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+}
+
 EStateTreeRunStatus FknightStateTreeFaceTargetTask::EnterState(FStateTreeExecutionContext& Context, const FStateTreeTransitionResult& Transition) const
 {
 	FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
 	InstanceData.ElapsedTime = 0.f;
-	return InstanceData.Monster && InstanceData.Target ? EStateTreeRunStatus::Running : EStateTreeRunStatus::Failed;
+	if (!InstanceData.Monster || !InstanceData.Target)
+	{
+		return EStateTreeRunStatus::Failed;
+	}
+	if (InstanceData.bSkipForSideAttacks && knightMonsterStateTree::HasUsableSideAttack(*InstanceData.Monster, InstanceData.Target))
+	{
+		UE_LOG(LogknightAI, Verbose, TEXT("%s: Face Target skipped, a side attack is usable."), *GetNameSafe(InstanceData.Monster));
+		return EStateTreeRunStatus::Succeeded;
+	}
+	return EStateTreeRunStatus::Running;
 }
 
 EStateTreeRunStatus FknightStateTreeFaceTargetTask::Tick(FStateTreeExecutionContext& Context, const float DeltaTime) const
@@ -248,10 +281,7 @@ bool FknightStateTreeCanUseAbilityCondition::TestCondition(FStateTreeExecutionCo
 	if (ASC && !InstanceData.AbilityTags.IsEmpty())
 	{
 		FknightMonsterAttackContext AttackContext = FknightMonsterAttackContext::Make(InstanceData.Actor, InstanceData.Target);
-		if (InstanceData.bIgnoreAngle)
-		{
-			AttackContext.AngleToTarget = 0.f;
-		}
+		AttackContext.bIgnoreAngle = InstanceData.bIgnoreAngle;
 		TArray<FGameplayAbilitySpec*> Specs;
 		ASC->GetActivatableGameplayAbilitySpecsByAllMatchingTags(InstanceData.AbilityTags, Specs, true);
 		for (const FGameplayAbilitySpec* const Spec : Specs)
