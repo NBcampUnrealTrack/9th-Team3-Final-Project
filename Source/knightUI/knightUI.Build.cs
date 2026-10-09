@@ -28,6 +28,8 @@ public class knightUI : ModuleRules
 		PrivateDependencyModuleNames.AddRange(new string[] {
 			"Slate",
 			"SlateCore",
+			"InputCore",
+			"knightInventory",
 			"DeveloperSettings"
 		});
 	}

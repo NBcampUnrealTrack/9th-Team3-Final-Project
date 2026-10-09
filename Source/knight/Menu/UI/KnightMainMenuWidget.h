@@ -4,26 +4,29 @@
 #include "KnightMenuWidgetBase.h"
 #include "KnightMainMenuWidget.generated.h"
 
-class UButton;
+class UCommonButtonBase;
+class UImage;
 class UPanelWidget;
 class UTextBlock;
-class UVerticalBox;
-class UKnightStageEntryWidget;
+class UKnightStageGlobeWidget;
 class UKnightSettingsWidget;
 class UKnightCodexWidget;
+struct FStreamableHandle;
 
 UENUM(BlueprintType)
 enum class EKnightMainMenuPage : uint8
 {
 	Home,
 	Stage,
-	StageDetails,
 	Maintenance,
 	Settings,
 	Codex
 };
 
-/** C++ parent for the main-menu root WBP. Stage detail/back behavior extends here in step 3. */
+/**
+ * C++ parent for the main-menu root WBP. The stage page is a globe: clicking a region (or Left/Right) selects it,
+ * the info panel moves to the region's side, and the launch button unlocks when the stage can be played.
+ */
 UCLASS()
 class KNIGHT_API UKnightMainMenuWidget : public UKnightMenuWidgetBase
 {
@@ -32,19 +35,13 @@ class KNIGHT_API UKnightMainMenuWidget : public UKnightMenuWidgetBase
 public:
 	UFUNCTION(BlueprintPure, Category="Knight|Menu")
 	EKnightMainMenuPage GetCurrentPage() const { return CurrentPage; }
-	UFUNCTION(BlueprintPure, Category="Knight|Codex")
-	UKnightCodexWidget* GetCodexWidget() const { return CodexWidget; }
-	UFUNCTION(BlueprintPure, Category="Knight|Codex") bool IsCodexButtonFocused() const;
 
 	UFUNCTION(BlueprintCallable, Category="Knight|Menu")
 	bool ShowPage(EKnightMainMenuPage NewPage);
 
-	/** Shared entry point for list items and future globe markers. */
+	/** Shared entry point for globe clicks, keyboard cycling and tests. NAME_None clears the selection. */
 	UFUNCTION(BlueprintCallable, Category="Knight|Stage")
 	bool SelectStage(FName StageId);
-
-	UFUNCTION(BlueprintCallable, Category="Knight|Stage")
-	bool RebuildStageEntries();
 
 	UFUNCTION(BlueprintPure, Category="Knight|Stage")
 	FName GetSelectedStageId() const { return SelectedStageId; }
@@ -52,6 +49,7 @@ public:
 protected:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeConstruct() override;
+	virtual FReply NativeOnPreviewKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
 	virtual EKnightFlowState GetExpectedFlowState() const override { return EKnightFlowState::MainMenu; }
 	virtual bool HandleBackRequested() override;
 	virtual bool ShouldAllowEscapeToChild() const override;
@@ -65,10 +63,11 @@ protected:
 	TObjectPtr<UPanelWidget> Panel_Stage;
 
 	UPROPERTY(meta=(BindWidget))
-	TObjectPtr<UPanelWidget> Panel_StageDetails;
+	TObjectPtr<UKnightStageGlobeWidget> Globe_Stages;
 
+	/** Info panel next to the globe. Must sit directly in a CanvasPanel: C++ moves it to the selected region's side. */
 	UPROPERTY(meta=(BindWidget))
-	TObjectPtr<UVerticalBox> Box_StageEntries;
+	TObjectPtr<UWidget> Panel_StageInfo;
 
 	UPROPERTY(meta=(BindWidget))
 	TObjectPtr<UTextBlock> Text_StageTitle;
@@ -76,8 +75,28 @@ protected:
 	UPROPERTY(meta=(BindWidget))
 	TObjectPtr<UTextBlock> Text_StageDescription;
 
+	UPROPERTY(meta=(BindWidgetOptional))
+	TObjectPtr<UTextBlock> Text_StageRegion;
+
+	UPROPERTY(meta=(BindWidgetOptional))
+	TObjectPtr<UTextBlock> Text_StageTarget;
+
+	UPROPERTY(meta=(BindWidgetOptional))
+	TObjectPtr<UTextBlock> Text_StageTimeLimit;
+
+	UPROPERTY(meta=(BindWidgetOptional))
+	TObjectPtr<UTextBlock> Text_StageRecord;
+
+	/** Why the launch button is locked; hidden when the stage can be played. */
+	UPROPERTY(meta=(BindWidgetOptional))
+	TObjectPtr<UTextBlock> Text_StageLock;
+
+	/** Hidden when the stage has no thumbnail. */
+	UPROPERTY(meta=(BindWidgetOptional))
+	TObjectPtr<UImage> Img_StageThumbnail;
+
 	UPROPERTY(meta=(BindWidget))
-	TObjectPtr<UButton> Button_LaunchStage;
+	TObjectPtr<UCommonButtonBase> Button_LaunchStage;
 
 	UPROPERTY(meta=(BindWidget))
 	TObjectPtr<UPanelWidget> Panel_Maintenance;
@@ -89,26 +108,26 @@ protected:
 	TObjectPtr<UPanelWidget> Panel_Codex;
 
 	UPROPERTY(meta=(BindWidget))
-	TObjectPtr<UButton> Button_Stage;
+	TObjectPtr<UCommonButtonBase> Button_Stage;
 
 	UPROPERTY(meta=(BindWidget))
 	TObjectPtr<UTextBlock> Text_ActiveProfile;
 
 	UPROPERTY(meta=(BindWidget))
-	TObjectPtr<UButton> Button_ReturnToTitle;
+	TObjectPtr<UCommonButtonBase> Button_ReturnToTitle;
 
 	UPROPERTY(meta=(BindWidget))
-	TObjectPtr<UButton> Button_Maintenance;
+	TObjectPtr<UCommonButtonBase> Button_Maintenance;
 
 	UPROPERTY(meta=(BindWidget))
-	TObjectPtr<UButton> Button_Settings;
+	TObjectPtr<UCommonButtonBase> Button_Settings;
 
 	UPROPERTY(meta=(BindWidget))
-	TObjectPtr<UButton> Button_Codex;
+	TObjectPtr<UCommonButtonBase> Button_Codex;
 
-	/** Set to a WBP derived from UKnightStageEntryWidget on the main-menu WBP defaults. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Knight|Stage")
-	TSubclassOf<UKnightStageEntryWidget> StageEntryWidgetClass;
+	/** Gap between the globe's edge and the info panel. Slate units. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Stage", meta=(ClampMin=0))
+	float StageInfoGap = 64.f;
 
 	virtual void NativeDestruct() override;
 
@@ -131,14 +150,17 @@ private:
 	UFUNCTION() void HandleCodexClosed();
 
 	UFUNCTION()
-	void HandleStageEntrySelected(FName StageId);
+	void HandleGlobeStageClicked(FName StageId);
 
 	UFUNCTION()
 	void HandleLaunchStageClicked();
 
 	bool ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDuringTravel);
-	bool RefreshStageDetails();
-	void RemoveStageEntries();
+	bool RebuildGlobeMarkers();
+	void RefreshStageDetails();
+	void RefreshRaidDetails();
+	void PlaceStageInfo();
+	bool CycleStage(int32 Direction);
 	void EnsureSettingsWidget();
 	void EnsureCodexWidget();
 
@@ -149,10 +171,12 @@ private:
 	bool bRestoreCodexFocus = false;
 
 	EKnightMainMenuPage CurrentPage = EKnightMainMenuPage::Home;
+	TArray<FName> StageOrder;
 	FName SelectedStageId;
-	bool bStageEntriesBuilt = false;
 	bool bStageLaunchAvailable = false;
+	/** Panel stays on one side while the player drags; it only moves when a region is selected. */
+	bool bStageInfoOnRight = true;
 
-	UPROPERTY(Transient)
-	TArray<TObjectPtr<UKnightStageEntryWidget>> GeneratedStageEntries;
+	/** Raid rules load in the background: the target monster's definition can pull in large assets. */
+	TSharedPtr<FStreamableHandle> RaidDefinitionHandle;
 };

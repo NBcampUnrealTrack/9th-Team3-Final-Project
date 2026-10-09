@@ -1,16 +1,22 @@
 #include "KnightMainMenuWidget.h"
 
 #include "GameFlow/KnightGameFlowSubsystem.h"
+#include "CommonButtonBase.h"
+#include "Engine/AssetManager.h"
 #include "Engine/GameInstance.h"
-#include "KnightStageEntryWidget.h"
+#include "Engine/Texture2D.h"
+#include "InputCoreTypes.h"
+#include "KnightStageGlobeWidget.h"
+#include "Monster/knightMonsterDefinition.h"
+#include "Progression/knightProgressionSubsystem.h"
+#include "Raid/knightRaidDefinition.h"
 #include "Raid/knightRaidSubsystem.h"
 #include "Progression/knightSaveSubsystem.h"
-#include "Components/Button.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/HorizontalBoxSlot.h"
+#include "Components/Image.h"
 #include "Components/PanelWidget.h"
 #include "Components/TextBlock.h"
-#include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "knight.h"
 #include "Settings/KnightSettingsWidget.h"
@@ -23,8 +29,8 @@ void UKnightMainMenuWidget::NativeOnInitialized()
 	Super::NativeOnInitialized();
 	ValidateRequiredWidget(Panel_Home, TEXT("Panel_Home"));
 	ValidateRequiredWidget(Panel_Stage, TEXT("Panel_Stage"));
-	ValidateRequiredWidget(Panel_StageDetails, TEXT("Panel_StageDetails"));
-	ValidateRequiredWidget(Box_StageEntries, TEXT("Box_StageEntries"));
+	ValidateRequiredWidget(Globe_Stages, TEXT("Globe_Stages"));
+	ValidateRequiredWidget(Panel_StageInfo, TEXT("Panel_StageInfo"));
 	ValidateRequiredWidget(Text_StageTitle, TEXT("Text_StageTitle"));
 	ValidateRequiredWidget(Text_StageDescription, TEXT("Text_StageDescription"));
 	ValidateRequiredWidget(Button_LaunchStage, TEXT("Button_LaunchStage"));
@@ -37,12 +43,17 @@ void UKnightMainMenuWidget::NativeOnInitialized()
 	ValidateRequiredWidget(Button_Maintenance, TEXT("Button_Maintenance"));
 	ValidateRequiredWidget(Button_Settings, TEXT("Button_Settings"));
 	ValidateRequiredWidget(Button_Codex, TEXT("Button_Codex"));
-	if (Button_Stage) Button_Stage->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleStageClicked);
-	if (Button_ReturnToTitle) Button_ReturnToTitle->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleReturnToTitleClicked);
-	if (Button_Maintenance) Button_Maintenance->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleMaintenanceClicked);
-	if (Button_Settings) Button_Settings->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleSettingsClicked);
-	if (Button_Codex) Button_Codex->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleCodexClicked);
-	if (Button_LaunchStage) Button_LaunchStage->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleLaunchStageClicked);
+	if (Button_Stage) Button_Stage->OnClicked().AddUObject(this, &ThisClass::HandleStageClicked);
+	if (Button_ReturnToTitle) Button_ReturnToTitle->OnClicked().AddUObject(this, &ThisClass::HandleReturnToTitleClicked);
+	if (Button_Maintenance) Button_Maintenance->OnClicked().AddUObject(this, &ThisClass::HandleMaintenanceClicked);
+	if (Button_Settings) Button_Settings->OnClicked().AddUObject(this, &ThisClass::HandleSettingsClicked);
+	if (Button_Codex) Button_Codex->OnClicked().AddUObject(this, &ThisClass::HandleCodexClicked);
+	if (Button_LaunchStage) Button_LaunchStage->OnClicked().AddUObject(this, &ThisClass::HandleLaunchStageClicked);
+	if (Globe_Stages)
+	{
+		Globe_Stages->OnStageClicked.AddUniqueDynamic(this, &ThisClass::HandleGlobeStageClicked);
+		Globe_Stages->SetLeaderTarget(Panel_StageInfo);
+	}
 }
 
 void UKnightMainMenuWidget::NativeConstruct()
@@ -54,8 +65,8 @@ void UKnightMainMenuWidget::NativeConstruct()
 	{
 		const int32 SlotNumber = Save ? Save->GetActiveFixedSlotNumber() : 0;
 		Text_ActiveProfile->SetText(SlotNumber > 0
-			? FText::Format(LOCTEXT("ActiveSlot", "세이브 {0}"), FText::AsNumber(SlotNumber))
-			: LOCTEXT("NoActiveSlot", "세이브 없음"));
+			? FText::Format(LOCTEXT("ActiveSlot", "저장 {0}"), FText::AsNumber(SlotNumber))
+			: LOCTEXT("NoActiveSlot", "저장 파일 없음"));
 	}
 	UknightRaidSubsystem* const Session = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightRaidSubsystem>() : nullptr;
 	FknightRaidResult Result;
@@ -76,9 +87,17 @@ void UKnightMainMenuWidget::NativeConstruct()
 
 void UKnightMainMenuWidget::NativeDestruct()
 {
-	if (SettingsWidget) SettingsWidget->OnClosed.RemoveDynamic(this, &ThisClass::HandleSettingsClosed);
+	if (SettingsWidget)
+	{
+		SettingsWidget->OnClosed.RemoveDynamic(this, &ThisClass::HandleSettingsClosed);
+		SettingsWidget->RemoveFromParent();
+	}
 	if (CodexWidget) CodexWidget->OnClosed.RemoveDynamic(this, &ThisClass::HandleCodexClosed);
-	RemoveStageEntries();
+	if (RaidDefinitionHandle.IsValid())
+	{
+		RaidDefinitionHandle->CancelHandle();
+		RaidDefinitionHandle.Reset();
+	}
 	Super::NativeDestruct();
 }
 
@@ -93,20 +112,11 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 	{
 		return false;
 	}
-	if (NewPage == EKnightMainMenuPage::Stage && !bStageEntriesBuilt)
-	{
-		RebuildStageEntries();
-	}
-	if (NewPage == EKnightMainMenuPage::StageDetails && !RefreshStageDetails())
-	{
-		return false;
-	}
 	UPanelWidget* Page = nullptr;
 	switch (NewPage)
 	{
 	case EKnightMainMenuPage::Home: Page = Panel_Home; break;
 	case EKnightMainMenuPage::Stage: Page = Panel_Stage; break;
-	case EKnightMainMenuPage::StageDetails: Page = Panel_StageDetails; break;
 	case EKnightMainMenuPage::Maintenance: Page = Panel_Maintenance; break;
 	case EKnightMainMenuPage::Settings: Page = Panel_Settings; break;
 	case EKnightMainMenuPage::Codex: Page = Panel_Codex; break;
@@ -118,29 +128,43 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 	{
 		return false;
 	}
+	const bool bEnteringStage = NewPage == EKnightMainMenuPage::Stage && CurrentPage != EKnightMainMenuPage::Stage;
 	CurrentPage = NewPage;
 	if (NewPage != EKnightMainMenuPage::Home) bRestoreCodexFocus = false;
+	bool bHasStages = true;
+	if (bEnteringStage)
+	{
+		// Unlocks can change between visits (a clear unlocks the next stage), so rebuild every time.
+		SelectedStageId = NAME_None;
+		if (Globe_Stages) Globe_Stages->SetSelectedStage(NAME_None);
+		bHasStages = RebuildGlobeMarkers();
+		RefreshStageDetails();
+		PlaceStageInfo();
+	}
 	if (NewPage == EKnightMainMenuPage::Settings)
 	{
 		EnsureSettingsWidget();
+		// The settings screen is laid out for the whole screen, so it goes over the menu rather than into Panel_Settings.
+		if (SettingsWidget && !SettingsWidget->IsInViewport()) SettingsWidget->AddToViewport(50);
 		if (SettingsWidget) SettingsWidget->Open();
+	}
+	else if (SettingsWidget && SettingsWidget->IsInViewport())
+	{
+		SettingsWidget->RemoveFromParent();
 	}
 	if (NewPage == EKnightMainMenuPage::Codex)
 	{
 		EnsureCodexWidget();
 		if (CodexWidget) CodexWidget->Open();
 	}
-	UpdateBackVisibility(NewPage == EKnightMainMenuPage::Home || NewPage == EKnightMainMenuPage::Settings);
+	// Settings and the codex bring their own close buttons.
+	UpdateBackVisibility(NewPage == EKnightMainMenuPage::Home || NewPage == EKnightMainMenuPage::Settings || NewPage == EKnightMainMenuPage::Codex);
 	RefreshTravelControls();
 	if (!IsTravelPending() && GetFlow() && GetFlow()->GetCurrentFlowState() == EKnightFlowState::MainMenu)
 	{
 		ClearStatus();
 	}
-	if (NewPage == EKnightMainMenuPage::StageDetails)
-	{
-		RefreshStageDetails();
-	}
-	else if (NewPage == EKnightMainMenuPage::Stage && !bStageEntriesBuilt)
+	if (NewPage == EKnightMainMenuPage::Stage && !bHasStages)
 	{
 		SetStatusText(LOCTEXT("NoStages", "표시할 스테이지가 없습니다. 카탈로그 설정을 확인해 주세요."));
 	}
@@ -157,11 +181,27 @@ bool UKnightMainMenuWidget::HandleBackRequested()
 {
 	if (CurrentPage == EKnightMainMenuPage::Settings && SettingsWidget) { SettingsWidget->RequestClose(); return true; }
 	if (CurrentPage == EKnightMainMenuPage::Codex) { HandleCodexClosed(); return true; }
-	if (CurrentPage == EKnightMainMenuPage::StageDetails)
+	// First Esc clears the selected region, the next one leaves the globe.
+	if (CurrentPage == EKnightMainMenuPage::Stage && !SelectedStageId.IsNone())
 	{
-		return ShowPage(EKnightMainMenuPage::Stage);
+		return SelectStage(NAME_None);
 	}
 	return CurrentPage == EKnightMainMenuPage::Home ? ShowPage(EKnightMainMenuPage::Settings) : ShowPage(EKnightMainMenuPage::Home);
+}
+
+FReply UKnightMainMenuWidget::NativeOnPreviewKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
+{
+	// Left / Right walk the regions on the globe.
+	if (CurrentPage == EKnightMainMenuPage::Stage && !IsTravelPending())
+	{
+		const FKey Key = InKeyEvent.GetKey();
+		if (Key == EKeys::Left || Key == EKeys::A || Key == EKeys::Right || Key == EKeys::D)
+		{
+			CycleStage(Key == EKeys::Left || Key == EKeys::A ? -1 : 1);
+			return FReply::Handled();
+		}
+	}
+	return Super::NativeOnPreviewKeyDown(InGeometry, InKeyEvent);
 }
 
 bool UKnightMainMenuWidget::ShouldAllowEscapeToChild() const
@@ -174,8 +214,8 @@ void UKnightMainMenuWidget::EnsureSettingsWidget()
 	if (SettingsWidget || !Panel_Settings || !GetOwningPlayer()) return;
 	SettingsWidget = CreateWidget<UKnightSettingsWidget>(GetOwningPlayer(), UKnightSettingsWidget::GetSharedWidgetClass());
 	if (!SettingsWidget) return;
+	// The page stays as the menu's "settings" state but shows nothing; its placeholder would show through.
 	Panel_Settings->ClearChildren();
-	Panel_Settings->AddChild(SettingsWidget);
 	SettingsWidget->OnClosed.AddUniqueDynamic(this, &ThisClass::HandleSettingsClosed);
 }
 
@@ -210,11 +250,6 @@ void UKnightMainMenuWidget::HandleCodexClosed()
 	ShowPage(EKnightMainMenuPage::Home);
 }
 
-bool UKnightMainMenuWidget::IsCodexButtonFocused() const
-{
-	return Button_Codex && GetOwningPlayer() && Button_Codex->HasUserFocus(GetOwningPlayer());
-}
-
 UWidget* UKnightMainMenuWidget::GetPreferredFocusTarget() const
 {
 	if (CurrentPage == EKnightMainMenuPage::Home && bRestoreCodexFocus && Button_Codex)
@@ -225,29 +260,17 @@ UWidget* UKnightMainMenuWidget::GetPreferredFocusTarget() const
 	{
 		return CodexWidget->GetFocusButton();
 	}
-	if (CurrentPage == EKnightMainMenuPage::StageDetails && Button_LaunchStage
-		&& Button_LaunchStage->GetIsFocusable() && Button_LaunchStage->IsVisible() && Button_LaunchStage->GetIsEnabled())
+	if (CurrentPage == EKnightMainMenuPage::Stage && !SelectedStageId.IsNone() && CanFocusButton(Button_LaunchStage))
 	{
 		return Button_LaunchStage;
-	}
-	if (CurrentPage == EKnightMainMenuPage::Stage)
-	{
-		for (const UKnightStageEntryWidget* Entry : GeneratedStageEntries)
-		{
-			UButton* const SelectButton = Entry ? Entry->GetSelectionButton() : nullptr;
-			if (SelectButton && SelectButton->GetIsFocusable() && SelectButton->IsVisible() && SelectButton->GetIsEnabled())
-			{
-				return SelectButton;
-			}
-		}
 	}
 	if (CurrentPage != EKnightMainMenuPage::Home)
 	{
 		return Button_Back;
 	}
-	for (UButton* Button : { Button_Stage.Get(), Button_Maintenance.Get(), Button_Settings.Get(), Button_Codex.Get(), Button_ReturnToTitle.Get() })
+	for (UCommonButtonBase* Button : { Button_Stage.Get(), Button_Maintenance.Get(), Button_Settings.Get(), Button_Codex.Get(), Button_ReturnToTitle.Get() })
 	{
-		if (Button && Button->GetIsFocusable() && Button->IsVisible() && Button->GetIsEnabled())
+		if (CanFocusButton(Button))
 		{
 			return Button;
 		}
@@ -263,11 +286,8 @@ void UKnightMainMenuWidget::SetTravelControlsEnabled(bool bEnabled)
 	if (Button_Maintenance) Button_Maintenance->SetIsEnabled(bEnabled);
 	if (Button_Settings) Button_Settings->SetIsEnabled(bEnabled);
 	if (Button_Codex) Button_Codex->SetIsEnabled(bEnabled);
-	if (Button_LaunchStage) Button_LaunchStage->SetIsEnabled(bEnabled && bStageLaunchAvailable && CurrentPage == EKnightMainMenuPage::StageDetails);
-	for (UKnightStageEntryWidget* Entry : GeneratedStageEntries)
-	{
-		if (Entry) Entry->SetSelectionEnabled(bEnabled);
-	}
+	if (Button_LaunchStage) Button_LaunchStage->SetIsEnabled(bEnabled && bStageLaunchAvailable && !SelectedStageId.IsNone());
+	if (Globe_Stages) Globe_Stages->SetIsEnabled(bEnabled);
 }
 
 void UKnightMainMenuWidget::HandleStageClicked()
@@ -295,69 +315,29 @@ void UKnightMainMenuWidget::HandleCodexClicked()
 	ShowPage(EKnightMainMenuPage::Codex);
 }
 
-void UKnightMainMenuWidget::RemoveStageEntries()
+bool UKnightMainMenuWidget::RebuildGlobeMarkers()
 {
-	for (UKnightStageEntryWidget* Entry : GeneratedStageEntries)
-	{
-		if (Entry)
-		{
-			Entry->OnStageSelected.RemoveDynamic(this, &ThisClass::HandleStageEntrySelected);
-			Entry->RemoveFromParent();
-		}
-	}
-	GeneratedStageEntries.Reset();
-	bStageEntriesBuilt = false;
-}
-
-bool UKnightMainMenuWidget::RebuildStageEntries()
-{
-	RemoveStageEntries();
-	if (!Box_StageEntries || !StageEntryWidgetClass || !StageEntryWidgetClass->IsChildOf(UKnightStageEntryWidget::StaticClass()))
-	{
-		UE_LOG(Logknight, Error, TEXT("%s requires Box_StageEntries and a valid StageEntryWidgetClass."), *GetClass()->GetName());
-		SetStatusText(LOCTEXT("EntrySetupMissing", "스테이지 목록 화면 설정을 확인해 주세요."));
-		return false;
-	}
+	StageOrder.Reset();
 	UKnightGameFlowSubsystem* const Flow = GetFlow();
-	if (!Flow || Flow->GetCurrentFlowState() != EKnightFlowState::MainMenu)
-	{
-		UE_LOG(Logknight, Error, TEXT("Cannot build stage entries without an active MainMenu GameFlow."));
-		SetStatusText(LOCTEXT("NoFlowForStages", "스테이지 목록을 열 수 없습니다."));
-		return false;
-	}
 	TArray<FKnightStageDefinition> Stages;
-	if (!Flow->GetStageDefinitions(Stages))
+	if (!Globe_Stages || !Flow || !Flow->GetStageDefinitions(Stages))
 	{
-		SetStatusText(LOCTEXT("NoValidStages", "표시할 스테이지가 없습니다. 카탈로그 설정을 확인해 주세요."));
+		if (Globe_Stages) Globe_Stages->SetMarkers({});
 		return false;
 	}
-	APlayerController* const OwningPlayer = GetOwningPlayer();
-	if (!OwningPlayer)
-	{
-		UE_LOG(Logknight, Error, TEXT("Cannot build stage entries without an owning PlayerController."));
-		return false;
-	}
+	TArray<FKnightGlobeMarker> Markers;
 	for (const FKnightStageDefinition& Stage : Stages)
 	{
-		UKnightStageEntryWidget* const Entry = CreateWidget<UKnightStageEntryWidget>(OwningPlayer, StageEntryWidgetClass);
-		if (!Entry)
-		{
-			UE_LOG(Logknight, Error, TEXT("Could not create stage entry for %s using %s."), *Stage.StageId.ToString(), *StageEntryWidgetClass->GetName());
-			continue;
-		}
-		Entry->SetStage(Stage.StageId, Stage.bDevelopmentOnly
-			? FText::Format(LOCTEXT("DevStageName", "[DEV] {0}"), Stage.DisplayName) : Stage.DisplayName);
-		Entry->OnStageSelected.AddUniqueDynamic(this, &ThisClass::HandleStageEntrySelected);
-		if (!Box_StageEntries->AddChildToVerticalBox(Entry))
-		{
-			Entry->OnStageSelected.RemoveDynamic(this, &ThisClass::HandleStageEntrySelected);
-			UE_LOG(Logknight, Error, TEXT("Could not add stage entry %s to Box_StageEntries."), *Stage.StageId.ToString());
-			continue;
-		}
-		GeneratedStageEntries.Add(Entry);
+		FKnightGlobeMarker& Marker = Markers.AddDefaulted_GetRef();
+		Marker.StageId = Stage.StageId;
+		Marker.Label = Stage.bDevelopmentOnly ? FText::Format(LOCTEXT("DevStageName", "[DEV] {0}"), Stage.DisplayName) : Stage.DisplayName;
+		Marker.Location = Stage.GlobeLocation;
+		FText Reason;
+		Marker.bLocked = !Flow->CanLaunchStage(Stage.StageId, Reason);
+		StageOrder.Add(Stage.StageId);
 	}
-	bStageEntriesBuilt = !GeneratedStageEntries.IsEmpty();
-	return bStageEntriesBuilt;
+	Globe_Stages->SetMarkers(Markers);
+	return !StageOrder.IsEmpty();
 }
 
 bool UKnightMainMenuWidget::SelectStage(FName StageId)
@@ -369,42 +349,150 @@ bool UKnightMainMenuWidget::SelectStage(FName StageId)
 		return false;
 	}
 	FKnightStageDefinition Stage;
-	if (!Flow->FindStageDefinition(StageId, Stage))
+	if (!StageId.IsNone() && !Flow->FindStageDefinition(StageId, Stage))
 	{
 		SetStatusText(LOCTEXT("UnknownStage", "스테이지 정보를 확인할 수 없습니다."));
 		return false;
 	}
-	const FName PreviousSelection = SelectedStageId;
-	SelectedStageId = StageId;
-	if (!ShowPage(EKnightMainMenuPage::StageDetails))
+	if (CurrentPage != EKnightMainMenuPage::Stage && !ShowPage(EKnightMainMenuPage::Stage))
 	{
-		SelectedStageId = PreviousSelection;
 		return false;
 	}
+	SelectedStageId = StageId;
+	if (Globe_Stages) Globe_Stages->SetSelectedStage(StageId);
+	ClearStatus();
+
+	// The panel goes to the side the region is on, so the leader line stays short.
+	FVector2D MarkerPosition;
+	bool bFront = false;
+	if (Globe_Stages && Globe_Stages->GetMarkerLocalPosition(StageId, MarkerPosition, bFront) && bFront)
+	{
+		bStageInfoOnRight = MarkerPosition.X >= Globe_Stages->GetCachedGeometry().GetLocalSize().X * 0.5f;
+	}
+	RefreshStageDetails();
+	PlaceStageInfo();
+	FocusCurrentPage();
 	return true;
 }
 
-bool UKnightMainMenuWidget::RefreshStageDetails()
+bool UKnightMainMenuWidget::CycleStage(int32 Direction)
+{
+	if (StageOrder.IsEmpty())
+	{
+		return false;
+	}
+	const int32 Current = StageOrder.IndexOfByKey(SelectedStageId);
+	const int32 Next = Current == INDEX_NONE ? (Direction > 0 ? 0 : StageOrder.Num() - 1) : (Current + Direction + StageOrder.Num()) % StageOrder.Num();
+	if (Globe_Stages) Globe_Stages->FocusStage(StageOrder[Next]);
+	return SelectStage(StageOrder[Next]);
+}
+
+void UKnightMainMenuWidget::PlaceStageInfo()
+{
+	if (!Panel_StageInfo)
+	{
+		return;
+	}
+	Panel_StageInfo->SetVisibility(SelectedStageId.IsNone() ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
+	UCanvasPanelSlot* const InfoSlot = Cast<UCanvasPanelSlot>(Panel_StageInfo->Slot);
+	const UCanvasPanelSlot* const GlobeSlot = Globe_Stages ? Cast<UCanvasPanelSlot>(Globe_Stages->Slot) : nullptr;
+	if (!InfoSlot || !GlobeSlot)
+	{
+		return;
+	}
+	// Both are anchored to the screen centre; the panel hangs off the globe's left or right edge.
+	const float GlobeHalfWidth = GlobeSlot->GetSize().X * 0.5f;
+	const float Offset = GlobeHalfWidth + StageInfoGap;
+	InfoSlot->SetAnchors(FAnchors(0.5f, 0.5f));
+	InfoSlot->SetAlignment(FVector2D(bStageInfoOnRight ? 0.f : 1.f, 0.5f));
+	InfoSlot->SetPosition(FVector2D(GlobeSlot->GetPosition().X + (bStageInfoOnRight ? Offset : -Offset), GlobeSlot->GetPosition().Y));
+}
+
+namespace
+{
+	FText FormatMinutes(float Seconds)
+	{
+		const int32 Whole = FMath::Max(0, FMath::FloorToInt(Seconds));
+		return FText::FromString(FString::Printf(TEXT("%02d:%02d"), Whole / 60, Whole % 60));
+	}
+
+	FText FormatRecord(float Seconds)
+	{
+		const int32 Hundredths = FMath::Max(0, FMath::RoundToInt(Seconds * 100.f));
+		return FText::FromString(FString::Printf(TEXT("%02d:%02d.%02d"), Hundredths / 6000, (Hundredths / 100) % 60, Hundredths % 100));
+	}
+}
+
+void UKnightMainMenuWidget::RefreshStageDetails()
+{
+	UKnightGameFlowSubsystem* const Flow = GetFlow();
+	FKnightStageDefinition Stage;
+	if (SelectedStageId.IsNone() || !Flow || !Flow->FindStageDefinition(SelectedStageId, Stage))
+	{
+		bStageLaunchAvailable = false;
+		if (Button_LaunchStage) Button_LaunchStage->SetIsEnabled(false);
+		return;
+	}
+	if (Text_StageTitle) Text_StageTitle->SetText(Stage.bDevelopmentOnly ? FText::Format(LOCTEXT("DevStageName", "[DEV] {0}"), Stage.DisplayName) : Stage.DisplayName);
+	if (Text_StageDescription) Text_StageDescription->SetText(Stage.Description);
+	if (Text_StageRegion) Text_StageRegion->SetText(Stage.RegionName.IsEmpty() ? LOCTEXT("NoRegion", "-") : Stage.RegionName);
+
+	const UknightProgressionSubsystem* const Progression = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>() : nullptr;
+	const float Best = Progression ? Progression->GetBestClearTime(SelectedStageId) : 0.f;
+	if (Text_StageRecord) Text_StageRecord->SetText(Best > 0.f ? FormatRecord(Best) : LOCTEXT("NoRecord", "기록 없음"));
+
+	if (Img_StageThumbnail)
+	{
+		UTexture2D* const Thumbnail = Stage.Thumbnail.LoadSynchronous();
+		Img_StageThumbnail->SetBrushFromTexture(Thumbnail);
+		Img_StageThumbnail->SetVisibility(Thumbnail ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	}
+
+	FText Reason;
+	bStageLaunchAvailable = Flow->CanLaunchStage(SelectedStageId, Reason);
+	if (Button_LaunchStage) Button_LaunchStage->SetIsEnabled(bStageLaunchAvailable && !IsTravelPending());
+	if (Text_StageLock)
+	{
+		Text_StageLock->SetText(Reason);
+		Text_StageLock->SetVisibility(bStageLaunchAvailable || Reason.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+	}
+
+	// Target and time limit live in the raid definition.
+	if (RaidDefinitionHandle.IsValid())
+	{
+		RaidDefinitionHandle->CancelHandle();
+		RaidDefinitionHandle.Reset();
+	}
+	if (Stage.RaidDefinition.IsNull() || Stage.RaidDefinition.Get())
+	{
+		RefreshRaidDetails();
+		return;
+	}
+	if (Text_StageTarget) Text_StageTarget->SetText(LOCTEXT("Loading", "..."));
+	if (Text_StageTimeLimit) Text_StageTimeLimit->SetText(LOCTEXT("Loading", "..."));
+	RaidDefinitionHandle = UAssetManager::GetStreamableManager().RequestAsyncLoad(Stage.RaidDefinition.ToSoftObjectPath(),
+		FStreamableDelegate::CreateWeakLambda(this, [this]() { RefreshRaidDetails(); }));
+}
+
+void UKnightMainMenuWidget::RefreshRaidDetails()
 {
 	UKnightGameFlowSubsystem* const Flow = GetFlow();
 	FKnightStageDefinition Stage;
 	if (!Flow || !Flow->FindStageDefinition(SelectedStageId, Stage))
 	{
-		bStageLaunchAvailable = false;
-		if (Button_LaunchStage) Button_LaunchStage->SetIsEnabled(false);
-		SetStatusText(LOCTEXT("NoSelectedStage", "유효한 스테이지를 먼저 선택해 주세요."));
-		return false;
+		return;
 	}
-	if (Text_StageTitle) Text_StageTitle->SetText(Stage.DisplayName);
-	if (Text_StageDescription) Text_StageDescription->SetText(Stage.Description);
-	FText Reason;
-	bStageLaunchAvailable = Flow->CanLaunchStage(SelectedStageId, Reason);
-	if (Button_LaunchStage) Button_LaunchStage->SetIsEnabled(bStageLaunchAvailable && !IsTravelPending());
-	if (!bStageLaunchAvailable) SetStatusText(Reason);
-	return true;
+	const UknightRaidDefinition* const Raid = Stage.RaidDefinition.Get();
+	const UknightMonsterDefinition* const Monster = Raid ? Raid->TargetMonster.Get() : nullptr;
+	if (Text_StageTarget) Text_StageTarget->SetText(Monster && !Monster->DisplayName.IsEmpty() ? Monster->DisplayName : LOCTEXT("NoTarget", "-"));
+	if (Text_StageTimeLimit)
+	{
+		Text_StageTimeLimit->SetText(!Raid ? LOCTEXT("NoTimeInfo", "-")
+			: (Raid->TimeLimit > 0.f ? FormatMinutes(Raid->TimeLimit) : LOCTEXT("NoTimeLimit", "제한 없음")));
+	}
 }
 
-void UKnightMainMenuWidget::HandleStageEntrySelected(FName StageId)
+void UKnightMainMenuWidget::HandleGlobeStageClicked(FName StageId)
 {
 	SelectStage(StageId);
 }
@@ -412,7 +500,7 @@ void UKnightMainMenuWidget::HandleStageEntrySelected(FName StageId)
 void UKnightMainMenuWidget::HandleLaunchStageClicked()
 {
 	UKnightGameFlowSubsystem* const Flow = GetFlow();
-	if (!Flow || IsTravelPending() || !bStageLaunchAvailable)
+	if (!Flow || IsTravelPending() || !bStageLaunchAvailable || SelectedStageId.IsNone())
 	{
 		return;
 	}

@@ -61,8 +61,9 @@ float UknightGameplayAbility_MonsterAttack::GetSelectionWeight(const FknightMons
 	{
 		return Selection.MinRange <= 0.f && Selection.MaxAngle >= 180.f ? Selection.Weight : 0.f;
 	}
+	const float AbsAngle = FMath::Abs(Context.AngleToTarget);
 	if (Context.Distance < Selection.MinRange || Context.Distance > Selection.MaxRange
-		|| FMath::Abs(Context.AngleToTarget) > Selection.MaxAngle)
+		|| (!Context.bIgnoreAngle && (AbsAngle > Selection.MaxAngle || AbsAngle < Selection.MinAngle)))
 	{
 		return 0.f;
 	}

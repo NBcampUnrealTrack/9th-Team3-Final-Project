@@ -50,14 +50,26 @@ public:
 	virtual void SetToDefaults() override;
 	virtual void ApplyNonResolutionSettings() override;
 
-	/** Called only from GameInstance::Init, once per real game process. */
+	/**
+	 * Called only from GameInstance::Init, once per real game process. Restores the pending graphics, which are the
+	 * previous display settings when the game closed before a display change was kept.
+	 */
 	bool ApplyPendingGraphicsAtStartup();
-	bool QueueGraphicsForNextProcess(const FKnightGraphicsChoice& Choice, FText& Error);
-	FKnightGraphicsChoice GetDisplayedGraphics() const;
+	/**
+	 * Applies and saves Choice right away. With RevertTo, RevertTo is also saved as pending until ConfirmGraphics, so
+	 * a display change that leaves a black screen is undone on the next launch even when the game is killed.
+	 * bRestoring skips the option checks: going back to values the game already ran with must not be refused.
+	 */
+	bool ApplyGraphicsNow(const FKnightGraphicsChoice& Choice, const FKnightGraphicsChoice* RevertTo, FText& Error, bool bRestoring = false);
+	/** Keeps the graphics applied by ApplyGraphicsNow and drops the pending revert. */
+	void ConfirmGraphics();
 	FKnightGraphicsChoice GetActiveGraphics() const;
 	bool HasPendingGraphics() const { return bHasPendingGraphics; }
-	bool ConsumeGraphicsAppliedNotice();
+	/** True once after startup restored the previous display settings. */
+	bool ConsumeGraphicsRevertedNotice();
 	static bool ValidateGraphics(const FKnightGraphicsChoice& Choice, FText& Error);
+	/** Loose check for restoring earlier values: a real window mode and a size the window can take. */
+	static bool IsRestorableGraphics(const FKnightGraphicsChoice& Choice);
 	static void GetSupportedResolutions(TArray<FIntPoint>& OutResolutions);
 
 	UFUNCTION(BlueprintCallable, Category="Knight|Settings")
@@ -73,6 +85,9 @@ public:
 	bool IsMotionBlurEnabled() const { return bMotionBlurEnabled; }
 
 private:
+	/** Sets the engine values without applying them. */
+	void SetGraphics(const FKnightGraphicsChoice& Choice);
+
 	UPROPERTY(Config)
 	FKnightGraphicsChoice PendingGraphics;
 
@@ -85,8 +100,8 @@ private:
 	UPROPERTY(Config)
 	int32 PendingGraphicsSaveSerial = 0;
 
-	bool bGraphicsAppliedNotice = false;
-	FKnightGraphicsChoice ActiveGraphicsSnapshot;
+	bool bGraphicsRevertedNotice = false;
+
 	UPROPERTY(Config)
 	EknightUpscaler Upscaler = EknightUpscaler::TSR;
 

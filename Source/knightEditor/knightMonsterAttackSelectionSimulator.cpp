@@ -1,6 +1,7 @@
 #include "knightMonsterAttackSelectionSimulator.h"
 
 #include "AbilitySystem/Abilities/knightGameplayAbility_MonsterAttack.h"
+#include "GameplayTagsManager.h"
 #include "System/knightGameplayTags.h"
 
 bool FknightMonsterAttackSelectionSimulator::Supports(const UClass* AbilityClass) const
@@ -45,6 +46,10 @@ FknightSelectionResult FknightMonsterAttackSelectionSimulator::Evaluate(const UG
 	{
 		Result.Reason = FString::Printf(TEXT("각도 밖 (%.0f도 > %.0f도)"), FMath::Abs(Query.AngleToTarget), Selection.MaxAngle);
 	}
+	else if (FMath::Abs(Query.AngleToTarget) < Selection.MinAngle)
+	{
+		Result.Reason = FString::Printf(TEXT("너무 정면 (%.0f도 < 최소 %.0f도)"), FMath::Abs(Query.AngleToTarget), Selection.MinAngle);
+	}
 	else if (Selection.AirborneRule == EknightTargetAirborneRule::OnlyAirborne && !Query.bTargetAirborne)
 	{
 		Result.Reason = TEXT("공중 타깃 전용");
@@ -87,6 +92,7 @@ FknightSelectionShape FknightMonsterAttackSelectionSimulator::GetShape(const UGa
 	Shape.MinRange = Selection.MinRange;
 	Shape.MaxRange = Selection.MaxRange;
 	Shape.MaxAngle = Selection.MaxAngle;
+	Shape.MinAngle = Selection.MinAngle;
 	Shape.Weight = Selection.Weight;
 	Shape.Cooldown = Selection.Cooldown;
 	Shape.AirborneText = Selection.AirborneRule == EknightTargetAirborneRule::OnlyAirborne ? TEXT("공중 전용")
@@ -98,7 +104,23 @@ FknightSelectionShape FknightMonsterAttackSelectionSimulator::GetShape(const UGa
 
 TArray<FGameplayTag> FknightMonsterAttackSelectionSimulator::GetSimulatedStateTags() const
 {
-	return { knightGameplayTags::State_Monster_Enraged, knightGameplayTags::State_Monster_Exhausted };
+	TArray<FGameplayTag> Tags = { knightGameplayTags::State_Monster_Enraged, knightGameplayTags::State_Monster_Exhausted };
+	// 부위 파괴 태그(Monster.State.Broken.<몬스터>.<부위>)도 켜 보며 어떤 공격이 봉인되는지 본다.
+	const FGameplayTag BrokenRoot = FGameplayTag::RequestGameplayTag(TEXT("Monster.State.Broken"), false);
+	if (BrokenRoot.IsValid())
+	{
+		const FGameplayTagContainer BrokenTags = UGameplayTagsManager::Get().RequestGameplayTagChildren(BrokenRoot);
+		for (const FGameplayTag& Tag : BrokenTags)
+		{
+			// 몬스터 단위 중간 태그(Monster.State.Broken.Janyeol)는 빼고 부위 태그만.
+			const TSharedPtr<FGameplayTagNode> Node = UGameplayTagsManager::Get().FindTagNode(Tag);
+			if (Node.IsValid() && Node->GetChildTagNodes().IsEmpty())
+			{
+				Tags.Add(Tag);
+			}
+		}
+	}
+	return Tags;
 }
 
 FName FknightMonsterAttackSelectionSimulator::GetSelectionPropertyName() const

@@ -6,6 +6,7 @@
 #include "Abilities/GameplayAbility.h"
 #include "AbilitySystem/Abilities/knightGameplayAbility_MonsterAttack.h"
 #include "Monster/knightMonsterCharacterBase.h"
+#include "Monster/knightMonsterDefinition.h"
 #include "Monster/knightMonsterMovementComponent.h"
 #include "Monster/knightMonsterTargetingComponent.h"
 #include "StateTreeAsyncExecutionContext.h"
@@ -64,6 +65,13 @@ void FknightStateTreeMonsterTargetEvaluator::Update(FInstanceDataType& InstanceD
 		InstanceData.bEnraged = ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Enraged);
 		InstanceData.bExhausted = ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Exhausted);
 		InstanceData.bIsReacting = ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Reacting);
+	}
+
+	if (const UknightMonsterDefinition* const Definition = Monster ? Monster->GetMonsterDefinition() : nullptr)
+	{
+		InstanceData.ChaseStopDistance = Definition->ChaseStopDistance;
+		InstanceData.RangedMinDistance = Definition->RangedMinDistance;
+		InstanceData.RangedMaxDistance = Definition->RangedMaxDistance;
 	}
 }
 
@@ -196,23 +204,65 @@ void FknightStateTreeActivateAbilityTask::ExitState(FStateTreeExecutionContext& 
 
 // Knight Face Target
 
+namespace knightMonsterStateTree
+{
+	/** 지금 각도에서 고를 수 있는 옆·뒤 전용 공격(MinAngle > 0)이 있는가. */
+	static bool HasUsableSideAttack(const AknightMonsterCharacterBase& Monster, const AActor* Target)
+	{
+		UAbilitySystemComponent* const ASC = Monster.GetAbilitySystemComponent();
+		if (!ASC || !Target)
+		{
+			return false;
+		}
+		const FknightMonsterAttackContext AttackContext = FknightMonsterAttackContext::Make(&Monster, Target);
+		for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+		{
+			const UGameplayAbility* const Instance = Spec.GetPrimaryInstance() ? Spec.GetPrimaryInstance() : Spec.Ability.Get();
+			const UknightGameplayAbility_MonsterAttack* const Attack = Cast<UknightGameplayAbility_MonsterAttack>(Instance);
+			if (Attack && Attack->GetSelection().MinAngle > 0.f && Attack->GetSelectionWeight(AttackContext) > 0.f)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+}
+
 EStateTreeRunStatus FknightStateTreeFaceTargetTask::EnterState(FStateTreeExecutionContext& Context, const FStateTreeTransitionResult& Transition) const
 {
-	const FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
-	return InstanceData.Monster && InstanceData.Target ? EStateTreeRunStatus::Running : EStateTreeRunStatus::Failed;
+	FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
+	InstanceData.ElapsedTime = 0.f;
+	if (!InstanceData.Monster || !InstanceData.Target)
+	{
+		return EStateTreeRunStatus::Failed;
+	}
+	if (InstanceData.bSkipForSideAttacks && knightMonsterStateTree::HasUsableSideAttack(*InstanceData.Monster, InstanceData.Target))
+	{
+		UE_LOG(LogknightAI, Verbose, TEXT("%s: Face Target skipped, a side attack is usable."), *GetNameSafe(InstanceData.Monster));
+		return EStateTreeRunStatus::Succeeded;
+	}
+	return EStateTreeRunStatus::Running;
 }
 
 EStateTreeRunStatus FknightStateTreeFaceTargetTask::Tick(FStateTreeExecutionContext& Context, const float DeltaTime) const
 {
-	const FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
+	FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
 	UknightMonsterMovementComponent* const Movement = InstanceData.Monster ? InstanceData.Monster->GetMonsterMovementComponent() : nullptr;
 	if (!Movement || !InstanceData.Target)
 	{
 		return EStateTreeRunStatus::Failed;
 	}
-	return Movement->TurnTowards(InstanceData.Target->GetActorLocation(), DeltaTime, InstanceData.TurnRate, InstanceData.Tolerance)
-		? EStateTreeRunStatus::Succeeded
-		: EStateTreeRunStatus::Running;
+	if (Movement->TurnTowards(InstanceData.Target->GetActorLocation(), DeltaTime, InstanceData.TurnRate, InstanceData.Tolerance))
+	{
+		return EStateTreeRunStatus::Succeeded;
+	}
+	InstanceData.ElapsedTime += DeltaTime;
+	if (InstanceData.MaxTime > 0.f && InstanceData.ElapsedTime >= InstanceData.MaxTime)
+	{
+		UE_LOG(LogknightAI, Verbose, TEXT("%s: Face Target gave up after %.1fs."), *GetNameSafe(InstanceData.Monster), InstanceData.ElapsedTime);
+		return EStateTreeRunStatus::Succeeded;
+	}
+	return EStateTreeRunStatus::Running;
 }
 
 // Knight Has Gameplay Tag
@@ -239,10 +289,7 @@ bool FknightStateTreeCanUseAbilityCondition::TestCondition(FStateTreeExecutionCo
 	if (ASC && !InstanceData.AbilityTags.IsEmpty())
 	{
 		FknightMonsterAttackContext AttackContext = FknightMonsterAttackContext::Make(InstanceData.Actor, InstanceData.Target);
-		if (InstanceData.bIgnoreAngle)
-		{
-			AttackContext.AngleToTarget = 0.f;
-		}
+		AttackContext.bIgnoreAngle = InstanceData.bIgnoreAngle;
 		TArray<FGameplayAbilitySpec*> Specs;
 		ASC->GetActivatableGameplayAbilitySpecsByAllMatchingTags(InstanceData.AbilityTags, Specs, true);
 		for (const FGameplayAbilitySpec* const Spec : Specs)

@@ -48,6 +48,32 @@ void UknightMonsterMovementComponent::PhysicsRotation(float DeltaTime)
 	}
 }
 
+void UknightMonsterMovementComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	if (FMath::IsNearlyZero(TurnSpeed))
+	{
+		return;
+	}
+	// 회전이 끝났거나(허용 각도 도달) 회전을 요청하던 쪽이 멈췄으면(최대 시간 등) 남은 속도를 관성으로 줄인다.
+	const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	if (!bCoastingTurn && Now - LastTurnTime < 0.1)
+	{
+		return;
+	}
+	AActor* const Owner = GetOwner();
+	if (!Owner || IsMovementLocked() || TurnAcceleration <= 0.f)
+	{
+		TurnSpeed = 0.f;
+		return;
+	}
+	const float NewSpeed = FMath::FInterpConstantTo(TurnSpeed, 0.f, DeltaTime, TurnAcceleration);
+	const float Step = 0.5f * (TurnSpeed + NewSpeed) * DeltaTime;
+	TurnSpeed = NewSpeed;
+	Owner->SetActorRotation(FRotator(0.f, Owner->GetActorRotation().Yaw + Step, 0.f));
+}
+
 bool UknightMonsterMovementComponent::TurnTowards(const FVector& WorldLocation, float DeltaTime, float TurnRate, float ToleranceDegrees)
 {
 	AActor* const Owner = GetOwner();
@@ -67,11 +93,48 @@ bool UknightMonsterMovementComponent::TurnTowards(const FVector& WorldLocation, 
 	const float CurrentYaw = Owner->GetActorRotation().Yaw;
 	const float DesiredYaw = ToTarget.Rotation().Yaw;
 	const float Delta = FRotator::NormalizeAxis(DesiredYaw - CurrentYaw);
+
+	LastTurnTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
 	if (FMath::Abs(Delta) <= ToleranceDegrees)
 	{
+		// 남은 속도는 TickComponent가 줄인다. 감속 곡선(v = sqrt(2 a d)) 덕분에 관성으로 돈 만큼이 남은 각도와 거의 같다.
+		bCoastingTurn = TurnAcceleration > 0.f;
+		if (!bCoastingTurn)
+		{
+			TurnSpeed = 0.f;
+		}
 		return true;
 	}
-	const float Step = FMath::Clamp(Delta, -TurnRate * DeltaTime, TurnRate * DeltaTime);
+	bCoastingTurn = false;
+
+	float Step;
+	if (TurnAcceleration > 0.f)
+	{
+		// 남은 각도 안에 멈출 수 있는 속도(v = sqrt(2 a d))를 넘지 않게 해서, 목표 근처에서 저절로 감속한다.
+		const float StopSpeed = FMath::Sqrt(2.f * TurnAcceleration * FMath::Abs(Delta));
+		const float DesiredSpeed = FMath::Sign(Delta) * FMath::Min(TurnRate, StopSpeed);
+		TurnSpeed = FMath::FInterpConstantTo(TurnSpeed, DesiredSpeed, DeltaTime, TurnAcceleration);
+		Step = TurnSpeed * DeltaTime;
+		if (FMath::Sign(Step) != FMath::Sign(Delta))
+		{
+			// 목표가 반대편으로 넘어갔다. 감속이 끝날 때까지 더 돌지 않는다.
+			Step = 0.f;
+		}
+		else if (FMath::Abs(Step) > FMath::Abs(Delta))
+		{
+			Step = Delta;
+		}
+	}
+	else
+	{
+		Step = FMath::Clamp(Delta, -TurnRate * DeltaTime, TurnRate * DeltaTime);
+	}
 	Owner->SetActorRotation(FRotator(0.f, CurrentYaw + Step, 0.f));
-	return FMath::Abs(Delta - Step) <= ToleranceDegrees;
+	const bool bDone = FMath::Abs(Delta - Step) <= ToleranceDegrees;
+	bCoastingTurn = bDone && TurnAcceleration > 0.f;
+	if (bDone && !bCoastingTurn)
+	{
+		TurnSpeed = 0.f;
+	}
+	return bDone;
 }

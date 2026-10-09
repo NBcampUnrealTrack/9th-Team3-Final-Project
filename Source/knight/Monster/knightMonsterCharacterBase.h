@@ -18,8 +18,10 @@ class UknightMonsterAttributeSet;
 class UknightMonsterDefinition;
 class UknightMonsterMovementComponent;
 class UknightMonsterPartComponent;
+class UknightMonsterPushOutComponent;
 class UknightMonsterTargetingComponent;
 class UMotionWarpingComponent;
+struct FGameplayEventData;
 struct FGameplayEffectSpec;
 
 class AknightMonsterCharacterBase;
@@ -83,6 +85,9 @@ protected:
 	void HandleStaminaDepleted(AActor* EffectInstigator, AActor* EffectCauser, const FGameplayEffectSpec* EffectSpec,
 		float Magnitude, float OldValue, float NewValue);
 
+	/** 퍼펙트 가드를 당하면(Event.Parried) MonsterDefinition의 ParriedPoiseDamageRatio만큼 경직도를 깎는다. */
+	void HandleParried(const FGameplayEventData* Payload);
+
 	/** The first target of this life sends Event.Monster.Engaged (an encounter roar ability triggers on it). */
 	UFUNCTION()
 	void HandleTargetChanged(AActor* OldTarget, AActor* NewTarget);
@@ -111,6 +116,10 @@ private:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UMotionWarpingComponent> MotionWarping;
+
+	/** 몸(몸 아래 차단 상자, 설정하면 메시 바디)과 겹친 플레이어를 밀어낸다. 검사할 몸이 없는 몬스터에서는 쉰다. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UknightMonsterPushOutComponent> PushOut;
 
 	UPROPERTY()
 	TObjectPtr<UknightCoreAttributeSet> CoreAttributeSet;

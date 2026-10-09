@@ -51,6 +51,10 @@ struct KNIGHT_API FknightMonsterPartDefinition
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Break", meta=(EditCondition="bBreakable", ClampMin=1))
 	float BreakDamage = 500.f;
 
+	/** Remaining durability ratio (BreakDamage left / BreakDamage) at or below which the part counts as critical (near break). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Break", meta=(EditCondition="bBreakable", ClampMin=0, ClampMax=1))
+	float CriticalRatio = 0.3f;
+
 	/** Hitzone multiplier after the break (a broken horn often becomes softer). */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Break", meta=(EditCondition="bBreakable", ClampMin=0))
 	float BrokenDamageMultiplier = 1.f;
@@ -58,6 +62,13 @@ struct KNIGHT_API FknightMonsterPartDefinition
 	/** Applied to the monster on break (weaken an attack, grant a tag the AI reacts to). */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Break", meta=(EditCondition="bBreakable"))
 	TSubclassOf<UGameplayEffect> BreakEffect;
+
+	/**
+	 * Loose tags added to the monster's ability system on break (for example Monster.State.Broken.ForelegL).
+	 * Attacks list these in Selection.BlockedOwnerTags to stop being picked, without a GE asset per part.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Break", meta=(EditCondition="bBreakable", Categories="Monster.State.Broken"))
+	FGameplayTagContainer GrantedTagsOnBreak;
 
 	/** Bone hidden on break, including its children (tail cut, horn snapped). None hides nothing. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Break", meta=(EditCondition="bBreakable"))
