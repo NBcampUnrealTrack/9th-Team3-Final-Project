@@ -142,6 +142,17 @@ def slider():
     return normalize(tail(x), -12)
 
 
+def part_alert():
+    # Locked part turned critical or broke: a dry crack over a falling two-note warning.
+    def tone(f):
+        t = t_axis(0.09)
+        s = np.sign(np.sin(2 * np.pi * f * t)) * 0.5 + np.sin(2 * np.pi * f * t) * 0.5
+        return lowpass(s * np.clip(t / 0.003, 0, 1) * np.clip((0.09 - t) / 0.02, 0, 1), 2400)
+    crack = band_noise(0.04, 1200, 6000, 0.008)
+    x = place(0.26, (0.0, crack * 1.2), (0.0, tone(880) * 0.6), (0.11, tone(587) * 0.6), (0.0, partials([75], 0.2, 0.05) * 0.8))
+    return normalize(tail(x), -4)
+
+
 def deploy():
     total = 0.95
     clank = partials([420, 713, 1130, 1790, 2610], 0.6, 0.18, amps=[1, .8, .6, .45, .3])
@@ -166,6 +177,7 @@ SOUNDS = {
     "S_UI_LockOn": lock_on,
     "S_UI_Slider": slider,
     "S_UI_Deploy": deploy,
+    "S_UI_PartAlert": part_alert,
 }
 
 if __name__ == "__main__":

@@ -39,9 +39,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
 	static bool BuildHUDRaidTimer(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> TimeStyle, TSubclassOf<UCommonTextStyle> CaptionStyle);
 
-	/** WBP_HUDLockOnMarker: 캔버스 직속의 Box(주황 귀퉁이), Line_Diagonal, Line_Shelf, Plate(TARGET LOCK + 이름). 위치는 C++가 매 프레임 정한다. */
+	/**
+	 * WBP_HUDLockOnMarker: 캔버스 직속의 Box(주황 귀퉁이), PartFrame/PartFlash(부위 틀, PartFrameTexture가 있을 때), Line_Diagonal, Line_Shelf,
+	 * Plate(TARGET LOCK + 이름 + 부위 이름). 위치는 C++가 매 프레임 정한다.
+	 */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
-	static bool BuildHUDLockOnMarker(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> NameStyle);
+	static bool BuildHUDLockOnMarker(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> NameStyle,
+		UTexture2D* PartFrameTexture = nullptr);
 
 	/** WBP_HUDLayout: 화면 전체의 락온 마커(맨 아래), 1080p 세이프존(4.5%) 안쪽에 플레이어 상태(좌상), 타이머(우상). */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")

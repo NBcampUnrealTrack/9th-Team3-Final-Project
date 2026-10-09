@@ -282,7 +282,8 @@ bool UknightUIEditorLibrary::BuildHUDRaidTimer(UWidgetBlueprint* WidgetBlueprint
 	return true;
 }
 
-bool UknightUIEditorLibrary::BuildHUDLockOnMarker(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> NameStyle)
+bool UknightUIEditorLibrary::BuildHUDLockOnMarker(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> NameStyle,
+	UTexture2D* PartFrameTexture)
 {
 	if (!BeginBuild(WidgetBlueprint, TEXT("BuildHUDLockOnMarker")))
 	{
@@ -293,6 +294,23 @@ bool UknightUIEditorLibrary::BuildHUDLockOnMarker(UWidgetBlueprint* WidgetBluepr
 	WidgetBlueprint->WidgetTree->RootWidget = Root;
 	// 디자이너에서 보이도록 놓는 자리. 실행 중에는 C++가 대상 위치로 옮긴다.
 	const FVector2D Preview(400.f, 300.f);
+
+	// 부위 틀: 박스 뒤에 깔린다. 색은 C++가 부위 상태로 정하고, 흰 PartFlash는 상태가 바뀔 때만 잠깐 보인다.
+	if (PartFrameTexture)
+	{
+		for (const TCHAR* const Name : { TEXT("PartFrame"), TEXT("PartFlash") })
+		{
+			UImage* const Image = NewHUDImage(WidgetBlueprint, Name, FLinearColor::White, FVector2D(104.f, 104.f), true);
+			FSlateBrush Brush;
+			Brush.SetResourceObject(PartFrameTexture);
+			Brush.ImageSize = FVector2D(104.f, 104.f);
+			Image->SetBrush(Brush);
+			UCanvasPanelSlot* const FrameSlot = Root->AddChildToCanvas(Image);
+			FrameSlot->SetAutoSize(true);
+			FrameSlot->SetAlignment(FVector2D(0.5f, 0.5f));
+			FrameSlot->SetPosition(Preview);
+		}
+	}
 
 	// 주황 귀퉁이 4개(각 2px L자) + 가운데 마름모. 버튼의 포커스 브래킷과 같은 형태 언어.
 	USizeBox* const Box = NewSizeBox(WidgetBlueprint, TEXT("Box"), 64.f, 64.f);
@@ -335,6 +353,13 @@ bool UknightUIEditorLibrary::BuildHUDLockOnMarker(UWidgetBlueprint* WidgetBluepr
 	UHorizontalBoxSlot* const NameSlot = NameRow->AddChildToHorizontalBox(NewText(WidgetBlueprint, TEXT("Txt_TargetName"), NameStyle, INVTEXT("TARGET"), true));
 	NameSlot->SetVerticalAlignment(VAlign_Center);
 	AddToColumn(Plate, NameRow, HAlign_Left);
+	// 부위 이름: 눈금(4) + 간격(8)만큼 들여서 몬스터 이름과 맞춘다. 부위가 없으면 C++가 접는다.
+	UCommonTextBlock* const PartName = NewText(WidgetBlueprint, TEXT("Txt_PartName"), CaptionStyle, INVTEXT("PART"), true);
+	AddToColumn(Plate, PartName, HAlign_Left);
+	if (UVerticalBoxSlot* const PartSlot = Cast<UVerticalBoxSlot>(PartName->Slot))
+	{
+		PartSlot->SetPadding(FMargin(12.f, 2.f, 0.f, 0.f));
+	}
 	UCanvasPanelSlot* const PlateSlot = Root->AddChildToCanvas(Plate);
 	PlateSlot->SetAutoSize(true);
 	PlateSlot->SetAlignment(FVector2D(0.f, 1.f));

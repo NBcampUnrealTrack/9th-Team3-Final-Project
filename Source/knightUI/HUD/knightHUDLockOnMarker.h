@@ -4,6 +4,7 @@
 #include "Blueprint/UserWidget.h"
 #include "Containers/Ticker.h"
 #include "FieldNotificationId.h"
+#include "Monster/knightMonsterPartComponent.h"
 #include "knightHUDLockOnMarker.generated.h"
 
 class UCommonTextBlock;
@@ -15,9 +16,13 @@ class UknightVM_PlayerStatus;
  * Lock-on marker: corner box on the locked target, a leader line branching up and out from the box, and a name plate
  * at the end of the line showing only the target's name.
  *
+ * When the lock is on a monster part, a part frame around the box shows the part's condition by color (red, dark red
+ * blinking when critical, gray when broken, neutral when unbreakable) and flashes when the condition changes.
+ *
  * Fills the HUD; the pieces are positioned every frame from the target's projected screen position, so they must be
- * direct children of the root Canvas Panel: Box, Line_Diagonal, Line_Shelf, Plate (and Txt_TargetName anywhere).
- * The branch flips to the left when the target is on the right side of the screen. Ticks only while locked.
+ * direct children of the root Canvas Panel: Box, PartFrame, PartFlash, Line_Diagonal, Line_Shelf, Plate (and
+ * Txt_TargetName / Txt_PartName anywhere). The branch flips to the left when the target is on the right side of the
+ * screen. Ticks only while locked.
  */
 UCLASS(Abstract, Blueprintable, meta=(DisableNativeTick))
 class KNIGHTUI_API UknightHUDLockOnMarker : public UUserWidget
@@ -43,8 +48,50 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category="Knight|HUD", meta=(BindWidgetOptional))
 	TObjectPtr<UCommonTextBlock> Txt_TargetName;
 
+	/** Tinted by the locked part's condition. */
+	UPROPERTY(BlueprintReadOnly, Category="Knight|HUD", meta=(BindWidgetOptional))
+	TObjectPtr<UWidget> PartFrame;
+
+	/** White copy of the frame, shown briefly when the condition changes. */
+	UPROPERTY(BlueprintReadOnly, Category="Knight|HUD", meta=(BindWidgetOptional))
+	TObjectPtr<UWidget> PartFlash;
+
+	UPROPERTY(BlueprintReadOnly, Category="Knight|HUD", meta=(BindWidgetOptional))
+	TObjectPtr<UCommonTextBlock> Txt_PartName;
+
 	UPROPERTY(EditAnywhere, Category="Knight|HUD")
 	TObjectPtr<USoundBase> LockOnSound;
+
+	/** Played when the locked part turns critical or breaks. */
+	UPROPERTY(EditAnywhere, Category="Knight|HUD")
+	TObjectPtr<USoundBase> PartConditionSound;
+
+	UPROPERTY(EditAnywhere, Category="Knight|HUD|Part")
+	FLinearColor NormalColor = FLinearColor(FColor(0xFF, 0x3B, 0x30));
+
+	UPROPERTY(EditAnywhere, Category="Knight|HUD|Part")
+	FLinearColor CriticalColor = FLinearColor(FColor(0x9E, 0x1B, 0x1B));
+
+	UPROPERTY(EditAnywhere, Category="Knight|HUD|Part")
+	FLinearColor BrokenColor = FLinearColor(FColor(0x7A, 0x7F, 0x87));
+
+	UPROPERTY(EditAnywhere, Category="Knight|HUD|Part")
+	FLinearColor UnbreakableColor = FLinearColor(FColor(0xA8, 0xC8, 0xF0));
+
+	/** One full fade out and back in while the part is critical. */
+	UPROPERTY(EditAnywhere, Category="Knight|HUD|Part", meta=(ClampMin=0.1, Units="s"))
+	float CriticalBlinkPeriod = 1.4f;
+
+	/** Lowest frame opacity in the critical blink. */
+	UPROPERTY(EditAnywhere, Category="Knight|HUD|Part", meta=(ClampMin=0, ClampMax=1))
+	float CriticalBlinkMinOpacity = 0.25f;
+
+	UPROPERTY(EditAnywhere, Category="Knight|HUD|Part", meta=(ClampMin=0, Units="s"))
+	float FlashTime = 0.35f;
+
+	/** Flash scale at the moment of the change, shrinking to 1. */
+	UPROPERTY(EditAnywhere, Category="Knight|HUD|Part", meta=(ClampMin=1))
+	float FlashStartScale = 1.5f;
 
 	/** Side of the corner box, in slate units at 1080p. */
 	UPROPERTY(EditAnywhere, Category="Knight|HUD|Layout", meta=(ClampMin=8))
@@ -88,6 +135,8 @@ protected:
 private:
 	void HandleViewModelChanged(UObject* InViewModel, UE::FieldNotification::FFieldId FieldId);
 	void RefreshLockState();
+	void RefreshPart();
+	void HandleLockedPartConditionChanged(EknightPartCondition NewCondition);
 	bool TickMarker(float DeltaTime);
 	void StopTicking();
 	bool UpdateLayout();
@@ -97,6 +146,9 @@ private:
 	TWeakObjectPtr<UknightVM_PlayerStatus> ViewModel;
 	TWeakObjectPtr<AActor> ShownTarget;
 	FTSTicker::FDelegateHandle Ticker;
+	FDelegateHandle PartConditionHandle;
 	float AnimTime = 0.f;
+	/** Time since the last condition flash; starts past the end so nothing flashes on lock. */
+	float FlashElapsed = TNumericLimits<float>::Max();
 	bool bFlipped = false;
 };
