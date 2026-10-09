@@ -27,6 +27,7 @@ class UCurveFloat;
  * 경직과 캔슬 (2026-10-07):
  *   흐름: 대시 이동(DashDuration) → 경직(RecoveryDuration) → 종료. 몽타주는 경직까지 이어서 재생된다.
  *   경직 중에는 이동 입력으로 가속하지 않고(미끄러지며 정지) Window.Cancel을 켠다.
+ *   단, 대시가 끝날 때 대시 방향 쪽으로 방향키를 누르고 있으면 이동을 잠그지 않는다(관성 이어가기, 2026-10-09, CarryMomentumMaxAngle).
  *     - 공격·가드: Window.Cancel 덕분에 활성화 그룹 규칙대로 대시를 대신한다. 대시 중 미리 누른 입력은 버퍼에서 나간다.
  *     - 대시: 실행 중에 퀵스텝 키(InputTag.Boost)를 다시 누르면 입력 처리(knightAbilitySystemComponent)가 재발동을 시도한다.
  *       경직 중이고 쿨타임이 끝났을 때만 받아들여 지금 대시를 끝내고 새 대시로 다시 시작한다(bRetriggerInstancedAbility, 비용 다시 냄).
@@ -64,6 +65,15 @@ protected:
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Dash", meta=(ClampMin=0, Units="s"))
 	float RecoveryDuration = 0.1f;
+
+	/**
+	 * 관성 이어가기 각도 (2026-10-09 사용자 결정, 바뀔 수 있는 값). 대시가 끝날 때 대시 방향에서 이 각도 안쪽으로 방향키를 누르고 있으면
+	 * 경직 동안 이동을 잠그지 않아, 걷기·달리기 속도 그대로 이어서 움직인다. 방향키를 안 누르거나 이 각도 밖이면 전처럼 미끄러지며 버틴다.
+	 * (출발 Easing을 넣은 뒤 '퀵스텝 → 경직에서 거의 정지 → 느린 출발'이 어색해서 넣음. 캔슬 창은 어느 쪽이든 그대로)
+	 * 0이면 항상 잠근다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Dash", meta=(ClampMin=0, ClampMax=180, Units="Degrees"))
+	float CarryMomentumMaxAngle = 90.f;
 
 	/**
 	 * 대시 몽타주 재생 속도(고정). 어빌리티가 끝나면(대시 + 경직) 그 지점에서 블렌드 아웃된다.
@@ -142,6 +152,9 @@ private:
 	bool bCancelWindowApplied = false;
 	bool bMoveLockApplied = false;
 	bool bInRecovery = false;
+
+	/** 이번 대시의 방향(수평 단위 벡터). 경직에서 관성 이어가기 여부를 정할 때 쓴다. */
+	FVector DashDirection = FVector::ZeroVector;
 
 	/** 이 월드 시각(초)이 지나기 전에는 다시 발동할 수 없다. 어빌리티가 액터별 인스턴스라 액터마다 따로 기록된다. */
 	float CooldownEndTime = 0.f;
