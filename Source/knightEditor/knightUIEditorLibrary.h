@@ -115,4 +115,11 @@ public:
 	/** WBP_KnightLoadingScreen: 검은 배경, 가운데 마크와 팁 한 줄, 오른쪽 아래 점 세 개. */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
 	static bool BuildLoadingScreen(UWidgetBlueprint* WidgetBlueprint, UTexture2D* Mark, TSubclassOf<UCommonTextStyle> TipStyle);
+
+	/**
+	 * 기존 WBP_KnightTitleMenu에 시작 로고 화면(Panel_Intro: 검은 막 + 팀 로고 + 엔진 로고, 맨 위)과 메뉴 자리의 Txt_PressKey를 더한다.
+	 * 나머지 트리는 건드리지 않는다. 다시 부르면 두 위젯을 지우고 새로 만든다.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
+	static bool AddTitleIntro(UWidgetBlueprint* WidgetBlueprint, UTexture2D* StudioLogo, UTexture2D* EngineLogo, TSubclassOf<UCommonTextStyle> PressKeyStyle);
 };

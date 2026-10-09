@@ -63,6 +63,9 @@ public:
 	void DebugFailNextRaidLoad() { bDebugFailNextRaidLoad = true; }
 #endif
 
+	/** The startup logos play once per game session; returning to the title later skips them. Returns true the first time. */
+	bool ConsumeStartupIntro() { return !bStartupIntroPlayed && (bStartupIntroPlayed = true); }
+
 	/** Native GameMode initialization hook; call from a Gameplay GameMode's InitGame. */
 	void RegisterEnteredGameplay(UWorld* EnteredWorld);
 
@@ -109,6 +112,7 @@ private:
 	TWeakObjectPtr<UWorld> RegisteredWorld;
 	FDelegateHandle TravelFailureHandle;
 	FDelegateHandle PostLoadMapHandle;
+	bool bStartupIntroPlayed = false;
 #if WITH_EDITOR
 	bool bDebugFailNextRaidLoad = false;
 #endif
