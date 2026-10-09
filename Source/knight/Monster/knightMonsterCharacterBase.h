@@ -21,6 +21,7 @@ class UknightMonsterPartComponent;
 class UknightMonsterPushOutComponent;
 class UknightMonsterTargetingComponent;
 class UMotionWarpingComponent;
+struct FGameplayEventData;
 struct FGameplayEffectSpec;
 
 class AknightMonsterCharacterBase;
@@ -83,6 +84,9 @@ protected:
 		float Magnitude, float OldValue, float NewValue);
 	void HandleStaminaDepleted(AActor* EffectInstigator, AActor* EffectCauser, const FGameplayEffectSpec* EffectSpec,
 		float Magnitude, float OldValue, float NewValue);
+
+	/** 퍼펙트 가드를 당하면(Event.Parried) MonsterDefinition의 ParriedPoiseDamageRatio만큼 경직도를 깎는다. */
+	void HandleParried(const FGameplayEventData* Payload);
 
 	/** The first target of this life sends Event.Monster.Engaged (an encounter roar ability triggers on it). */
 	UFUNCTION()

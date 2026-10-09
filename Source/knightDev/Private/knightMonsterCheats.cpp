@@ -12,6 +12,7 @@
 //   knight.Monster.SetHealth <Percent>                0-100 (또는 0-1). 낮출 때는 Damage, 올릴 때는 Healing을 거친다
 //   knight.Monster.Kill [all]                         남은 Health만큼 피해를 넣는다
 //   knight.Monster.Enrage / Exhaust / PoiseBreak      Rage를 채우고, Stamina를 비우고, Poise를 비운다
+//   knight.Monster.Parried                            플레이어가 퍼펙트 가드에 성공한 것처럼 Event.Parried를 보낸다
 //   knight.Monster.FreezeAI [0|1]                     모든 몬스터의 StateTree를 멈추거나 재개한다. 인자가 없으면 토글한다
 //   knight.Monster.Status [all]                       속성, 상태 태그, 타깃, 부위를 로그로 출력한다
 //   knight.Player.Invulnerable [0|1]                  플레이어에 State.Invulnerable을 건다. 인자가 없으면 토글한다
@@ -428,6 +429,23 @@ namespace knightMonsterCheats
 		LogHealth(Monster, TEXT("knight.Monster.PoiseBreak"));
 	}
 
+	// knight.Monster.Parried
+	static void ParriedCommand(const TArray<FString>& Args, UWorld* World)
+	{
+		AknightMonsterCharacterBase* const Monster = FindTargetMonster(World);
+		UAbilitySystemComponent* const ASC = Monster ? Monster->GetAbilitySystemComponent() : nullptr;
+		if (!ASC)
+		{
+			return;
+		}
+		FGameplayEventData Payload;
+		Payload.EventTag = knightGameplayTags::Event_Parried;
+		Payload.Instigator = GetPlayerPawn(World);
+		Payload.Target = Monster;
+		ASC->HandleGameplayEvent(Payload.EventTag, &Payload);
+		LogHealth(Monster, TEXT("knight.Monster.Parried"));
+	}
+
 	// knight.Monster.FreezeAI [0|1]
 
 	static void FreezeAICommand(const TArray<FString>& Args, UWorld* World)
@@ -681,6 +699,9 @@ namespace knightMonsterCheats
 	static FAutoConsoleCommandWithWorldAndArgs PoiseBreakCmd(TEXT("knight.Monster.PoiseBreak"),
 		TEXT("Empties the target monster's Poise through PoiseDamage."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&PoiseBreakCommand), ECVF_Cheat);
+	static FAutoConsoleCommandWithWorldAndArgs ParriedCmd(TEXT("knight.Monster.Parried"),
+		TEXT("Sends Event.Parried to the target monster as if the player had just perfect-guarded its attack (parry reaction + poise damage)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&ParriedCommand), ECVF_Cheat);
 	static FAutoConsoleCommandWithWorldAndArgs FreezeAICmd(TEXT("knight.Monster.FreezeAI"),
 		TEXT("knight.Monster.FreezeAI [0|1]. Pauses or resumes every monster's StateTree; no argument toggles."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&FreezeAICommand), ECVF_Cheat);
