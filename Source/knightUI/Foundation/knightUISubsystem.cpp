@@ -16,6 +16,7 @@
 #include "TimerManager.h"
 #include "Types/MVVMViewModelCollection.h"
 #include "ViewModels/knightVM_BossStatus.h"
+#include "Foundation/knightPilotVoice.h"
 #include "ViewModels/knightVM_PlayerStatus.h"
 #include "ViewModels/knightVM_Raid.h"
 #include "knightUI.h"
@@ -43,6 +44,7 @@ void UknightUISubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	PlayerStatusVM = NewObject<UknightVM_PlayerStatus>(this);
 	BossStatusVM = NewObject<UknightVM_BossStatus>(this);
 	RaidVM = NewObject<UknightVM_Raid>(this);
+	PilotVoice = NewObject<UknightPilotVoice>(this);
 	RegisterViewModels();
 }
 
@@ -56,6 +58,7 @@ void UknightUISubsystem::Deinitialize()
 	PlayerStatusVM->Unbind();
 	BossStatusVM->Unbind();
 	RaidVM->Unbind();
+	PilotVoice->Unbind();
 	UnregisterViewModels();
 	Super::Deinitialize();
 }
@@ -139,6 +142,7 @@ void UknightUISubsystem::BindToController(APlayerController* PlayerController)
 
 	BindPawn(PlayerController->GetPawn());
 	RaidVM->Bind(PlayerController->GetWorld()->GetGameState<AknightRaidGameState>());
+	PilotVoice->BindRaid(PlayerController->GetWorld()->GetGameState<AknightRaidGameState>());
 	BossStatusVM->Unbind();
 
 	const float Interval = GetDefault<UknightUISettings>()->ViewModelRefreshInterval;
@@ -149,6 +153,7 @@ void UknightUISubsystem::BindPawn(APawn* Pawn)
 {
 	PlayerStatusVM->Bind(UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Pawn),
 		Pawn ? Pawn->FindComponentByClass<UknightTargetLockComponent>() : nullptr);
+	PilotVoice->BindPawn(UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Pawn));
 }
 
 void UknightUISubsystem::HandlePossessedPawnChanged(APawn* OldPawn, APawn* NewPawn)
@@ -159,6 +164,7 @@ void UknightUISubsystem::HandlePossessedPawnChanged(APawn* OldPawn, APawn* NewPa
 void UknightUISubsystem::RefreshViewModels()
 {
 	RaidVM->RefreshTimer();
+	PilotVoice->Refresh();
 
 	// Raid targets are registered after actors begin play, so the boss binds late, on the first refresh that sees it.
 	if (!BossStatusVM->HasMonster())

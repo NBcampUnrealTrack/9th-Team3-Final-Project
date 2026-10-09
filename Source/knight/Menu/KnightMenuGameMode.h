@@ -15,6 +15,7 @@ public:
 	AKnightMenuGameMode();
 
 	virtual void InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage) override;
+	virtual void StartPlay() override;
 
 	EKnightFlowState GetMenuFlowState() const { return MenuFlowState; }
 	TSubclassOf<class UKnightMenuWidgetBase> GetMenuWidgetClass() const { return MenuWidgetClass; }
@@ -27,4 +28,8 @@ protected:
 	/** Title and main menu GameMode Blueprints supply their own root WBP class. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Knight|Menu")
 	TSubclassOf<class UKnightMenuWidgetBase> MenuWidgetClass;
+
+	/** Looping music for this menu map; none keeps the menu silent. Stops with the map. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Knight|Menu")
+	TSoftObjectPtr<class USoundBase> MenuMusic;
 };

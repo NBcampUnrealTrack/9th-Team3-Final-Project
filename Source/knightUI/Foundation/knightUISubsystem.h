@@ -8,6 +8,7 @@
 class APawn;
 class APlayerController;
 class UCommonActivatableWidget;
+class UknightPilotVoice;
 class UknightPrimaryGameLayout;
 class UknightVM_BossStatus;
 class UknightVM_PlayerStatus;
@@ -62,6 +63,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UknightVM_Raid> RaidVM;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UknightPilotVoice> PilotVoice;
 
 	TWeakObjectPtr<UknightPrimaryGameLayout> Layout;
 	TWeakObjectPtr<APlayerController> BoundController;

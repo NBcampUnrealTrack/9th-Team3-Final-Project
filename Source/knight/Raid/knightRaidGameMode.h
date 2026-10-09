@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GameplayEffectTypes.h"
 #include "GameplayTagContainer.h"
 #include "knightGameMode.h"
 #include "Raid/knightRaidTypes.h"
@@ -9,6 +10,7 @@
 class AknightMonsterCharacterBase;
 class AknightRaidGameState;
 class UknightRaidDefinition;
+class USoundBase;
 
 /**
  * GameMode for raid maps: Deploy -> Explore <-> Combat -> Success / Failed -> Returning.
@@ -86,8 +88,10 @@ private:
 
 	void HandleMonsterEnragedChanged(const FGameplayTag Tag, int32 NewCount);
 
-	/** Picks the music state from the raid phase and the target monsters' rage. */
+	/** Picks the music state from the raid phase and the target monsters' rage, and the combat track (see CombatMusic). */
 	void UpdateMusic();
+	void UpdateCombatMusic(EknightRaidPhase Phase);
+	void HandleMonsterHealthChanged(const FOnAttributeChangeData& Data);
 
 	virtual void ReturnToMainMenu() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -99,6 +103,12 @@ private:
 	TArray<TWeakObjectPtr<AknightMonsterCharacterBase>> TargetMonsters;
 
 	TSet<TWeakObjectPtr<AActor>> MonstersFightingPlayer;
+
+	/** Combat track playing now; null before the first fight and after the raid ends. */
+	UPROPERTY(Transient)
+	TObjectPtr<USoundBase> PlayingCombatTrack;
+	bool bCombatMusicLowHealth = false;
+	bool bCombatMusicEnded = false;
 	FGameplayTagContainer BrokenParts;
 	FTimerHandle PhaseTimer;
 	FTimerHandle TimeLimitTimer;
