@@ -62,6 +62,16 @@ struct FknightMonsterTargetEvaluatorInstanceData
 	/** 반응(다운, 경직, 포효)이 진행 중이다: State.Monster.Reacting. 행동하지 말고 기다린다. */
 	UPROPERTY(EditAnywhere, Category="Output")
 	bool bIsReacting = false;
+
+	/** 몬스터 정의(UknightMonsterDefinition)의 AI 거리. 공용 StateTree가 몬스터 크기에 맞춰 추격·원거리 판단을 하도록 바인딩한다. */
+	UPROPERTY(EditAnywhere, Category="Output")
+	float ChaseStopDistance = 900.f;
+
+	UPROPERTY(EditAnywhere, Category="Output")
+	float RangedMinDistance = 533.f;
+
+	UPROPERTY(EditAnywhere, Category="Output")
+	float RangedMaxDistance = 2000.f;
 };
 
 USTRUCT(meta=(DisplayName="Knight Monster Target", Category="Knight"))

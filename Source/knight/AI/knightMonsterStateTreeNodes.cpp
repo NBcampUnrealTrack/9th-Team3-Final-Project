@@ -6,6 +6,7 @@
 #include "Abilities/GameplayAbility.h"
 #include "AbilitySystem/Abilities/knightGameplayAbility_MonsterAttack.h"
 #include "Monster/knightMonsterCharacterBase.h"
+#include "Monster/knightMonsterDefinition.h"
 #include "Monster/knightMonsterMovementComponent.h"
 #include "Monster/knightMonsterTargetingComponent.h"
 #include "StateTreeAsyncExecutionContext.h"
@@ -64,6 +65,13 @@ void FknightStateTreeMonsterTargetEvaluator::Update(FInstanceDataType& InstanceD
 		InstanceData.bEnraged = ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Enraged);
 		InstanceData.bExhausted = ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Exhausted);
 		InstanceData.bIsReacting = ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Reacting);
+	}
+
+	if (const UknightMonsterDefinition* const Definition = Monster ? Monster->GetMonsterDefinition() : nullptr)
+	{
+		InstanceData.ChaseStopDistance = Definition->ChaseStopDistance;
+		InstanceData.RangedMinDistance = Definition->RangedMinDistance;
+		InstanceData.RangedMaxDistance = Definition->RangedMaxDistance;
 	}
 }
 
