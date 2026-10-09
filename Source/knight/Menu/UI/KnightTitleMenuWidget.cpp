@@ -7,6 +7,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "KnightSaveSlotCard.h"
+#include "LoadingScreenManager.h"
 #include "Misc/Paths.h"
 #include "Progression/knightSaveGame.h"
 #include "Progression/knightSaveSubsystem.h"
@@ -41,6 +42,17 @@ void UKnightTitleMenuWidget::NativeOnInitialized()
 void UKnightTitleMenuWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
+	// Decided before the first page focus, so focus stays on the widget itself until the menu is shown.
+	const bool bCanWaitForKey = Txt_PressKey && VerticalBox_Menu;
+	UKnightGameFlowSubsystem* const Flow = GetFlow();
+	if (bCanWaitForKey && Panel_Intro && Img_StudioLogo && Img_EngineLogo && Flow && Flow->ConsumeStartupIntro())
+	{
+		EnterIntroPhase(EKnightTitleIntroPhase::StudioLogo);
+	}
+	else
+	{
+		EnterIntroPhase(bCanWaitForKey ? EKnightTitleIntroPhase::PressKey : EKnightTitleIntroPhase::Menu);
+	}
 	ApplyPage(EKnightTitlePage::Home, true);
 	if (UknightSaveSubsystem* const Save = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr)
 	{
@@ -65,6 +77,161 @@ void UKnightTitleMenuWidget::NativeDestruct()
 		Save->OnSaveFinished.RemoveDynamic(this, &ThisClass::HandleSaveFinished);
 	}
 	Super::NativeDestruct();
+}
+
+void UKnightTitleMenuWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+	if (!IsMenuShown())
+	{
+		TickIntro(InDeltaTime);
+	}
+}
+
+FReply UKnightTitleMenuWidget::NativeOnPreviewKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
+{
+	// Before the menu every key only moves the intro on, Escape included (it would open settings otherwise).
+	if (!IsMenuShown())
+	{
+		if (!InKeyEvent.IsRepeat()) AdvanceIntro();
+		return FReply::Handled();
+	}
+	return Super::NativeOnPreviewKeyDown(InGeometry, InKeyEvent);
+}
+
+FReply UKnightTitleMenuWidget::NativeOnPreviewMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	if (!IsMenuShown())
+	{
+		AdvanceIntro();
+		return FReply::Handled();
+	}
+	return Super::NativeOnPreviewMouseButtonDown(InGeometry, InMouseEvent);
+}
+
+void UKnightTitleMenuWidget::EnterIntroPhase(EKnightTitleIntroPhase NewPhase)
+{
+	IntroPhase = NewPhase;
+	IntroPhaseTime = 0.f;
+	const bool bLogos = NewPhase == EKnightTitleIntroPhase::StudioLogo || NewPhase == EKnightTitleIntroPhase::EngineLogo;
+	if (Panel_Intro) Panel_Intro->SetVisibility(IsMenuShown() ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
+	if (Img_IntroBackdrop) Img_IntroBackdrop->SetRenderOpacity(bLogos || NewPhase == EKnightTitleIntroPhase::FadeIn ? 1.f : 0.f);
+	// Both start hidden; TickIntro shows the one whose turn it is.
+	if (Img_StudioLogo) Img_StudioLogo->SetRenderOpacity(0.f);
+	if (Img_EngineLogo) Img_EngineLogo->SetRenderOpacity(0.f);
+	if (Txt_PressKey)
+	{
+		Txt_PressKey->SetVisibility(IsMenuShown() ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+		Txt_PressKey->SetRenderOpacity(1.f);
+	}
+	if (VerticalBox_Menu)
+	{
+		const bool bItemsShown = NewPhase == EKnightTitleIntroPhase::Reveal || IsMenuShown();
+		VerticalBox_Menu->SetVisibility(bItemsShown ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Hidden);
+		SetMenuItemsReveal(IsMenuShown() ? TNumericLimits<float>::Max() : 0.f);
+	}
+	if (NewPhase == EKnightTitleIntroPhase::Reveal && PressKeySound)
+	{
+		UGameplayStatics::PlaySound2D(this, PressKeySound);
+	}
+	FocusCurrentPage();
+}
+
+void UKnightTitleMenuWidget::AdvanceIntro()
+{
+	switch (IntroPhase)
+	{
+	case EKnightTitleIntroPhase::StudioLogo:
+	case EKnightTitleIntroPhase::EngineLogo:
+	case EKnightTitleIntroPhase::FadeIn:
+		EnterIntroPhase(EKnightTitleIntroPhase::PressKey);
+		break;
+	case EKnightTitleIntroPhase::PressKey:
+		EnterIntroPhase(EKnightTitleIntroPhase::Reveal);
+		break;
+	default:
+		// Reveal: the items are already coming in; input waits for them.
+		break;
+	}
+}
+
+void UKnightTitleMenuWidget::TickIntro(float DeltaTime)
+{
+	// At startup the loading screen stays up a moment after the title is ready; the intro waits for it.
+	const ULoadingScreenManager* const LoadingScreen = GetGameInstance() ? GetGameInstance()->GetSubsystem<ULoadingScreenManager>() : nullptr;
+	if (LoadingScreen && LoadingScreen->GetLoadingScreenDisplayStatus())
+	{
+		return;
+	}
+	IntroPhaseTime += DeltaTime;
+	const float LogoTime = LogoFadeTime * 2.f + LogoHoldTime + LogoGapTime;
+	switch (IntroPhase)
+	{
+	case EKnightTitleIntroPhase::StudioLogo:
+	case EKnightTitleIntroPhase::EngineLogo:
+	{
+		const bool bStudio = IntroPhase == EKnightTitleIntroPhase::StudioLogo;
+		ShowLogo(bStudio ? Img_StudioLogo : Img_EngineLogo, IntroPhaseTime);
+		if (IntroPhaseTime >= LogoTime)
+		{
+			EnterIntroPhase(bStudio ? EKnightTitleIntroPhase::EngineLogo : EKnightTitleIntroPhase::FadeIn);
+		}
+		break;
+	}
+	case EKnightTitleIntroPhase::FadeIn:
+		if (Img_IntroBackdrop) Img_IntroBackdrop->SetRenderOpacity(1.f - FMath::SmoothStep(0.f, LogoFadeTime, IntroPhaseTime));
+		if (IntroPhaseTime >= LogoFadeTime) EnterIntroPhase(EKnightTitleIntroPhase::PressKey);
+		break;
+	case EKnightTitleIntroPhase::PressKey:
+		if (Txt_PressKey)
+		{
+			const float Wave = 0.5f + 0.5f * FMath::Cos(IntroPhaseTime * UE_TWO_PI / PressKeyBlinkPeriod);
+			Txt_PressKey->SetRenderOpacity(0.35f + 0.65f * Wave);
+		}
+		break;
+	case EKnightTitleIntroPhase::Reveal:
+	{
+		if (Txt_PressKey)
+		{
+			// Fades out from wherever the blink was.
+			Txt_PressKey->SetRenderOpacity(FMath::Min(Txt_PressKey->GetRenderOpacity(), 1.f - IntroPhaseTime / PressKeyFadeOutTime));
+		}
+		const float ItemTime = IntroPhaseTime - PressKeyFadeOutTime;
+		SetMenuItemsReveal(ItemTime);
+		const int32 ItemCount = VerticalBox_Menu ? VerticalBox_Menu->GetChildrenCount() : 0;
+		if (ItemTime >= FMath::Max(ItemCount - 1, 0) * ItemRevealStagger + ItemRevealTime)
+		{
+			EnterIntroPhase(EKnightTitleIntroPhase::Menu);
+		}
+		break;
+	}
+	default:
+		break;
+	}
+}
+
+void UKnightTitleMenuWidget::ShowLogo(UWidget* Logo, float Time) const
+{
+	if (!Logo) return;
+	const float FadeOutStart = LogoFadeTime + LogoHoldTime;
+	const float Alpha = Time < LogoFadeTime ? FMath::SmoothStep(0.f, LogoFadeTime, Time)
+		: 1.f - FMath::SmoothStep(FadeOutStart, FadeOutStart + LogoFadeTime, Time);
+	const float Grow = FMath::Clamp(Time / (FadeOutStart + LogoFadeTime), 0.f, 1.f);
+	Logo->SetRenderOpacity(Alpha);
+	Logo->SetRenderScale(FVector2D(FMath::Lerp(LogoStartScale, 1.f, 1.f - FMath::Square(1.f - Grow))));
+}
+
+void UKnightTitleMenuWidget::SetMenuItemsReveal(float Time) const
+{
+	if (!VerticalBox_Menu) return;
+	for (int32 Index = 0; Index < VerticalBox_Menu->GetChildrenCount(); ++Index)
+	{
+		UWidget* const Item = VerticalBox_Menu->GetChildAt(Index);
+		const float Linear = FMath::Clamp((Time - Index * ItemRevealStagger) / ItemRevealTime, 0.f, 1.f);
+		const float Eased = 1.f - FMath::Cube(1.f - Linear);
+		Item->SetRenderOpacity(Eased);
+		Item->SetRenderTranslation(FVector2D(ItemRevealOffset * (1.f - Eased), 0.f));
+	}
 }
 
 bool UKnightTitleMenuWidget::ShowPage(EKnightTitlePage NewPage)
@@ -141,6 +308,11 @@ void UKnightTitleMenuWidget::HandleSettingsClosed() { ShowPage(EKnightTitlePage:
 
 UWidget* UKnightTitleMenuWidget::GetPreferredFocusTarget() const
 {
+	if (!IsMenuShown())
+	{
+		// The menu buttons stay visible inside a hidden box, so they would still pass CanFocusButton.
+		return const_cast<UKnightTitleMenuWidget*>(this);
+	}
 	if (CurrentPage != EKnightTitlePage::Home)
 	{
 		if (CurrentPage == EKnightTitlePage::SaveSelect)

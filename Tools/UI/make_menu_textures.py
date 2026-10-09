@@ -10,6 +10,8 @@ T_UI_GradientLeft.png  white with alpha fading left to right, tinted in UMG.
 T_UI_LoadingMark.png   placeholder emblem for the loading screen: tall four-point star through a ring, white on transparent.
 T_UI_PartFrame.png     lock-on part frame (/Game/Knight/UI/HUD/Textures): hexagon outline with three inward triangles,
                        white on transparent, tinted in UMG by the part condition. Shown at 104 x 104.
+T_UI_StudioLogo.png    team logo (Transparent Dragon) for the startup intro, final colors, 1024x1024 with mipmaps.
+T_UI_UnrealLogo.png    "Unreal Engine icon - white.png" (Epic branding download) scaled to 512. Do not recolor or reshape it.
 
 Continents are random but seeded, and pushed up under the stage-select sample regions so markers sit on land.
 """
@@ -173,6 +175,65 @@ def make_part_frame(out_dir):
     rgba.save(os.path.join(out_dir, "T_UI_PartFrame.png"))
 
 
+def make_studio_logo(font_dir, out_dir):
+    # Team logo for the startup intro: a dragon coiled into an open ring around an eye, "TRANSPARENT / DRAGON" below.
+    # Coordinates are in layout units (1 unit = 4 px), drawn 3x larger again and scaled down.
+    unit, ss = 4, 3
+    width, height = 300, 270
+    k = unit * ss
+    white, frost, orange, back = (244, 248, 252, 255), (168, 200, 240, 255), (255, 122, 26, 255), (0, 0, 0, 0)
+    img = Image.new("RGBA", (width * k, height * k), back)
+    draw = ImageDraw.Draw(img)
+    cx, cy = 150, 92
+    p = lambda x, y: ((cx + x) * k, (cy + y) * k)
+
+    # Body: open ring from the tail (upper right) round to the head; the gap is where the head meets the tail.
+    r, w = 62, 6
+    draw.arc([p(-r - w / 2, -r - w / 2), p(r + w / 2, r + w / 2)], start=13.1, end=308.4, fill=white, width=w * k)
+    # Spine: small notches cut along the body.
+    for a in range(20, 305, 12):
+        rad = math.radians(a)
+        x, y = math.cos(rad) * r, math.sin(rad) * r
+        draw.ellipse([p(x - 1.1, y - 1.1), p(x + 1.1, y + 1.1)], fill=back)
+    draw.polygon([p(60, 14), p(82, -12), p(70, 18)], fill=white)
+    jaw = Image.new("RGBA", img.size, back)
+    ImageDraw.Draw(jaw).polygon([p(60, 14), p(90, 4), p(72, 22)], fill=white[:3] + (140,))
+    img.alpha_composite(jaw)
+    draw.polygon([p(42, -50), p(50, -72), p(36, -46)], fill=frost)
+    # Inner ring and the eye.
+    inner = Image.new("RGBA", img.size, back)
+    ImageDraw.Draw(inner).ellipse([p(-36, -36), p(36, 36)], outline=frost[:3] + (80,), width=k)
+    img.alpha_composite(inner)
+    draw.line([p(0, -20), p(7, 0), p(0, 20), p(-7, 0), p(0, -20)], fill=orange, width=int(2 * k), joint="curve")
+
+    # Wordmark.
+    bold = ImageFont.truetype(os.path.join(font_dir, "IBMPlexSansKR-SemiBold.ttf"), 26 * k)
+    light = ImageFont.truetype(os.path.join(font_dir, "IBMPlexSansKR-Regular.ttf"), 20 * k)
+
+    def centred(text, font, tracking, baseline, fill):
+        x = (width * k - tracked_width(draw, text, font, tracking * k)) / 2
+        draw_tracked(draw, x, baseline * k, text, font, tracking * k, fill)
+
+    centred("TRANSPARENT", bold, 9, 204, white)
+    divider_y = 222
+    draw.line([p(-80, divider_y - cy), p(-18, divider_y - cy)], fill=frost[:3] + (128,), width=k)
+    draw.line([p(18, divider_y - cy), p(80, divider_y - cy)], fill=frost[:3] + (128,), width=k)
+    draw.polygon([p(0, divider_y - cy - 4), p(4, divider_y - cy), p(0, divider_y - cy + 4), p(-4, divider_y - cy)], fill=frost)
+    centred("DRAGON", light, 16, 254, frost)
+
+    # Power-of-two canvas so the texture gets mipmaps; the logo grows slowly in the intro and shimmers without them.
+    logo = img.resize((960, 864), Image.LANCZOS)
+    canvas = Image.new("RGBA", (1024, 1024), back)
+    canvas.paste(logo, ((1024 - 960) // 2, (1024 - 864) // 2))
+    canvas.save(os.path.join(out_dir, "T_UI_StudioLogo.png"))
+
+
+def make_unreal_logo(out_dir):
+    # Official white Unreal Engine mark (from Epic's branding page), only scaled down to the size the intro shows.
+    src = os.path.join(out_dir, "Unreal Engine icon - white.png")
+    Image.open(src).convert("RGBA").resize((512, 512), Image.LANCZOS).save(os.path.join(out_dir, "T_UI_UnrealLogo.png"))
+
+
 if __name__ == "__main__":
     if len(sys.argv) not in (2, 3):
         sys.exit(__doc__)
@@ -184,3 +245,5 @@ if __name__ == "__main__":
     make_gradient(out_dir)
     make_loading_mark(out_dir)
     make_part_frame(out_dir)
+    make_studio_logo(font_dir, out_dir)
+    make_unreal_logo(out_dir)

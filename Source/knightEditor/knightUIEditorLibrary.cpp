@@ -1364,3 +1364,45 @@ bool UknightUIEditorLibrary::BuildLoadingScreen(UWidgetBlueprint* WidgetBlueprin
 	EndBuild(WidgetBlueprint);
 	return true;
 }
+
+bool UknightUIEditorLibrary::AddTitleIntro(UWidgetBlueprint* WidgetBlueprint, UTexture2D* StudioLogo, UTexture2D* EngineLogo, TSubclassOf<UCommonTextStyle> PressKeyStyle)
+{
+	UWidgetTree* const Tree = WidgetBlueprint ? WidgetBlueprint->WidgetTree.Get() : nullptr;
+	UCanvasPanel* const Root = Tree ? Cast<UCanvasPanel>(Tree->RootWidget) : nullptr;
+	UCanvasPanel* const Home = Tree ? Cast<UCanvasPanel>(Tree->FindWidget(TEXT("Panel_Home"))) : nullptr;
+	if (!Root || !Home || !StudioLogo || !EngineLogo)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("AddTitleIntro: needs the title menu layout (Canvas_Root, Panel_Home) and both logos."));
+		return false;
+	}
+	RemoveWidget(WidgetBlueprint, TEXT("Panel_Intro"));
+	RemoveWidget(WidgetBlueprint, TEXT("Txt_PressKey"));
+	WidgetBlueprint->Modify();
+	Tree->Modify();
+
+	// Where the text menu starts, lined up with the menu labels (3px bar + 18px gap).
+	UCommonTextBlock* const PressKey = NewText(WidgetBlueprint, TEXT("Txt_PressKey"), PressKeyStyle, INVTEXT("PRESS ANY KEY"), true);
+	PressKey->SetVisibility(ESlateVisibility::HitTestInvisible);
+	AddToCanvas(Home, PressKey, FAnchors(0.f, 0.5f), FVector2D(0.f, 0.f), FMargin(HUDMargin.X + 21.f, 64.f, 0.f, 0.f), true);
+
+	// Last child of the root, so it covers the pages, the back button and the status line. The backdrop also takes the
+	// clicks until the menu is shown; C++ hides the whole panel after that.
+	UOverlay* const Intro = NewWidget<UOverlay>(WidgetBlueprint, TEXT("Panel_Intro"), true);
+	AddFill(Root, Intro);
+	UImage* const Backdrop = NewWidget<UImage>(WidgetBlueprint, TEXT("Img_IntroBackdrop"), true);
+	Backdrop->SetBrush(SolidBrush(FLinearColor::White));
+	Backdrop->SetColorAndOpacity(FLinearColor(FColor(0x05, 0x08, 0x0D)));
+	AddToOverlay(Intro, Backdrop, HAlign_Fill, VAlign_Fill);
+	// The logos scale slowly; with pixel snapping they would move in whole-pixel steps.
+	UImage* const Studio = NewTextureImage(WidgetBlueprint, TEXT("Img_StudioLogo"), StudioLogo, FLinearColor::White, FVector2D(512.f, 512.f));
+	Studio->bIsVariable = true;
+	Studio->SetPixelSnapping(EWidgetPixelSnapping::Disabled);
+	AddToOverlay(Intro, Studio, HAlign_Center, VAlign_Center);
+	UImage* const Engine = NewTextureImage(WidgetBlueprint, TEXT("Img_EngineLogo"), EngineLogo, FLinearColor::White, FVector2D(220.f, 220.f));
+	Engine->bIsVariable = true;
+	Engine->SetPixelSnapping(EWidgetPixelSnapping::Disabled);
+	AddToOverlay(Intro, Engine, HAlign_Center, VAlign_Center);
+
+	EndBuild(WidgetBlueprint);
+	return true;
+}
