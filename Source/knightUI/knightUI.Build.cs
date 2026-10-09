@@ -30,6 +30,8 @@ public class knightUI : ModuleRules
 			"SlateCore",
 			"InputCore",
 			"knightInventory",
+			"knightAudio",
+			"CommonLoadingScreen",
 			"DeveloperSettings"
 		});
 	}

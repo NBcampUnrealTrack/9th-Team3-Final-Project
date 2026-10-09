@@ -4,6 +4,9 @@
 #include "KnightMenuPlayerController.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
+#include "knightAudioSubsystem.h"
+#include "Sound/SoundBase.h"
+#include "System/knightAssetManager.h"
 #include "knight.h"
 
 AKnightMenuGameMode::AKnightMenuGameMode()
@@ -27,5 +30,15 @@ void AKnightMenuGameMode::InitGame(const FString& MapName, const FString& Option
 	if (UKnightGameFlowSubsystem* const Flow = GameInstance ? GameInstance->GetSubsystem<UKnightGameFlowSubsystem>() : nullptr)
 	{
 		Flow->RegisterEnteredMenu(MenuFlowState, World);
+	}
+}
+
+void AKnightMenuGameMode::StartPlay()
+{
+	Super::StartPlay();
+	UknightAudioSubsystem* const Audio = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightAudioSubsystem>() : nullptr;
+	if (Audio && !MenuMusic.IsNull())
+	{
+		Audio->PlayMusic(UknightAssetManager::GetAsset(MenuMusic));
 	}
 }

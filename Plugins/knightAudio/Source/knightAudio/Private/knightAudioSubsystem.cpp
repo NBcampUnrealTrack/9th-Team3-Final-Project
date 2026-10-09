@@ -31,6 +31,8 @@ void UknightAudioSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 void UknightAudioSubsystem::Deinitialize()
 {
 	FCoreUObjectDelegates::PostLoadMapWithWorld.Remove(PostLoadMapHandle);
+	FTSTicker::RemoveTicker(MusicReplayTicker);
+	ClearVoices();
 	Super::Deinitialize();
 }
 
@@ -39,6 +41,8 @@ void UknightAudioSubsystem::HandlePostLoadMap(UWorld* LoadedWorld)
 	if (LoadedWorld && LoadedWorld->GetGameInstance() == GetGameInstance())
 	{
 		ApplyAllVolumes(LoadedWorld);
+		// Lines queued in the previous map belong to it.
+		ClearVoices();
 	}
 }
 
@@ -138,7 +142,7 @@ float UknightAudioSubsystem::ResolveFadeTime(float FadeTime) const
 	return FadeTime >= 0.f ? FadeTime : GetDefault<UknightAudioSettings>()->DefaultMusicFadeTime;
 }
 
-void UknightAudioSubsystem::PlayMusic(USoundBase* Music, float FadeTime)
+void UknightAudioSubsystem::PlayMusic(USoundBase* Music, float FadeTime, float LoopGap)
 {
 	UWorld* const World = GetGameInstance() ? GetGameInstance()->GetWorld() : nullptr;
 	if (!World || !Music)
@@ -152,26 +156,150 @@ void UknightAudioSubsystem::PlayMusic(USoundBase* Music, float FadeTime)
 		{
 			return;
 		}
+		Current->OnAudioFinishedNative.RemoveAll(this);
 		Current->FadeOut(Fade, 0.f);
 	}
-	UAudioComponent* const NewMusic = UGameplayStatics::CreateSound2D(World, Music, 1.f, 1.f, 0.f, nullptr, false, true);
+	FTSTicker::RemoveTicker(MusicReplayTicker);
+	MusicReplayTicker.Reset();
+
+	// A track replayed after a gap must outlive its first play, so it is not auto-destroyed.
+	const bool bReplay = LoopGap > 0.f;
+	UAudioComponent* const NewMusic = UGameplayStatics::CreateSound2D(World, Music, 1.f, 1.f, 0.f, nullptr, false, !bReplay);
 	if (!NewMusic)
 	{
 		return;
 	}
 	NewMusic->SoundClassOverride = GetSoundClass(TEXT("Music"));
 	NewMusic->SetIntParameter(GetDefault<UknightAudioSettings>()->MusicStateParameter, MusicState);
+	if (bReplay)
+	{
+		NewMusic->OnAudioFinishedNative.AddUObject(this, &ThisClass::HandleMusicFinished);
+	}
 	NewMusic->FadeIn(Fade);
 	MusicComponent = NewMusic;
+	MusicLoopGap = LoopGap;
+}
+
+void UknightAudioSubsystem::HandleMusicFinished(UAudioComponent* Component)
+{
+	if (Component != MusicComponent.Get() || MusicReplayTicker.IsValid())
+	{
+		return;
+	}
+	MusicReplayTicker = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateWeakLambda(this, [this](float)
+	{
+		MusicReplayTicker.Reset();
+		ReplayMusic();
+		return false;
+	}), MusicLoopGap);
+}
+
+void UknightAudioSubsystem::ReplayMusic()
+{
+	if (UAudioComponent* const Current = MusicComponent.Get())
+	{
+		Current->SetIntParameter(GetDefault<UknightAudioSettings>()->MusicStateParameter, MusicState);
+		Current->Play();
+	}
 }
 
 void UknightAudioSubsystem::StopMusic(float FadeTime)
 {
+	FTSTicker::RemoveTicker(MusicReplayTicker);
+	MusicReplayTicker.Reset();
 	if (UAudioComponent* const Current = MusicComponent.Get())
 	{
+		Current->OnAudioFinishedNative.RemoveAll(this);
 		Current->FadeOut(ResolveFadeTime(FadeTime), 0.f);
 	}
 	MusicComponent.Reset();
+}
+
+void UknightAudioSubsystem::PlayVoice(USoundBase* Voice, bool bUrgent)
+{
+	if (!Voice)
+	{
+		return;
+	}
+	UAudioComponent* const Current = VoiceComponent.Get();
+	if ((Current && Current->IsPlaying() && Current->GetSound() == Voice) || VoiceQueue.Contains(Voice))
+	{
+		return;
+	}
+	if (!IsVoicePlaying() && !VoiceGapTicker.IsValid())
+	{
+		StartVoice(Voice);
+		return;
+	}
+	const int32 Index = bUrgent ? 0 : VoiceQueue.Num();
+	VoiceQueue.Insert(Voice, Index);
+	VoiceQueueTimes.Insert(FPlatformTime::Seconds(), Index);
+}
+
+bool UknightAudioSubsystem::IsVoicePlaying() const
+{
+	const UAudioComponent* const Current = VoiceComponent.Get();
+	return Current && Current->IsPlaying();
+}
+
+void UknightAudioSubsystem::StartVoice(USoundBase* Voice)
+{
+	UWorld* const World = GetGameInstance() ? GetGameInstance()->GetWorld() : nullptr;
+	UAudioComponent* const Component = World ? UGameplayStatics::CreateSound2D(World, Voice, 1.f, 1.f, 0.f, nullptr, false, true) : nullptr;
+	if (!Component)
+	{
+		return;
+	}
+	Component->SoundClassOverride = GetSoundClass(TEXT("Voice"));
+	Component->OnAudioFinishedNative.AddUObject(this, &ThisClass::HandleVoiceFinished);
+	Component->Play();
+	VoiceComponent = Component;
+}
+
+void UknightAudioSubsystem::HandleVoiceFinished(UAudioComponent* Component)
+{
+	if (Component != VoiceComponent.Get())
+	{
+		return;
+	}
+	VoiceComponent.Reset();
+	if (VoiceQueue.IsEmpty() || VoiceGapTicker.IsValid())
+	{
+		return;
+	}
+	VoiceGapTicker = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateWeakLambda(this, [this](float)
+	{
+		VoiceGapTicker.Reset();
+		PlayNextVoice();
+		return false;
+	}), GetDefault<UknightAudioSettings>()->VoiceQueueGap);
+}
+
+void UknightAudioSubsystem::PlayNextVoice()
+{
+	const double Now = FPlatformTime::Seconds();
+	const float MaxWait = GetDefault<UknightAudioSettings>()->VoiceMaxWait;
+	while (!VoiceQueue.IsEmpty())
+	{
+		USoundBase* const Next = VoiceQueue[0];
+		const double QueuedAt = VoiceQueueTimes[0];
+		VoiceQueue.RemoveAt(0);
+		VoiceQueueTimes.RemoveAt(0);
+		if (Next && Now - QueuedAt <= MaxWait)
+		{
+			StartVoice(Next);
+			return;
+		}
+	}
+}
+
+void UknightAudioSubsystem::ClearVoices()
+{
+	FTSTicker::RemoveTicker(VoiceGapTicker);
+	VoiceGapTicker.Reset();
+	VoiceQueue.Reset();
+	VoiceQueueTimes.Reset();
+	VoiceComponent.Reset();
 }
 
 void UknightAudioSubsystem::SetMusicState(int32 State)

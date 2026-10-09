@@ -3,6 +3,7 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "AbilitySystem/knightGameplayCueManager.h"
+#include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
 #include "Engine/GameInstance.h"
 #include "knightAudioSubsystem.h"
 #include "Sound/SoundBase.h"
@@ -140,6 +141,34 @@ void AknightRaidGameMode::RegisterTargetMonster(AknightMonsterCharacterBase* Mon
 	{
 		ASC->RegisterGameplayTagEvent(knightGameplayTags::State_Monster_Enraged, EGameplayTagEventType::NewOrRemoved)
 			.AddUObject(this, &ThisClass::HandleMonsterEnragedChanged);
+		ASC->GetGameplayAttributeValueChangeDelegate(UknightCoreAttributeSet::GetHealthAttribute())
+			.AddUObject(this, &ThisClass::HandleMonsterHealthChanged);
+	}
+}
+
+void AknightRaidGameMode::HandleMonsterHealthChanged(const FOnAttributeChangeData& Data)
+{
+	if (bCombatMusicLowHealth || !RaidDefinition)
+	{
+		return;
+	}
+	// The change data does not say whose health changed, so check every target monster.
+	for (const TWeakObjectPtr<AknightMonsterCharacterBase>& Monster : TargetMonsters)
+	{
+		const UAbilitySystemComponent* const MonsterASC = Monster.IsValid() ? Monster->GetAbilitySystemComponent() : nullptr;
+		if (!MonsterASC)
+		{
+			continue;
+		}
+		bool bFound = false;
+		const float MaxHealth = MonsterASC->GetGameplayAttributeValue(UknightCoreAttributeSet::GetMaxHealthAttribute(), bFound);
+		const float Health = MonsterASC->GetGameplayAttributeValue(UknightCoreAttributeSet::GetHealthAttribute(), bFound);
+		if (MaxHealth > 0.f && Health / MaxHealth < RaidDefinition->CombatMusicLowHealthRatio)
+		{
+			bCombatMusicLowHealth = true;
+			UpdateMusic();
+			return;
+		}
 	}
 }
 
@@ -156,6 +185,7 @@ void AknightRaidGameMode::UpdateMusic()
 	{
 		return;
 	}
+	UpdateCombatMusic(RaidState->GetRaidPhase());
 	const FknightRaidMusicStates& States = RaidDefinition->MusicStates;
 	switch (RaidState->GetRaidPhase())
 	{
@@ -183,6 +213,40 @@ void AknightRaidGameMode::UpdateMusic()
 		Audio->SetMusicState(States.Explore);
 		break;
 	}
+}
+
+void AknightRaidGameMode::UpdateCombatMusic(EknightRaidPhase Phase)
+{
+	UknightAudioSubsystem* const Audio = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightAudioSubsystem>() : nullptr;
+	if (!Audio || !RaidDefinition || RaidDefinition->CombatMusic.IsNull() || bCombatMusicEnded)
+	{
+		return;
+	}
+	if (Phase == EknightRaidPhase::Success || Phase == EknightRaidPhase::Failed || Phase == EknightRaidPhase::Returning)
+	{
+		if (PlayingCombatTrack)
+		{
+			Audio->StopMusic(RaidDefinition->CombatMusicSwitchFadeTime);
+		}
+		PlayingCombatTrack = nullptr;
+		bCombatMusicEnded = true;
+		return;
+	}
+	// The first fight starts the music; after that it carries on through exploring.
+	if (Phase != EknightRaidPhase::Combat && !PlayingCombatTrack)
+	{
+		return;
+	}
+	const TSoftObjectPtr<USoundBase>& Wanted = bCombatMusicLowHealth && !RaidDefinition->CombatMusicLowHealth.IsNull()
+		? RaidDefinition->CombatMusicLowHealth : RaidDefinition->CombatMusic;
+	USoundBase* const Track = UknightAssetManager::GetAsset(Wanted);
+	if (!Track || Track == PlayingCombatTrack)
+	{
+		return;
+	}
+	// Starts with the default fade, switches tracks with the longer crossfade.
+	Audio->PlayMusic(Track, PlayingCombatTrack ? RaidDefinition->CombatMusicSwitchFadeTime : -1.f, RaidDefinition->CombatMusicLoopGap);
+	PlayingCombatTrack = Track;
 }
 
 void AknightRaidGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
