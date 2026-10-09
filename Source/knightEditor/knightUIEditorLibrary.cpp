@@ -1393,11 +1393,14 @@ bool UknightUIEditorLibrary::AddTitleIntro(UWidgetBlueprint* WidgetBlueprint, UT
 	Backdrop->SetBrush(SolidBrush(FLinearColor::White));
 	Backdrop->SetColorAndOpacity(FLinearColor(FColor(0x05, 0x08, 0x0D)));
 	AddToOverlay(Intro, Backdrop, HAlign_Fill, VAlign_Fill);
-	UImage* const Studio = NewTextureImage(WidgetBlueprint, TEXT("Img_StudioLogo"), StudioLogo, FLinearColor::White, FVector2D(480.f, 432.f));
+	// The logos scale slowly; with pixel snapping they would move in whole-pixel steps.
+	UImage* const Studio = NewTextureImage(WidgetBlueprint, TEXT("Img_StudioLogo"), StudioLogo, FLinearColor::White, FVector2D(512.f, 512.f));
 	Studio->bIsVariable = true;
+	Studio->SetPixelSnapping(EWidgetPixelSnapping::Disabled);
 	AddToOverlay(Intro, Studio, HAlign_Center, VAlign_Center);
 	UImage* const Engine = NewTextureImage(WidgetBlueprint, TEXT("Img_EngineLogo"), EngineLogo, FLinearColor::White, FVector2D(220.f, 220.f));
 	Engine->bIsVariable = true;
+	Engine->SetPixelSnapping(EWidgetPixelSnapping::Disabled);
 	AddToOverlay(Intro, Engine, HAlign_Center, VAlign_Center);
 
 	EndBuild(WidgetBlueprint);

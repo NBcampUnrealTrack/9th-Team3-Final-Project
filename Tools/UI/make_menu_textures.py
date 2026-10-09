@@ -10,7 +10,7 @@ T_UI_GradientLeft.png  white with alpha fading left to right, tinted in UMG.
 T_UI_LoadingMark.png   placeholder emblem for the loading screen: tall four-point star through a ring, white on transparent.
 T_UI_PartFrame.png     lock-on part frame (/Game/Knight/UI/HUD/Textures): hexagon outline with three inward triangles,
                        white on transparent, tinted in UMG by the part condition. Shown at 104 x 104.
-T_UI_StudioLogo.png    team logo (Transparent Dragon) for the startup intro, final colors, 1200x1080.
+T_UI_StudioLogo.png    team logo (Transparent Dragon) for the startup intro, final colors, 1024x1024 with mipmaps.
 T_UI_UnrealLogo.png    "Unreal Engine icon - white.png" (Epic branding download) scaled to 512. Do not recolor or reshape it.
 
 Continents are random but seeded, and pushed up under the stage-select sample regions so markers sit on land.
@@ -221,7 +221,11 @@ def make_studio_logo(font_dir, out_dir):
     draw.polygon([p(0, divider_y - cy - 4), p(4, divider_y - cy), p(0, divider_y - cy + 4), p(-4, divider_y - cy)], fill=frost)
     centred("DRAGON", light, 16, 254, frost)
 
-    img.resize((width * unit, height * unit), Image.LANCZOS).save(os.path.join(out_dir, "T_UI_StudioLogo.png"))
+    # Power-of-two canvas so the texture gets mipmaps; the logo grows slowly in the intro and shimmers without them.
+    logo = img.resize((960, 864), Image.LANCZOS)
+    canvas = Image.new("RGBA", (1024, 1024), back)
+    canvas.paste(logo, ((1024 - 960) // 2, (1024 - 864) // 2))
+    canvas.save(os.path.join(out_dir, "T_UI_StudioLogo.png"))
 
 
 def make_unreal_logo(out_dir):
