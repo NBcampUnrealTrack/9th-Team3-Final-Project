@@ -478,8 +478,11 @@ namespace knightMonsterCheats
 
 			for (const FknightMonsterPartState& Part : Monster->GetPartComponent()->GetPartStates())
 			{
-				UE_LOG(LogknightDev, Display, TEXT("  Part %s  damage %.1f  broken %d  multiplier %.2f"), *Part.PartTag.ToString(),
-					Part.DamageTaken, Part.bBroken ? 1 : 0, Monster->GetPartComponent()->GetDamageMultiplier(Part.PartTag));
+				const UknightMonsterPartComponent* const PartComponent = Monster->GetPartComponent();
+				UE_LOG(LogknightDev, Display, TEXT("  Part %s  damage %.1f  ratio %.2f  %s  multiplier %.2f"), *Part.PartTag.ToString(),
+					Part.DamageTaken, PartComponent->GetPartHealthRatio(Part.PartTag),
+					*UEnum::GetDisplayValueAsText(PartComponent->GetPartCondition(Part.PartTag)).ToString(),
+					PartComponent->GetDamageMultiplier(Part.PartTag));
 			}
 		}
 	}
