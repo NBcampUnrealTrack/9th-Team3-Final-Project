@@ -261,6 +261,10 @@ void UknightMonsterPartComponent::BreakPart(int32 PartIndex, AActor* BreakInstig
 		{
 			ASC->ApplyGameplayEffectToSelf(Definition->BreakEffect->GetDefaultObject<UGameplayEffect>(), 1.f, ASC->MakeEffectContext());
 		}
+		if (!Definition->GrantedTagsOnBreak.IsEmpty())
+		{
+			ASC->AddLooseGameplayTags(Definition->GrantedTagsOnBreak);
+		}
 
 		FGameplayCueParameters CueParams;
 		CueParams.Location = BreakLocation;

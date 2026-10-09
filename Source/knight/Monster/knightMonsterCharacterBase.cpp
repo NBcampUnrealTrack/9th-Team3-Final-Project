@@ -12,9 +12,11 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GameplayEffect.h"
+#include "Monster/knightMonsterBodyBlockerComponent.h"
 #include "Monster/knightMonsterDefinition.h"
 #include "Monster/knightMonsterMovementComponent.h"
 #include "Monster/knightMonsterPartComponent.h"
+#include "Monster/knightMonsterPushOutComponent.h"
 #include "Monster/knightMonsterTargetingComponent.h"
 #include "MotionWarpingComponent.h"
 #include "Perception/AIPerceptionComponent.h"
@@ -49,6 +51,7 @@ AknightMonsterCharacterBase::AknightMonsterCharacterBase(const FObjectInitialize
 	HitStop = CreateDefaultSubobject<UknightHitStopComponent>(TEXT("HitStop"));
 	HitReaction = CreateDefaultSubobject<UknightHitReactionComponent>(TEXT("HitReaction"));
 	MotionWarping = CreateDefaultSubobject<UMotionWarpingComponent>(TEXT("MotionWarping"));
+	PushOut = CreateDefaultSubobject<UknightMonsterPushOutComponent>(TEXT("PushOut"));
 }
 
 UAbilitySystemComponent* AknightMonsterCharacterBase::GetAbilitySystemComponent() const
@@ -219,6 +222,13 @@ void AknightMonsterCharacterBase::HandleOutOfHealth(AActor* DamageInstigator, AA
 	// 플레이어가 갈무리 지점에 닿도록 시체를 밟거나 통과할 수 있게 한다. 부위 바디는 연출용으로 남긴다.
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+	// 큰 몬스터의 몸 아래 차단 상자도 같은 이유로 끈다.
+	TArray<UknightMonsterBodyBlockerComponent*> BodyBlockers;
+	GetComponents<UknightMonsterBodyBlockerComponent>(BodyBlockers);
+	for (UknightMonsterBodyBlockerComponent* const BodyBlocker : BodyBlockers)
+	{
+		BodyBlocker->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
 
 	UE_LOG(LogknightAI, Log, TEXT("%s defeated by %s."), *GetNameSafe(this), *GetNameSafe(DamageInstigator));
 	OnMonsterDefeated.Broadcast(this, DamageInstigator);
