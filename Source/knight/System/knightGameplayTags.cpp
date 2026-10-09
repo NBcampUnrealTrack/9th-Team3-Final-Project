@@ -26,6 +26,7 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Boost_Flight, "Ability.Boost.Flight", "Boost flight ability.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_HitReact, "Ability.HitReact", "Hit reaction ability, activated by damage events.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Death, "Ability.Death", "Death ability, activated when Health reaches zero.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Item_RepairKit, "Ability.Item.RepairKit", "Repair kit use (heals Health and the lowest parts first).");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_ActivateFail_Cost, "Ability.ActivateFail.Cost", "Activation failed: cost not met.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_ActivateFail_Cooldown, "Ability.ActivateFail.Cooldown", "Activation failed: on cooldown.");
@@ -46,6 +47,7 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Airborne, "State.Airborne", "Not on the ground for any reason.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_LockedOn, "State.LockedOn", "The player has a lock-on target (drives the lock-on camera mode).");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Overheated, "State.Overheated", "Boost gauge is depleted and recovering.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Repairing, "State.Repairing", "Using a repair kit (walk only, no attack, guard or quickstep).");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_HitReact, "State.HitReact", "Any hit reaction is playing.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_HitReact_Flinch, "State.HitReact.Flinch", "Light hit reaction.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_HitReact_Stagger, "State.HitReact.Stagger", "Poise broken.");
@@ -77,6 +79,7 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(SetByCaller_PoiseDamage, "SetByCaller.PoiseDamage", "Base poise damage magnitude.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(SetByCaller_MotionValue, "SetByCaller.MotionValue", "Per-attack motion value multiplier.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(SetByCaller_BoostCost, "SetByCaller.BoostCost", "Boost gauge cost.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(SetByCaller_Healing, "SetByCaller.Healing", "Health restored (repair kit).");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(GameplayCue_Hit_Melee, "GameplayCue.Hit.Melee", "Melee hit feedback.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(GameplayCue_Hit_Weakpoint, "GameplayCue.Hit.Weakpoint", "Weak point hit feedback.");
@@ -84,6 +87,8 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(GameplayCue_Parry, "GameplayCue.Parry", "Parry feedback.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(GameplayCue_PartBreak, "GameplayCue.PartBreak", "Monster part break feedback.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(GameplayCue_Boost_Dash, "GameplayCue.Boost.Dash", "Boost dash thrusters.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(GameplayCue_Repair_Loop, "GameplayCue.Repair.Loop", "Repair kit in use (looping, removed when the repair ends).");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(GameplayCue_Repair_Finish, "GameplayCue.Repair.Finish", "Repair kit finished and healed (one shot).");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Message_Combat_Hit, "Message.Combat.Hit", "Broadcast after a hit resolves.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Message_Combat_PartBroken, "Message.Combat.PartBroken", "Broadcast when a monster part breaks.");

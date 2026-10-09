@@ -83,6 +83,12 @@ public:
 	/** 이동 잠금 중인지. 잠금 중에는 정지에 엔진 값(빨리 멈춤)을 쓴다. */
 	bool IsMoveInputLocked() const { return MoveInputLockCount > 0; }
 
+	/**
+	 * 달리기를 막는다 (2026-10-09, 수리 키트 사용 중). 달리기 키를 누르고 있어도 걷기 속도(줄지 않음)로 움직이고,
+	 * 풀리면 키 상태대로 돌아간다. 이동 잠금처럼 요청 수를 센다: true로 켠 쪽이 반드시 false로 한 번 끈다.
+	 */
+	void SetRunLocked(bool bLocked) { RunLockCount = FMath::Max(0, RunLockCount + (bLocked ? 1 : -1)); }
+
 	virtual float GetMaxSpeed() const override;
 	virtual float GetMaxAcceleration() const override;
 
@@ -140,4 +146,5 @@ protected:
 private:
 	bool bWantsToRun = false;
 	int32 MoveInputLockCount = 0;
+	int32 RunLockCount = 0;
 };

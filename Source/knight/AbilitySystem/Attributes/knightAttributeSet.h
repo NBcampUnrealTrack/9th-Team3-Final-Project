@@ -58,6 +58,7 @@ public:
 
 	// 보조
 	KNIGHT_ATTRIBUTE_ACCESSORS(UknightAttributeSet, RepairEfficiency);
+	KNIGHT_ATTRIBUTE_ACCESSORS(UknightAttributeSet, RepairKitCount);
 
 	/** BoostGauge가 0이 됐을 때. 부스트 어빌리티가 이를 받아 State.Overheated를 건다. */
 	mutable FknightAttributeEvent OnBoostDepleted;
@@ -182,6 +183,15 @@ private:
 	/** 수리 키트 회복량 배율(기본 1.0). 특수 파츠·업그레이드로만 오른다. */
 	UPROPERTY(BlueprintReadOnly, Category="Knight|Mech", meta=(AllowPrivateAccess=true))
 	FGameplayAttributeData RepairEfficiency;
+
+	/**
+	 * 남은 수리 키트 개수(정수로 쓴다). 수리 키트 어빌리티(knightGameplayAbility_RepairKit)가 사용할 때 1 줄인다.
+	 * 스탯이 아니라 소모품 개수지만, HUD가 다른 값처럼 어트리뷰트 변경 알림으로 읽을 수 있게 여기 둔다(2026-10-09).
+	 * 기본 3 = 기획 문서 '출격당 3개'. 출격할 때마다 새 캐릭터라 3개로 시작한다. 보유 수량·상점 연결은 인벤토리 담당이 정해진 뒤.
+	 * 테스트 보충: knight.Player.SetStat RepairKitCount 3
+	 */
+	UPROPERTY(BlueprintReadOnly, Category="Knight|Mech", meta=(AllowPrivateAccess=true))
+	FGameplayAttributeData RepairKitCount;
 
 	bool bBoostDepleted = false;
 

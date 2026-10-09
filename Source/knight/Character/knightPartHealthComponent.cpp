@@ -47,6 +47,43 @@ namespace knightPartHealth
 			}
 		}
 	}
+
+	void DistributeRepair(float (&InOutHealth)[PartCount], const float (&MaxHealth)[PartCount], float Amount)
+	{
+		if (Amount <= 0.f)
+		{
+			return;
+		}
+
+		// 채우기 전의 체력 비율로 순서를 정한다. 비율이 같으면 앞 순서가 먼저(삽입 정렬이라 순서 유지).
+		auto Ratio = [&InOutHealth, &MaxHealth](int32 Index)
+		{
+			return MaxHealth[Index] > 0.f ? InOutHealth[Index] / MaxHealth[Index] : 1.f;
+		};
+		int32 Order[PartCount];
+		for (int32 Index = 0; Index < PartCount; ++Index)
+		{
+			int32 Slot = Index;
+			while (Slot > 0 && Ratio(Order[Slot - 1]) > Ratio(Index))
+			{
+				Order[Slot] = Order[Slot - 1];
+				--Slot;
+			}
+			Order[Slot] = Index;
+		}
+
+		// 낮은 부위부터 최대치까지 채우고, 남은 양은 다음 부위로 넘긴다.
+		for (const int32 Index : Order)
+		{
+			const float Added = FMath::Min(Amount, FMath::Max(0.f, MaxHealth[Index] - InOutHealth[Index]));
+			InOutHealth[Index] += Added;
+			Amount -= Added;
+			if (Amount <= 0.f)
+			{
+				break;
+			}
+		}
+	}
 }
 
 // ---- 부위 ↔ 속성·태그 ----
@@ -219,6 +256,57 @@ int32 UknightPartHealthComponent::GetBrokenPartCount() const
 		Count += IsPartBroken(PartFromIndex(Index)) ? 1 : 0;
 	}
 	return Count;
+}
+
+void UknightPartHealthComponent::ApplyRepair(float Amount)
+{
+	UAbilitySystemComponent* const OwnerASC = ASC.Get();
+	if (!OwnerASC || Amount <= 0.f)
+	{
+		return;
+	}
+
+	// 부위 체력은 기본값(Base)을 바꾸고, 최대치는 파츠 효과가 반영된 현재값을 쓴다(속성 세트의 상한과 같은 기준).
+	float Health[knightPartHealth::PartCount];
+	float MaxHealth[knightPartHealth::PartCount];
+	for (int32 Index = 0; Index < knightPartHealth::PartCount; ++Index)
+	{
+		const EknightBodyPart Part = PartFromIndex(Index);
+		Health[Index] = OwnerASC->GetNumericAttributeBase(GetPartHealthAttribute(Part));
+		MaxHealth[Index] = OwnerASC->GetNumericAttribute(GetPartMaxHealthAttribute(Part));
+	}
+	const float Before[knightPartHealth::PartCount] = { Health[0], Health[1], Health[2], Health[3] };
+
+	knightPartHealth::DistributeRepair(Health, MaxHealth, Amount);
+
+	for (int32 Index = 0; Index < knightPartHealth::PartCount; ++Index)
+	{
+		if (Health[Index] != Before[Index])
+		{
+			// 파괴된 부위가 1 이상이 되면 HandlePartHealthChanged가 복구한다.
+			OwnerASC->SetNumericAttributeBase(GetPartHealthAttribute(PartFromIndex(Index)), Health[Index]);
+		}
+	}
+	UE_LOG(Logknight, Log, TEXT("%s: part repair %.1f. Head %.1f  Torso %.1f  Arms %.1f  Legs %.1f"),
+		*GetNameSafe(GetOwner()), Amount, Health[0], Health[1], Health[2], Health[3]);
+}
+
+bool UknightPartHealthComponent::HasDamagedPart() const
+{
+	const UAbilitySystemComponent* const OwnerASC = ASC.Get();
+	if (!OwnerASC)
+	{
+		return false;
+	}
+	for (int32 Index = 0; Index < knightPartHealth::PartCount; ++Index)
+	{
+		const EknightBodyPart Part = PartFromIndex(Index);
+		if (OwnerASC->GetNumericAttribute(GetPartHealthAttribute(Part)) < OwnerASC->GetNumericAttribute(GetPartMaxHealthAttribute(Part)))
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 void UknightPartHealthComponent::HandleDamaged(AActor* DamageInstigator, AActor* DamageCauser, const FGameplayEffectSpec* EffectSpec,

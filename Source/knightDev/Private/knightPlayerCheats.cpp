@@ -6,7 +6,7 @@
 //   knight.Player.Damage <피해> [그로기]   지정한 양만큼 피해·그로기 피해를 넣는다 (예: knight.Player.Damage 0 30)
 //   knight.Player.SetStat <스탯 이름> <값>  플레이어 스탯의 기본값을 바꾼다 (예: knight.Player.SetStat Weight 100)
 //   knight.Player.Run <1|0>                달리기를 켜고 끈다 (키 연결 전 테스트용)
-//   knight.Player.Status                   체력, 그로기, 회복 속도, 마지막 피격 후 경과 시간, 부위 체력을 출력한다
+//   knight.Player.Status                   체력, 그로기, 회복 속도, 마지막 피격 후 경과 시간, 부위 체력, 수리 키트 개수를 출력한다
 //   knight.Player.Easing                   출발·정지 Easing 값(출발 곡선, 정지 마찰·감속 등)을 출력한다
 //   knight.Player.Easing <값 이름> <값>     무브먼트의 숫자 값을 바꾼다 (예: knight.Player.Easing StopBrakingFriction 1.5)
 //   knight.Player.Easing Curve [값...]     출발 곡선을 바꾼다. 값은 속도 0%~100%에 고르게 놓인다
@@ -270,6 +270,9 @@ namespace knightPlayerCheats
 				*PartText(TEXT("Torso"), MechSet->GetTorsoHealth(), MechSet->GetMaxTorsoHealth(), knightGameplayTags::State_PartBroken_Torso),
 				*PartText(TEXT("Arms"), MechSet->GetArmsHealth(), MechSet->GetMaxArmsHealth(), knightGameplayTags::State_PartBroken_Arms),
 				*PartText(TEXT("Legs"), MechSet->GetLegsHealth(), MechSet->GetMaxLegsHealth(), knightGameplayTags::State_PartBroken_Legs));
+			// 수리 키트 (2026-10-09). 보충: knight.Player.SetStat RepairKitCount 3
+			UE_LOG(LogknightDev, Log, TEXT("%s: RepairKits=%.0f  RepairEfficiency=%.2f  Repairing=%d"), CommandName,
+				MechSet->GetRepairKitCount(), MechSet->GetRepairEfficiency(), ASC->HasMatchingGameplayTag(knightGameplayTags::State_Repairing));
 		}
 		LogMovement(Pawn, CommandName);
 	}

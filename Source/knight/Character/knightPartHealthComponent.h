@@ -37,6 +37,13 @@ namespace knightPartHealth
 	 * 부위 체력은 0 아래로 내려가지 않는다.
 	 */
 	KNIGHT_API void DistributeDamage(float (&InOutHealth)[PartCount], float Damage, int32 HitPart);
+
+	/**
+	 * 수리량을 부위 체력에 나눠 더한다 (수리 키트, 2026-10-09 기획 문서 규칙).
+	 *   체력 비율(현재 / 최대)이 가장 낮은 부위부터 최대치까지 채우고, 남은 양은 다음으로 낮은 부위로 넘긴다.
+	 *   비율이 같으면 앞 순서(머리 → 몸통 → 팔 → 다리)부터. 모든 부위가 차면 남은 양은 버린다.
+	 */
+	KNIGHT_API void DistributeRepair(float (&InOutHealth)[PartCount], const float (&MaxHealth)[PartCount], float Amount);
 }
 
 /**
@@ -52,7 +59,7 @@ namespace knightPartHealth
  *
  * 간단 구현의 한계 (다음 단계에서 보완):
  *   - 머리 파괴의 피해 증가와 파괴 부위 크리티컬은 히트 정보가 있는 피격에만 적용된다(GetDamageMultiplier 경로).
- *   - 낙하 피해를 다리로 보내는 처리, 수리 키트(낮은 부위부터 회복·파괴 부위당 +0.2초)는 아직 없다.
+ *   - 낙하 피해를 다리로 보내는 처리는 아직 없다. (수리 키트는 2026-10-09 ApplyRepair + knightGameplayAbility_RepairKit)
  */
 UCLASS(ClassGroup=(Knight), meta=(BlueprintSpawnableComponent))
 class KNIGHT_API UknightPartHealthComponent : public UActorComponent
@@ -76,6 +83,16 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="Knight|PartHealth")
 	int32 GetBrokenPartCount() const;
+
+	/**
+	 * 수리 키트의 부위 회복 (2026-10-09). Amount를 DistributeRepair 규칙으로 부위 체력에 더한다.
+	 * 전체 체력(Health)은 여기서 채우지 않는다(수리 키트 어빌리티가 회복 이펙트로 따로 채운다).
+	 * 파괴된 부위가 1 이상이 되면 HandlePartHealthChanged가 복구한다.
+	 */
+	void ApplyRepair(float Amount);
+
+	/** 최대치보다 낮은 부위가 하나라도 있는지. 수리 키트 사용 조건(풀피면 사용 안 함)에 쓴다 (2026-10-09). */
+	bool HasDamagedPart() const;
 
 	static FGameplayTag GetPartTag(EknightBodyPart Part);
 

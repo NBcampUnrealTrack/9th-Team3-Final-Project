@@ -95,8 +95,10 @@ float UknightMovementComponent::GetMaxSpeed() const
 		return Super::GetMaxSpeed();
 	}
 
-	const float BaseSpeed = bWantsToRun ? BaseRunSpeed : BaseWalkSpeed;
-	const float SpeedScale = bWantsToRun
+	// 달리기 잠금(수리 키트 사용 중) 동안은 달리기 키를 누르고 있어도 걷기 기준.
+	const bool bRun = bWantsToRun && RunLockCount == 0;
+	const float BaseSpeed = bRun ? BaseRunSpeed : BaseWalkSpeed;
+	const float SpeedScale = bRun
 		? GetMechAttributeValue(UknightAttributeSet::GetRunSpeedAttribute(), 1.f)
 		: GetMechAttributeValue(UknightAttributeSet::GetWalkSpeedAttribute(), 1.f);
 	return BaseSpeed * SpeedScale * GetWeightSpeedFactor();
