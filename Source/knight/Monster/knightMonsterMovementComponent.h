@@ -28,6 +28,7 @@ public:
 
 	/**
 	 * 이번 프레임에 소유자를 WorldLocation 쪽으로 초당 최대 TurnRate도만큼 회전시킨다.
+	 * TurnAcceleration이 있으면 회전 속도를 서서히 올리고, 목표 각도에 가까워지면 서서히 줄여 멈춘다(큰 몸이 툭 돌았다 툭 서지 않게).
 	 * ToleranceDegrees 이내로 바라보면 true를 반환한다. 잠긴 동안에는 아무것도 하지 않고 false를 반환한다.
 	 * 몽타주가 있는 회전이라면 이 함수 대신 몽타주를 재생한다.
 	 */
@@ -43,6 +44,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Monster")
 	FGameplayTagContainer LockTags;
 
+	/** TurnTowards의 회전 가속·감속(도/초²). 0이면 처음부터 TurnRate로 돌고 바로 멈춘다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Knight|Monster", meta=(ClampMin=0))
+	float TurnAcceleration = 480.f;
+
 private:
 	mutable TWeakObjectPtr<UAbilitySystemComponent> CachedASC;
+
+	/** 지금 회전 속도(도/초, 부호 = 방향). 회전이 끝나거나 TurnTowards가 한동안 불리지 않으면 0부터 다시 시작한다. */
+	float TurnSpeed = 0.f;
+	double LastTurnTime = -1.0;
 };

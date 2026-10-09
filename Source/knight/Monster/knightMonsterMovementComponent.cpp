@@ -67,11 +67,50 @@ bool UknightMonsterMovementComponent::TurnTowards(const FVector& WorldLocation, 
 	const float CurrentYaw = Owner->GetActorRotation().Yaw;
 	const float DesiredYaw = ToTarget.Rotation().Yaw;
 	const float Delta = FRotator::NormalizeAxis(DesiredYaw - CurrentYaw);
-	if (FMath::Abs(Delta) <= ToleranceDegrees)
+
+	// 지난 프레임에 돌지 않았다면 새 회전이다. 정지 상태에서 다시 가속한다.
+	const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	if (Now - LastTurnTime > 0.1)
 	{
+		TurnSpeed = 0.f;
+	}
+	LastTurnTime = Now;
+
+	// 허용 각도 안이라도 아직 돌고 있으면 감속이 끝날 때까지 마저 돈다(툭 멈추지 않게).
+	if (FMath::Abs(Delta) <= ToleranceDegrees && (TurnAcceleration <= 0.f || FMath::IsNearlyZero(TurnSpeed)))
+	{
+		TurnSpeed = 0.f;
 		return true;
 	}
-	const float Step = FMath::Clamp(Delta, -TurnRate * DeltaTime, TurnRate * DeltaTime);
+
+	float Step;
+	if (TurnAcceleration > 0.f)
+	{
+		// 남은 각도 안에 멈출 수 있는 속도(v = sqrt(2 a d))를 넘지 않게 해서, 목표 근처에서 저절로 감속한다.
+		const float StopSpeed = FMath::Sqrt(2.f * TurnAcceleration * FMath::Abs(Delta));
+		const float DesiredSpeed = FMath::Sign(Delta) * FMath::Min(TurnRate, StopSpeed);
+		TurnSpeed = FMath::FInterpConstantTo(TurnSpeed, DesiredSpeed, DeltaTime, TurnAcceleration);
+		Step = TurnSpeed * DeltaTime;
+		if (FMath::Sign(Step) != FMath::Sign(Delta))
+		{
+			// 목표가 반대편으로 넘어갔다. 감속이 끝날 때까지 더 돌지 않는다.
+			Step = 0.f;
+		}
+		else if (FMath::Abs(Step) > FMath::Abs(Delta))
+		{
+			Step = Delta;
+		}
+	}
+	else
+	{
+		Step = FMath::Clamp(Delta, -TurnRate * DeltaTime, TurnRate * DeltaTime);
+	}
 	Owner->SetActorRotation(FRotator(0.f, CurrentYaw + Step, 0.f));
-	return FMath::Abs(Delta - Step) <= ToleranceDegrees;
+	const bool bStopped = TurnAcceleration <= 0.f || FMath::Abs(TurnSpeed) <= TurnAcceleration * DeltaTime;
+	const bool bDone = FMath::Abs(Delta - Step) <= ToleranceDegrees && bStopped;
+	if (bDone)
+	{
+		TurnSpeed = 0.f;
+	}
+	return bDone;
 }
