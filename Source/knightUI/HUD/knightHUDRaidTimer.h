@@ -9,8 +9,9 @@ class UCommonTextBlock;
 class UknightVM_Raid;
 
 /**
- * Top-right raid timer of the HUD. Reads the Raid view model; hidden when the raid has no time limit.
- * Turns to the warning color for the last WarningSeconds. Widgets are found by name: Txt_Time, Txt_Caption.
+ * Top-left objective line of the HUD: the hunt objective with the time left beside it. Reads the Raid view model.
+ * The time hides when the raid has no time limit, the whole widget when there is neither. The time turns to the warning
+ * color for the last WarningSeconds. Widgets are found by name: Txt_Objective, Txt_Time, Txt_Caption.
  */
 UCLASS(Abstract, Blueprintable, meta=(DisableNativeTick))
 class KNIGHTUI_API UknightHUDRaidTimer : public UUserWidget
@@ -27,6 +28,10 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, Category="Knight|HUD", meta=(BindWidgetOptional))
 	TObjectPtr<UCommonTextBlock> Txt_Caption;
+
+	/** "잔열 토벌" */
+	UPROPERTY(BlueprintReadOnly, Category="Knight|HUD", meta=(BindWidgetOptional))
+	TObjectPtr<UCommonTextBlock> Txt_Objective;
 
 	UPROPERTY(EditAnywhere, Category="Knight|HUD", meta=(ClampMin=0, Units="s"))
 	float WarningSeconds = 60.f;

@@ -16,6 +16,7 @@
 #include "Components/ScrollBox.h"
 #include "Components/ScrollBoxSlot.h"
 #include "Components/SizeBox.h"
+#include "Components/Spacer.h"
 #include "Components/Slider.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
@@ -225,65 +226,117 @@ bool UknightUIEditorLibrary::BuildPrimaryLayout(UWidgetBlueprint* WidgetBlueprin
 	return true;
 }
 
-bool UknightUIEditorLibrary::BuildHUDPlayerStatus(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> WarningStyle)
+bool UknightUIEditorLibrary::BuildHUDPlayerStatus(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> WarningStyle,
+	TSubclassOf<UCommonTextStyle> NumberStyle)
 {
 	if (!BeginBuild(WidgetBlueprint, TEXT("BuildHUDPlayerStatus")))
 	{
 		return false;
 	}
 
-	// 1080p 화면 폭의 약 27%.
-	USizeBox* const Root = NewSizeBox(WidgetBlueprint, TEXT("SizeBox_Root"), 520.f, 0.f);
+	// 화면 전체를 덮는 캔버스: 체력은 왼쪽 아래, 부스트는 아래 가운데. 두 패널 모두 세이프존 아래 끝에 맞춘다.
+	UCanvasPanel* const Root = NewWidget<UCanvasPanel>(WidgetBlueprint, TEXT("Canvas_Root"));
 	WidgetBlueprint->WidgetTree->RootWidget = Root;
-	UVerticalBox* const Column = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("VerticalBox_Panel"));
-	Root->AddChild(Column);
+	auto PlaceBottom = [Root](UWidget* Panel, float AnchorX, float X)
+	{
+		UCanvasPanelSlot* const Slot = Root->AddChildToCanvas(Panel);
+		Slot->SetAnchors(FAnchors(AnchorX, 1.f));
+		Slot->SetAlignment(FVector2D(AnchorX, 1.f));
+		Slot->SetPosition(FVector2D(X, -HUDMargin.Y));
+		Slot->SetAutoSize(true);
+	};
 
+	// 체력: 캡션 + 큰 현재값 + 작은 최대값, 아래에 고스트 바.
+	USizeBox* const HealthPanel = NewSizeBox(WidgetBlueprint, TEXT("SizeBox_HealthPanel"), 360.f, 0.f);
+	UVerticalBox* const HealthColumn = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("VerticalBox_Health"));
+	HealthPanel->AddChild(HealthColumn);
 	UHorizontalBox* const HealthRow = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("HorizontalBox_HealthLabels"));
-	AddToRow(HealthRow, NewText(WidgetBlueprint, TEXT("Txt_Name"), CaptionStyle, INVTEXT("KNIGHT"), false), true, HAlign_Left);
-	AddToRow(HealthRow, NewText(WidgetBlueprint, TEXT("Txt_Health"), CaptionStyle, INVTEXT("1000 / 1000"), true), false, HAlign_Right);
-	AddToColumn(Column, HealthRow, HAlign_Fill);
-
-	USizeBox* const HealthBox = NewSizeBox(WidgetBlueprint, TEXT("SizeBox_Health"), 0.f, 14.f);
+	AddToRow(HealthRow, NewText(WidgetBlueprint, TEXT("Txt_HealthLabel"), CaptionStyle, INVTEXT("HP"), false), true, HAlign_Left, FMargin(0.f, 0.f, 0.f, 8.f));
+	AddToRow(HealthRow, NewText(WidgetBlueprint, TEXT("Txt_Health"), NumberStyle, INVTEXT("100"), true), false, HAlign_Right);
+	AddToRow(HealthRow, NewText(WidgetBlueprint, TEXT("Txt_HealthMax"), CaptionStyle, INVTEXT("/100"), true), false, HAlign_Right, FMargin(6.f, 0.f, 0.f, 8.f));
+	AddToColumn(HealthColumn, HealthRow, HAlign_Fill);
+	USizeBox* const HealthBox = NewSizeBox(WidgetBlueprint, TEXT("SizeBox_Health"), 0.f, 8.f);
 	UOverlay* const HealthBars = NewWidget<UOverlay>(WidgetBlueprint, TEXT("Overlay_HealthBars"));
 	HealthBox->AddChild(HealthBars);
 	// 고스트 바가 테두리와 바탕을 그리고, 그 위에 실제 체력 바를 겹친다.
 	AddToOverlay(HealthBars, NewBar(WidgetBlueprint, TEXT("Bar_HealthGhost"), true, 1.f), HAlign_Fill, VAlign_Fill);
 	AddToOverlay(HealthBars, NewBar(WidgetBlueprint, TEXT("Bar_Health"), false, 1.f), HAlign_Fill, VAlign_Fill);
-	AddToColumn(Column, HealthBox, HAlign_Fill, FMargin(0.f, 4.f, 0.f, 0.f));
+	AddToColumn(HealthColumn, HealthBox, HAlign_Fill, FMargin(0.f, 2.f, 0.f, 0.f));
+	PlaceBottom(HealthPanel, 0.f, HUDMargin.X);
 
+	// 부스트: 캡션 줄 + 3등분 눈금이 있는 긴 바. 낮을 때 깜빡이는 빨간 테두리가 바를 감싼다.
+	USizeBox* const BoostPanel = NewSizeBox(WidgetBlueprint, TEXT("SizeBox_BoostPanel"), 640.f, 0.f);
+	UVerticalBox* const BoostColumn = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("VerticalBox_Boost"));
+	BoostPanel->AddChild(BoostColumn);
 	UHorizontalBox* const BoostRow = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("HorizontalBox_BoostLabels"));
 	AddToRow(BoostRow, NewText(WidgetBlueprint, TEXT("Txt_BoostLabel"), CaptionStyle, INVTEXT("BOOST"), false), false, HAlign_Left);
 	AddToRow(BoostRow, NewText(WidgetBlueprint, TEXT("Txt_Overheat"), WarningStyle, INVTEXT("OVERHEAT"), true), false, HAlign_Left, FMargin(12.f, 0.f, 0.f, 0.f));
 	// 수치가 남은 폭을 채우고 오른쪽에 붙는다. OVERHEAT가 접혀도 위치가 그대로다.
 	AddToRow(BoostRow, NewText(WidgetBlueprint, TEXT("Txt_Boost"), CaptionStyle, INVTEXT("100%"), true), true, HAlign_Right);
-	AddToColumn(Column, BoostRow, HAlign_Fill, FMargin(0.f, 10.f, 0.f, 0.f));
+	AddToColumn(BoostColumn, BoostRow, HAlign_Fill);
 
-	USizeBox* const BoostBox = NewSizeBox(WidgetBlueprint, TEXT("SizeBox_Boost"), 0.f, 9.f);
-	BoostBox->AddChild(NewBar(WidgetBlueprint, TEXT("Bar_Boost"), true, 1.f));
-	AddToColumn(Column, BoostBox, HAlign_Fill, FMargin(0.f, 4.f, 0.f, 0.f));
+	USizeBox* const BoostBox = NewSizeBox(WidgetBlueprint, TEXT("SizeBox_Boost"), 0.f, 8.f);
+	UOverlay* const BoostLayers = NewWidget<UOverlay>(WidgetBlueprint, TEXT("Overlay_Boost"));
+	BoostBox->AddChild(BoostLayers);
+	AddToOverlay(BoostLayers, NewBar(WidgetBlueprint, TEXT("Bar_Boost"), true, 1.f), HAlign_Fill, VAlign_Fill);
+	UHorizontalBox* const Ticks = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("HorizontalBox_BoostTicks"));
+	for (int32 Index = 0; Index < 3; ++Index)
+	{
+		if (Index > 0)
+		{
+			UHorizontalBoxSlot* const TickSlot = Ticks->AddChildToHorizontalBox(NewHUDImage(WidgetBlueprint, *FString::Printf(TEXT("Img_BoostTick%d"), Index), Navy900, FVector2D(2.f, 8.f)));
+			TickSlot->SetVerticalAlignment(VAlign_Fill);
+		}
+		Ticks->AddChildToHorizontalBox(NewWidget<USpacer>(WidgetBlueprint, *FString::Printf(TEXT("Spacer_Boost%d"), Index)))->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+	}
+	AddToOverlay(BoostLayers, Ticks, HAlign_Fill, VAlign_Fill);
+	UImage* const Alert = NewWidget<UImage>(WidgetBlueprint, TEXT("Img_BoostAlert"), true);
+	FSlateBrush AlertBrush;
+	AlertBrush.DrawAs = ESlateBrushDrawType::RoundedBox;
+	AlertBrush.TintColor = FSlateColor(FLinearColor::Transparent);
+	AlertBrush.OutlineSettings = FSlateBrushOutlineSettings(FVector4(0.f, 0.f, 0.f, 0.f), FSlateColor(FLinearColor(FColor(0xE5, 0x48, 0x4D))), 2.f);
+	AlertBrush.OutlineSettings.RoundingType = ESlateBrushRoundingType::FixedRadius;
+	Alert->SetBrush(AlertBrush);
+	Alert->SetVisibility(ESlateVisibility::Hidden);
+	Alert->SetPixelSnapping(EWidgetPixelSnapping::Disabled);
+	// 바 바깥으로 3px 나와서 바의 테두리와 겹치지 않는다.
+	AddToOverlay(BoostLayers, Alert, HAlign_Fill, VAlign_Fill, FMargin(-3.f));
+	AddToColumn(BoostColumn, BoostBox, HAlign_Fill, FMargin(0.f, 6.f, 0.f, 0.f));
+	PlaceBottom(BoostPanel, 0.5f, 0.f);
 
 	EndBuild(WidgetBlueprint);
 	return true;
 }
 
-bool UknightUIEditorLibrary::BuildHUDRaidTimer(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> TimeStyle, TSubclassOf<UCommonTextStyle> CaptionStyle)
+bool UknightUIEditorLibrary::BuildHUDRaidTimer(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> TimeStyle, TSubclassOf<UCommonTextStyle> CaptionStyle,
+	TSubclassOf<UCommonTextStyle> ObjectiveStyle)
 {
 	if (!BeginBuild(WidgetBlueprint, TEXT("BuildHUDRaidTimer")))
 	{
 		return false;
 	}
 
-	UVerticalBox* const Root = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("VerticalBox_Root"));
+	// 목표 한 줄: 캡션, 목표 + 남은 시간, 밑줄(왼쪽에 짧은 강조).
+	USizeBox* const Root = NewSizeBox(WidgetBlueprint, TEXT("SizeBox_Root"), 380.f, 0.f);
 	WidgetBlueprint->WidgetTree->RootWidget = Root;
-	AddToColumn(Root, NewText(WidgetBlueprint, TEXT("Txt_Time"), TimeStyle, INVTEXT("12:48"), true), HAlign_Right);
-	AddToColumn(Root, NewText(WidgetBlueprint, TEXT("Txt_Caption"), CaptionStyle, INVTEXT("TIME LEFT"), true), HAlign_Right);
+	UVerticalBox* const Column = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("VerticalBox_Root"));
+	Root->AddChild(Column);
+	AddToColumn(Column, NewText(WidgetBlueprint, TEXT("Txt_Caption"), CaptionStyle, INVTEXT("OBJECTIVE"), true), HAlign_Left);
+	UHorizontalBox* const Row = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("HorizontalBox_Objective"));
+	AddToRow(Row, NewText(WidgetBlueprint, TEXT("Txt_Objective"), ObjectiveStyle, NSLOCTEXT("knightUI", "ObjectivePlaceholder", "잔열 토벌"), true), true, HAlign_Left);
+	AddToRow(Row, NewText(WidgetBlueprint, TEXT("Txt_Time"), TimeStyle, INVTEXT("12:48"), true), false, HAlign_Right, FMargin(24.f, 0.f, 0.f, 0.f));
+	AddToColumn(Column, Row, HAlign_Fill, FMargin(0.f, 4.f, 0.f, 0.f));
+	UOverlay* const Underline = NewWidget<UOverlay>(WidgetBlueprint, TEXT("Overlay_Underline"));
+	AddToOverlay(Underline, NewHUDImage(WidgetBlueprint, TEXT("Img_Underline"), FLinearColor(Frost.R, Frost.G, Frost.B, 0.6f), FVector2D(8.f, 1.f)), HAlign_Fill, VAlign_Center);
+	AddToOverlay(Underline, NewHUDImage(WidgetBlueprint, TEXT("Img_UnderlineAccent"), Frost, FVector2D(32.f, 3.f)), HAlign_Left, VAlign_Center);
+	AddToColumn(Column, Underline, HAlign_Fill, FMargin(0.f, 6.f, 0.f, 0.f));
 
 	EndBuild(WidgetBlueprint);
 	return true;
 }
 
 bool UknightUIEditorLibrary::BuildHUDLockOnMarker(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> NameStyle,
-	UTexture2D* PartFrameTexture)
+	UTexture2D* PartFrameTexture, TSubclassOf<UCommonTextStyle> StaggerCaptionStyle)
 {
 	if (!BeginBuild(WidgetBlueprint, TEXT("BuildHUDLockOnMarker")))
 	{
@@ -365,6 +418,25 @@ bool UknightUIEditorLibrary::BuildHUDLockOnMarker(UWidgetBlueprint* WidgetBluepr
 	PlateSlot->SetAlignment(FVector2D(0.f, 1.f));
 	PlateSlot->SetPosition(Preview + FVector2D(64.f, -78.f));
 
+	// 박스 아래에 경직 게이지, 그 아래 거리. 가지선이 위로 나가므로 겹치지 않는다. 채움 색은 C++가 칠한다.
+	UVerticalBox* const Stagger = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("Stagger"), true);
+	Stagger->SetVisibility(ESlateVisibility::HitTestInvisible);
+	AddToColumn(Stagger, NewText(WidgetBlueprint, TEXT("Txt_StaggerCaption"), StaggerCaptionStyle ? StaggerCaptionStyle : CaptionStyle, INVTEXT("STAGGER"), false), HAlign_Center);
+	USizeBox* const StaggerBox = NewSizeBox(WidgetBlueprint, TEXT("SizeBox_Stagger"), 96.f, 5.f);
+	StaggerBox->AddChild(NewBar(WidgetBlueprint, TEXT("Bar_Stagger"), true, 0.6f));
+	AddToColumn(Stagger, StaggerBox, HAlign_Center, FMargin(0.f, 2.f, 0.f, 0.f));
+	UCanvasPanelSlot* const StaggerSlot = Root->AddChildToCanvas(Stagger);
+	StaggerSlot->SetAutoSize(true);
+	StaggerSlot->SetAlignment(FVector2D(0.5f, 0.f));
+	StaggerSlot->SetPosition(Preview + FVector2D(0.f, 58.f));
+
+	UCommonTextBlock* const Distance = NewText(WidgetBlueprint, TEXT("Txt_Distance"), CaptionStyle, INVTEXT("[ 42M ]"), true);
+	Distance->SetVisibility(ESlateVisibility::HitTestInvisible);
+	UCanvasPanelSlot* const DistanceSlot = Root->AddChildToCanvas(Distance);
+	DistanceSlot->SetAutoSize(true);
+	DistanceSlot->SetAlignment(FVector2D(0.5f, 0.f));
+	DistanceSlot->SetPosition(Preview + FVector2D(0.f, 90.f));
+
 	EndBuild(WidgetBlueprint);
 	return true;
 }
@@ -384,16 +456,16 @@ bool UknightUIEditorLibrary::BuildHUDLayout(UWidgetBlueprint* WidgetBlueprint, T
 	LockOnSlot->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f));
 	LockOnSlot->SetOffsets(FMargin(0.f));
 
+	// 플레이어 패널은 화면 전체에 깔고 그 안에서 체력(왼쪽 아래)과 부스트(아래 가운데)를 놓는다.
 	UCanvasPanelSlot* const PlayerSlot = Root->AddChildToCanvas(NewWidget<UUserWidget>(WidgetBlueprint, PlayerStatusClass, TEXT("PlayerStatus"), true));
-	PlayerSlot->SetAnchors(FAnchors(0.f, 0.f));
-	PlayerSlot->SetAlignment(FVector2D(0.f, 0.f));
-	PlayerSlot->SetPosition(HUDMargin);
-	PlayerSlot->SetAutoSize(true);
+	PlayerSlot->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f));
+	PlayerSlot->SetOffsets(FMargin(0.f));
 
+	// 목표 + 남은 시간: 왼쪽 위.
 	UCanvasPanelSlot* const TimerSlot = Root->AddChildToCanvas(NewWidget<UUserWidget>(WidgetBlueprint, RaidTimerClass, TEXT("RaidTimer"), true));
-	TimerSlot->SetAnchors(FAnchors(1.f, 0.f));
-	TimerSlot->SetAlignment(FVector2D(1.f, 0.f));
-	TimerSlot->SetPosition(FVector2D(-HUDMargin.X, HUDMargin.Y));
+	TimerSlot->SetAnchors(FAnchors(0.f, 0.f));
+	TimerSlot->SetAlignment(FVector2D(0.f, 0.f));
+	TimerSlot->SetPosition(HUDMargin);
 	TimerSlot->SetAutoSize(true);
 
 	EndBuild(WidgetBlueprint);

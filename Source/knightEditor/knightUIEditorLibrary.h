@@ -31,23 +31,25 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
 	static bool BuildPrimaryLayout(UWidgetBlueprint* WidgetBlueprint);
 
-	/** WBP_HUDPlayerStatus: 이름/체력 수치, 체력 바(고스트 바 겹침), 부스트 라벨/과열/수치, 부스트 바. */
+	/** WBP_HUDPlayerStatus: 화면 전체 캔버스. 왼쪽 아래 체력(HP 캡션, 큰 현재값, /최대값, 고스트 바), 아래 가운데 부스트(라벨/과열/수치, 3등분 바, 낮을 때 빨간 테두리). */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
-	static bool BuildHUDPlayerStatus(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> WarningStyle);
+	static bool BuildHUDPlayerStatus(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> WarningStyle,
+		TSubclassOf<UCommonTextStyle> NumberStyle = nullptr);
 
-	/** WBP_HUDRaidTimer: 오른쪽 정렬된 Txt_Time과 Txt_Caption. */
+	/** WBP_HUDRaidTimer: OBJECTIVE 캡션, 목표(Txt_Objective)와 남은 시간(Txt_Time) 한 줄, 밑줄. */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
-	static bool BuildHUDRaidTimer(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> TimeStyle, TSubclassOf<UCommonTextStyle> CaptionStyle);
+	static bool BuildHUDRaidTimer(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> TimeStyle, TSubclassOf<UCommonTextStyle> CaptionStyle,
+		TSubclassOf<UCommonTextStyle> ObjectiveStyle = nullptr);
 
 	/**
 	 * WBP_HUDLockOnMarker: 캔버스 직속의 Box(주황 귀퉁이), PartFrame/PartFlash(부위 틀, PartFrameTexture가 있을 때), Line_Diagonal, Line_Shelf,
-	 * Plate(TARGET LOCK + 이름 + 부위 이름). 위치는 C++가 매 프레임 정한다.
+	 * Plate(TARGET LOCK + 이름 + 부위 이름), Stagger(경직 게이지), Txt_Distance. 위치는 C++가 매 프레임 정한다.
 	 */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
 	static bool BuildHUDLockOnMarker(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> NameStyle,
-		UTexture2D* PartFrameTexture = nullptr);
+		UTexture2D* PartFrameTexture = nullptr, TSubclassOf<UCommonTextStyle> StaggerCaptionStyle = nullptr);
 
-	/** WBP_HUDLayout: 화면 전체의 락온 마커(맨 아래), 1080p 세이프존(4.5%) 안쪽에 플레이어 상태(좌상), 타이머(우상). */
+	/** WBP_HUDLayout: 화면 전체의 락온 마커(맨 아래)와 플레이어 패널(체력 왼쪽 아래, 부스트 아래 가운데), 세이프존 안쪽 왼쪽 위에 목표/타이머. */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
 	static bool BuildHUDLayout(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> PlayerStatusClass, TSubclassOf<UUserWidget> RaidTimerClass, TSubclassOf<UUserWidget> LockOnMarkerClass);
 
