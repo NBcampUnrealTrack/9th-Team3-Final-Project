@@ -26,7 +26,18 @@ public class knightEditor : ModuleRules
 			"CommonUI",
 			"knightUI",
 			"Slate",
-			"SlateCore"
+			"SlateCore",
+			// 몬스터 레시피 생성기(knightMonsterRecipeLibrary).
+			"AIModule",
+			"AnimGraph",
+			"AnimGraphRuntime",
+			"AssetRegistry",
+			"AssetTools",
+			"BlueprintGraph",
+			"GameplayStateTreeModule",
+			"PropertyBindingUtils",
+			"StateTreeEditorModule",
+			"StateTreeModule"
 		});
 	}
 }

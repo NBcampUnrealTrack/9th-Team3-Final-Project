@@ -54,4 +54,15 @@ public:
 	/** Lock-on point when PartData defines none. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Targeting")
 	FName FallbackLockOnSocket = TEXT("spine_03");
+
+	/** 공용 StateTree(ST_Monster_Default)의 추격이 멈추는 거리. 몸 크기에 맞춘다. Knight Monster Target 평가기가 내보낸다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="cm"))
+	float ChaseStopDistance = 900.f;
+
+	/** 공용 StateTree가 원거리 공격(Ability.Attack.Ranged)으로 넘어가는 거리 구간. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="cm"))
+	float RangedMinDistance = 533.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="cm"))
+	float RangedMaxDistance = 2000.f;
 };
