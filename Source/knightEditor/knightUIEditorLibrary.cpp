@@ -1297,3 +1297,45 @@ bool UknightUIEditorLibrary::BuildMainMenu(UWidgetBlueprint* WidgetBlueprint, TS
 	EndBuild(WidgetBlueprint);
 	return true;
 }
+
+bool UknightUIEditorLibrary::BuildLoadingScreen(UWidgetBlueprint* WidgetBlueprint, UTexture2D* Mark, TSubclassOf<UCommonTextStyle> TipStyle)
+{
+	if (!BeginBuild(WidgetBlueprint, TEXT("BuildLoadingScreen")))
+	{
+		return false;
+	}
+	UCanvasPanel* const Root = NewWidget<UCanvasPanel>(WidgetBlueprint, TEXT("Canvas_Root"));
+	WidgetBlueprint->WidgetTree->RootWidget = Root;
+	AddFill(Root, NewHUDImage(WidgetBlueprint, TEXT("Img_Background"), FLinearColor(FColor(0x05, 0x08, 0x0D)), FVector2D(32.f, 32.f)));
+
+	// Mark and tip, a little below the centre like the reference.
+	UVerticalBox* const Center = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("VerticalBox_Center"));
+	AddToCanvas(Root, Center, FAnchors(0.5f, 0.5f), FVector2D(0.5f, 0.f), FMargin(0.f, -40.f, 0.f, 0.f), true);
+	UVerticalBoxSlot* const MarkSlot = Center->AddChildToVerticalBox(NewTextureImage(WidgetBlueprint, TEXT("Img_Mark"), Mark, White, FVector2D(72.f, 96.f)));
+	MarkSlot->SetHorizontalAlignment(HAlign_Center);
+	UCommonTextBlock* const Tip = NewText(WidgetBlueprint, TEXT("Txt_Tip"), TipStyle, NSLOCTEXT("knightUI", "LoadingTipPlaceholder", "로딩 중에 보여 줄 팁 문구입니다."), true);
+	Tip->SetJustification(ETextJustify::Center);
+	UVerticalBoxSlot* const TipSlot = Center->AddChildToVerticalBox(Tip);
+	TipSlot->SetHorizontalAlignment(HAlign_Center);
+	TipSlot->SetPadding(FMargin(0.f, 28.f, 0.f, 0.f));
+
+	// Three rounded dots; C++ lights them in turn.
+	UHorizontalBox* const Dots = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("HorizontalBox_Dots"));
+	AddToCanvas(Root, Dots, FAnchors(1.f, 1.f), FVector2D(1.f, 1.f), FMargin(-HUDMargin.X, -HUDMargin.Y, 0.f, 0.f), true);
+	for (int32 Index = 0; Index < 3; ++Index)
+	{
+		UImage* const Dot = NewWidget<UImage>(WidgetBlueprint, *FString::Printf(TEXT("Img_Dot_%d"), Index), true);
+		FSlateBrush Brush;
+		Brush.DrawAs = ESlateBrushDrawType::RoundedBox;
+		Brush.ImageSize = FVector2D(12.f, 12.f);
+		Brush.TintColor = FSlateColor(White);
+		Brush.OutlineSettings = FSlateBrushOutlineSettings(FVector4(3.f, 3.f, 3.f, 3.f), FSlateColor(FLinearColor::Transparent), 0.f);
+		Brush.OutlineSettings.RoundingType = ESlateBrushRoundingType::FixedRadius;
+		Dot->SetBrush(Brush);
+		Dot->SetVisibility(ESlateVisibility::HitTestInvisible);
+		AddCentered(Dots, Dot, false, VAlign_Center, FMargin(Index > 0 ? 6.f : 0.f, 0.f, 0.f, 0.f));
+	}
+
+	EndBuild(WidgetBlueprint);
+	return true;
+}
