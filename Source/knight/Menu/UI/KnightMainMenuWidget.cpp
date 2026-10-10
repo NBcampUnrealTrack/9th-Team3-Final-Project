@@ -21,6 +21,9 @@
 #include "knight.h"
 #include "Settings/KnightSettingsWidget.h"
 #include "Codex/KnightCodexWidget.h"
+#include "Menu/KnightMaintenanceCameraRig.h"
+#include "Menu/UI/KnightMaintenanceWidget.h"
+#include "EngineUtils.h"
 
 #define LOCTEXT_NAMESPACE "KnightMainMenu"
 
@@ -87,6 +90,8 @@ void UKnightMainMenuWidget::NativeConstruct()
 
 void UKnightMainMenuWidget::NativeDestruct()
 {
+	if (MaintenanceWidget) MaintenanceWidget->Close();
+	if (MaintenanceCameraRig.IsValid()) MaintenanceCameraRig->SetMaintenanceView(false);
 	if (SettingsWidget)
 	{
 		SettingsWidget->OnClosed.RemoveDynamic(this, &ThisClass::HandleSettingsClosed);
@@ -129,8 +134,16 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 		return false;
 	}
 	const bool bEnteringStage = NewPage == EKnightMainMenuPage::Stage && CurrentPage != EKnightMainMenuPage::Stage;
+	const bool bLeavingMaintenance = CurrentPage == EKnightMainMenuPage::Maintenance && NewPage != CurrentPage;
+	if (bLeavingMaintenance)
+	{
+		if (MaintenanceWidget) MaintenanceWidget->Close();
+		if (MaintenanceCameraRig.IsValid()) MaintenanceCameraRig->SetMaintenanceView(false);
+		bRestoreMaintenanceFocus = NewPage == EKnightMainMenuPage::Home;
+	}
 	CurrentPage = NewPage;
 	if (NewPage != EKnightMainMenuPage::Home) bRestoreCodexFocus = false;
+	if (NewPage != EKnightMainMenuPage::Home) bRestoreMaintenanceFocus = false;
 	bool bHasStages = true;
 	if (bEnteringStage)
 	{
@@ -157,6 +170,20 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 		EnsureCodexWidget();
 		if (CodexWidget) CodexWidget->Open();
 	}
+	if (NewPage == EKnightMainMenuPage::Maintenance)
+	{
+		EnsureMaintenanceWidget();
+		if (MaintenanceWidget) MaintenanceWidget->Open();
+		if (!MaintenanceCameraRig.IsValid() && GetWorld())
+		{
+			for (TActorIterator<AKnightMaintenanceCameraRig> It(GetWorld()); It; ++It)
+			{
+				MaintenanceCameraRig = *It;
+				break;
+			}
+		}
+		if (MaintenanceCameraRig.IsValid()) MaintenanceCameraRig->SetMaintenanceView(true);
+	}
 	// Settings and the codex bring their own close buttons.
 	UpdateBackVisibility(NewPage == EKnightMainMenuPage::Home || NewPage == EKnightMainMenuPage::Settings || NewPage == EKnightMainMenuPage::Codex);
 	RefreshTravelControls();
@@ -174,6 +201,8 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 	{
 		CodexWidget->GetFocusButton()->SetUserFocus(GetOwningPlayer());
 	}
+	if (NewPage == EKnightMainMenuPage::Maintenance && MaintenanceWidget && MaintenanceWidget->GetFocusButton())
+		MaintenanceWidget->GetFocusButton()->SetUserFocus(GetOwningPlayer());
 	return true;
 }
 
@@ -191,6 +220,20 @@ bool UKnightMainMenuWidget::HandleBackRequested()
 
 FReply UKnightMainMenuWidget::NativeOnPreviewKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
 {
+	if (CurrentPage == EKnightMainMenuPage::Maintenance && MaintenanceWidget && !IsTravelPending())
+	{
+		const FKey Key = InKeyEvent.GetKey();
+		if (Key == EKeys::Left || Key == EKeys::Right)
+		{
+			MaintenanceWidget->CyclePage(Key == EKeys::Left ? -1 : 1);
+			return FReply::Handled();
+		}
+		if (Key == EKeys::N)
+		{
+			MaintenanceWidget->TogglePreview();
+			return FReply::Handled();
+		}
+	}
 	// Left / Right walk the regions on the globe.
 	if (CurrentPage == EKnightMainMenuPage::Stage && !IsTravelPending())
 	{
@@ -244,6 +287,17 @@ void UKnightMainMenuWidget::EnsureCodexWidget()
 	CodexWidget->OnClosed.AddUniqueDynamic(this, &ThisClass::HandleCodexClosed);
 }
 
+void UKnightMainMenuWidget::EnsureMaintenanceWidget()
+{
+	if (MaintenanceWidget || !Panel_Maintenance || !GetOwningPlayer()) return;
+	MaintenanceWidget = CreateWidget<UKnightMaintenanceWidget>(GetOwningPlayer(), UKnightMaintenanceWidget::GetSharedWidgetClass());
+	if (!MaintenanceWidget) return;
+	Panel_Maintenance->ClearChildren();
+	UPanelSlot* AddedSlot = Panel_Maintenance->AddChild(MaintenanceWidget);
+	if (UVerticalBoxSlot* MaintenanceSlot = Cast<UVerticalBoxSlot>(AddedSlot))
+		MaintenanceSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+}
+
 void UKnightMainMenuWidget::HandleCodexClosed()
 {
 	bRestoreCodexFocus = true;
@@ -252,6 +306,8 @@ void UKnightMainMenuWidget::HandleCodexClosed()
 
 UWidget* UKnightMainMenuWidget::GetPreferredFocusTarget() const
 {
+	if (CurrentPage == EKnightMainMenuPage::Home && bRestoreMaintenanceFocus && Button_Maintenance) return Button_Maintenance;
+	if (CurrentPage == EKnightMainMenuPage::Maintenance && MaintenanceWidget) return MaintenanceWidget->GetFocusButton();
 	if (CurrentPage == EKnightMainMenuPage::Home && bRestoreCodexFocus && Button_Codex)
 	{
 		return Button_Codex;

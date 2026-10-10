@@ -114,6 +114,15 @@ public:
 		TSubclassOf<UCommonTextStyle> TitleStyle, TSubclassOf<UCommonTextStyle> BodyStyle, TSubclassOf<UCommonTextStyle> BodyDimStyle,
 		TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> WarningStyle, TSubclassOf<UCommonTextStyle> NumberStyle);
 
+	/** Designer-editable maintenance screen: inventory/craft left, clear camera view center, two stat pages right. */
+	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
+	static bool BuildMaintenanceScreen(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> ButtonClass,
+		TSubclassOf<UCommonTextStyle> TitleStyle, TSubclassOf<UCommonTextStyle> BodyStyle);
+
+	/** One selectable equipment or recipe row, with icon/name/equipped state. */
+	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
+	static bool BuildMaintenanceEntry(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> BodyStyle);
+
 	/** WBP_KnightLoadingScreen: 검은 배경, 가운데 마크와 팁 한 줄, 오른쪽 아래 점 세 개. */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
 	static bool BuildLoadingScreen(UWidgetBlueprint* WidgetBlueprint, UTexture2D* Mark, TSubclassOf<UCommonTextStyle> TipStyle);

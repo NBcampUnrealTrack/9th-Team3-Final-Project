@@ -9,6 +9,7 @@
 class UknightItemDefinition;
 class UknightPartItemDefinition;
 class UknightSaveGame;
+class UknightCraftRecipeDefinition;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FknightProgressionChanged);
 
@@ -67,9 +68,19 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|Progression")
 	bool UpgradePart(const UknightPartItemDefinition* Part);
 
+	/** Validates all ingredients and stage unlocks without changing the save. */
+	UFUNCTION(BlueprintPure, Category="Knight|Progression")
+	bool CanCraftPart(const UknightCraftRecipeDefinition* Recipe) const;
+
+	/** Atomic single-save transaction. Never equips the result. */
+	UFUNCTION(BlueprintCallable, Category="Knight|Progression")
+	bool CraftPart(const UknightCraftRecipeDefinition* Recipe);
+
 	// Loadout
 	/** Equipped part for a slot, or null. Loads the definition if needed. */
 	const UknightPartItemDefinition* GetEquippedPart(FGameplayTag SlotTag) const;
+
+	bool IsSlotExplicitlyEmpty(FGameplayTag SlotTag) const;
 
 	/** Equips an owned part into its slot. Returns false if it is not owned. */
 	UFUNCTION(BlueprintCallable, Category="Knight|Progression")

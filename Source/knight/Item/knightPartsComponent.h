@@ -9,6 +9,7 @@
 class UGameplayEffect;
 class USkeletalMeshComponent;
 class UknightPartItemDefinition;
+struct FknightPartStatModifier;
 
 /** Part is null when the slot was emptied. Item definitions are shared assets: listeners must not modify them. */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FknightEquipmentChanged, FGameplayTag, SlotTag, UknightPartItemDefinition*, Part);
@@ -95,6 +96,7 @@ public:
 	float GetLoadCapacity() const;
 
 	const TArray<FGameplayTag>& GetLoadoutSlots() const { return LoadoutSlots; }
+	const TArray<TObjectPtr<const UknightPartItemDefinition>>& GetDefaultLoadout() const { return DefaultLoadout; }
 
 	/** Meshes of every equipped part (for damage visuals, dissolves, outlines). */
 	void GetPartMeshes(TArray<USkeletalMeshComponent*>& OutMeshes) const;
@@ -127,6 +129,8 @@ private:
 	const UGameplayEffect* GetStatEffect(const UknightPartItemDefinition* Part);
 
 	void RemovePart(FknightEquippedPart& Part);
+	void RefreshSetBonuses();
+	const UGameplayEffect* GetSetStatEffect(const FString& Key, const TArray<FknightPartStatModifier>& Modifiers);
 
 	UPROPERTY(Transient)
 	TMap<FGameplayTag, FknightEquippedPart> EquippedParts;
@@ -134,4 +138,8 @@ private:
 	/** 파츠 정의 → 그 능력치로 만든 GE (에셋 파일 없이 메모리에만 있다). */
 	UPROPERTY(Transient)
 	TMap<TObjectPtr<const UknightPartItemDefinition>, TObjectPtr<UGameplayEffect>> StatEffects;
+
+	UPROPERTY(Transient)
+	TMap<FString, TObjectPtr<UGameplayEffect>> SetStatEffects;
+	TArray<FActiveGameplayEffectHandle> ActiveSetHandles;
 };
