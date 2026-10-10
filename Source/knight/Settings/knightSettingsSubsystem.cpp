@@ -2,6 +2,8 @@
 
 #include "Engine/GameInstance.h"
 #include "Engine/LocalPlayer.h"
+#include "Camera/PlayerCameraManager.h"
+#include "GameFramework/PlayerController.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputMappingContext.h"
 #include "UserSettings/EnhancedInputUserSettings.h"
@@ -79,4 +81,41 @@ void UknightSettingsSubsystem::ApplyAudioSettings()
 	Audio->SetCategoryVolume(TEXT("Music"), SharedSettings->MusicVolume);
 	Audio->SetCategoryVolume(TEXT("SFX"), SharedSettings->SFXVolume);
 	Audio->SetCategoryVolume(TEXT("Voice"), SharedSettings->VoiceVolume);
+}
+
+void UknightSettingsSubsystem::PreviewDisplaySettings(float FieldOfViewOffset, float Brightness, float Gamma)
+{
+	bDisplayPreviewActive = true;
+	PreviewFieldOfViewOffset = FMath::Clamp(FieldOfViewOffset, -20.f, 30.f);
+	PreviewBrightness = FMath::Clamp(Brightness, 0.8f, 1.2f);
+	PreviewGamma = FMath::Clamp(Gamma, 0.8f, 1.2f);
+	RefreshActiveCamera();
+}
+
+void UknightSettingsSubsystem::EndDisplayPreview()
+{
+	if (bDisplayPreviewActive)
+	{
+		bDisplayPreviewActive = false;
+		RefreshActiveCamera();
+	}
+}
+
+void UknightSettingsSubsystem::GetEffectiveDisplaySettings(float& FieldOfViewOffset, float& Brightness, float& Gamma)
+{
+	const UknightSharedSettings* const Settings = GetSharedSettings();
+	FieldOfViewOffset = bDisplayPreviewActive ? PreviewFieldOfViewOffset : Settings ? Settings->FieldOfViewOffset : 0.f;
+	Brightness = bDisplayPreviewActive ? PreviewBrightness : Settings ? Settings->Brightness : 1.f;
+	Gamma = bDisplayPreviewActive ? PreviewGamma : Settings ? Settings->Gamma : 1.f;
+}
+
+void UknightSettingsSubsystem::RefreshActiveCamera()
+{
+	const ULocalPlayer* const Player = GetLocalPlayer();
+	APlayerController* const Controller = Player ? Player->GetPlayerController(Player->GetWorld()) : nullptr;
+	if (Controller && Controller->PlayerCameraManager)
+	{
+		// Paused menu worlds do not tick their camera; refresh the cached view and PP blends now.
+		Controller->PlayerCameraManager->UpdateCamera(0.f);
+	}
 }

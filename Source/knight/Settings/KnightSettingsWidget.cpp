@@ -116,6 +116,7 @@ void UKnightSettingsWidget::Open()
 		SetStatus(LOCTEXT("Unavailable", "설정을 불러오지 못했습니다."));
 		return;
 	}
+	Settings->EndDisplayPreview();
 	HandleOpened();
 	SavedGraphics = Graphics->GetActiveGraphics();
 	DraftGraphics = SavedGraphics;
@@ -375,6 +376,25 @@ void UKnightSettingsWidget::PreviewAudio(const UknightSharedSettings* Settings) 
 	Audio->SetCategoryVolume(TEXT("Voice"), Settings->VoiceVolume);
 }
 
+void UKnightSettingsWidget::PreviewDisplay(const UknightSharedSettings* Settings) const
+{
+	const ULocalPlayer* const Player = GetOwningLocalPlayer();
+	UknightSettingsSubsystem* const Subsystem = Player ? Player->GetSubsystem<UknightSettingsSubsystem>() : nullptr;
+	if (Subsystem && Settings)
+	{
+		Subsystem->PreviewDisplaySettings(Settings->FieldOfViewOffset, Settings->Brightness, Settings->Gamma);
+	}
+}
+
+void UKnightSettingsWidget::EndDisplayPreview() const
+{
+	const ULocalPlayer* const Player = GetOwningLocalPlayer();
+	if (UknightSettingsSubsystem* const Subsystem = Player ? Player->GetSubsystem<UknightSettingsSubsystem>() : nullptr)
+	{
+		Subsystem->EndDisplayPreview();
+	}
+}
+
 void UKnightSettingsWidget::OptionEdited(FName Id, const FString& Value)
 {
 	if (!DraftPersonal) return;
@@ -437,6 +457,10 @@ void UKnightSettingsWidget::OptionEdited(FName Id, const FString& Value)
 	{
 		PreviewAudio(DraftPersonal);
 	}
+	if (Id == TEXT("FOV") || Id == TEXT("Gamma") || Id == TEXT("Brightness"))
+	{
+		PreviewDisplay(DraftPersonal);
+	}
 	SetStatus(FText::GetEmpty());
 	HandleValuesChanged();
 }
@@ -462,7 +486,7 @@ void UKnightSettingsWidget::Apply()
 			return;
 		}
 		CopyPersonal(SavedPersonal, DraftPersonal);
-		Settings->ApplyAudioSettings();
+		Settings->EndDisplayPreview();
 	}
 	if (IsKeyDirty())
 	{
@@ -589,6 +613,7 @@ void UKnightSettingsWidget::Revert()
 	CopyPersonal(DraftPersonal, SavedPersonal);
 	DraftKeys = SavedKeys;
 	PreviewAudio(SavedPersonal);
+	EndDisplayPreview();
 	HandleTabChanged();
 	ShowUnsavedPrompt(false);
 	SetStatus(LOCTEXT("Discarded", "편집한 내용을 버렸습니다."));
@@ -603,6 +628,7 @@ void UKnightSettingsWidget::RestoreDefaults()
 	CopyPersonal(DraftPersonal, Defaults);
 	DraftKeys = DefaultKeys;
 	PreviewAudio(DraftPersonal);
+	PreviewDisplay(DraftPersonal);
 	HandleTabChanged();
 	SetStatus(LOCTEXT("DefaultsStaged", "기본값을 불러왔습니다. 적용을 누르면 저장됩니다."));
 }
@@ -627,6 +653,7 @@ void UKnightSettingsWidget::ShowUnsavedPrompt(bool bShow)
 void UKnightSettingsWidget::CloseNow()
 {
 	ShowUnsavedPrompt(false);
+	EndDisplayPreview();
 	OnClosed.Broadcast();
 }
 
@@ -659,6 +686,8 @@ void UKnightSettingsWidget::NativeDestruct()
 {
 	// Leaving the map mid-countdown counts as not keeping the display.
 	if (bDisplayConfirmShown) RestoreDisplay(false);
+	EndDisplayPreview();
+	if (SavedPersonal) PreviewAudio(SavedPersonal);
 	Super::NativeDestruct();
 }
 

@@ -64,8 +64,10 @@ public:
 
 private:
 	void HandlePostLoadMap(UWorld* LoadedWorld);
+	void HandleWorldInitialized(const struct FActorsInitializedParams& Params);
 	void ApplyAllVolumes(UWorld* World);
 	void ApplyVolume(UWorld* World, FName Category, float Volume);
+	bool EnsureUserSoundMix(UWorld* World, USoundMix* SoundMix);
 	USoundMix* GetUserSoundMix();
 	USoundClass* GetSoundClass(FName Category);
 	float ResolveFadeTime(float FadeTime) const;
@@ -84,7 +86,8 @@ private:
 	TObjectPtr<USoundMix> LoadedUserSoundMix;
 	UPROPERTY(Transient)
 	TMap<FName, TObjectPtr<USoundClass>> LoadedSoundClasses;
-	TWeakObjectPtr<UWorld> SoundMixWorld;
+	// The modifier belongs to an audio device, which can survive a map change.
+	uint32 PushedSoundMixDeviceId = MAX_uint32;
 	TWeakObjectPtr<UAudioComponent> MusicComponent;
 	int32 MusicState = 0;
 	float MusicLoopGap = 0.f;
@@ -97,4 +100,5 @@ private:
 	TWeakObjectPtr<UAudioComponent> VoiceComponent;
 	FTSTicker::FDelegateHandle VoiceGapTicker;
 	FDelegateHandle PostLoadMapHandle;
+	FDelegateHandle WorldInitializedHandle;
 };

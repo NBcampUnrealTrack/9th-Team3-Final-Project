@@ -1,4 +1,5 @@
 #include "KnightMenuPlayerController.h"
+#include "Camera/knightPlayerCameraManager.h"
 
 #include "KnightMenuGameMode.h"
 #include "UI/KnightMainMenuWidget.h"
@@ -14,6 +15,7 @@
 
 AKnightMenuPlayerController::AKnightMenuPlayerController()
 {
+	PlayerCameraManagerClass = AknightPlayerCameraManager::StaticClass();
 	bShowMouseCursor = true;
 	bEnableClickEvents = true;
 	bEnableMouseOverEvents = true;

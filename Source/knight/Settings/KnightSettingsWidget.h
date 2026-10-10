@@ -7,6 +7,7 @@
 #include "KnightSettingsWidget.generated.h"
 
 class UknightSharedSettings;
+class UknightSettingsSubsystem;
 
 UENUM(BlueprintType)
 enum class EKnightSettingControl : uint8
@@ -144,6 +145,8 @@ private:
 	void CopyPersonal(UknightSharedSettings* To, const UknightSharedSettings* From) const;
 	/** Plays the draft volumes, so sliders are heard while dragging. Revert and close play the stored ones again. */
 	void PreviewAudio(const UknightSharedSettings* Settings) const;
+	void PreviewDisplay(const UknightSharedSettings* Settings) const;
+	void EndDisplayPreview() const;
 	void CloseNow();
 	void ApplyPreset(int32 Quality);
 
