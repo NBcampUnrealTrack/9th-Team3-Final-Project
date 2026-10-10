@@ -8,6 +8,7 @@ class UGameplayEffect;
 class UknightAbilitySet;
 class UknightAbilityTagRelationshipMapping;
 class UknightMonsterPartData;
+class UNiagaraSystem;
 
 /**
  * Everything that defines a monster species, separate from its Blueprint (mesh, anim BP, StateTree).
@@ -65,4 +66,11 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="cm"))
 	float RangedMaxDistance = 2000.f;
+
+	/**
+	 * 등장할 때 셰이더 파이프라인(PSO)을 미리 준비해 둘 이펙트(브레스, 땅울림 먼지). 처음 쓰일 때 셰이더를 즉석에서 만드느라
+	 * 한 프레임이 튀는 것을 막는다. 몽타주 노티파이로 처음 등장하는 Niagara를 넣는다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation")
+	TArray<TObjectPtr<UNiagaraSystem>> PrewarmEffects;
 };

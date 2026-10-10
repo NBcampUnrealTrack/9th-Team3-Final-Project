@@ -20,9 +20,12 @@
 #include "Monster/knightMonsterPushOutComponent.h"
 #include "Monster/knightMonsterTargetingComponent.h"
 #include "MotionWarpingComponent.h"
+#include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
 #include "Perception/AIPerceptionComponent.h"
 #include "System/knightGameplayTags.h"
 #include "System/knightTeams.h"
+#include "TimerManager.h"
 #include "knight.h"
 #include "knightPerfCounters.h"
 
@@ -78,6 +81,45 @@ void AknightMonsterCharacterBase::BeginPlay()
 	// 배치된 몬스터는 빙의 전에 BeginPlay가 불릴 수 있다. 부위와 위협도는 어느 쪽이든 동작한다.
 	InitializeAbilitySystem();
 	SetCountedAlive(true);
+	PrewarmEffects();
+}
+
+void AknightMonsterCharacterBase::PrewarmEffects()
+{
+	UWorld* const World = GetWorld();
+	if (!MonsterDefinition || !World || !World->IsGameWorld())
+	{
+		return;
+	}
+	// 레이드 로딩 화면 동안은 월드를 그리지 않아 실제로 그려서 데우는 방법은 통하지 않는다. 대신 숨긴 채 켜면 Niagara가
+	// 초기화하면서 PSO 준비를 비동기로 걸어 두고, 실제 공격 때는 준비된 PSO를 쓴다.
+	TArray<TWeakObjectPtr<UNiagaraComponent>> Spawned;
+	for (UNiagaraSystem* const System : MonsterDefinition->PrewarmEffects)
+	{
+		UNiagaraComponent* const Effect = System ? UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, System, GetActorLocation(),
+			FRotator::ZeroRotator, FVector::OneVector, false, false) : nullptr;
+		if (Effect)
+		{
+			Effect->SetHiddenInGame(true);
+			Effect->Activate(true);
+			Spawned.Add(Effect);
+		}
+	}
+	if (Spawned.IsEmpty())
+	{
+		return;
+	}
+	FTimerHandle Handle;
+	World->GetTimerManager().SetTimer(Handle, FTimerDelegate::CreateWeakLambda(this, [Spawned]()
+	{
+		for (const TWeakObjectPtr<UNiagaraComponent>& Effect : Spawned)
+		{
+			if (Effect.IsValid())
+			{
+				Effect->DestroyComponent();
+			}
+		}
+	}), 2.f, false);
 }
 
 void AknightMonsterCharacterBase::EndPlay(const EEndPlayReason::Type EndPlayReason)

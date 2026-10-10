@@ -78,6 +78,9 @@ protected:
 
 	void InitializeAbilitySystem();
 
+	/** MonsterDefinition의 PrewarmEffects를 숨긴 채 한 번 켜서 PSO 준비를 미리 걸어 둔다. */
+	void PrewarmEffects();
+
 	void HandleOutOfHealth(AActor* DamageInstigator, AActor* DamageCauser, const FGameplayEffectSpec* EffectSpec,
 		float Magnitude, float OldValue, float NewValue);
 	void HandleRageMaxed(AActor* EffectInstigator, AActor* EffectCauser, const FGameplayEffectSpec* EffectSpec,
