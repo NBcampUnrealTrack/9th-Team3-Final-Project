@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Curves/CurveFloat.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "knightMovementComponent.generated.h"
 
@@ -23,6 +24,14 @@ struct FGameplayAttribute;
  *   점프 힘 = BaseJumpZVelocity x JumpSpeed 배율 (중량은 점프에 영향 없음)
  * 배율·중량·적재 한도는 메카 속성 세트(UknightAttributeSet)에서 매번 읽으므로,
  * 파츠 교체나 부위 파괴로 스탯이 바뀌면 바로 반영된다.
+ *
+ * 출발·정지 Easing (2026-10-09):
+ *   출발: 땅 위의 가속 = MaxAcceleration x 출발 곡선(지금 속도 / 최고 속도) x 중량 계수.
+ *         기본 곡선은 느리게 떼고(0.35배) 중간에 붙었다가(1.0배) 최고 속도 근처에서 부드럽게 닿는(0.6배) S자.
+ *   정지: 방향키를 떼면 StopBrakingFriction·StopBrakingDeceleration으로 미끄러지며 멈춘다(속도가 줄수록 감속도 약해짐).
+ *         이동 잠금(가드·퀵스텝 경직) 중에는 엔진 값(GroundFriction·BrakingDecelerationWalking)으로 지금처럼 빨리 멈춘다.
+ *   중량 계수는 가속과 정지 감속에도 곱한다. 최고 속도도 같은 비율로 줄어서 출발·정지에 걸리는 시간은 가벼울 때와 같다.
+ *   PIE에서 값 바꾸기·측정: knight.Player.Easing, knight.Player.MoveLog (knightDev 치트)
  */
 UCLASS()
 class KNIGHT_API UknightMovementComponent : public UCharacterMovementComponent
@@ -48,8 +57,7 @@ public:
 
 	/**
 	 * 달리기 상태를 켜고 끈다. 지상 이동 속도가 걷기 대신 달리기 기준으로 바뀐다.
-	 * 기본 조작은 '누르고 있는 동안 달리기'이고, 옵션에서 '토글'로 바꿀 수 있게 할 예정이다.
-	 * (입력 키 연결은 키 매핑이 정해진 뒤에 캐릭터 쪽에서 한다)
+	 * 조작은 '누르고 있는 동안 달리기'(LeftShift, 캐릭터의 SetRunning이 부른다). 토글 설정은 2026-10-08에 뺐다.
 	 */
 	UFUNCTION(BlueprintCallable, Category="Knight|Movement")
 	void SetWantsToRun(bool bNewWantsToRun) { bWantsToRun = bNewWantsToRun; }
@@ -72,12 +80,22 @@ public:
 	 */
 	void SetMoveInputLocked(bool bLocked) { MoveInputLockCount = FMath::Max(0, MoveInputLockCount + (bLocked ? 1 : -1)); }
 
+	/** 이동 잠금 중인지. 잠금 중에는 정지에 엔진 값(빨리 멈춤)을 쓴다. */
+	bool IsMoveInputLocked() const { return MoveInputLockCount > 0; }
+
+	/**
+	 * 달리기를 막는다 (2026-10-09, 수리 키트 사용 중). 달리기 키를 누르고 있어도 걷기 속도(줄지 않음)로 움직이고,
+	 * 풀리면 키 상태대로 돌아간다. 이동 잠금처럼 요청 수를 센다: true로 켠 쪽이 반드시 false로 한 번 끈다.
+	 */
+	void SetRunLocked(bool bLocked) { RunLockCount = FMath::Max(0, RunLockCount + (bLocked ? 1 : -1)); }
+
 	virtual float GetMaxSpeed() const override;
 	virtual float GetMaxAcceleration() const override;
 
 protected:
 	virtual void OnMovementModeChanged(EMovementMode PreviousMovementMode, uint8 PreviousCustomMode) override;
 	virtual bool DoJump(bool bReplayingMoves, float DeltaTime) override;
+	virtual void ApplyVelocityBraking(float DeltaTime, float Friction, float BrakingDeceleration) override;
 
 	void SyncMovementTags() const;
 
@@ -104,7 +122,29 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Weight")
 	TObjectPtr<UCurveFloat> WeightSpeedCurve;
 
+	/**
+	 * 출발 곡선. X = 지금 속도 / 최고 속도(0~1), Y = 가속 배율(MaxAcceleration에 곱함). 땅 위에서만 쓴다.
+	 * 기본값(2026-10-09 사용자 결정 'S자, 조금 더 묵직하게', 바뀔 수 있는 값): 0 → 0.35, 0.5 → 1.0, 1.0 → 0.6 (직선 보간).
+	 * 이때 최고 속도까지 걷기 약 0.73초, 달리기 약 1.09초. 키를 모두 지우면 일정한 가속(배율 1)으로 돌아간다.
+	 * 배율이 0이면 출발할 수 없으므로 0.05 아래로는 내려가지 않는다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Easing")
+	FRuntimeFloatCurve StartAccelerationCurve;
+
+	/**
+	 * 방향키를 뗐을 때(달리기 → 걷기로 속도가 줄 때 포함)의 마찰. 속도에 비례하는 감속이라 멈추는 끝이 부드럽다. 클수록 빨리 멈춘다.
+	 * 엔진이 BrakingFrictionFactor(기본 2)를 곱해서 쓴다.
+	 * 기본값 2(바뀔 수 있는 값): StopBrakingDeceleration 600과 함께 걷기 약 0.40초·86cm, 달리기 약 0.48초·145cm에 멈춘다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Easing", meta=(ClampMin=0))
+	float StopBrakingFriction = 2.f;
+
+	/** 방향키를 뗐을 때 마찰과 따로 더하는 일정한 감속(cm/s²). 0이면 느린 속도에서 오래 미끄러진다. 기본값 600(바뀔 수 있는 값). */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Easing", meta=(ClampMin=0))
+	float StopBrakingDeceleration = 600.f;
+
 private:
 	bool bWantsToRun = false;
 	int32 MoveInputLockCount = 0;
+	int32 RunLockCount = 0;
 };

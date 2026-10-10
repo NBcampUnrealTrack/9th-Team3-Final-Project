@@ -39,6 +39,9 @@ UknightAttributeSet::UknightAttributeSet()
 	InitPerfectGuardWindow(0.25f);
 
 	InitRepairEfficiency(1.f);
+
+	// 수리 키트 출격당 3개 (기획 문서).
+	InitRepairKitCount(3.f);
 }
 
 void UknightAttributeSet::PreAttributeBaseChange(const FGameplayAttribute& Attribute, float& NewValue) const
@@ -99,7 +102,8 @@ void UknightAttributeSet::ClampAttribute(const FGameplayAttribute& Attribute, fl
 	// 나머지는 음수만 막는다.
 	else if (Attribute == GetWeightAttribute() || Attribute == GetWalkSpeedAttribute()
 		|| Attribute == GetRunSpeedAttribute() || Attribute == GetJumpSpeedAttribute()
-		|| Attribute == GetDodgeCooldownAttribute() || Attribute == GetPerfectGuardWindowAttribute() || Attribute == GetRepairEfficiencyAttribute())
+		|| Attribute == GetDodgeCooldownAttribute() || Attribute == GetPerfectGuardWindowAttribute() || Attribute == GetRepairEfficiencyAttribute()
+		|| Attribute == GetRepairKitCountAttribute())
 	{
 		NewValue = FMath::Max(NewValue, 0.f);
 	}

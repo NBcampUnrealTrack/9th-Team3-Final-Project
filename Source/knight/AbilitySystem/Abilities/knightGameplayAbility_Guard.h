@@ -27,6 +27,8 @@ class UGameplayEffect;
  *   판정: 패리 가능한 공격(bCanBeParried)을 가드 범위(정면) 안에서 막았을 때만 (UknightCombatLibrary::ApplyMeleeHit). 그 외는 일반 가드·피격.
  *   결과: 받는 피해 0 + 반격 창(위) + 공격한 적에게 그로기 피해
  *         그로기 = (PerfectGuardPoiseDamage + 내 공격력 x PerfectGuardPoiseMotionValue / 100) x 내 경직치(StaggerPower)
+ *         (2026-10-09) 몬스터도 Event.Parried를 받으면 스스로 '최대 그로기 x ParriedPoiseDamageRatio'를 깎으므로 둘이 더해진다.
+ *         몬스터별 기본은 몬스터 쪽, 여기는 공격력 보너스만 맡도록 PerfectGuardPoiseDamage 기본값을 0으로 내렸다.
  *         피해 실행(UknightDamageExecution)을 그대로 거치므로 적의 그로기가 0이 되면 평소처럼 그로기 반응이 나온다.
  *   ParrySucceededEventTag가 비어 있으면 반격 창과 그로기 피해 둘 다 없다(같은 이벤트로 받는다).
  *   키를 떼면 판정 시간 중이라도 바로 가드를 내린다(사용자 결정). 전에는 판정 시간이 끝날 때까지 가드가 유지됐다(짧게 눌러도 패리 유지).
@@ -78,9 +80,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Guard|Parry Counter")
 	TSubclassOf<UGameplayEffect> ParryCounterEffect;
 
-	/** 퍼펙트 가드 때 공격한 적에게 주는 기본 그로기 피해. 일반 공격 기본값(10)의 2배로 시작 (2026-10-08 임시값, 조정 대상). */
+	/**
+	 * 퍼펙트 가드 때 공격한 적에게 주는 기본 그로기 피해. (2026-10-08 임시값 20 → 2026-10-09 0)
+	 * 몬스터도 퍼펙트 가드를 당하면 스스로 '최대 그로기 x 몬스터별 비율'을 깎는다(MonsterDefinition.ParriedPoiseDamageRatio, Samooyang).
+	 * 그래서 몬스터별 기본은 몬스터 쪽이 맡고, 여기서는 아래 공격력 몫만 보너스로 준다(사용자 결정: 역할 나눠 둘 다 유지).
+	 */
 	UPROPERTY(EditDefaultsOnly, Category="Guard|Perfect Guard", meta=(ClampMin=0))
-	float PerfectGuardPoiseDamage = 20.f;
+	float PerfectGuardPoiseDamage = 0.f;
 
 	/**
 	 * 퍼펙트 가드 그로기에 더하는 공격력 계수(%). 그로기 += 내 공격력 x 이 값 / 100.

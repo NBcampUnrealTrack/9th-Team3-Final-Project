@@ -78,6 +78,7 @@ void UknightGameplayAbility_BoostDash::StartDash(ACharacter& Character)
 	{
 		Direction = -Character.GetActorForwardVector().GetSafeNormal2D();
 	}
+	DashDirection = Direction;
 
 	const UAbilitySystemComponent* const OwnerASC = GetAbilitySystemComponentFromActorInfo();
 	const bool bLockedOn = OwnerASC && OwnerASC->HasMatchingGameplayTag(knightGameplayTags::State_LockedOn);
@@ -183,8 +184,16 @@ void UknightGameplayAbility_BoostDash::OnDashFinished()
 	{
 		if (UknightMovementComponent* const KnightMovement = Cast<UknightMovementComponent>(Character->GetCharacterMovement()))
 		{
-			KnightMovement->SetMoveInputLocked(true);
-			bMoveLockApplied = true;
+			// 관성 이어가기: 대시 방향 쪽(CarryMomentumMaxAngle 안쪽)으로 방향키를 누르고 있으면 잠그지 않는다.
+			// 대시가 끝날 때 속도는 걷기·달리기 최고 속도로 잘려 있어서, 잠그지 않으면 그 속도 그대로 이어서 움직인다.
+			const FVector HeldInput = KnightMovement->GetLastInputVector().GetSafeNormal2D();
+			const bool bCarryMomentum = CarryMomentumMaxAngle > 0.f && !HeldInput.IsNearlyZero()
+				&& FVector::DotProduct(HeldInput, DashDirection) >= FMath::Cos(FMath::DegreesToRadians(CarryMomentumMaxAngle));
+			if (!bCarryMomentum)
+			{
+				KnightMovement->SetMoveInputLocked(true);
+				bMoveLockApplied = true;
+			}
 		}
 	}
 

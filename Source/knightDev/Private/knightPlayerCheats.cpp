@@ -6,7 +6,15 @@
 //   knight.Player.Damage <피해> [그로기]   지정한 양만큼 피해·그로기 피해를 넣는다 (예: knight.Player.Damage 0 30)
 //   knight.Player.SetStat <스탯 이름> <값>  플레이어 스탯의 기본값을 바꾼다 (예: knight.Player.SetStat Weight 100)
 //   knight.Player.Run <1|0>                달리기를 켜고 끈다 (키 연결 전 테스트용)
-//   knight.Player.Status                   체력, 그로기, 회복 속도, 마지막 피격 후 경과 시간, 부위 체력을 출력한다
+//   knight.Player.Status                   체력, 그로기, 회복 속도, 마지막 피격 후 경과 시간, 부위 체력, 수리 키트 개수를 출력한다
+//   knight.Player.Easing                   출발·정지 Easing 값(출발 곡선, 정지 마찰·감속 등)을 출력한다
+//   knight.Player.Easing <값 이름> <값>     무브먼트의 숫자 값을 바꾼다 (예: knight.Player.Easing StopBrakingFriction 1.5)
+//   knight.Player.Easing Curve [값...]     출발 곡선을 바꾼다. 값은 속도 0%~100%에 고르게 놓인다
+//                                          (예: Curve 0.35 1 0.6 → 0%, 50%, 100%). 값 없이 쓰면 곡선을 비워 일정한 가속
+//   knight.Player.MoveLog [1|0]            출발·가속·정지에 걸린 시간과 거리를 화면과 로그에 찍는다. 인자가 없으면 켜고 끈다
+//
+// Easing으로 바꾼 값은 지금 PIE의 플레이어에게만 적용되고 PIE를 끝내면 사라진다.
+// 마음에 드는 값은 BP_Knight의 CharacterMovement 컴포넌트(Knight|Movement|Easing)에 넣거나 C++ 기본값으로 옮긴다.
 //
 // Kill·Damage는 실제 피격과 같은 GAS 경로를 거치므로 아래 흐름 전체를 확인할 수 있다.
 //   체력 감소 → 체력 0 → AknightCharacter::HandleOutOfHealth → 레이드 NotifyPlayerDefeated → 레이드 Failed
@@ -19,6 +27,8 @@
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
 #include "AttributeSet.h"
 #include "Character/knightMovementComponent.h"
+#include "Containers/Ticker.h"
+#include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/PlayerController.h"
@@ -260,8 +270,296 @@ namespace knightPlayerCheats
 				*PartText(TEXT("Torso"), MechSet->GetTorsoHealth(), MechSet->GetMaxTorsoHealth(), knightGameplayTags::State_PartBroken_Torso),
 				*PartText(TEXT("Arms"), MechSet->GetArmsHealth(), MechSet->GetMaxArmsHealth(), knightGameplayTags::State_PartBroken_Arms),
 				*PartText(TEXT("Legs"), MechSet->GetLegsHealth(), MechSet->GetMaxLegsHealth(), knightGameplayTags::State_PartBroken_Legs));
+			// 수리 키트 (2026-10-09). 보충: knight.Player.SetStat RepairKitCount 3
+			UE_LOG(LogknightDev, Log, TEXT("%s: RepairKits=%.0f  RepairEfficiency=%.2f  Repairing=%d"), CommandName,
+				MechSet->GetRepairKitCount(), MechSet->GetRepairEfficiency(), ASC->HasMatchingGameplayTag(knightGameplayTags::State_Repairing));
 		}
 		LogMovement(Pawn, CommandName);
+	}
+
+	// 플레이어의 나이트 무브먼트. 없으면 경고를 남기고 null.
+	static UknightMovementComponent* GetPlayerMovement(UWorld* World, const TCHAR* CommandName)
+	{
+		const ACharacter* const Character = Cast<ACharacter>(GetPlayerPawn(World, CommandName));
+		UknightMovementComponent* const Movement = Character ? Cast<UknightMovementComponent>(Character->GetCharacterMovement()) : nullptr;
+		if (Character && !Movement)
+		{
+			UE_LOG(LogknightDev, Warning, TEXT("%s: the player does not use knightMovementComponent."), CommandName);
+		}
+		return Movement;
+	}
+
+	// 무브먼트의 float 값을 이름으로 찾는다(대소문자 무시). Stop 값처럼 protected인 값도 읽고 쓰려고 리플렉션을 쓴다.
+	static FFloatProperty* FindMovementFloat(const UknightMovementComponent* Movement, const FString& Name)
+	{
+		for (TFieldIterator<FFloatProperty> It(Movement->GetClass()); It; ++It)
+		{
+			if (It->GetName().Equals(Name, ESearchCase::IgnoreCase))
+			{
+				return *It;
+			}
+		}
+		return nullptr;
+	}
+
+	// 출발 곡선(StartAccelerationCurve). 무브먼트의 protected 값이라 리플렉션으로 꺼낸다.
+	static FRuntimeFloatCurve* FindStartCurve(UknightMovementComponent* Movement)
+	{
+		const FStructProperty* const Property = FindFProperty<FStructProperty>(Movement->GetClass(), TEXT("StartAccelerationCurve"));
+		return Property && Property->Struct == FRuntimeFloatCurve::StaticStruct()
+			? Property->ContainerPtrToValuePtr<FRuntimeFloatCurve>(Movement)
+			: nullptr;
+	}
+
+	// 출발·정지 Easing에 쓰이는 값을 남긴다. 곡선은 '속도%:가속 배율'로 찍는다.
+	static void LogEasing(UknightMovementComponent* Movement, const TCHAR* CommandName)
+	{
+		auto Value = [Movement](const TCHAR* Name)
+		{
+			const FFloatProperty* const Property = FindMovementFloat(Movement, Name);
+			return Property ? Property->GetPropertyValue_InContainer(Movement) : -1.f;
+		};
+
+		FString CurveText = TEXT("empty = constant acceleration");
+		if (const FRuntimeFloatCurve* const Curve = FindStartCurve(Movement))
+		{
+			TArray<FString> Keys;
+			for (const FRichCurveKey& Key : Curve->GetRichCurveConst()->GetConstRefOfKeys())
+			{
+				Keys.Add(FString::Printf(TEXT("%.0f%%:%.2f"), Key.Time * 100.f, Key.Value));
+			}
+			if (Keys.Num() > 0)
+			{
+				CurveText = FString::Join(Keys, TEXT(", "));
+			}
+		}
+
+		UE_LOG(LogknightDev, Log, TEXT("%s: start   MaxAcceleration=%.0f  StartAccelerationCurve=[%s]"),
+			CommandName, Value(TEXT("MaxAcceleration")), *CurveText);
+		UE_LOG(LogknightDev, Log, TEXT("%s: stop    StopBrakingFriction=%.2f  StopBrakingDeceleration=%.0f  BrakingFrictionFactor=%.2f"),
+			CommandName, Value(TEXT("StopBrakingFriction")), Value(TEXT("StopBrakingDeceleration")), Value(TEXT("BrakingFrictionFactor")));
+		UE_LOG(LogknightDev, Log, TEXT("%s: locked  GroundFriction=%.2f  BrakingDecelerationWalking=%.0f  (guard, quickstep recovery; locked now=%d)"),
+			CommandName, Value(TEXT("GroundFriction")), Value(TEXT("BrakingDecelerationWalking")), Movement->IsMoveInputLocked());
+		LogMovement(Movement->GetCharacterOwner(), CommandName);
+	}
+
+	// knight.Player.Easing [값 이름 값 | Curve 값...]. 인자가 없으면 지금 값만 출력한다.
+	static void EasingCommand(const TArray<FString>& Args, UWorld* World)
+	{
+		const TCHAR* const CommandName = TEXT("knight.Player.Easing");
+		UknightMovementComponent* const Movement = GetPlayerMovement(World, CommandName);
+		if (!Movement)
+		{
+			return;
+		}
+
+		if (Args.IsValidIndex(0) && Args[0].Equals(TEXT("Curve"), ESearchCase::IgnoreCase))
+		{
+			FRuntimeFloatCurve* const Curve = FindStartCurve(Movement);
+			if (!Curve)
+			{
+				UE_LOG(LogknightDev, Warning, TEXT("%s: StartAccelerationCurve not found."), CommandName);
+				return;
+			}
+			// 커브 에셋이 지정돼 있으면 에셋을 고치지 않도록, 이 플레이어에서만 에셋 연결을 끊고 키를 직접 넣는다.
+			Curve->ExternalCurve = nullptr;
+			Curve->EditorCurveData.Reset();
+			const int32 KeyCount = Args.Num() - 1;
+			for (int32 Index = 0; Index < KeyCount; ++Index)
+			{
+				const float Time = KeyCount > 1 ? static_cast<float>(Index) / (KeyCount - 1) : 0.f;
+				Curve->EditorCurveData.AddKey(Time, FCString::Atof(*Args[Index + 1]));
+			}
+		}
+		else if (Args.Num() >= 2)
+		{
+			FFloatProperty* const Property = FindMovementFloat(Movement, Args[0]);
+			if (!Property)
+			{
+				UE_LOG(LogknightDev, Warning, TEXT("%s: the movement component has no float value named '%s'."), CommandName, *Args[0]);
+				return;
+			}
+			const float OldValue = Property->GetPropertyValue_InContainer(Movement);
+			Property->SetPropertyValue_InContainer(Movement, FCString::Atof(*Args[1]));
+			UE_LOG(LogknightDev, Log, TEXT("%s: %s %.2f -> %.2f"), CommandName, *Property->GetName(), OldValue, Property->GetPropertyValue_InContainer(Movement));
+		}
+		else if (Args.Num() == 1)
+		{
+			UE_LOG(LogknightDev, Warning, TEXT("%s [<Name> <Value> | Curve <Values...>]: e.g. knight.Player.Easing StopBrakingFriction 1.5"), CommandName);
+		}
+		LogEasing(Movement, CommandName);
+	}
+
+	// knight.Player.MoveLog 측정 상태. 한 번에 한 플레이어만 잰다.
+	struct FMoveLogState
+	{
+		// SpeedUp = 최고 속도까지 가속, SlowDown = 최고 속도가 낮아져 줄어듦(달리기 → 걷기), Stop = 방향키를 떼고 멈춤
+		enum class EPhase : uint8 { None, SpeedUp, SlowDown, Stop };
+
+		TWeakObjectPtr<UknightMovementComponent> Movement;
+		FTSTicker::FDelegateHandle TickerHandle;
+		EPhase Phase = EPhase::None;
+		double StartTime = 0.0;
+		FVector StartLocation = FVector::ZeroVector;
+		float StartSpeed = 0.f;
+		float TargetSpeed = 0.f;
+		double Time50 = -1.0;
+		double Time90 = -1.0;
+		bool bLocked = false;
+	};
+	static FMoveLogState MoveLogState;
+
+	// 측정 결과를 로그와 화면에 남긴다. 화면 글꼴에 한글이 없을 수 있어 영어로 찍는다.
+	static void PrintMoveLog(const FString& Text)
+	{
+		UE_LOG(LogknightDev, Log, TEXT("knight.Player.MoveLog: %s"), *Text);
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 6.f, FColor::Cyan, Text);
+		}
+	}
+
+	// 매 프레임 속도를 보고 가속·감속·정지 구간의 시간과 거리를 잰다. 프레임 단위라 ±1프레임 오차가 있다.
+	static bool TickMoveLog(float DeltaTime)
+	{
+		using EPhase = FMoveLogState::EPhase;
+		FMoveLogState& State = MoveLogState;
+		const UknightMovementComponent* const Movement = State.Movement.Get();
+		const UWorld* const World = Movement ? Movement->GetWorld() : nullptr;
+		if (!World || !Movement->UpdatedComponent)
+		{
+			// PIE가 끝나 플레이어가 사라지면 측정도 끝낸다.
+			State = FMoveLogState();
+			return false;
+		}
+
+		// 루트 모션(퀵스텝·공격)이나 공중에서는 재지 않는다. 끝나면 그때 속도에서 다시 잰다.
+		if (Movement->HasAnimRootMotion() || Movement->CurrentRootMotion.HasActiveRootMotionSources() || !Movement->IsMovingOnGround())
+		{
+			State.Phase = EPhase::None;
+			return true;
+		}
+
+		constexpr float StoppedSpeed = 1.f;
+		const double Now = World->GetTimeSeconds();
+		const FVector Location = Movement->UpdatedComponent->GetComponentLocation();
+		const float Speed = static_cast<float>(Movement->Velocity.Size2D());
+		const float MaxSpeed = Movement->GetMaxSpeed();
+		const bool bHasInput = !Movement->GetCurrentAcceleration().IsNearlyZero();
+		const float Elapsed = static_cast<float>(Now - State.StartTime);
+		const float Moved = static_cast<float>(FVector::Dist2D(Location, State.StartLocation));
+
+		// 진행 중인 측정을 이어 가거나 끝낸다.
+		if (State.Phase == EPhase::SpeedUp)
+		{
+			if (!bHasInput || Speed > MaxSpeed * 1.01f)
+			{
+				// 도중에 키를 떼거나 최고 속도가 낮아지면 이번 측정은 버린다.
+				State.Phase = EPhase::None;
+			}
+			else
+			{
+				State.TargetSpeed = MaxSpeed;
+				const float Range = State.TargetSpeed - State.StartSpeed;
+				const float Progress = Range > 1.f ? (Speed - State.StartSpeed) / Range : 1.f;
+				if (State.Time50 < 0.0 && Progress >= 0.5f)
+				{
+					State.Time50 = Now;
+				}
+				if (State.Time90 < 0.0 && Progress >= 0.9f)
+				{
+					State.Time90 = Now;
+				}
+				if (Speed >= State.TargetSpeed * 0.99f)
+				{
+					PrintMoveLog(FString::Printf(TEXT("speed up %.0f -> %.0f: 50%% %.2fs, 90%% %.2fs, reached %.2fs, moved %.0fcm"),
+						State.StartSpeed, State.TargetSpeed, State.Time50 - State.StartTime, State.Time90 - State.StartTime, Elapsed, Moved));
+					State.Phase = EPhase::None;
+				}
+			}
+		}
+		else if (State.Phase == EPhase::SlowDown)
+		{
+			if (!bHasInput)
+			{
+				State.Phase = EPhase::None;
+			}
+			else if (Speed <= MaxSpeed * 1.01f)
+			{
+				PrintMoveLog(FString::Printf(TEXT("slow down %.0f -> %.0f (lower top speed, e.g. run -> walk): %.2fs, moved %.0fcm"),
+					State.StartSpeed, MaxSpeed, Elapsed, Moved));
+				State.Phase = EPhase::None;
+			}
+		}
+		else if (State.Phase == EPhase::Stop)
+		{
+			State.bLocked |= Movement->IsMoveInputLocked();
+			if (bHasInput)
+			{
+				State.Phase = EPhase::None;
+			}
+			else if (Speed < StoppedSpeed)
+			{
+				PrintMoveLog(FString::Printf(TEXT("stop %.0f -> 0: %.2fs, slid %.0fcm%s"), State.StartSpeed, Elapsed, Moved,
+					State.bLocked ? TEXT(" (move input locked: guard / quickstep recovery)") : TEXT("")));
+				State.Phase = EPhase::None;
+			}
+		}
+
+		// 새 측정을 시작한다. 방향 전환으로 속도가 10% 넘게 떨어졌다가 다시 붙는 것도 가속으로 잰다.
+		if (State.Phase == EPhase::None)
+		{
+			EPhase NewPhase = EPhase::None;
+			if (!bHasInput && Speed >= StoppedSpeed)
+			{
+				NewPhase = EPhase::Stop;
+			}
+			else if (bHasInput && Speed < MaxSpeed * 0.9f)
+			{
+				NewPhase = EPhase::SpeedUp;
+			}
+			else if (bHasInput && Speed > MaxSpeed * 1.01f)
+			{
+				NewPhase = EPhase::SlowDown;
+			}
+			if (NewPhase != EPhase::None)
+			{
+				State.Phase = NewPhase;
+				State.StartTime = Now;
+				State.StartLocation = Location;
+				State.StartSpeed = Speed;
+				State.TargetSpeed = MaxSpeed;
+				State.Time50 = -1.0;
+				State.Time90 = -1.0;
+				State.bLocked = false;
+			}
+		}
+		return true;
+	}
+
+	// knight.Player.MoveLog [1|0]. 인자가 없으면 켜고 끈다.
+	static void MoveLogCommand(const TArray<FString>& Args, UWorld* World)
+	{
+		const TCHAR* const CommandName = TEXT("knight.Player.MoveLog");
+		const bool bWasOn = MoveLogState.TickerHandle.IsValid();
+		const bool bOn = Args.IsValidIndex(0) ? FCString::Atoi(*Args[0]) != 0 : !bWasOn;
+		if (bWasOn)
+		{
+			FTSTicker::GetCoreTicker().RemoveTicker(MoveLogState.TickerHandle);
+			MoveLogState = FMoveLogState();
+		}
+		if (bOn)
+		{
+			UknightMovementComponent* const Movement = GetPlayerMovement(World, CommandName);
+			if (!Movement)
+			{
+				return;
+			}
+			MoveLogState.Movement = Movement;
+			MoveLogState.TickerHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&TickMoveLog));
+		}
+		UE_LOG(LogknightDev, Log, TEXT("%s: %s"), CommandName,
+			bOn ? TEXT("on. Speed up, slow down and stop times are printed on screen and in the log.") : TEXT("off"));
 	}
 
 	// 콘솔 명령 등록. ECVF_Cheat라 개발 빌드에서만 동작한다.
@@ -293,5 +591,18 @@ namespace knightPlayerCheats
 		TEXT("knight.Player.Status"),
 		TEXT("knight.Player.Status. Logs health, poise, poise recovery rate, time since the last hit and movement."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&StatusCommand),
+		ECVF_Cheat);
+
+	static FAutoConsoleCommandWithWorldAndArgs EasingCmd(
+		TEXT("knight.Player.Easing"),
+		TEXT("knight.Player.Easing [<Name> <Value> | Curve <Values...>]. Logs or changes the player's start/stop easing for this PIE only. ")
+		TEXT("e.g. knight.Player.Easing StopBrakingFriction 1.5, knight.Player.Easing Curve 0.35 1 0.6"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&EasingCommand),
+		ECVF_Cheat);
+
+	static FAutoConsoleCommandWithWorldAndArgs MoveLogCmd(
+		TEXT("knight.Player.MoveLog"),
+		TEXT("knight.Player.MoveLog [1|0]. Prints how long the player takes to speed up, slow down and stop, and how far it slides. No argument toggles."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&MoveLogCommand),
 		ECVF_Cheat);
 }
