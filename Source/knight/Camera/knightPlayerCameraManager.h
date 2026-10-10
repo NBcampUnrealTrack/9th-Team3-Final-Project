@@ -5,6 +5,7 @@
 #include "knightPlayerCameraManager.generated.h"
 
 class UCameraShakeBase;
+class UknightCameraModifier_RoarShockwave;
 
 /**
  * Global camera concerns only: pitch limits, combat shakes, and cinematic view targets (Sequencer camera
@@ -30,6 +31,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|Camera")
 	void PlayHeavyImpactShake(float Intensity = 1.f);
 
+	/** Starts the roar screen ripple from Source (a monster mesh) at Socket. See UknightCameraModifier_RoarShockwave. */
+	void StartRoarShockwave(USceneComponent* Source, FName Socket);
+
+	/** Stops sending new ripple rings for Source. */
+	void StopRoarShockwave(const USceneComponent* Source);
+
+	/** The player's CameraShakeScale setting. Screen effects that move or distort the view scale with it too. */
+	float GetShakeScale() const;
+
 protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Camera")
 	TSubclassOf<UCameraShakeBase> HitShake;
@@ -37,7 +47,6 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Camera")
 	TSubclassOf<UCameraShakeBase> HeavyImpactShake;
 
-private:
-	/** The player's CameraShakeScale setting. */
-	float GetShakeScale() const;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Camera")
+	TSubclassOf<UknightCameraModifier_RoarShockwave> RoarShockwaveClass;
 };

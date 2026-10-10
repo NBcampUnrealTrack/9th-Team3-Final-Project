@@ -2,6 +2,7 @@
 
 #include "Camera/CameraModifier_CameraShake.h"
 #include "Camera/CameraShakeBase.h"
+#include "Camera/knightCameraModifier_RoarShockwave.h"
 #include "Engine/LocalPlayer.h"
 #include "GameFramework/PlayerController.h"
 #include "Settings/knightSettingsSubsystem.h"
@@ -11,6 +12,7 @@ AknightPlayerCameraManager::AknightPlayerCameraManager()
 {
 	ViewPitchMin = -70.f;
 	ViewPitchMax = 60.f;
+	RoarShockwaveClass = UknightCameraModifier_RoarShockwave::StaticClass();
 }
 
 float AknightPlayerCameraManager::GetShakeScale() const
@@ -46,5 +48,30 @@ void AknightPlayerCameraManager::PlayHeavyImpactShake(float Intensity)
 	if (HeavyImpactShake && Intensity > 0.f)
 	{
 		StartCameraShake(HeavyImpactShake, Intensity);
+	}
+}
+
+void AknightPlayerCameraManager::StartRoarShockwave(USceneComponent* Source, FName Socket)
+{
+	if (!RoarShockwaveClass)
+	{
+		return;
+	}
+	UknightCameraModifier_RoarShockwave* Modifier = Cast<UknightCameraModifier_RoarShockwave>(FindCameraModifierByClass(RoarShockwaveClass));
+	if (!Modifier)
+	{
+		Modifier = Cast<UknightCameraModifier_RoarShockwave>(AddNewCameraModifier(RoarShockwaveClass));
+	}
+	if (Modifier)
+	{
+		Modifier->StartRoar(Source, Socket);
+	}
+}
+
+void AknightPlayerCameraManager::StopRoarShockwave(const USceneComponent* Source)
+{
+	if (UknightCameraModifier_RoarShockwave* const Modifier = RoarShockwaveClass ? Cast<UknightCameraModifier_RoarShockwave>(FindCameraModifierByClass(RoarShockwaveClass)) : nullptr)
+	{
+		Modifier->StopRoar(Source);
 	}
 }
