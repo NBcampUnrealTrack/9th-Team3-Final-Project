@@ -84,6 +84,7 @@ class KNIGHT_API UknightAbilitySet : public UPrimaryDataAsset
 	GENERATED_BODY()
 
 public:
+	const TArray<FknightAbilitySet_GameplayEffect>& GetGrantedGameplayEffects() const { return GrantedGameplayEffects; }
 	/**
 	 * SourceObject is stored on each ability spec (for example the part item that granted it).
 	 * LevelOffset is added to every ability and effect level (a part's upgrade level).

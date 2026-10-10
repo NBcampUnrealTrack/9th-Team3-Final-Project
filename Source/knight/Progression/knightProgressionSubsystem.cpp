@@ -4,12 +4,23 @@
 #include "GameFlow/KnightGameFlowSubsystem.h"
 #include "GameFlow/KnightStageCatalog.h"
 #include "Item/knightItemDefinitions.h"
+#include "Item/knightEquipmentData.h"
+#include "Item/knightEquipmentStats.h"
 #include "knightInventoryLibrary.h"
 #include "Progression/knightSaveGame.h"
 #include "Progression/knightSaveSubsystem.h"
 #include "Raid/knightRaidSubsystem.h"
 #include "Raid/knightRaidDefinition.h"
 #include "knight.h"
+
+namespace
+{
+	const UknightPartItemDefinition* GetImplicitStarterPart(FGameplayTag Slot)
+	{
+		const auto Defaults = knightEquipmentStats::ReadLoadout(nullptr, UknightEquipmentSettings::LoadCatalog());
+		return Defaults.FindRef(Slot);
+	}
+}
 
 void UknightProgressionSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -242,6 +253,51 @@ const UknightPartItemDefinition* UknightProgressionSubsystem::GetEquippedPart(FG
 	return ItemId ? Cast<UknightPartItemDefinition>(UknightInventoryLibrary::LoadItemDefinition(*ItemId)) : nullptr;
 }
 
+bool UknightProgressionSubsystem::IsSlotExplicitlyEmpty(FGameplayTag SlotTag) const
+{
+	const UknightSaveGame* const Save = GetSave();
+	return Save && Save->ExplicitlyEmptySlots.Contains(SlotTag);
+}
+
+bool UknightProgressionSubsystem::CanCraftPart(const UknightCraftRecipeDefinition* Recipe) const
+{
+	const UknightSaveGame* const Save = GetSave();
+	if (!Save || !Recipe || !Recipe->Result || !Recipe->Result->GetPrimaryAssetId().IsValid()
+		|| Recipe->Costs.IsEmpty() || (!Recipe->RequiredClearedStageId.IsNone() && !IsStageCleared(Recipe->RequiredClearedStageId)))
+	{
+		return false;
+	}
+	TMap<FPrimaryAssetId, int32> Totals;
+	for (const FknightItemCost& Cost : Recipe->Costs)
+	{
+		if (!Cost.Item || Cost.Count <= 0 || !Cost.Item->GetPrimaryAssetId().IsValid()) return false;
+		int32& Total = Totals.FindOrAdd(Cost.Item->GetPrimaryAssetId());
+		if (Total > MAX_int32 - Cost.Count) return false;
+		Total += Cost.Count;
+	}
+	for (const auto& Cost : Totals)
+	{
+		if (Save->ItemCounts.FindRef(Cost.Key) < Cost.Value) return false;
+	}
+	return GetItemCount(Recipe->Result) < MAX_int32;
+}
+
+bool UknightProgressionSubsystem::CraftPart(const UknightCraftRecipeDefinition* Recipe)
+{
+	UknightSaveGame* const Save = GetSave();
+	if (!Save || !CanCraftPart(Recipe)) return false;
+	for (const FknightItemCost& Cost : Recipe->Costs)
+	{
+		const FPrimaryAssetId Id = Cost.Item->GetPrimaryAssetId();
+		int32& Owned = Save->ItemCounts.FindChecked(Id);
+		Owned -= Cost.Count;
+		if (Owned == 0) Save->ItemCounts.Remove(Id);
+	}
+	++Save->ItemCounts.FindOrAdd(Recipe->Result->GetPrimaryAssetId());
+	CommitChange();
+	return true;
+}
+
 bool UknightProgressionSubsystem::SetEquippedPart(const UknightPartItemDefinition* Part)
 {
 	UknightSaveGame* const Save = GetSave();
@@ -254,7 +310,15 @@ bool UknightProgressionSubsystem::SetEquippedPart(const UknightPartItemDefinitio
 		UE_LOG(Logknight, Warning, TEXT("Cannot equip %s: not owned."), *Part->GetName());
 		return false;
 	}
+	// A starter part can be equipped without an inventory entry. Keep it when first replaced.
+	if (!Save->EquippedItems.Contains(Part->SlotTag) && !Save->ExplicitlyEmptySlots.Contains(Part->SlotTag))
+	{
+		const UknightPartItemDefinition* Starter = GetImplicitStarterPart(Part->SlotTag);
+		if (Starter)
+			++Save->ItemCounts.FindOrAdd(Starter->GetPrimaryAssetId());
+	}
 	Save->EquippedItems.Add(Part->SlotTag, Part->GetPrimaryAssetId());
+	Save->ExplicitlyEmptySlots.Remove(Part->SlotTag);
 	CommitChange();
 	return true;
 }
@@ -262,8 +326,18 @@ bool UknightProgressionSubsystem::SetEquippedPart(const UknightPartItemDefinitio
 void UknightProgressionSubsystem::ClearEquippedSlot(FGameplayTag SlotTag)
 {
 	UknightSaveGame* const Save = GetSave();
-	if (Save && Save->EquippedItems.Remove(SlotTag) > 0)
+	if (!Save || !SlotTag.IsValid()) return;
+	const bool bImplicitStarter = !Save->EquippedItems.Contains(SlotTag) && !Save->ExplicitlyEmptySlots.Contains(SlotTag);
+	if (Save->EquippedItems.Remove(SlotTag) > 0 || !Save->ExplicitlyEmptySlots.Contains(SlotTag))
 	{
+		// Unequipping an implicit starter places it in the box instead of making it disappear.
+		if (bImplicitStarter)
+		{
+			const UknightPartItemDefinition* Starter = GetImplicitStarterPart(SlotTag);
+			if (Starter)
+				++Save->ItemCounts.FindOrAdd(Starter->GetPrimaryAssetId());
+		}
+		Save->ExplicitlyEmptySlots.Add(SlotTag);
 		CommitChange();
 	}
 }

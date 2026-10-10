@@ -36,7 +36,7 @@ public:
 	 * Bump when the layout changes, and handle the old version in UknightSaveSubsystem::MigrateSave.
 	 * 1: items keyed by FName. 2: primary asset IDs and equipment. 3: explicit unlocks and applied run IDs.
 	 */
-	static constexpr int32 CurrentVersion = 3;
+	static constexpr int32 CurrentVersion = 4;
 
 	UPROPERTY(SaveGame)
 	int32 SaveVersion = CurrentVersion;
@@ -63,6 +63,10 @@ public:
 	/** Equipped part per Equipment.Slot tag. */
 	UPROPERTY(SaveGame)
 	TMap<FGameplayTag, FPrimaryAssetId> EquippedItems;
+
+	/** Explicitly unequipped slots must not fall back to the character's starter loadout. */
+	UPROPERTY(SaveGame)
+	TSet<FGameplayTag> ExplicitlyEmptySlots;
 
 	UPROPERTY(SaveGame)
 	float TotalPlayTime = 0.f;
