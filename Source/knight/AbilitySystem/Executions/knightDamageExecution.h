@@ -27,6 +27,8 @@ namespace knightDamageMath
 		float GuardEfficiency = 1.f;      // 맞는 쪽 가드 효율 (배율)
 		float GuardDamageMultiplier = 0.2f;      // 가드 효율 1.0일 때 남는 피해 비율
 		float GuardPoiseDamageMultiplier = 0.5f; // 가드 효율 1.0일 때 남는 그로기 비율
+		float DamageTakenMultiplier = 1.f;       // 맞는 쪽 받는 피해 배율 (2026-10-10, 마지막에 곱함)
+		float PoiseDamageTakenMultiplier = 1.f;  // 맞는 쪽 받는 그로기 배율 = 그로기 저항 (2026-10-10, 마지막에 곱함)
 	};
 
 	struct FResult
@@ -61,8 +63,10 @@ namespace knightDamageMath
  * 한 번의 피격을 Damage·PoiseDamage 메타 속성 출력으로 바꾼다.
  *
  *   Raw    = SetByCaller.Damage + AttackPower * SetByCaller.MotionValue / 100
- *   Damage = Raw * PartMultiplier * Critical * 100 / (100 + Defense) * Guard
- *   Poise  = SetByCaller.PoiseDamage * StaggerPower * GuardPoise
+ *   Damage = Raw * PartMultiplier * Critical * 100 / (100 + Defense) * Guard * DamageTakenMultiplier
+ *   Poise  = SetByCaller.PoiseDamage * StaggerPower * GuardPoise * PoiseDamageTakenMultiplier
+ *   (2026-10-10) DamageTakenMultiplier·PoiseDamageTakenMultiplier = 맞는 쪽의 받는 피해·그로기 배율(기본 1.0, 파츠 효과용).
+ *   마지막에 곱해서 방어력·가드와 상관없이 정확한 비율로 줄인다(예: 0.85 = 받는 피해 -15%).
  *   Guard / GuardPoise = 1 - (1 - 기준 배율) * GuardEfficiency   (가드 범위 안에서 막았을 때만)
  *
  * PartMultiplier는 이펙트 컨텍스트의 히트 결과로 맞는 쪽 ICombatInterface에서 가져오므로,

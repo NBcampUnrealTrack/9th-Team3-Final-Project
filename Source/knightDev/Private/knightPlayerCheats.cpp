@@ -257,6 +257,9 @@ namespace knightPlayerCheats
 		UE_LOG(LogknightDev, Log, TEXT("%s: PoiseRecoveryRate=%.1f/s  SecondsSinceLastHit=%.2f  MaxHealth=%.1f  AttackPower=%.1f"),
 			CommandName, CoreSet->GetPoiseRecoveryRate(), World->GetTimeSeconds() - CoreSet->GetLastHitTime(),
 			CoreSet->GetMaxHealth(), CoreSet->GetAttackPower());
+		// 받는 쪽 보정 (2026-10-10): 방어력, 받는 피해·그로기 배율(파츠 효과용, 기본 1.0)
+		UE_LOG(LogknightDev, Log, TEXT("%s: Defense=%.1f  DamageTakenMultiplier=%.2f  PoiseDamageTakenMultiplier=%.2f"),
+			CommandName, CoreSet->GetDefense(), CoreSet->GetDamageTakenMultiplier(), CoreSet->GetPoiseDamageTakenMultiplier());
 
 		// 부위 체력: 현재/최대, 파괴 여부(B). 파괴 페널티가 걸리면 위 AttackPower·아래 MaxSpeed가 줄어든다.
 		if (const UknightAttributeSet* const MechSet = ASC->GetSet<UknightAttributeSet>())
