@@ -9,6 +9,7 @@
 #include "knightItemDefinitions.generated.h"
 
 class USkeletalMesh;
+class UStaticMesh;
 class UknightAbilitySet;
 class UknightMonsterDefinition;
 
@@ -99,8 +100,16 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Part", meta=(ClampMin=0))
 	float Weight = 0.f;
 
+	/** 스켈레탈 메시 파츠(SK_). 나이트 뼈대를 따라 변형되게 붙일 수 있다(Attachment LeaderPose). StaticMesh보다 먼저 쓴다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Part")
 	TSoftObjectPtr<USkeletalMesh> Mesh;
+
+	/**
+	 * 스태틱 메시 파츠(SM_, 2026-10-10). 팀원이 모델링한 파츠는 대부분 이것이다. Mesh가 비어 있을 때 쓴다.
+	 * 뼈대가 없어서 Attachment는 Socket 모드로(붙일 뼈·소켓 + 위치·회전·크기) 지정한다. 값은 Mech Parts Workbench에서 맞춘다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Part")
+	TSoftObjectPtr<UStaticMesh> StaticMesh;
 
 	/** Written by the Mech Parts Workbench. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Part")

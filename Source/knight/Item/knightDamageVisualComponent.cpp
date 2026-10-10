@@ -83,7 +83,8 @@ void UknightDamageVisualComponent::Refresh()
 	}
 	AppliedDamage = Damage;
 
-	TArray<USkeletalMeshComponent*> Meshes;
+	// 나이트 본체(스켈레탈) + 파츠 메시(스켈레탈·스태틱, 2026-10-10).
+	TArray<UMeshComponent*> Meshes;
 	if (const ACharacter* const Character = Cast<ACharacter>(GetOwner()))
 	{
 		Meshes.Add(Character->GetMesh());
@@ -92,7 +93,7 @@ void UknightDamageVisualComponent::Refresh()
 	{
 		Parts->GetPartMeshes(Meshes);
 	}
-	for (USkeletalMeshComponent* const Mesh : Meshes)
+	for (UMeshComponent* const Mesh : Meshes)
 	{
 		if (Mesh)
 		{
