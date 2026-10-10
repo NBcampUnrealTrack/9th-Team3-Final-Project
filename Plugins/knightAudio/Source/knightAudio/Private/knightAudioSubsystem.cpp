@@ -2,6 +2,8 @@
 
 #include "AudioModulationStatics.h"
 #include "Components/AudioComponent.h"
+#include "AudioDeviceHandle.h"
+#include "Engine/Engine.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
@@ -26,11 +28,21 @@ void UknightAudioSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
 	PostLoadMapHandle = FCoreUObjectDelegates::PostLoadMapWithWorld.AddUObject(this, &ThisClass::HandlePostLoadMap);
+	WorldInitializedHandle = FWorldDelegates::OnWorldInitializedActors.AddUObject(this, &ThisClass::HandleWorldInitialized);
 }
 
 void UknightAudioSubsystem::Deinitialize()
 {
 	FCoreUObjectDelegates::PostLoadMapWithWorld.Remove(PostLoadMapHandle);
+	FWorldDelegates::OnWorldInitializedActors.Remove(WorldInitializedHandle);
+	if (UWorld* const World = GetGameInstance() ? GetGameInstance()->GetWorld() : nullptr)
+	{
+		if (USoundMix* const Mix = LoadedUserSoundMix.Get(); Mix && World->AllowAudioPlayback()
+			&& World->GetAudioDevice() && World->GetAudioDevice().GetDeviceID() == PushedSoundMixDeviceId)
+		{
+			UGameplayStatics::PopSoundMixModifier(World, Mix);
+		}
+	}
 	FTSTicker::RemoveTicker(MusicReplayTicker);
 	ClearVoices();
 	Super::Deinitialize();
@@ -44,6 +56,29 @@ void UknightAudioSubsystem::HandlePostLoadMap(UWorld* LoadedWorld)
 		// Lines queued in the previous map belong to it.
 		ClearVoices();
 	}
+}
+
+void UknightAudioSubsystem::HandleWorldInitialized(const FActorsInitializedParams& Params)
+{
+	if (!Params.World || Params.World->GetGameInstance() != GetGameInstance()) return;
+	const TWeakObjectPtr<UWorld> WeakWorld(Params.World);
+	Params.World->OnWorldBeginPlay.AddWeakLambda(this, [this, WeakWorld]
+	{
+		if (UWorld* const World = WeakWorld.Get()) ApplyAllVolumes(World);
+	});
+}
+
+bool UknightAudioSubsystem::EnsureUserSoundMix(UWorld* World, USoundMix* SoundMix)
+{
+	if (!World || !SoundMix || !World->AllowAudioPlayback() || !GEngine || !GEngine->UseSound()) return false;
+	const FAudioDeviceHandle Device = World->GetAudioDevice();
+	if (!Device) return false;
+	if (PushedSoundMixDeviceId != Device.GetDeviceID())
+	{
+		UGameplayStatics::PushSoundMixModifier(World, SoundMix);
+		PushedSoundMixDeviceId = Device.GetDeviceID();
+	}
+	return true;
 }
 
 USoundMix* UknightAudioSubsystem::GetUserSoundMix()
@@ -79,11 +114,7 @@ void UknightAudioSubsystem::ApplyAllVolumes(UWorld* World)
 	const UknightAudioSettings* const Settings = GetDefault<UknightAudioSettings>();
 	if (USoundMix* const SoundMix = GetUserSoundMix())
 	{
-		if (SoundMixWorld.Get() != World)
-		{
-			UGameplayStatics::PushSoundMixModifier(World, SoundMix);
-			SoundMixWorld = World;
-		}
+		EnsureUserSoundMix(World, SoundMix);
 	}
 	if (USoundControlBusMix* const Mix = Cast<USoundControlBusMix>(Settings->UserVolumeMix.TryLoad()))
 	{
@@ -119,12 +150,11 @@ void UknightAudioSubsystem::ApplyVolume(UWorld* World, FName Category, float Vol
 	USoundClass* const SoundClass = GetSoundClass(Category);
 	if (SoundMix && SoundClass)
 	{
-		if (SoundMixWorld.Get() != World)
+		if (EnsureUserSoundMix(World, SoundMix))
 		{
-			UGameplayStatics::PushSoundMixModifier(World, SoundMix);
-			SoundMixWorld = World;
+			UGameplayStatics::SetSoundMixClassOverride(World, SoundMix, SoundClass, Volume, 1.f, 0.1f,
+				Category == TEXT("Master"));
 		}
-		UGameplayStatics::SetSoundMixClassOverride(World, SoundMix, SoundClass, Volume, 1.f, 0.1f, false);
 		return;
 	}
 	const FSoftObjectPath* const BusPath = Settings->VolumeBuses.Find(Category);
