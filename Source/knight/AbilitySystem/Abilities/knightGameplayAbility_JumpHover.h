@@ -26,7 +26,7 @@ class USoundBase;
  *     기울기는 캡슐 가운데를 축으로 돌고, 체공이 끝나면 부드럽게 똑바로 돌아온다.
  *   - 연출: 체공하는 동안 ThrusterSockets(기본 양발)에 ThrusterEffect를 붙여 아래로 분사한다. 분사 방향은 몸 기울기를 따라간다.
  *     시작할 때 HoverStartSound와 카메라 흔들림(HoverStartShake), 체공 중에는 HoverLoopSound(있으면)를 낸다.
- * 체공 중에는 State.Boosting을 걸어 게이지 회복을 멈춘다. 과열(State.Overheated) 중에는 체공할 수 없다.
+ * 체공 중에는 State.Hovering을 건다(State.Boosting은 전투 자세를 켜서 쓰지 않음). 게이지 회복은 bCancelGaugeRecovery로 상쇄한다. 과열(State.Overheated) 중에는 체공할 수 없다.
  */
 UCLASS()
 class KNIGHT_API UknightGameplayAbility_JumpHover : public UknightGameplayAbility
@@ -45,6 +45,10 @@ protected:
 	/** 체공 중 초당 부스트 게이지 소모량 (최대 게이지 100 기준 20이면 5초). */
 	UPROPERTY(EditDefaultsOnly, Category="Hover|Cost", meta=(ClampMin=0))
 	float HoverDrainPerSecond = 20.f;
+
+	/** 체공 중 부스트 회복(BoostRecoveryRate)만큼 더 소모해서, 회복 GE가 돌고 있어도 게이지가 줄게 한다. */
+	UPROPERTY(EditDefaultsOnly, Category="Hover|Cost")
+	bool bCancelGaugeRecovery = true;
 
 	/** 이 값보다 게이지가 적으면 체공을 시작하지 않는다. */
 	UPROPERTY(EditDefaultsOnly, Category="Hover|Cost", meta=(ClampMin=0))

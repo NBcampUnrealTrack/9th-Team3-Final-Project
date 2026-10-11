@@ -7,6 +7,12 @@
 #include "GameFramework/Pawn.h"
 #include "System/knightGameplayTags.h"
 
+namespace
+{
+	// 달리기 중. 달리기 공격 조건으로 쓴다(태그는 Config/Tags에 이미 있음).
+	UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_State_Sprinting, "State.Sprinting");
+}
+
 UknightMovementComponent::UknightMovementComponent(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
@@ -111,6 +117,32 @@ void UknightMovementComponent::OnMovementModeChanged(EMovementMode PreviousMovem
 {
 	Super::OnMovementModeChanged(PreviousMovementMode, PreviousCustomMode);
 	SyncMovementTags();
+}
+
+bool UknightMovementComponent::ShouldHaveSprintTag() const
+{
+	if (!bWantsToRun || !IsMovingOnGround())
+	{
+		return false;
+	}
+	// 걷기 최대 속도(스탯·중량 반영)보다 빠를 때만. 제자리에서 Shift만 눌렀거나 달리기 토글이 켜져 있어도 멈춰 있으면 일반 공격이 나간다.
+	const float WalkMax = BaseWalkSpeed * GetMechAttributeValue(UknightAttributeSet::GetWalkSpeedAttribute(), 1.f) * GetWeightSpeedFactor();
+	return Velocity.SizeSquared2D() > FMath::Square(WalkMax * SprintTagSpeedRatio);
+}
+
+void UknightMovementComponent::OnMovementUpdated(float DeltaSeconds, const FVector& OldLocation, const FVector& OldVelocity)
+{
+	Super::OnMovementUpdated(DeltaSeconds, OldLocation, OldVelocity);
+
+	const bool bSprint = ShouldHaveSprintTag();
+	if (bSprint != bSprintTagged)
+	{
+		if (UAbilitySystemComponent* const ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner()))
+		{
+			ASC->SetLooseGameplayTagCount(TAG_State_Sprinting, bSprint ? 1 : 0);
+			bSprintTagged = bSprint;
+		}
+	}
 }
 
 void UknightMovementComponent::SyncMovementTags() const

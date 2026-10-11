@@ -19,6 +19,10 @@
 #include "System/knightGameplayTags.h"
 #include "TimerManager.h"
 #include "knight.h"
+#include "NativeGameplayTags.h"
+
+// 체공 중 상태. State.Boosting은 전투 자세(CombatStance)를 켜므로 따로 쓴다.
+UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_State_Hovering, "State.Hovering");
 
 namespace
 {
@@ -109,7 +113,7 @@ bool UknightGameplayAbility_JumpHover::StartHover()
 		Movement->Velocity.Z = HoverStartLift;
 	}
 
-	ASC->AddLooseGameplayTag(knightGameplayTags::State_Boosting);
+	ASC->AddLooseGameplayTag(TAG_State_Hovering);
 	bHovering = true;
 	HoverStartTime = World->GetTimeSeconds();
 	EnsureTicking();
@@ -167,7 +171,13 @@ void UknightGameplayAbility_JumpHover::TickHover()
 			const FGameplayAttribute Gauge = UknightAttributeSet::GetBoostGaugeAttribute();
 			if (ASC->HasAttributeSetForAttribute(Gauge) && HoverDrainPerSecond > 0.f)
 			{
-				ASC->ApplyModToAttribute(Gauge, EGameplayModOp::Additive, -HoverDrainPerSecond * DeltaTime);
+				// 부스트 회복 GE는 지금 항상 돌고 있어서(막는 태그 없음), 켜 두면 그만큼 더 빼서 체공 중에는 회복이 없게 한다.
+				float Drain = HoverDrainPerSecond;
+				if (bCancelGaugeRecovery && ASC->HasAttributeSetForAttribute(UknightAttributeSet::GetBoostRecoveryRateAttribute()))
+				{
+					Drain += FMath::Max(0.f, ASC->GetNumericAttribute(UknightAttributeSet::GetBoostRecoveryRateAttribute()));
+				}
+				ASC->ApplyModToAttribute(Gauge, EGameplayModOp::Additive, -Drain * DeltaTime);
 				if (ASC->GetNumericAttribute(Gauge) <= 0.f)
 				{
 					UE_LOG(LogknightAbility, Log, TEXT("JumpHover: boost gauge empty, falling"));
@@ -235,7 +245,7 @@ void UknightGameplayAbility_JumpHover::StopHover()
 	bHovering = false;
 	if (UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo())
 	{
-		ASC->RemoveLooseGameplayTag(knightGameplayTags::State_Boosting);
+		ASC->RemoveLooseGameplayTag(TAG_State_Hovering);
 	}
 	const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
 	if (UknightMovementComponent* const Movement = Character ? Cast<UknightMovementComponent>(Character->GetCharacterMovement()) : nullptr)

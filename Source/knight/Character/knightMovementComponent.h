@@ -14,8 +14,11 @@ struct FGameplayAttribute;
  * 부스트 비행은 엔진의 MOVE_Flying 물리를 쓴다. 비행 어빌리티가 비행을 시작·종료하고 게이지를 소모한다.
  * 부스트 대시는 이동 모드가 아니다: 대시 어빌리티가 루트 모션 소스를 건다.
  *
- * 이동 상태는 소유자 ASC에 루즈 태그(State.Flying, State.Airborne)로 반영되므로,
+ * 이동 상태는 소유자 ASC에 루즈 태그(State.Flying, State.Airborne, State.Sprinting)로 반영되므로,
  * 어빌리티가 무브먼트 컴포넌트에 묻지 않고도 이 상태를 조건으로 쓸 수 있다.
+ * State.Sprinting (2026-10-12): 달리기를 원하고, 땅 위에서, 걷기 최대 속도보다 빠르게 움직이는 동안.
+ *   달리기 공격(GA_Knight_RunAttack)이 이 태그를 요구하고, 일반 1타(GA_Knight_Attack_1)는 이 태그가 있으면 막힌다.
+ *   예전에는 Sprint 어빌리티가 붙였는데, Shift 달리기를 InputTag.Run 네이티브 입력으로 옮기면서 여기로 옮겼다.
  *
  * 속도 스탯 연결 (2026-10-04):
  *   걷기 속도 = BaseWalkSpeed x WalkSpeed 배율 x 중량 계수
@@ -75,6 +78,14 @@ public:
 
 protected:
 	virtual void OnMovementModeChanged(EMovementMode PreviousMovementMode, uint8 PreviousCustomMode) override;
+	virtual void OnMovementUpdated(float DeltaSeconds, const FVector& OldLocation, const FVector& OldVelocity) override;
+
+	/** 지금 State.Sprinting을 붙일 상태인지: 달리기를 원하고, 땅 위에서, 걷기 최대 속도 x SprintTagSpeedRatio보다 빠르다. */
+	bool ShouldHaveSprintTag() const;
+
+	/** 달리기 태그가 붙는 속도. 걷기 최대 속도에 대한 비율이다. 1보다 조금 크게 둬서 걷기와 섞이지 않게 한다. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Speed", meta=(ClampMin=0.5, ClampMax=2))
+	float SprintTagSpeedRatio = 1.05f;
 	virtual bool DoJump(bool bReplayingMoves, float DeltaTime) override;
 
 	void SyncMovementTags() const;
@@ -105,4 +116,5 @@ protected:
 private:
 	bool bWantsToRun = false;
 	bool bMoveInputLocked = false;
+	bool bSprintTagged = false;
 };
