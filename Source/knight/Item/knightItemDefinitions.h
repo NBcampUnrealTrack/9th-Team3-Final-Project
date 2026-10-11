@@ -90,7 +90,11 @@ public:
 	/** Highest upgrade level (the number of upgrade steps). */
 	int32 GetMaxUpgradeLevel() const { return UpgradeSteps.Num(); }
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Part", meta=(Categories="Equipment.Slot"))
+	/**
+	 * 장착 부위. (2026-10-11) AssetRegistrySearchable: 값이 에셋 목록 정보에 저장되어, Mech Parts Workbench가
+	 * 파츠를 열지 않고 부위별로 걸러 보여 준다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, AssetRegistrySearchable, Category="Part", meta=(Categories="Equipment.Slot"))
 	FGameplayTag SlotTag;
 
 	/**
