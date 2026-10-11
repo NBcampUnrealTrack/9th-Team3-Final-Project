@@ -4,6 +4,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "knightMovementComponent.generated.h"
 
+class UCameraShakeBase;
 class UCurveFloat;
 struct FGameplayAttribute;
 
@@ -77,6 +78,37 @@ public:
 	virtual float GetMaxAcceleration() const override;
 
 protected:
+	/** 착지 충격 (2026-10-12): 떨어지던 속도로 카메라를 흔들고, 세게 떨어지면 잠깐 발이 묶인다. */
+	virtual void ProcessLanded(const FHitResult& Hit, float remainingTime, int32 Iterations) override;
+	void HandleLandingImpact(float ImpactSpeed);
+	void EndLandingRecovery();
+
+	/** 착지할 때 카메라 흔들림. 비워 두면 흔들지 않는다. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Landing")
+	TSubclassOf<UCameraShakeBase> LandingShake;
+
+	/** 이 속도(아래로) 이상으로 떨어져야 흔들린다. 제자리 점프 착지는 약 600. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Landing", meta=(ClampMin=0, Units="CentimetersPerSecond"))
+	float LandingShakeMinSpeed = 450.f;
+
+	/** 이 속도에서 흔들림이 최대(LandingShakeMaxScale)가 된다. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Landing", meta=(ClampMin=1, Units="CentimetersPerSecond"))
+	float LandingShakeMaxSpeed = 1600.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Landing", meta=(ClampMin=0))
+	float LandingShakeMinScale = 0.3f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Landing", meta=(ClampMin=0))
+	float LandingShakeMaxScale = 1.2f;
+
+	/** 이 속도 이상으로 떨어지면 착지 경직: 잠깐 이동 입력으로 가속하지 못한다. 0이면 경직 없음. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Landing", meta=(ClampMin=0, Units="CentimetersPerSecond"))
+	float LandingRecoveryMinSpeed = 1100.f;
+
+	/** 착지 경직 시간. LandingRecoveryMinSpeed에서 0, LandingShakeMaxSpeed에서 이 값이 된다. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Landing", meta=(ClampMin=0, Units="s"))
+	float LandingRecoveryMaxTime = 0.3f;
+
 	virtual void OnMovementModeChanged(EMovementMode PreviousMovementMode, uint8 PreviousCustomMode) override;
 	virtual void OnMovementUpdated(float DeltaSeconds, const FVector& OldLocation, const FVector& OldVelocity) override;
 
@@ -117,4 +149,6 @@ private:
 	bool bWantsToRun = false;
 	bool bMoveInputLocked = false;
 	bool bSprintTagged = false;
+	bool bLandingRecovery = false;
+	FTimerHandle LandingRecoveryTimer;
 };

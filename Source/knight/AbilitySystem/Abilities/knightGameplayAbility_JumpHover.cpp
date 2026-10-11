@@ -166,6 +166,7 @@ void UknightGameplayAbility_JumpHover::TickHover()
 		Movement->Velocity.Z = FMath::FInterpTo(Movement->Velocity.Z, TargetZ, DeltaTime, HoverCatchSpeed);
 
 		// 게이지.
+		float GaugeValue = -1.f;
 		if (UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo())
 		{
 			const FGameplayAttribute Gauge = UknightAttributeSet::GetBoostGaugeAttribute();
@@ -178,7 +179,8 @@ void UknightGameplayAbility_JumpHover::TickHover()
 					Drain += FMath::Max(0.f, ASC->GetNumericAttribute(UknightAttributeSet::GetBoostRecoveryRateAttribute()));
 				}
 				ASC->ApplyModToAttribute(Gauge, EGameplayModOp::Additive, -Drain * DeltaTime);
-				if (ASC->GetNumericAttribute(Gauge) <= 0.f)
+				GaugeValue = ASC->GetNumericAttribute(Gauge);
+				if (GaugeValue <= 0.f)
 				{
 					UE_LOG(LogknightAbility, Log, TEXT("JumpHover: boost gauge empty, falling"));
 					EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, false);
@@ -191,6 +193,8 @@ void UknightGameplayAbility_JumpHover::TickHover()
 		const FVector Accel = Movement->GetCurrentAcceleration().GetSafeNormal2D();
 		const FVector Local = Character->GetActorRotation().UnrotateVector(Accel);
 		TargetTilt = FRotator(-Local.X * HoverMaxTilt, 0.f, Local.Y * HoverMaxTilt);
+
+		UpdateLoopAudio(DeltaTime, Movement->Velocity.Size2D(), GaugeValue, Now);
 	}
 
 	UpdateTilt(DeltaTime, TargetTilt);
@@ -297,6 +301,11 @@ void UknightGameplayAbility_JumpHover::StartEffects()
 		LoopAudio = UGameplayStatics::SpawnSoundAttached(HoverLoopSound, Mesh);
 		if (LoopAudio)
 		{
+			// 처음에는 제자리 소리(낮게 웅웅)로 시작한다. 필터·피치는 Tick에서 속도를 따라간다.
+			LoopBlend = 0.f;
+			LoopAudio->SetLowPassFilterEnabled(true);
+			LoopAudio->SetLowPassFilterFrequency(HoverLoopLowPassIdle);
+			LoopAudio->SetPitchMultiplier(HoverLoopPitchIdle);
 			LoopAudio->FadeIn(0.15f);
 		}
 	}
@@ -325,6 +334,33 @@ void UknightGameplayAbility_JumpHover::StopEffects()
 		LoopAudio->FadeOut(0.25f, 0.f);
 		LoopAudio = nullptr;
 	}
+}
+
+void UknightGameplayAbility_JumpHover::UpdateLoopAudio(float DeltaTime, float HorizontalSpeed, float GaugeValue, double Now)
+{
+	if (!LoopAudio)
+	{
+		return;
+	}
+	// 속도 비율을 부드럽게 따라간다(갑자기 바뀌면 소리가 튄다).
+	const float Target = FMath::Clamp(HorizontalSpeed / FMath::Max(HoverLoopFullSpeed, 1.f), 0.f, 1.f);
+	LoopBlend = FMath::FInterpTo(LoopBlend, Target, DeltaTime, 4.f);
+
+	// 필터는 귀가 로그로 듣기 때문에 주파수도 로그로 섞는다.
+	const float LogIdle = FMath::Loge(FMath::Max(HoverLoopLowPassIdle, 20.f));
+	const float LogMoving = FMath::Loge(FMath::Max(HoverLoopLowPassMoving, 20.f));
+	LoopAudio->SetLowPassFilterFrequency(FMath::Exp(FMath::Lerp(LogIdle, LogMoving, LoopBlend)));
+	LoopAudio->SetPitchMultiplier(FMath::Lerp(HoverLoopPitchIdle, HoverLoopPitchMoving, LoopBlend));
+
+	// 게이지가 바닥에 가까우면 추진이 불안정하게 떨린다. 적을수록 더 크게, 더 빠르게.
+	float Volume = 1.f;
+	if (HoverLoopLowGauge > 0.f && GaugeValue >= 0.f && GaugeValue < HoverLoopLowGauge)
+	{
+		const float Low = 1.f - GaugeValue / HoverLoopLowGauge;
+		const float Rate = FMath::Lerp(6.f, 14.f, Low);
+		Volume = 1.f - 0.45f * Low * (0.5f + 0.5f * FMath::Sin(static_cast<float>(Now) * Rate * 2.f * PI));
+	}
+	LoopAudio->SetVolumeMultiplier(Volume);
 }
 
 void UknightGameplayAbility_JumpHover::UpdateThrusterRotation() const

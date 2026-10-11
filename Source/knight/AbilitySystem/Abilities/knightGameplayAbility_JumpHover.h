@@ -105,6 +105,31 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Hover|Effects")
 	TObjectPtr<USoundBase> HoverLoopSound;
 
+	/**
+	 * 추진음 변화 (2026-10-12). 루프 소리에 로우패스 필터를 걸어 제자리에서는 낮게 웅웅거리고,
+	 * 수평으로 빠르게 날수록 필터가 열리고 피치가 올라 "쉬이익" 하는 분사음이 된다.
+	 * 게이지가 HoverLoopLowGauge 아래로 내려가면 소리가 떨려서(볼륨 흔들림) 연료가 바닥나는 느낌을 준다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Hover|Effects|Loop", meta=(ClampMin=20, ClampMax=20000, Units="Hz"))
+	float HoverLoopLowPassIdle = 450.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Hover|Effects|Loop", meta=(ClampMin=20, ClampMax=20000, Units="Hz"))
+	float HoverLoopLowPassMoving = 2200.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Hover|Effects|Loop", meta=(ClampMin=0.1, ClampMax=4))
+	float HoverLoopPitchIdle = 0.9f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Hover|Effects|Loop", meta=(ClampMin=0.1, ClampMax=4))
+	float HoverLoopPitchMoving = 1.15f;
+
+	/** 이 수평 속도에서 "이동 중" 소리가 된다. */
+	UPROPERTY(EditDefaultsOnly, Category="Hover|Effects|Loop", meta=(ClampMin=1, Units="CentimetersPerSecond"))
+	float HoverLoopFullSpeed = 600.f;
+
+	/** 게이지가 이 값보다 적으면 소리가 떨린다. 0이면 떨지 않는다. */
+	UPROPERTY(EditDefaultsOnly, Category="Hover|Effects|Loop", meta=(ClampMin=0))
+	float HoverLoopLowGauge = 25.f;
+
 	UPROPERTY(EditDefaultsOnly, Category="Hover|Effects")
 	TSubclassOf<UCameraShakeBase> HoverStartShake;
 
@@ -123,6 +148,10 @@ private:
 	void StartEffects();
 	void StopEffects();
 	void UpdateThrusterRotation() const;
+	void UpdateLoopAudio(float DeltaTime, float HorizontalSpeed, float GaugeValue, double Now);
+
+	// 추진음 필터·피치의 현재 값 (부드럽게 따라간다).
+	float LoopBlend = 0.f;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UNiagaraComponent>> ThrusterComponents;

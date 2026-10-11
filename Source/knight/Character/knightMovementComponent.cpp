@@ -3,8 +3,13 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "AbilitySystem/Attributes/knightAttributeSet.h"
+#include "Camera/CameraShakeBase.h"
 #include "Curves/CurveFloat.h"
+#include "Engine/World.h"
+#include "GameFramework/Character.h"
 #include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerController.h"
+#include "TimerManager.h"
 #include "System/knightGameplayTags.h"
 
 namespace
@@ -103,7 +108,49 @@ float UknightMovementComponent::GetMaxSpeed() const
 float UknightMovementComponent::GetMaxAcceleration() const
 {
 	// 잠금 중에는 입력이 있어도 가속이 0 → 엔진이 제동을 걸어 미끄러지며 멈춘다. 이동 방향으로 몸도 돌지 않는다.
-	return bMoveInputLocked ? 0.f : Super::GetMaxAcceleration();
+	return (bMoveInputLocked || bLandingRecovery) ? 0.f : Super::GetMaxAcceleration();
+}
+
+void UknightMovementComponent::ProcessLanded(const FHitResult& Hit, float remainingTime, int32 Iterations)
+{
+	// Super가 착지 처리를 하면서 수직 속도를 없애므로, 미리 떨어지던 속도를 읽어 둔다.
+	const float ImpactSpeed = FMath::Max(0.f, -Velocity.Z);
+	Super::ProcessLanded(Hit, remainingTime, Iterations);
+	HandleLandingImpact(ImpactSpeed);
+}
+
+void UknightMovementComponent::HandleLandingImpact(float ImpactSpeed)
+{
+	if (ImpactSpeed < LandingShakeMinSpeed || !CharacterOwner)
+	{
+		return;
+	}
+	const float MaxSpeed = FMath::Max(LandingShakeMaxSpeed, LandingShakeMinSpeed + 1.f);
+	const float Alpha = FMath::Clamp((ImpactSpeed - LandingShakeMinSpeed) / (MaxSpeed - LandingShakeMinSpeed), 0.f, 1.f);
+
+	if (LandingShake)
+	{
+		if (APlayerController* const PC = Cast<APlayerController>(CharacterOwner->GetController()))
+		{
+			PC->ClientStartCameraShake(LandingShake, FMath::Lerp(LandingShakeMinScale, LandingShakeMaxScale, Alpha));
+		}
+	}
+
+	// 세게 떨어지면 무게를 받아내느라 잠깐 출발하지 못한다. 퀵스텝 잠금(bMoveInputLocked)과는 따로 둔다.
+	UWorld* const World = GetWorld();
+	if (World && LandingRecoveryMinSpeed > 0.f && LandingRecoveryMaxTime > 0.f && ImpactSpeed >= LandingRecoveryMinSpeed)
+	{
+		const float RecoveryAlpha = FMath::Clamp((ImpactSpeed - LandingRecoveryMinSpeed) / FMath::Max(MaxSpeed - LandingRecoveryMinSpeed, 1.f), 0.f, 1.f);
+		const float Time = FMath::Max(0.05f, LandingRecoveryMaxTime * RecoveryAlpha);
+		bLandingRecovery = true;
+		World->GetTimerManager().SetTimer(LandingRecoveryTimer, this, &ThisClass::EndLandingRecovery, Time, false);
+	}
+	UE_LOG(LogTemp, Verbose, TEXT("Knight landing impact %.0f cm/s"), ImpactSpeed);
+}
+
+void UknightMovementComponent::EndLandingRecovery()
+{
+	bLandingRecovery = false;
 }
 
 bool UknightMovementComponent::DoJump(bool bReplayingMoves, float DeltaTime)
