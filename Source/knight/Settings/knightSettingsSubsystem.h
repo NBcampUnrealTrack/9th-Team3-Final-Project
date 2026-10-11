@@ -25,6 +25,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|Settings")
 	void ApplyAudioSettings();
 
+	/** Temporary calibration used by the settings screen. It never changes the saved object. */
+	void PreviewDisplaySettings(float FieldOfViewOffset, float Brightness, float Gamma);
+	void EndDisplayPreview();
+	void GetEffectiveDisplaySettings(float& FieldOfViewOffset, float& Brightness, float& Gamma);
+
 	UFUNCTION(BlueprintPure, Category="Knight|Settings")
 	bool AreSubtitlesEnabled();
 
@@ -39,4 +44,9 @@ private:
 	bool bMappableContextsRegistered = false;
 	UPROPERTY(Transient)
 	TObjectPtr<UknightSharedSettings> SharedSettings;
+	bool bDisplayPreviewActive = false;
+	float PreviewFieldOfViewOffset = 0.f;
+	float PreviewBrightness = 1.f;
+	float PreviewGamma = 1.f;
+	void RefreshActiveCamera();
 };

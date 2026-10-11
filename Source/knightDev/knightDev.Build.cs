@@ -23,6 +23,7 @@ public class knightDev : ModuleRules
 			"GameplayTags",
 			"GameplayTasks",
 			"knight",
+			"knightInventory",
 			"knightPerfTracker"
 		});
 	}

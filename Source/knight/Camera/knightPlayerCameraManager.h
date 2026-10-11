@@ -18,6 +18,7 @@ class KNIGHT_API AknightPlayerCameraManager : public APlayerCameraManager
 
 public:
 	AknightPlayerCameraManager();
+	virtual void UpdateCamera(float DeltaTime) override;
 
 	/** Applies the player's CameraShakeScale setting to every shake. */
 	virtual UCameraShakeBase* StartCameraShake(TSubclassOf<UCameraShakeBase> ShakeClass, const FAddCameraShakeParams& Params) override;
@@ -41,6 +42,7 @@ public:
 	float GetShakeScale() const;
 
 protected:
+	virtual void UpdateViewTarget(FTViewTarget& OutVT, float DeltaTime) override;
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Camera")
 	TSubclassOf<UCameraShakeBase> HitShake;
 

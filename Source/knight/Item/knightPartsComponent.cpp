@@ -11,6 +11,7 @@
 #include "GameFramework/Character.h"
 #include "GameplayEffect.h"
 #include "Item/knightItemDefinitions.h"
+#include "Item/knightEquipmentData.h"
 #include "Progression/knightProgressionSubsystem.h"
 #include "System/knightAssetManager.h"
 #include "System/knightGameplayTags.h"
@@ -44,7 +45,7 @@ void UknightPartsComponent::ApplyLoadout()
 	{
 		// The saved choice wins; the default fills slots the save has nothing for.
 		const UknightPartItemDefinition* Part = Progression ? Progression->GetEquippedPart(Slot) : nullptr;
-		if (!Part)
+		if (!Part && !(Progression && Progression->IsSlotExplicitlyEmpty(Slot)))
 		{
 			const TObjectPtr<const UknightPartItemDefinition>* const Default = DefaultLoadout.FindByPredicate(
 				[&Slot](const UknightPartItemDefinition* Candidate) { return Candidate && Candidate->SlotTag == Slot; });
@@ -170,6 +171,7 @@ bool UknightPartsComponent::EquipPartUnchecked(const UknightPartItemDefinition* 
 	}
 
 	UpdateWeightAttribute();
+	RefreshSetBonuses();
 
 	UE_LOG(Logknight, Verbose, TEXT("%s equipped %s (level %d) in %s."), *GetNameSafe(Character), *Part->GetName(), Equipped.UpgradeLevel, *Part->SlotTag.ToString());
 	OnEquipmentChanged.Broadcast(Part->SlotTag, const_cast<UknightPartItemDefinition*>(Part));
@@ -183,6 +185,7 @@ void UknightPartsComponent::UnequipSlot(FGameplayTag SlotTag)
 	{
 		RemovePart(Removed);
 		UpdateWeightAttribute();
+		RefreshSetBonuses();
 		OnEquipmentChanged.Broadcast(SlotTag, nullptr);
 	}
 }
@@ -216,6 +219,64 @@ const UGameplayEffect* UknightPartsComponent::GetStatEffect(const UknightPartIte
 	}
 	StatEffects.Add(Part, Effect);
 	return Effect;
+}
+
+const UGameplayEffect* UknightPartsComponent::GetSetStatEffect(const FString& Key, const TArray<FknightPartStatModifier>& Modifiers)
+{
+	if (Modifiers.IsEmpty()) return nullptr;
+	if (const TObjectPtr<UGameplayEffect>* Cached = SetStatEffects.Find(Key)) return *Cached;
+	UGameplayEffect* Effect = NewObject<UGameplayEffect>(this, NAME_None, RF_Transient);
+	Effect->DurationPolicy = EGameplayEffectDurationType::Infinite;
+	for (const FknightPartStatModifier& Stat : Modifiers)
+	{
+		if (!Stat.Attribute.IsValid()) continue;
+		FGameplayModifierInfo Modifier;
+		Modifier.Attribute = Stat.Attribute;
+		Modifier.ModifierOp = Stat.ModifierOp;
+		Modifier.ModifierMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(Stat.Value));
+		Effect->Modifiers.Add(Modifier);
+	}
+	SetStatEffects.Add(Key, Effect);
+	return Effect;
+}
+
+void UknightPartsComponent::RefreshSetBonuses()
+{
+	UknightAbilitySystemComponent* const ASC = Cast<UknightAbilitySystemComponent>(UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner()));
+	if (!ASC) return;
+	for (FActiveGameplayEffectHandle& Handle : ActiveSetHandles)
+	{
+		if (Handle.IsValid()) ASC->RemoveActiveGameplayEffect(Handle);
+	}
+	ActiveSetHandles.Reset();
+	const UknightMaintenanceCatalog* Catalog = UknightEquipmentSettings::LoadCatalog();
+	if (!Catalog) return;
+	TMap<FGameplayTag, int32> Counts;
+	for (const auto& Entry : EquippedParts)
+	{
+		const FGameplayTag Slot = Entry.Key;
+		if (Slot != knightGameplayTags::Equipment_Slot_Head && Slot != knightGameplayTags::Equipment_Slot_Torso
+			&& Slot != knightGameplayTags::Equipment_Slot_Arms && Slot != knightGameplayTags::Equipment_Slot_Legs
+			&& Slot != knightGameplayTags::Equipment_Slot_Weapon) continue;
+		const UknightPartItemDefinition* Part = Entry.Value.Definition.Get();
+		if (Part && Part->SetTag.IsValid()) ++Counts.FindOrAdd(Part->SetTag);
+	}
+	for (const UknightEquipmentSetDefinition* Set : Catalog->Sets)
+	{
+		if (!Set || !Set->SetTag.IsValid()) continue;
+		const int32 Count = Counts.FindRef(Set->SetTag);
+		const FknightSetTier* Tiers[] = { &Set->TwoPiece, &Set->FourPiece };
+		for (int32 TierIndex = 0; TierIndex < 2; ++TierIndex)
+		{
+			const FknightSetTier& Tier = *Tiers[TierIndex];
+			if (Count < Tier.RequiredCount || Tier.StatModifiers.IsEmpty()) continue;
+			const FString Key = FString::Printf(TEXT("%s_%d"), *Set->GetPathName(), TierIndex);
+			if (const UGameplayEffect* Effect = GetSetStatEffect(Key, Tier.StatModifiers))
+			{
+				ActiveSetHandles.Add(ASC->ApplyGameplayEffectToSelf(Effect, 1.f, ASC->MakeEffectContext()));
+			}
+		}
+	}
 }
 
 void UknightPartsComponent::RemovePart(FknightEquippedPart& Part)
@@ -259,6 +320,14 @@ void UknightPartsComponent::GetPartMeshes(TArray<UMeshComponent*>& OutMeshes) co
 
 void UknightPartsComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (UknightAbilitySystemComponent* ASC = Cast<UknightAbilitySystemComponent>(UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner())))
+	{
+		for (FActiveGameplayEffectHandle& Handle : ActiveSetHandles)
+		{
+			if (Handle.IsValid()) ASC->RemoveActiveGameplayEffect(Handle);
+		}
+	}
+	ActiveSetHandles.Reset();
 	for (TPair<FGameplayTag, FknightEquippedPart>& Entry : EquippedParts)
 	{
 		RemovePart(Entry.Value);

@@ -11,6 +11,8 @@ class UTextBlock;
 class UKnightStageGlobeWidget;
 class UKnightSettingsWidget;
 class UKnightCodexWidget;
+class UKnightMaintenanceWidget;
+class AKnightMaintenanceCameraRig;
 struct FStreamableHandle;
 
 UENUM(BlueprintType)
@@ -163,11 +165,16 @@ private:
 	bool CycleStage(int32 Direction);
 	void EnsureSettingsWidget();
 	void EnsureCodexWidget();
+	void EnsureMaintenanceWidget();
 
 	UPROPERTY(Transient)
 	TObjectPtr<UKnightSettingsWidget> SettingsWidget;
 	UPROPERTY(Transient)
 	TObjectPtr<UKnightCodexWidget> CodexWidget;
+	UPROPERTY(Transient)
+	TObjectPtr<UKnightMaintenanceWidget> MaintenanceWidget;
+	TWeakObjectPtr<AKnightMaintenanceCameraRig> MaintenanceCameraRig;
+	bool bRestoreMaintenanceFocus = false;
 	bool bRestoreCodexFocus = false;
 
 	EKnightMainMenuPage CurrentPage = EKnightMainMenuPage::Home;
