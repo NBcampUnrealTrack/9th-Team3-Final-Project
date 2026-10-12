@@ -51,4 +51,24 @@ public:
 	 */
 	UPROPERTY(config, EditAnywhere, Category="Preview", meta=(ClampMin="10", Units="cm"))
 	float FocusMinSize = 50.f;
+
+	/**
+	 * (2026-10-12) '뼈대에 입히기'에서 팔 뼈(SkinArmRootBones와 그 아래 전부)도 따라 휘게 할지.
+	 * 끄면(기본) 팔에 실린 가중치를 가장 가까운 몸통 쪽 뼈(쇄골 등)로 옮긴다 → 망토 옆면이 팔에 끌려가지 않는다(팔은 망토 밑으로 나온다).
+	 * 장갑·소매처럼 팔에 입는 파츠는 켠다.
+	 */
+	UPROPERTY(config, EditAnywhere, Category="Skin")
+	bool bSkinFollowArms = false;
+
+	/** 위와 같고 다리용. 끄면(기본) 다리 가중치를 골반 쪽 뼈로 옮긴다 → 치마가 허벅지에 들러붙지 않는다. 바지·다리 갑옷은 켠다. */
+	UPROPERTY(config, EditAnywhere, Category="Skin")
+	bool bSkinFollowLegs = false;
+
+	/** 팔로 볼 뼈(이 뼈와 그 아래 전부). 기본값은 Config/DefaultEditorPerProjectUserSettings.ini (나이트: upperarm_l, upperarm_r). */
+	UPROPERTY(config, EditAnywhere, Category="Skin")
+	TArray<FName> SkinArmRootBones;
+
+	/** 다리로 볼 뼈(이 뼈와 그 아래 전부). 기본값은 위 ini (나이트: thigh_l, thigh_r). */
+	UPROPERTY(config, EditAnywhere, Category="Skin")
+	TArray<FName> SkinLegRootBones;
 };

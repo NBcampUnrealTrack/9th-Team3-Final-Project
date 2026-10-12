@@ -21,6 +21,11 @@ struct FAssetData;
  *   3. 오른쪽 속성 패널의 Attachment(소켓, Relative Transform의 위치·회전·크기)를 바꾸면 바로 반영된다.
  *      메시(Mesh / StaticMesh)를 바꿔도 바로 반영된다. 되돌리기(Ctrl+Z)도 반영된다.
  *   4. '저장'을 누르면 파츠 에셋 파일이 저장된다 (바뀐 게 있을 때만 눌린다).
+ *   5. (10-12) 망토·옷처럼 여러 뼈에 걸친 스태틱 메시 파츠는 위치를 맞춘 뒤 '뼈대에 입히기'를 누른다.
+ *      원본 옆에 SK_ 스켈레탈 메시가 생기고, 파츠의 스켈레탈 메시 칸 = 그 메시, 붙이는 방식 = LeaderPose로 바뀐다.
+ *      위치를 다시 맞추려면 스켈레탈 메시 칸(Mesh)을 비우면 스태틱 메시로 돌아온다 → 맞춘 뒤 다시 누른다(덮어씀).
+ *      위치는 반드시 기본 자세(Preview Animation 비움)에서 맞춘다. 굽기는 기본 자세 기준이다.
+ *      팔·다리를 따라갈지는 미리보기 설정의 Skin Follow Arms / Legs (기본 끔: 망토가 팔·다리에 끌려가지 않음).
  *   오른쪽 아래 '미리보기 설정'에서 메카 메시와 자세(애니메이션 반복 재생, 또는 멈춘 시점)를 바꿀 수 있다 (개인 설정).
  *   파츠를 고르거나 F를 누르면 카메라가 파츠에 맞춰진다. 작은 파츠도 최소 크기(FocusMinSize)만큼 떨어져서 본다.
  */
@@ -69,6 +74,10 @@ private:
 
 	FReply HandleSaveClicked();
 	bool CanSave() const;
+
+	/** (10-12) '뼈대에 입히기': 스태틱 메시 파츠를 메카 뼈대를 따라 휘는 스켈레탈 메시로 바꾼다 (MechPartSkinBaker). */
+	FReply HandleBakeSkinClicked();
+	bool CanBakeSkin() const;
 
 	TSharedPtr<SMechPartsWorkbenchViewport> Viewport;
 	TSharedPtr<IDetailsView> PartDetails;
