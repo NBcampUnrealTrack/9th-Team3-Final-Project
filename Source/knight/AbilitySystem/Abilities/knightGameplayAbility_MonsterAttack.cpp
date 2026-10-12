@@ -75,6 +75,17 @@ float UknightGameplayAbility_MonsterAttack::GetSelectionWeight(const FknightMons
 	return Selection.Weight;
 }
 
+bool UknightGameplayAbility_MonsterAttack::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
+{
+	if (ActorInfo && ActorInfo->AbilitySystemComponent.IsValid()
+		&& ActorInfo->AbilitySystemComponent->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Exhausted))
+	{
+		return false;
+	}
+	return Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags);
+}
+
 float UknightGameplayAbility_MonsterAttack::GetCooldownRemaining(double WorldTime) const
 {
 	return FMath::Max(0.f, static_cast<float>(LastActivationTime + Selection.Cooldown - WorldTime));

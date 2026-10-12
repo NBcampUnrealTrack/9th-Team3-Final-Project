@@ -22,21 +22,43 @@ UknightMonsterMovementComponent::UknightMonsterMovementComponent(const FObjectIn
 
 	LockTags.AddTag(knightGameplayTags::State_Monster_Reacting);
 	LockTags.AddTag(knightGameplayTags::State_Dead);
+	SlowTags.AddTag(knightGameplayTags::State_Monster_Exhausted);
 }
 
-bool UknightMonsterMovementComponent::IsMovementLocked() const
+UAbilitySystemComponent* UknightMonsterMovementComponent::GetOwnerASC() const
 {
 	if (!CachedASC.IsValid())
 	{
 		CachedASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner());
 	}
-	const UAbilitySystemComponent* const ASC = CachedASC.Get();
+	return CachedASC.Get();
+}
+
+bool UknightMonsterMovementComponent::IsMovementLocked() const
+{
+	const UAbilitySystemComponent* const ASC = GetOwnerASC();
 	return ASC && ASC->HasAnyMatchingGameplayTags(LockTags);
+}
+
+bool UknightMonsterMovementComponent::IsMovementSlowed() const
+{
+	const UAbilitySystemComponent* const ASC = GetOwnerASC();
+	return ASC && ASC->HasAnyMatchingGameplayTags(SlowTags);
 }
 
 float UknightMonsterMovementComponent::GetMaxSpeed() const
 {
-	return IsMovementLocked() ? 0.f : Super::GetMaxSpeed();
+	if (IsMovementLocked())
+	{
+		return 0.f;
+	}
+	return IsMovementSlowed() ? Super::GetMaxSpeed() * SlowSpeedScale : Super::GetMaxSpeed();
+}
+
+FRotator UknightMonsterMovementComponent::GetDeltaRotation(float DeltaTime) const
+{
+	const FRotator DeltaRotation = Super::GetDeltaRotation(DeltaTime);
+	return IsMovementSlowed() ? DeltaRotation * SlowTurnScale : DeltaRotation;
 }
 
 void UknightMonsterMovementComponent::PhysicsRotation(float DeltaTime)
@@ -93,6 +115,16 @@ bool UknightMonsterMovementComponent::TurnTowards(const FVector& WorldLocation, 
 	const float CurrentYaw = Owner->GetActorRotation().Yaw;
 	const float DesiredYaw = ToTarget.Rotation().Yaw;
 	const float Delta = FRotator::NormalizeAxis(DesiredYaw - CurrentYaw);
+
+	if (IsMovementSlowed())
+	{
+		// 지친 몬스터가 주위를 도는 타깃을 따라 계속 돌지 않게 한다. 이미 돌고 있으면 끝까지 돈다.
+		if (FMath::IsNearlyZero(TurnSpeed) && FMath::Abs(Delta) < SlowTurnStartAngle)
+		{
+			return true;
+		}
+		TurnRate *= SlowTurnScale;
+	}
 
 	LastTurnTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
 	if (FMath::Abs(Delta) <= ToleranceDegrees)
