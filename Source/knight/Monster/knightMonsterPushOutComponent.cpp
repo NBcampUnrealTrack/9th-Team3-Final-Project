@@ -1,5 +1,7 @@
 #include "Monster/knightMonsterPushOutComponent.h"
 
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemGlobals.h"
 #include "Components/CapsuleComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
@@ -7,6 +9,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Monster/knightMonsterBodyBlockerComponent.h"
 #include "Interfaces/CombatInterface.h"
+#include "System/knightGameplayTags.h"
 #include "knight.h"
 
 namespace knightMonsterPushOut
@@ -20,6 +23,7 @@ UknightMonsterPushOutComponent::UknightMonsterPushOutComponent()
 	PrimaryComponentTick.bCanEverTick = true;
 	// 몬스터와 플레이어가 이번 프레임 이동을 마친 뒤에 겹침을 본다.
 	PrimaryComponentTick.TickGroup = TG_PostPhysics;
+	MeshPushOutPauseTags.AddTag(knightGameplayTags::State_HitReact_Knockdown);
 }
 
 void UknightMonsterPushOutComponent::BeginPlay()
@@ -35,7 +39,8 @@ void UknightMonsterPushOutComponent::BeginPlay()
 		const ACharacter* const Character = Cast<ACharacter>(Owner);
 		if (bPushOutOfMesh && Character && Character->GetMesh())
 		{
-			BodyPrimitives.Add(Character->GetMesh());
+			MeshPrimitive = Character->GetMesh();
+			BodyPrimitives.Add(MeshPrimitive);
 		}
 	}
 	SetComponentTickEnabled(BodyPrimitives.Num() > 0);
@@ -56,13 +61,14 @@ void UknightMonsterPushOutComponent::TickComponent(float DeltaTime, ELevelTick T
 		return;
 	}
 
+	const bool bIncludeMesh = !IsMeshPushOutPaused();
 	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
 	{
 		const APlayerController* const PlayerController = It->Get();
 		ACharacter* const Character = PlayerController ? Cast<ACharacter>(PlayerController->GetPawn()) : nullptr;
 		UCharacterMovementComponent* const Movement = Character ? Character->GetCharacterMovement() : nullptr;
 		UCapsuleComponent* const Capsule = Character ? Character->GetCapsuleComponent() : nullptr;
-		if (!Movement || !Capsule || !IsOverlappingBody(Character))
+		if (!Movement || !Capsule || !IsOverlappingBody(Character, bIncludeMesh))
 		{
 			continue;
 		}
@@ -86,7 +92,17 @@ void UknightMonsterPushOutComponent::TickComponent(float DeltaTime, ELevelTick T
 	}
 }
 
-bool UknightMonsterPushOutComponent::IsOverlappingBody(const ACharacter* Character) const
+bool UknightMonsterPushOutComponent::IsMeshPushOutPaused() const
+{
+	if (!MeshPrimitive || MeshPushOutPauseTags.IsEmpty())
+	{
+		return false;
+	}
+	const UAbilitySystemComponent* const ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner());
+	return ASC && ASC->HasAnyMatchingGameplayTags(MeshPushOutPauseTags);
+}
+
+bool UknightMonsterPushOutComponent::IsOverlappingBody(const ACharacter* Character, bool bIncludeMesh) const
 {
 	const UCapsuleComponent* const Capsule = Character->GetCapsuleComponent();
 	const float Radius = Capsule->GetScaledCapsuleRadius() - knightMonsterPushOut::Skin;
@@ -102,7 +118,7 @@ bool UknightMonsterPushOutComponent::IsOverlappingBody(const ACharacter* Charact
 	for (const UPrimitiveComponent* const Primitive : BodyPrimitives)
 	{
 		// 죽으면 차단 상자 충돌이 꺼지는 등 도중에 바뀔 수 있어 매번 확인한다.
-		if (!Primitive || !Primitive->IsQueryCollisionEnabled())
+		if (!Primitive || !Primitive->IsQueryCollisionEnabled() || (!bIncludeMesh && Primitive == MeshPrimitive))
 		{
 			continue;
 		}
