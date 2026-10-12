@@ -10,6 +10,13 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/RootMotionSource.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
+#include "TimerManager.h"
+#include "DrawDebugHelpers.h"
+#include "knight.h"
 #include "Perception/AISense_Hearing.h"
 #include "System/knightGameplayTags.h"
 
@@ -30,6 +37,9 @@ UknightGameplayAbility_BoostDash::UknightGameplayAbility_BoostDash(const FObject
 
 	// 퀵스텝은 행동 에너지가 비용만큼 있어야 나간다(2026-10-09 사용자 결정). 비용 값은 BP의 StaminaCost(전에는 Cost GE).
 	bRequireFullStaminaCost = true;
+
+	// 등 부스터 두 개: 등 뒤쪽(X -), 양옆(Y ±). (2026-10-12)
+	BackThrusterOffsets = { FVector(-15.f, -12.f, 4.f), FVector(-15.f, 12.f, 4.f) };
 }
 
 float UknightGameplayAbility_BoostDash::GetMechAttributeValue(const FGameplayAttribute& Attribute, float Fallback) const
@@ -119,6 +129,8 @@ void UknightGameplayAbility_BoostDash::StartDash(ACharacter& Character)
 	DashTask->OnFinish.AddDynamic(this, &ThisClass::OnDashFinished);
 	DashTask->ReadyForActivation();
 
+	StartBackThrusters(Character);
+
 	UAbilitySystemComponent* const CueASC = DashCueTag.IsValid() ? GetAbilitySystemComponentFromActorInfo() : nullptr;
 	if (UAbilitySystemComponent* const ASC = CueASC)
 	{
@@ -167,6 +179,15 @@ UAnimMontage* UknightGameplayAbility_BoostDash::SelectDashMontage(const ACharact
 
 void UknightGameplayAbility_BoostDash::OnDashFinished()
 {
+	// 등 부스터는 이동이 끝나면 잠깐 뒤에 끈다. (2026-10-12)
+	if (UWorld* const World = GetWorld(); World && BackThrusterLinger > 0.f)
+	{
+		World->GetTimerManager().SetTimer(BackThrusterStopTimer, this, &ThisClass::StopBackThrusters, BackThrusterLinger, false);
+	}
+	else
+	{
+		StopBackThrusters();
+	}
 	// 쿨타임은 이동이 끝난 시점부터 센다. 그래야 경직 중에 쿨타임이 끝나 대시로 캔슬할 수 있다.
 	StartCooldown();
 	if (RecoveryDuration <= 0.f)
@@ -246,6 +267,91 @@ void UknightGameplayAbility_BoostDash::StartCooldown()
 	}
 }
 
+void UknightGameplayAbility_BoostDash::StartBackThrusters(const ACharacter& Character)
+{
+	StopBackThrusters();
+	USkeletalMeshComponent* const Mesh = Character.GetMesh();
+	UWorld* const World = GetWorld();
+	if (!BackThrusterEffect || !Mesh || !World)
+	{
+		UE_LOG(LogknightAbility, Warning, TEXT("BoostDash back booster: skipped (Effect=%s Mesh=%s World=%s)"),
+			*GetNameSafe(BackThrusterEffect), *GetNameSafe(Mesh), *GetNameSafe(World));
+		return;
+	}
+	for (int32 Index = 0; Index < BackThrusterOffsets.Num(); ++Index)
+	{
+		// 어디에도 붙이지 않고 월드에 만든 뒤, 위치·회전을 매 프레임 직접 정한다.
+		UNiagaraComponent* const Jet = UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, BackThrusterEffect, Character.GetActorLocation(),
+			Character.GetActorRotation(), FVector(BackThrusterScale), true, true, ENCPoolMethod::None);
+		if (Jet)
+		{
+			BackThrusters.Add(Jet);
+		}
+	}
+	UpdateBackThrusters();
+	if (bDebugBackThrusters)
+	{
+		UE_LOG(LogknightAbility, Log, TEXT("BoostDash back booster: spawned %d / %d jets, effect %s, bone %s exists=%d"),
+			BackThrusters.Num(), BackThrusterOffsets.Num(), *GetNameSafe(BackThrusterEffect), *BackThrusterBone.ToString(),
+			Mesh->DoesSocketExist(BackThrusterBone) ? 1 : 0);
+		for (const UNiagaraComponent* const Jet : BackThrusters)
+		{
+			UE_LOG(LogknightAbility, Log, TEXT("  jet %s at %s rot %s active=%d visible=%d"), *GetNameSafe(Jet),
+				*Jet->GetComponentLocation().ToCompactString(), *Jet->GetComponentRotation().ToCompactString(), Jet->IsActive() ? 1 : 0, Jet->IsVisible() ? 1 : 0);
+		}
+	}
+	World->GetTimerManager().SetTimer(BackThrusterTimer, this, &ThisClass::UpdateBackThrusters, 1.f / 60.f, true);
+}
+
+void UknightGameplayAbility_BoostDash::UpdateBackThrusters()
+{
+	const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	const USkeletalMeshComponent* const Mesh = Character ? Character->GetMesh() : nullptr;
+	if (!Mesh || BackThrusters.IsEmpty())
+	{
+		return;
+	}
+	const FVector Anchor = Mesh->DoesSocketExist(BackThrusterBone) ? Mesh->GetSocketLocation(BackThrusterBone) : Character->GetActorLocation();
+	const FQuat ActorQuat = Character->GetActorQuat();
+	// 대시 반대 방향으로, 조금 아래로 뿜는다. 이펙트는 로컬 -Z로 뿜므로 로컬 Z를 뿜는 방향의 반대로 둔다.
+	const FVector Back = DashDirection.IsNearlyZero() ? -Character->GetActorForwardVector() : -DashDirection;
+	const float Down = FMath::DegreesToRadians(BackThrusterDownAngle);
+	const FVector Emit = (Back.GetSafeNormal2D() * FMath::Cos(Down) - FVector::UpVector * FMath::Sin(Down)).GetSafeNormal();
+	const FRotator Rotation = FRotationMatrix::MakeFromZ(-Emit).Rotator();
+	for (int32 Index = 0; Index < BackThrusters.Num(); ++Index)
+	{
+		if (UNiagaraComponent* const Jet = BackThrusters[Index])
+		{
+			const FVector Offset = BackThrusterOffsets.IsValidIndex(Index) ? BackThrusterOffsets[Index] : FVector::ZeroVector;
+			Jet->SetWorldLocationAndRotation(Anchor + ActorQuat.RotateVector(Offset), Rotation);
+			if (bDebugBackThrusters)
+			{
+				const FVector Location = Jet->GetComponentLocation();
+				DrawDebugSphere(Jet->GetWorld(), Location, 6.f, 8, FColor::Yellow, false, 0.f, SDPG_Foreground);
+				DrawDebugLine(Jet->GetWorld(), Location, Location + Emit * 80.f, FColor::Red, false, 0.f, SDPG_Foreground, 2.f);
+			}
+		}
+	}
+}
+
+void UknightGameplayAbility_BoostDash::StopBackThrusters()
+{
+	if (UWorld* const World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(BackThrusterTimer);
+		World->GetTimerManager().ClearTimer(BackThrusterStopTimer);
+	}
+	for (UNiagaraComponent* const Jet : BackThrusters)
+	{
+		if (Jet)
+		{
+			// 이미 나온 입자는 끝까지 보이고, 다 사라지면 컴포넌트가 스스로 지워진다.
+			Jet->Deactivate();
+		}
+	}
+	BackThrusters.Reset();
+}
+
 void UknightGameplayAbility_BoostDash::OnInvulnerabilityEnded()
 {
 	RemoveInvulnerability();
@@ -268,6 +374,7 @@ void UknightGameplayAbility_BoostDash::EndAbility(const FGameplayAbilitySpecHand
 {
 	RemoveInvulnerability();
 	ReleaseRecoveryState();
+	StopBackThrusters();
 
 	// 이동이 끝나기 전에 끊긴 대시(피격 등)도 쿨타임은 건다. 비용 부족 등으로 시작도 못 했으면 걸지 않는다.
 	StartCooldown();
