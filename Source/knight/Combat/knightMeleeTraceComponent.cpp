@@ -7,6 +7,7 @@
 #include "Combat/knightCombatLibrary.h"
 #include "Components/MeshComponent.h"
 #include "DrawDebugHelpers.h"
+#include "Engine/OverlapResult.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "GenericTeamAgentInterface.h"
@@ -210,6 +211,67 @@ void UknightMeleeTraceComponent::SweepFrame()
 	for (const FHitResult& Hit : BestHits)
 	{
 		HandleHit(Hit);
+	}
+}
+
+void UknightMeleeTraceComponent::HitArea(const FVector& Center, float Radius)
+{
+	UWorld* const World = GetWorld();
+	if (!World || Radius <= 0.f)
+	{
+		return;
+	}
+
+	FCollisionObjectQueryParams ObjectParams;
+	for (const TEnumAsByte<EObjectTypeQuery>& ObjectType : HitObjectTypes)
+	{
+		ObjectParams.AddObjectTypesToQuery(UEngineTypes::ConvertToCollisionChannel(ObjectType));
+	}
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(knightMeleeArea), false, GetOwner());
+	TArray<AActor*> AttachedActors;
+	GetOwner()->GetAttachedActors(AttachedActors);
+	QueryParams.AddIgnoredActors(AttachedActors);
+
+	TArray<FOverlapResult> Overlaps;
+	World->OverlapMultiByObjectType(Overlaps, Center, FQuat::Identity, ObjectParams, FCollisionShape::MakeSphere(Radius), QueryParams);
+
+	// 피해 컨텍스트, 큐, 부위 조회는 히트 결과를 필요로 하므로 구체 중심에서 가장 가까운 표면 지점으로 하나씩 만든다.
+	TArray<FHitResult> AreaHits;
+	for (const FOverlapResult& Overlap : Overlaps)
+	{
+		AActor* const Target = Overlap.GetActor();
+		UPrimitiveComponent* const Component = Overlap.GetComponent();
+		if (!Target || !Component)
+		{
+			continue;
+		}
+		FVector ImpactPoint = Component->GetComponentLocation();
+		FVector ClosestPoint;
+		if (Component->GetClosestPointOnCollision(Center, ClosestPoint) >= 0.f)
+		{
+			ImpactPoint = ClosestPoint;
+		}
+		FHitResult& Hit = AreaHits.Emplace_GetRef(Target, Component, ImpactPoint, (Center - ImpactPoint).GetSafeNormal());
+		Hit.bBlockingHit = true;
+		Hit.TraceStart = Center;
+		Hit.TraceEnd = ImpactPoint;
+	}
+
+	TArray<FHitResult> BestHits;
+	UknightCombatLibrary::SelectBestHitPerActor(AreaHits, BestHits);
+	for (const FHitResult& Hit : BestHits)
+	{
+		HandleHit(Hit);
+	}
+	// 열린 판정 구간이 없으면 타격 목록을 비워 다음 판정이 같은 대상을 다시 칠 수 있게 한다.
+	if (!IsTracing())
+	{
+		HitActors.Reset();
+	}
+
+	if (knightMeleeTraceCVars::DrawMeleeTraces != 0)
+	{
+		DrawDebugSphere(World, Center, Radius, 24, BestHits.IsEmpty() ? FColor::Yellow : FColor::Red, false, 1.f, 0, 3.f);
 	}
 }
 
