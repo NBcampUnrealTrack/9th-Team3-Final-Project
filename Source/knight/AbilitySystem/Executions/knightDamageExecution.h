@@ -55,6 +55,12 @@ namespace knightDamageMath
 	/** 방어력 배율 = 100 / (100 + 방어력). 방어력이 음수면 0으로 본다. */
 	KNIGHT_API float GetDefenseMultiplier(float Defense);
 
+	/**
+	 * (2026-10-12) 공격이 들어온 지점(AttackOrigin)이 맞는 쪽 정면(TargetForward) 기준 가드 범위 안인지.
+	 * ArcDegrees는 전체 각도(150이면 좌우 75°씩). 높이는 무시하고 수평으로만 본다. 두 점이 같은 자리면 범위 안.
+	 */
+	KNIGHT_API bool IsInGuardArc(const FVector& TargetLocation, const FVector& TargetForward, const FVector& AttackOrigin, float ArcDegrees);
+
 	/** 위 규칙을 모두 적용한 최종 피해·그로기 피해. 둘 다 0 미만이 되지 않는다. */
 	KNIGHT_API FResult Compute(const FInputs& In);
 }
@@ -93,8 +99,14 @@ public:
 	virtual void Execute_Implementation(const FGameplayEffectCustomExecutionParameters& ExecutionParams,
 		FGameplayEffectCustomExecutionOutput& OutExecutionOutput) const override;
 
-	/** 공격자가 맞는 쪽의 가드 범위(GuardArcDegrees) 안에 있는지. 퍼펙트 가드도 같은 범위를 쓰도록 공개한다(UknightCombatLibrary). */
-	bool IsAttackerInGuardArc(const AActor* Target, const AActor* Attacker) const;
+	/**
+	 * 공격자가 맞는 쪽의 가드 범위(GuardArcDegrees) 안에 있는지. 퍼펙트 가드도 같은 범위를 쓰도록 공개한다(UknightCombatLibrary).
+	 * (2026-10-12) Hit이 있고 TraceStart가 있으면 공격이 들어온 지점에서 방향을 잰다:
+	 *   근접 공격 = 무기·발톱 스윕의 직전 위치, 몬스터 범위 공격 = 범위 중심, 쓸어서 맞는 투사체 = 맞기 직전 위치.
+	 *   없으면 공격자 액터 위치. 잔열처럼 큰 몬스터는 몸 중심이 공격 부위(머리·꼬리)에서 8~10m 떨어져 있어서
+	 *   몸 중심으로 재면 정면으로 막아도 범위 밖으로 나오던 문제를 고친다.
+	 */
+	bool IsAttackerInGuardArc(const AActor* Target, const AActor* Attacker, const FHitResult* Hit = nullptr) const;
 
 protected:
 	/** 가드한 피격의 피해 배율. 맞는 쪽 가드 효율이 1.0일 때의 기준값이다. */

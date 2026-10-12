@@ -10,6 +10,17 @@
 
 namespace knightDamageMath
 {
+	bool IsInGuardArc(const FVector& TargetLocation, const FVector& TargetForward, const FVector& AttackOrigin, float ArcDegrees)
+	{
+		const FVector ToAttack = (AttackOrigin - TargetLocation).GetSafeNormal2D();
+		if (ToAttack.IsNearlyZero())
+		{
+			return true;
+		}
+		const float CosHalfArc = FMath::Cos(FMath::DegreesToRadians(ArcDegrees * 0.5f));
+		return FVector::DotProduct(TargetForward.GetSafeNormal2D(), ToAttack) >= CosHalfArc;
+	}
+
 	float GetGuardedMultiplier(float BaseGuardMultiplier, float GuardEfficiency)
 	{
 		// 기준 배율로 줄이던 양(1 - 기준)에 효율을 곱한다. 효율이 높을수록 더 많이 막는다.
@@ -130,7 +141,8 @@ void UknightDamageExecution::Execute_Implementation(const FGameplayEffectCustomE
 	const AActor* const TargetActor = TargetASC ? TargetASC->GetAvatarActor_Direct() : nullptr;
 	const AActor* const AttackerActor = Context.GetInstigator();
 
-	if (const FHitResult* const Hit = Context.GetHitResult())
+	const FHitResult* const Hit = Context.GetHitResult();
+	if (Hit)
 	{
 		if (TargetActor && TargetActor->GetClass()->ImplementsInterface(UCombatInterface::StaticClass()))
 		{
@@ -141,7 +153,7 @@ void UknightDamageExecution::Execute_Implementation(const FGameplayEffectCustomE
 	}
 
 	In.bCritical = CriticalChance > 0.f && FMath::FRand() < CriticalChance;
-	In.bGuarded = TargetTags && TargetTags->HasTag(knightGameplayTags::State_Guarding) && IsAttackerInGuardArc(TargetActor, AttackerActor);
+	In.bGuarded = TargetTags && TargetTags->HasTag(knightGameplayTags::State_Guarding) && IsAttackerInGuardArc(TargetActor, AttackerActor, Hit);
 	In.GuardDamageMultiplier = GuardDamageMultiplier;
 	In.GuardPoiseDamageMultiplier = GuardPoiseDamageMultiplier;
 
@@ -162,17 +174,13 @@ void UknightDamageExecution::Execute_Implementation(const FGameplayEffectCustomE
 	}
 }
 
-bool UknightDamageExecution::IsAttackerInGuardArc(const AActor* Target, const AActor* Attacker) const
+bool UknightDamageExecution::IsAttackerInGuardArc(const AActor* Target, const AActor* Attacker, const FHitResult* Hit) const
 {
 	if (!Target || !Attacker)
 	{
 		return false;
 	}
-	const FVector ToAttacker = (Attacker->GetActorLocation() - Target->GetActorLocation()).GetSafeNormal2D();
-	if (ToAttacker.IsNearlyZero())
-	{
-		return true;
-	}
-	const float CosHalfArc = FMath::Cos(FMath::DegreesToRadians(GuardArcDegrees * 0.5f));
-	return FVector::DotProduct(Target->GetActorForwardVector().GetSafeNormal2D(), ToAttacker) >= CosHalfArc;
+	// 공격이 들어온 지점 (2026-10-12). 타격 결과에 시작점이 없으면 공격자 위치.
+	const FVector AttackOrigin = Hit && !Hit->TraceStart.IsZero() ? FVector(Hit->TraceStart) : Attacker->GetActorLocation();
+	return knightDamageMath::IsInGuardArc(Target->GetActorLocation(), Target->GetActorForwardVector(), AttackOrigin, GuardArcDegrees);
 }
