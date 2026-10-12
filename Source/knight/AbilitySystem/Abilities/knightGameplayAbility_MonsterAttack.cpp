@@ -28,6 +28,9 @@ FknightMonsterAttackContext FknightMonsterAttackContext::Make(const AActor* Mons
 		Context.AngleToTarget = FRotator::NormalizeAxis(ToTarget.GetSafeNormal2D().Rotation().Yaw - Monster->GetActorRotation().Yaw);
 		const UAbilitySystemComponent* const TargetASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Target);
 		Context.bTargetAirborne = TargetASC && TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_Airborne);
+		const AknightMonsterCharacterBase* const MonsterCharacter = Cast<AknightMonsterCharacterBase>(Monster);
+		const UknightMonsterTargetingComponent* const Targeting = MonsterCharacter ? MonsterCharacter->GetTargetingComponent() : nullptr;
+		Context.TargetBehindTime = Targeting && Targeting->GetCurrentTarget() == Target ? Targeting->GetTargetBehindTime() : 0.f;
 	}
 	return Context;
 }
@@ -69,6 +72,10 @@ float UknightGameplayAbility_MonsterAttack::GetSelectionWeight(const FknightMons
 	}
 	if ((Selection.AirborneRule == EknightTargetAirborneRule::OnlyAirborne && !Context.bTargetAirborne)
 		|| (Selection.AirborneRule == EknightTargetAirborneRule::OnlyGrounded && Context.bTargetAirborne))
+	{
+		return 0.f;
+	}
+	if (Selection.MinTargetBehindTime > 0.f && Context.TargetBehindTime < Selection.MinTargetBehindTime)
 	{
 		return 0.f;
 	}

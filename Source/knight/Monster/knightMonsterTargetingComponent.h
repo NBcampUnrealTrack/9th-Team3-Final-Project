@@ -49,6 +49,9 @@ public:
 	UFUNCTION(BlueprintPure, Category="Knight|Monster")
 	AActor* GetCurrentTarget() const { return CurrentTarget.Get(); }
 
+	/** 현재 타깃이 등 뒤(정면에서 BehindAngle 이상)에 계속 머문 시간(초). 평가 간격(EvaluationInterval)마다 갱신한다. */
+	float GetTargetBehindTime() const;
+
 	UPROPERTY(BlueprintAssignable, Category="Knight|Monster")
 	FknightMonsterTargetChanged OnTargetChanged;
 
@@ -94,6 +97,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Monster", meta=(ClampMin=0, Units="cm"))
 	float CloseAwarenessRadius = 2500.f;
 
+	/** 타깃이 정면에서 이 각도 이상 벗어나 있으면 등 뒤로 본다(GetTargetBehindTime, 뒤쪽 공격의 MinTargetBehindTime). */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Monster", meta=(ClampMin=0, ClampMax=180, Units="deg"))
+	float BehindAngle = 120.f;
+
 private:
 	struct FCandidate
 	{
@@ -112,11 +119,14 @@ private:
 	float ScoreCandidate(const FCandidate& Candidate) const;
 	bool IsCandidateValid(const FCandidate& Candidate, double Now) const;
 	void SetCurrentTarget(AActor* NewTarget);
+	void UpdateTargetBehind(double Now);
 
 	TArray<FCandidate> Candidates;
 	TWeakObjectPtr<AActor> CurrentTarget;
 	TWeakObjectPtr<UAbilitySystemComponent> BoundASC;
 	FTimerHandle EvaluationTimer;
 	double LastEvaluationTime = 0.0;
+	/** 현재 타깃이 등 뒤로 들어간 월드 시간. 등 뒤가 아니면 음수. */
+	double TargetBehindSince = -1.0;
 	bool bStopped = false;
 };
