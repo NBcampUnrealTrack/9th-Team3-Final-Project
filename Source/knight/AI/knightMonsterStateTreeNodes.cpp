@@ -329,7 +329,9 @@ bool FknightStateTreeFaceTargetTask::TryStartTurnMontage(FInstanceDataType& Inst
 	{
 		return false;
 	}
-	if (AnimInstance->Montage_Play(Montage) <= 0.f)
+	// 탈진처럼 느려진 상태면 보간 회전과 같은 비율로 천천히 돈다.
+	const float PlayRate = Movement->GetTurnScale();
+	if (PlayRate <= UE_KINDA_SMALL_NUMBER || AnimInstance->Montage_Play(Montage, PlayRate) <= 0.f)
 	{
 		return false;
 	}
@@ -342,7 +344,7 @@ bool FknightStateTreeFaceTargetTask::TryStartTurnMontage(FInstanceDataType& Inst
 		knightMonsterStateTree::TurnWarpTargetName, EWarpPointAnimProvider::None, FTransform::Identity, NAME_None,
 		/*bInWarpTranslation*/ false, /*bInIgnoreZAxis*/ true, /*bInWarpRotation*/ true);
 	UpdateTurnWarpTarget(InstanceData);
-	UE_LOG(LogknightAI, Verbose, TEXT("%s: turn montage %s for %.0f deg."), *GetNameSafe(Monster), *GetNameSafe(Montage), Delta);
+	UE_LOG(LogknightAI, Verbose, TEXT("%s: turn montage %s for %.0f deg at %.2fx."), *GetNameSafe(Monster), *GetNameSafe(Montage), Delta, PlayRate);
 	return true;
 }
 
