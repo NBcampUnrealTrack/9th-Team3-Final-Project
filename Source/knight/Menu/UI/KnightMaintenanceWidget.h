@@ -6,9 +6,11 @@
 #include "KnightMaintenanceWidget.generated.h"
 
 class UCommonButtonBase;
+class UCommonTextBlock;
 class UImage;
 class UScrollBox;
 class UTextBlock;
+class UVerticalBox;
 class UWidgetSwitcher;
 class UknightCraftRecipeDefinition;
 class UknightPartItemDefinition;
@@ -41,12 +43,12 @@ protected:
 	UPROPERTY(meta=(BindWidget)) TObjectPtr<UCommonButtonBase> Btn_SlotWeapon;
 	UPROPERTY(meta=(BindWidget)) TObjectPtr<UScrollBox> List_Items;
 	UPROPERTY(meta=(BindWidget)) TObjectPtr<UWidgetSwitcher> Switcher_Info;
-	UPROPERTY(meta=(BindWidget)) TObjectPtr<UTextBlock> Txt_CurrentStats;
-	UPROPERTY(meta=(BindWidget)) TObjectPtr<UTextBlock> Txt_PreviewStats;
+	UPROPERTY(meta=(BindWidget)) TObjectPtr<UVerticalBox> Stats_Rows;
+	UPROPERTY(meta=(BindWidget)) TObjectPtr<UTextBlock> Txt_ActiveSets;
+	UPROPERTY(meta=(BindWidget)) TObjectPtr<UTextBlock> Txt_SetInfo;
 	UPROPERTY(meta=(BindWidget)) TObjectPtr<UTextBlock> Txt_Detail;
 	UPROPERTY(meta=(BindWidget)) TObjectPtr<UTextBlock> Txt_Page;
 	UPROPERTY(meta=(BindWidget)) TObjectPtr<UTextBlock> Txt_Status;
-	UPROPERTY(meta=(BindWidget)) TObjectPtr<UTextBlock> Txt_PreviewHint;
 	UPROPERTY(meta=(BindWidget)) TObjectPtr<UCommonButtonBase> Btn_PageLeft;
 	UPROPERTY(meta=(BindWidget)) TObjectPtr<UCommonButtonBase> Btn_PageRight;
 	UPROPERTY(meta=(BindWidget)) TObjectPtr<UCommonButtonBase> Btn_Execute;
@@ -59,6 +61,7 @@ private:
 	void SetCategory(int32 NewCategory);
 	void SetSlot(FGameplayTag NewSlot);
 	void RebuildList();
+	void EnsureStatRows();
 	void RefreshDetails();
 	void HandleEntryClicked(UKnightMaintenanceEntryWidget* Entry);
 	void ExecuteSelection();
@@ -73,4 +76,6 @@ private:
 	UPROPERTY(Transient) TObjectPtr<const UknightPartItemDefinition> SelectedPart;
 	UPROPERTY(Transient) TObjectPtr<const UknightCraftRecipeDefinition> SelectedRecipe;
 	UPROPERTY(Transient) TArray<TObjectPtr<UKnightMaintenanceEntryWidget>> Entries;
+	UPROPERTY(Transient) TArray<TObjectPtr<UCommonTextBlock>> StatCurrentTexts;
+	UPROPERTY(Transient) TArray<TObjectPtr<UCommonTextBlock>> StatDeltaTexts;
 };

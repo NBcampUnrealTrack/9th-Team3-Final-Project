@@ -3,9 +3,14 @@
 #include "AbilitySystem/Attributes/knightAttributeSet.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
 #include "CommonButtonBase.h"
+#include "CommonTextBlock.h"
+#include "Blueprint/WidgetTree.h"
+#include "Components/HorizontalBox.h"
+#include "Components/HorizontalBoxSlot.h"
 #include "Components/Image.h"
 #include "Components/ScrollBox.h"
 #include "Components/TextBlock.h"
+#include "Components/VerticalBox.h"
 #include "Components/WidgetSwitcher.h"
 #include "Engine/GameInstance.h"
 #include "Item/knightEquipmentData.h"
@@ -25,10 +30,9 @@ namespace
 	{
 		return FString::Printf(TEXT("%s  %s%.2f"), *Mod.Attribute.GetName(), Mod.Value >= 0 ? TEXT("+") : TEXT(""), Mod.Value);
 	}
-	FString StatsText(const FknightEquipmentStats& Stats)
+	TArray<TPair<FGameplayAttribute, const TCHAR*>> StatRows()
 	{
-		if (!Stats.bComplete) return FString::Printf(TEXT("계산 불가: %s"), *Stats.IncompleteReason);
-		const TPair<FGameplayAttribute, const TCHAR*> Rows[] = {
+		return {
 			{ UknightCoreAttributeSet::GetMaxHealthAttribute(), TEXT("최대 체력") },
 			{ UknightAttributeSet::GetMaxBoostGaugeAttribute(), TEXT("최대 부스트") },
 			{ UknightCoreAttributeSet::GetAttackPowerAttribute(), TEXT("공격력") },
@@ -38,9 +42,83 @@ namespace
 			{ UknightCoreAttributeSet::GetMaxPoiseAttribute(), TEXT("강인도") },
 			{ UknightCoreAttributeSet::GetCriticalChanceAttribute(), TEXT("치명타 확률") },
 			{ UknightAttributeSet::GetLoadCapacityAttribute(), TEXT("적재 한도") } };
-		FString Text;
-		for (const auto& Row : Rows) Text += FString::Printf(TEXT("%s  %.2f\n"), Row.Value, Stats.Values.FindRef(Row.Key));
-		return Text;
+	}
+	FString StatName(const FGameplayAttribute& Attribute)
+	{
+		for (const auto& Row : StatRows())
+			if (Row.Key == Attribute) return Row.Value;
+		return Attribute.GetName();
+	}
+	FString TierEffectText(const FknightSetTier& Tier)
+	{
+		FString Description = Tier.Description.ToString();
+		TArray<FString> Effects;
+		bool bAllValuesDescribed = !Description.IsEmpty();
+		for (const FknightPartStatModifier& Mod : Tier.StatModifiers)
+		{
+			FString Number = FString::Printf(TEXT("%+.2f"), Mod.Value);
+			while (Number.Contains(TEXT(".")) && Number.EndsWith(TEXT("0"))) Number.LeftChopInline(1);
+			if (Number.EndsWith(TEXT("."))) Number.LeftChopInline(1);
+			Effects.Add(FString::Printf(TEXT("%s %s"), *StatName(Mod.Attribute), *Number));
+			bAllValuesDescribed &= Description.Contains(Number);
+		}
+		if (Description.IsEmpty()) return FString::Join(Effects, TEXT(", "));
+		if (!bAllValuesDescribed && !Effects.IsEmpty()) Description += FString::Printf(TEXT(" (%s)"), *FString::Join(Effects, TEXT(", ")));
+		return Description;
+	}
+	FString SetDisplayName(const UknightEquipmentSetDefinition* Set)
+	{
+		FString Name = Set->DisplayName.IsEmpty() ? Set->SetTag.ToString() : Set->DisplayName.ToString();
+		if (!Name.EndsWith(TEXT("세트"))) Name += TEXT(" 세트");
+		return Name;
+	}
+	FString ActiveSetsText(const UknightMaintenanceCatalog* Catalog, const FknightEquipmentStats& Current)
+	{
+		if (!Catalog) return FString();
+		TArray<FString> ActiveSets;
+		TSet<FGameplayTag> SeenTags;
+		for (const UknightEquipmentSetDefinition* Set : Catalog->Sets)
+		{
+			if (!Set || !Set->SetTag.IsValid() || SeenTags.Contains(Set->SetTag)) continue;
+			SeenTags.Add(Set->SetTag);
+			const int32 Count = Current.SetCounts.FindRef(Set->SetTag);
+			TArray<FString> ActiveTiers;
+			for (const FknightSetTier* Tier : { &Set->TwoPiece, &Set->FourPiece })
+			{
+				if (!Tier->StatModifiers.IsEmpty() && Count >= Tier->RequiredCount)
+					ActiveTiers.Add(FString::Printf(TEXT("%d세트: %s"), Tier->RequiredCount, *TierEffectText(*Tier)));
+			}
+			if (!ActiveTiers.IsEmpty())
+				ActiveSets.Add(FString::Printf(TEXT("%s · %d개 장착\n%s"), *SetDisplayName(Set), Count,
+					*FString::Join(ActiveTiers, TEXT("\n"))));
+		}
+		return ActiveSets.IsEmpty() ? FString() : TEXT("현재 활성 세트\n") + FString::Join(ActiveSets, TEXT("\n\n"));
+	}
+	FString SetInfoText(const UknightPartItemDefinition* Part, const UknightMaintenanceCatalog* Catalog,
+		const FknightEquipmentStats& Current, const FknightEquipmentStats* Predicted)
+	{
+		if (!Part) return FString();
+		if (!Part->SetTag.IsValid()) return TEXT("선택 장비 세트\n세트 없음");
+		const UknightEquipmentSetDefinition* FoundSet = nullptr;
+		if (Catalog) for (const UknightEquipmentSetDefinition* Set : Catalog->Sets)
+			if (Set && Set->SetTag == Part->SetTag) { FoundSet = Set; break; }
+		if (!FoundSet) return TEXT("선택 장비 세트\n세트 정보를 찾을 수 없습니다.");
+		const int32 CurrentCount = Current.SetCounts.FindRef(FoundSet->SetTag);
+		const int32 PredictedCount = Predicted ? Predicted->SetCounts.FindRef(FoundSet->SetTag) : CurrentCount;
+		FString Info = FString::Printf(TEXT("선택 장비 세트\n%s\n현재 장착: %d개\n"), *SetDisplayName(FoundSet), CurrentCount);
+		if (Predicted && CurrentCount != PredictedCount)
+			Info += FString::Printf(TEXT("장착 개수: %d → %d개\n"), CurrentCount, PredictedCount);
+		for (const FknightSetTier* Tier : { &FoundSet->TwoPiece, &FoundSet->FourPiece })
+		{
+			if (Tier->StatModifiers.IsEmpty()) continue;
+			const TCHAR* CurrentState = CurrentCount >= Tier->RequiredCount ? TEXT("활성") : TEXT("미활성");
+			const FString State = Predicted
+				? FString::Printf(TEXT("%s → 예상 %s"), CurrentState,
+					PredictedCount >= Tier->RequiredCount ? TEXT("활성") : TEXT("미활성"))
+				: CurrentState;
+			Info += FString::Printf(TEXT("%d세트: %s — %s\n"), Tier->RequiredCount, *TierEffectText(*Tier), *State);
+		}
+		return Info;
 	}
 }
 
@@ -202,36 +280,91 @@ void UKnightMaintenanceWidget::TogglePreview()
 	RefreshDetails();
 }
 
+void UKnightMaintenanceWidget::EnsureStatRows()
+{
+	if (!Stats_Rows || !WidgetTree) return;
+	const int32 RowCount = StatRows().Num();
+	if (StatCurrentTexts.Num() == RowCount && StatDeltaTexts.Num() == RowCount
+		&& Stats_Rows->GetChildrenCount() == RowCount) return;
+	Stats_Rows->ClearChildren();
+	StatCurrentTexts.Reset();
+	StatDeltaTexts.Reset();
+	const TSubclassOf<UCommonTextStyle> TextStyle = LoadClass<UCommonTextStyle>(nullptr,
+		TEXT("/Game/Knight/UI/Style/TS_Knight_Body.TS_Knight_Body_C"));
+	for (int32 Index = 0; Index < RowCount; ++Index)
+	{
+		UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>();
+		UCommonTextBlock* CurrentText = WidgetTree->ConstructWidget<UCommonTextBlock>();
+		UCommonTextBlock* DeltaText = WidgetTree->ConstructWidget<UCommonTextBlock>();
+		if (TextStyle)
+		{
+			CurrentText->SetStyle(TextStyle);
+			DeltaText->SetStyle(TextStyle);
+		}
+		Row->AddChildToHorizontalBox(CurrentText)->SetPadding(FMargin(0.f, 0.f, 6.f, 0.f));
+		Row->AddChildToHorizontalBox(DeltaText);
+		DeltaText->SetVisibility(ESlateVisibility::Collapsed);
+		Stats_Rows->AddChildToVerticalBox(Row);
+		StatCurrentTexts.Add(CurrentText);
+		StatDeltaTexts.Add(DeltaText);
+	}
+}
+
 void UKnightMaintenanceWidget::RefreshDetails()
 {
 	UknightProgressionSubsystem* Progression = GetProgression();
 	const UknightMaintenanceCatalog* Catalog = UknightEquipmentSettings::LoadCatalog();
 	const knightEquipmentStats::FLoadout Loadout = knightEquipmentStats::ReadLoadout(Progression, Catalog);
 	const FknightEquipmentStats Current = knightEquipmentStats::Calculate(Loadout, Catalog, Progression);
-	if (Txt_CurrentStats) Txt_CurrentStats->SetText(FText::FromString(StatsText(Current)));
-	if (Txt_PreviewStats)
+	FknightEquipmentStats Predicted;
+	bool bHasPrediction = false;
+	if (bPreview && SelectedPart)
 	{
-		FString PreviewText;
-		if (bPreview && SelectedPart)
-		{
-			auto Changed = Loadout;
-			Changed.Add(SelectedPart->SlotTag, SelectedPart);
-			const FknightEquipmentStats Predicted = knightEquipmentStats::Calculate(Changed, Catalog, Progression);
-			if (Current.bComplete && Predicted.bComplete)
-			{
-				PreviewText = TEXT("교체 후 예상\n") + StatsText(Predicted) + TEXT("\n변화\n");
-				for (const auto& Stat : Predicted.Values)
-				{
-					const float Difference = Stat.Value - Current.Values.FindRef(Stat.Key);
-					if (!FMath::IsNearlyZero(Difference)) PreviewText += FString::Printf(TEXT("%s  %+.2f\n"), *Stat.Key.GetName(), Difference);
-				}
-			}
-			else PreviewText = TEXT("조건부 효과가 있어 정확한 미리보기를 계산할 수 없습니다.");
-		}
-		if (PreviewText.IsEmpty()) PreviewText = TEXT("장비를 선택하고 N을 눌러 교체 결과를 미리 보세요.");
-		Txt_PreviewStats->SetText(FText::FromString(PreviewText));
+		auto Changed = Loadout;
+		Changed.Add(SelectedPart->SlotTag, SelectedPart);
+		Predicted = knightEquipmentStats::Calculate(Changed, Catalog, Progression);
+		bHasPrediction = Current.bComplete && Predicted.bComplete;
 	}
-	if (Txt_PreviewHint) Txt_PreviewHint->SetText(bPreview ? INVTEXT("미리보기 활성 · 실제 장비/세이브는 그대로") : INVTEXT("N · 스탯 미리보기"));
+	EnsureStatRows();
+	const auto Rows = StatRows();
+	for (int32 Index = 0; Index < Rows.Num() && Index < StatCurrentTexts.Num() && Index < StatDeltaTexts.Num(); ++Index)
+	{
+		UCommonTextBlock* CurrentText = StatCurrentTexts[Index];
+		UCommonTextBlock* DeltaText = StatDeltaTexts[Index];
+		if (!Current.bComplete)
+		{
+			CurrentText->SetText(Index == 0 ? FText::FromString(FString::Printf(TEXT("계산 불가: %s"), *Current.IncompleteReason)) : FText::GetEmpty());
+			DeltaText->SetVisibility(ESlateVisibility::Collapsed);
+			continue;
+		}
+		const float CurrentValue = Current.Values.FindRef(Rows[Index].Key);
+		CurrentText->SetText(FText::FromString(FString::Printf(TEXT("%s  %.2f"), Rows[Index].Value, CurrentValue)));
+		const int32 DeltaHundredths = bHasPrediction
+			? FMath::RoundToInt((Predicted.Values.FindRef(Rows[Index].Key) - CurrentValue) * 100.f) : 0;
+		if (DeltaHundredths == 0)
+		{
+			DeltaText->SetVisibility(ESlateVisibility::Collapsed);
+			continue;
+		}
+		DeltaText->SetText(FText::FromString(FString::Printf(TEXT("%+.2f"), DeltaHundredths / 100.f)));
+		DeltaText->SetColorAndOpacity(FSlateColor(DeltaHundredths > 0
+			? FLinearColor(0.29f, 0.91f, 0.50f, 1.f) : FLinearColor(1.f, 0.39f, 0.39f, 1.f)));
+		DeltaText->SetVisibility(ESlateVisibility::HitTestInvisible);
+	}
+	if (Txt_ActiveSets)
+	{
+		const FString ActiveText = ActiveSetsText(Catalog, Current);
+		Txt_ActiveSets->SetText(FText::FromString(ActiveText));
+		Txt_ActiveSets->SetVisibility(ActiveText.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
+	}
+	if (Txt_SetInfo)
+	{
+		FString Info = SetInfoText(SelectedPart, Catalog, Current, bHasPrediction ? &Predicted : nullptr);
+		if (bPreview && SelectedPart && !bHasPrediction) Info += TEXT("\n미리보기 계산 불가: 조건부 효과를 확인하세요.");
+		Txt_SetInfo->SetText(FText::FromString(Info));
+		Txt_SetInfo->SetVisibility(Info.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
+	}
+	if (Btn_Preview) Btn_Preview->SetRenderOpacity(bPreview ? 1.f : 0.65f);
 	FString Details = PartName(SelectedPart).ToString();
 	if (SelectedPart)
 	{
