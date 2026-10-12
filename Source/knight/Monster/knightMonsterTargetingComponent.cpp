@@ -165,11 +165,40 @@ void UknightMonsterTargetingComponent::EvaluateTarget()
 		}
 	}
 
-	if (Best && CurrentTarget.IsValid() && Best != CurrentTarget.Get() && CurrentScore > 0.f && BestScore < CurrentScore * SwitchHysteresis)
+	const bool bKeepCurrent = Best && CurrentTarget.IsValid() && Best != CurrentTarget.Get() && CurrentScore > 0.f
+		&& BestScore < CurrentScore * SwitchHysteresis;
+	if (!bKeepCurrent)
 	{
-		return;
+		SetCurrentTarget(Best);
 	}
-	SetCurrentTarget(Best);
+	UpdateTargetBehind(Now);
+}
+
+float UknightMonsterTargetingComponent::GetTargetBehindTime() const
+{
+	const UWorld* const World = GetWorld();
+	return TargetBehindSince >= 0.0 && World ? static_cast<float>(World->GetTimeSeconds() - TargetBehindSince) : 0.f;
+}
+
+void UknightMonsterTargetingComponent::UpdateTargetBehind(double Now)
+{
+	const AActor* const Owner = GetOwner();
+	const AActor* const Target = CurrentTarget.Get();
+	bool bBehind = false;
+	if (Owner && Target)
+	{
+		const FVector ToTarget = (Target->GetActorLocation() - Owner->GetActorLocation()).GetSafeNormal2D();
+		const float Angle = FMath::Abs(FRotator::NormalizeAxis(ToTarget.Rotation().Yaw - Owner->GetActorRotation().Yaw));
+		bBehind = !ToTarget.IsNearlyZero() && Angle >= BehindAngle;
+	}
+	if (!bBehind)
+	{
+		TargetBehindSince = -1.0;
+	}
+	else if (TargetBehindSince < 0.0)
+	{
+		TargetBehindSince = Now;
+	}
 }
 
 void UknightMonsterTargetingComponent::StopTargeting()
@@ -222,6 +251,7 @@ void UknightMonsterTargetingComponent::SetCurrentTarget(AActor* NewTarget)
 		return;
 	}
 	CurrentTarget = NewTarget;
+	TargetBehindSince = -1.0;
 	KNIGHT_PERF_COUNT("Monster.TargetChanges", 1);
 	UE_LOG(LogknightAI, Log, TEXT("%s target: %s -> %s"), *GetNameSafe(GetOwner()), *GetNameSafe(OldTarget), *GetNameSafe(NewTarget));
 	OnTargetChanged.Broadcast(OldTarget, NewTarget);

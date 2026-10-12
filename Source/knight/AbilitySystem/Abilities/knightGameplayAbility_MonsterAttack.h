@@ -50,6 +50,13 @@ struct KNIGHT_API FknightMonsterAttackSelection
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Selection")
 	EknightTargetAirborneRule AirborneRule = EknightTargetAirborneRule::Any;
 
+	/**
+	 * 타깃이 등 뒤(타기팅 컴포넌트의 BehindAngle)에 이 시간(초) 이상 머물러야 고를 수 있다. 0이면 보지 않는다.
+	 * 등 뒤에 숨어 있는 플레이어를 응징하는 뒤쪽 공격(꼬리 휩쓸기)에 쓴다. 바로 쓰지 않아서 돌아서는 동안 공격할 틈이 남는다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Selection", meta=(ClampMin=0, Units="s"))
+	float MinTargetBehindTime = 0.f;
+
 	/** 몬스터에 이 태그가 모두 있어야 한다(분노 전용 기술이면 State.Monster.Enraged). */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Selection", meta=(Categories="State"))
 	FGameplayTagContainer RequiredOwnerTags;
@@ -70,6 +77,8 @@ struct KNIGHT_API FknightMonsterAttackContext
 	/** 각도 조건(MinAngle, MaxAngle)을 검사하지 않는다. 발동 전에 몸을 돌리는 흐름에서 쓴다. */
 	bool bIgnoreAngle = false;
 	bool bTargetAirborne = false;
+	/** 타깃이 등 뒤에 계속 머문 시간(초). */
+	float TargetBehindTime = 0.f;
 	double WorldTime = 0.0;
 
 	static FknightMonsterAttackContext Make(const AActor* Monster, const AActor* Target);
