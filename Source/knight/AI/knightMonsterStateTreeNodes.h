@@ -9,6 +9,7 @@
 #include "knightMonsterStateTreeNodes.generated.h"
 
 class AknightMonsterCharacterBase;
+class UAnimMontage;
 class UAbilitySystemComponent;
 
 /*
@@ -180,9 +181,16 @@ struct FknightFaceTargetTaskInstanceData
 	bool bSkipForSideAttacks = true;
 
 	float ElapsedTime = 0.f;
+	/** 재생 중인 회전 몽타주(몬스터 정의의 TurnLeft/RightMontage). */
+	TWeakObjectPtr<UAnimMontage> TurnMontage;
+	float TurnStartYaw = 0.f;
 };
 
-/** 몬스터를 제자리에서 타깃 쪽으로 돌리고, 타깃을 바라보면 성공한다. 회전 몽타주가 필요하면 Activate Ability를 쓴다. */
+/**
+ * 몬스터를 제자리에서 타깃 쪽으로 돌리고, 타깃을 바라보면 성공한다.
+ * 몬스터 정의에 회전 몽타주가 있고 타깃이 TurnMontageMinAngle 이상 벗어나 있으면 몽타주로 돌고(발을 디디며 돈다),
+ * 남은 작은 각도는 이동 컴포넌트의 보간 회전으로 맞춘다. MaxTime은 몽타주가 끝난 뒤부터 센다.
+ */
 USTRUCT(meta=(DisplayName="Knight Face Target", Category="Knight"))
 struct KNIGHT_API FknightStateTreeFaceTargetTask : public FStateTreeTaskCommonBase
 {
@@ -198,6 +206,12 @@ struct KNIGHT_API FknightStateTreeFaceTargetTask : public FStateTreeTaskCommonBa
 
 	virtual EStateTreeRunStatus EnterState(FStateTreeExecutionContext& Context, const FStateTreeTransitionResult& Transition) const override;
 	virtual EStateTreeRunStatus Tick(FStateTreeExecutionContext& Context, const float DeltaTime) const override;
+	virtual void ExitState(FStateTreeExecutionContext& Context, const FStateTreeTransitionResult& Transition) const override;
+
+private:
+	static bool TryStartTurnMontage(FInstanceDataType& InstanceData);
+	static bool IsTurnMontagePlaying(const FInstanceDataType& InstanceData);
+	static void UpdateTurnWarpTarget(const FInstanceDataType& InstanceData);
 };
 
 ////////////////////////////////////////////////////////////////////
