@@ -97,6 +97,14 @@ public:
 
 	const FknightMonsterAttackSelection& GetSelection() const { return Selection; }
 
+	/**
+	 * 탈진(State.Monster.Exhausted) 중에는 어떤 공격도 시작하지 않는다. 이미 시작한 공격은 끝까지 한다.
+	 * ActivationBlockedTags는 BP와 몬스터 생성기가 부위 파괴 태그로 통째로 덮어쓰므로 여기서 검사한다.
+	 */
+	virtual bool CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+		const FGameplayTagContainer* SourceTags = nullptr, const FGameplayTagContainer* TargetTags = nullptr,
+		FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
+
 	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 		const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData) override;
 

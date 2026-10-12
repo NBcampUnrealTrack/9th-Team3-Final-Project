@@ -141,7 +141,8 @@ void UknightGameplayAbility_MonsterAreaAttack::OnImpact()
 		}
 		if (!Target->GetClass()->ImplementsInterface(UCombatInterface::StaticClass())
 			|| !ICombatInterface::Execute_CanReceiveHitBP(Target, Avatar)
-			|| FGenericTeamId::GetAttitude(Avatar, Target) != ETeamAttitude::Hostile)
+			|| FGenericTeamId::GetAttitude(Avatar, Target) != ETeamAttitude::Hostile
+			|| !IsInsideCone(*Avatar, Target->GetActorLocation()))
 		{
 			continue;
 		}
@@ -167,9 +168,29 @@ void UknightGameplayAbility_MonsterAreaAttack::OnImpact()
 	{
 		DrawDebugSphere(World, Center, AreaRadius, 16, NewHits == 0 ? FColor::Red : FColor::Magenta, false,
 			ActiveTime > 0.f ? knightMonsterAreaAttack::ActiveCheckInterval : 0.5f, 0, 3.f);
+		if (ConeHalfAngle > 0.f)
+		{
+			const FVector Origin = Avatar->GetActorTransform().TransformPosition(ConeOrigin);
+			const float Length = FVector::Dist(Origin, Center) + AreaRadius;
+			DrawDebugCone(World, Origin, Avatar->GetActorForwardVector(), Length, FMath::DegreesToRadians(ConeHalfAngle),
+				FMath::DegreesToRadians(5.f), 12, FColor::Yellow, false, ActiveTime > 0.f ? knightMonsterAreaAttack::ActiveCheckInterval : 0.5f);
+		}
 	}
 #endif
 	UE_LOG(LogknightAI, Verbose, TEXT("%s: %s hit %d target(s)."), *GetNameSafe(Avatar), *GetName(), NewHits);
+}
+
+bool UknightGameplayAbility_MonsterAreaAttack::IsInsideCone(const AActor& Avatar, const FVector& Point) const
+{
+	if (ConeHalfAngle <= 0.f)
+	{
+		return true;
+	}
+	// 높이는 보지 않는다. 브레스가 아래로 기울어도 같은 좌우 폭으로 판정한다.
+	const FVector Origin = Avatar.GetActorTransform().TransformPosition(ConeOrigin);
+	const FVector ToPoint = (Point - Origin).GetSafeNormal2D();
+	const FVector Forward = Avatar.GetActorForwardVector().GetSafeNormal2D();
+	return !ToPoint.IsNearlyZero() && FVector::DotProduct(ToPoint, Forward) >= FMath::Cos(FMath::DegreesToRadians(ConeHalfAngle));
 }
 
 FVector UknightGameplayAbility_MonsterAreaAttack::GetAreaCenter() const
