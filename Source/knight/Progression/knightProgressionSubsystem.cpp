@@ -263,7 +263,7 @@ bool UknightProgressionSubsystem::CanCraftPart(const UknightCraftRecipeDefinitio
 {
 	const UknightSaveGame* const Save = GetSave();
 	if (!Save || !Recipe || !Recipe->Result || !Recipe->Result->GetPrimaryAssetId().IsValid()
-		|| Recipe->Costs.IsEmpty() || (!Recipe->RequiredClearedStageId.IsNone() && !IsStageCleared(Recipe->RequiredClearedStageId)))
+		|| (!Recipe->RequiredClearedStageId.IsNone() && !IsStageCleared(Recipe->RequiredClearedStageId)))
 	{
 		return false;
 	}
