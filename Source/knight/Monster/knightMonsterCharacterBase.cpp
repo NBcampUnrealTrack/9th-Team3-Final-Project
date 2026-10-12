@@ -73,6 +73,7 @@ void AknightMonsterCharacterBase::BeginPlay()
 	Super::BeginPlay();
 
 	CoreAttributeSet->OnOutOfHealth.AddUObject(this, &ThisClass::HandleOutOfHealth);
+	CoreAttributeSet->OnDamaged.AddUObject(this, &ThisClass::HandleDamaged);
 	MonsterAttributeSet->OnRageMaxed.AddUObject(this, &ThisClass::HandleRageMaxed);
 	MonsterAttributeSet->OnStaminaDepleted.AddUObject(this, &ThisClass::HandleStaminaDepleted);
 	TargetingComponent->OnTargetChanged.AddUniqueDynamic(this, &ThisClass::HandleTargetChanged);
@@ -286,6 +287,51 @@ void AknightMonsterCharacterBase::HandleRageMaxed(AActor* EffectInstigator, AAct
 		AbilitySystemComponent->ApplyGameplayEffectToSelf(MonsterDefinition->EnrageEffect->GetDefaultObject<UGameplayEffect>(), 1.f,
 			AbilitySystemComponent->MakeEffectContext());
 	}
+}
+
+void AknightMonsterCharacterBase::HandleDamaged(AActor* DamageInstigator, AActor* DamageCauser, const FGameplayEffectSpec* EffectSpec,
+	float Magnitude, float OldValue, float NewValue)
+{
+	const float Ratio = MonsterDefinition ? MonsterDefinition->Phase2HealthRatio : 0.f;
+	if (bInPhase2 || bPhase2Pending || IsDead() || Ratio <= 0.f
+		|| CoreAttributeSet->GetHealth() >= CoreAttributeSet->GetMaxHealth() * Ratio)
+	{
+		return;
+	}
+
+	// 다운 중에 넘기면 기상 후에 포효한다. 전환 포효가 다운 중 반격 기회를 끊지 않게.
+	if (AbilitySystemComponent->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Reacting))
+	{
+		bPhase2Pending = true;
+		ReactingChangedHandle = AbilitySystemComponent->RegisterGameplayTagEvent(knightGameplayTags::State_Monster_Reacting,
+			EGameplayTagEventType::NewOrRemoved).AddUObject(this, &ThisClass::HandleReactingChanged);
+		return;
+	}
+	EnterPhase2();
+}
+
+void AknightMonsterCharacterBase::HandleReactingChanged(const FGameplayTag Tag, int32 NewCount)
+{
+	if (NewCount > 0)
+	{
+		return;
+	}
+	AbilitySystemComponent->RegisterGameplayTagEvent(knightGameplayTags::State_Monster_Reacting, EGameplayTagEventType::NewOrRemoved)
+		.Remove(ReactingChangedHandle);
+	ReactingChangedHandle.Reset();
+	bPhase2Pending = false;
+	if (!IsDead())
+	{
+		EnterPhase2();
+	}
+}
+
+void AknightMonsterCharacterBase::EnterPhase2()
+{
+	bInPhase2 = true;
+	AbilitySystemComponent->AddLooseGameplayTag(knightGameplayTags::State_Monster_Phase2);
+	UE_LOG(LogknightAI, Log, TEXT("%s: phase 2 at health %.0f / %.0f."), *GetNameSafe(this),
+		CoreAttributeSet->GetHealth(), CoreAttributeSet->GetMaxHealth());
 }
 
 void AknightMonsterCharacterBase::HandleTargetChanged(AActor* OldTarget, AActor* NewTarget)

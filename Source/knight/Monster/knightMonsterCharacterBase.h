@@ -88,6 +88,12 @@ protected:
 	void HandleStaminaDepleted(AActor* EffectInstigator, AActor* EffectCauser, const FGameplayEffectSpec* EffectSpec,
 		float Magnitude, float OldValue, float NewValue);
 
+	/** 체력이 MonsterDefinition의 Phase2HealthRatio 밑으로 내려가면 2페이즈로 넘어간다. */
+	void HandleDamaged(AActor* DamageInstigator, AActor* DamageCauser, const FGameplayEffectSpec* EffectSpec,
+		float Magnitude, float OldValue, float NewValue);
+	void HandleReactingChanged(const FGameplayTag Tag, int32 NewCount);
+	void EnterPhase2();
+
 	/** 퍼펙트 가드를 당하면(Event.Parried) MonsterDefinition의 ParriedPoiseDamageRatio만큼 경직도를 깎는다. */
 	void HandleParried(const FGameplayEventData* Payload);
 
@@ -136,6 +142,10 @@ private:
 	bool bAbilitySystemInitialized = false;
 	bool bIsDying = false;
 	bool bHasEngaged = false;
+	bool bInPhase2 = false;
+	/** 반응 중에 2페이즈 체력을 넘겨 State.Monster.Reacting이 풀리기를 기다리는 중. */
+	bool bPhase2Pending = false;
+	FDelegateHandle ReactingChangedHandle;
 	/** Counted in the Monster.Alive perf gauge. */
 	bool bCountedAlive = false;
 

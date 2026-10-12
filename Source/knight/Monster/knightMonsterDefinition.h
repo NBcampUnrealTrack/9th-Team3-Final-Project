@@ -49,6 +49,13 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="States", meta=(ClampMin=0, ClampMax=1))
 	float ParriedPoiseDamageRatio = 0.f;
 
+	/**
+	 * 체력이 이 비율 밑으로 내려가면 State.Monster.Phase2를 붙인다(한 생에 한 번, 떼지 않는다). 0이면 2페이즈가 없다.
+	 * 다운·경직·포효 중에 넘으면 그 반응이 끝난 뒤에 붙인다. 전환 포효는 이 태그를 트리거로 쓰는 반응 어빌리티로 만든다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="States", meta=(ClampMin=0, ClampMax=1))
+	float Phase2HealthRatio = 0.f;
+
 	/** Rough radius for lock-on camera framing. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Targeting", meta=(ClampMin=0, Units="cm"))
 	float TargetRadius = 600.f;
