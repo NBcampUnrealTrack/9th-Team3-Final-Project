@@ -1211,6 +1211,10 @@ namespace knightRecipe
 		{
 			Log.Error(TEXT("공용 StateTree의 Ranged 상태에서 거리 조건 2개를 찾지 못했습니다."));
 		}
+		if (!UknightMonsterRecipeLibrary::SetFaceTargetSideAttacks(StateTree, TEXT("Aim"), true, FGameplayTagContainer(Tag(TEXT("Ability.Attack.Ranged")))))
+		{
+			Log.Error(TEXT("공용 StateTree의 Aim 상태에서 Knight Face Target을 찾지 못했습니다."));
+		}
 
 		FStateTreeCompilerLog CompilerLog;
 		if (!UStateTreeEditingSubsystem::CompileStateTree(StateTree, CompilerLog))
@@ -1219,6 +1223,43 @@ namespace knightRecipe
 		}
 		StateTree->MarkPackageDirty();
 	}
+}
+
+bool UknightMonsterRecipeLibrary::SetFaceTargetSideAttacks(UStateTree* StateTree, FName StateName, bool bSkip, const FGameplayTagContainer& SideAttackTags)
+{
+	UStateTreeEditorData* const EditorData = StateTree ? Cast<UStateTreeEditorData>(StateTree->EditorData) : nullptr;
+	if (!EditorData)
+	{
+		return false;
+	}
+	TArray<UStateTreeState*> Pending(EditorData->SubTrees);
+	while (!Pending.IsEmpty())
+	{
+		UStateTreeState* const State = Pending.Pop();
+		Pending.Append(State->Children);
+		if (State->Name != StateName)
+		{
+			continue;
+		}
+		for (FStateTreeEditorNode& Task : State->Tasks)
+		{
+			const UScriptStruct* const InstanceStruct = Task.Instance.GetScriptStruct();
+			const FBoolProperty* const SkipProperty = InstanceStruct ? FindFProperty<FBoolProperty>(InstanceStruct, TEXT("bSkipForSideAttacks")) : nullptr;
+			const FStructProperty* const TagsProperty = InstanceStruct ? FindFProperty<FStructProperty>(InstanceStruct, TEXT("SideAttackTags")) : nullptr;
+			if (!SkipProperty || !TagsProperty || TagsProperty->Struct != FGameplayTagContainer::StaticStruct())
+			{
+				continue;
+			}
+			State->Modify();
+			SkipProperty->SetPropertyValue_InContainer(Task.Instance.GetMutableMemory(), bSkip);
+			*TagsProperty->ContainerPtrToValuePtr<FGameplayTagContainer>(Task.Instance.GetMutableMemory()) = SideAttackTags;
+			FStateTreeCompilerLog CompilerLog;
+			const bool bCompiled = UStateTreeEditingSubsystem::CompileStateTree(StateTree, CompilerLog);
+			StateTree->MarkPackageDirty();
+			return bCompiled;
+		}
+	}
+	return false;
 }
 
 bool UknightMonsterRecipeLibrary::CreateSharedMonsterAssets()

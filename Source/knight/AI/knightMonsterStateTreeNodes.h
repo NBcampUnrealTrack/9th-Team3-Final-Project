@@ -180,10 +180,19 @@ struct FknightFaceTargetTaskInstanceData
 	UPROPERTY(EditAnywhere, Category="Parameter")
 	bool bSkipForSideAttacks = true;
 
+	/**
+	 * 건너뛸 근거로 볼 옆·뒤 공격의 태그. 이어지는 Knight Activate Ability의 AbilityTags와 같게 둔다(원거리 상태의 조준이면
+	 * Ability.Attack.Ranged). 다음 단계가 쓸 수 없는 공격 때문에 건너뛰면 아무것도 못 하고 다시 들어오는 루프가 된다. 비면 모든 공격.
+	 */
+	UPROPERTY(EditAnywhere, Category="Parameter", meta=(EditCondition="bSkipForSideAttacks"))
+	FGameplayTagContainer SideAttackTags;
+
 	float ElapsedTime = 0.f;
 	/** 재생 중인 회전 몽타주(몬스터 정의의 TurnLeft/RightMontage). */
 	TWeakObjectPtr<UAnimMontage> TurnMontage;
 	float TurnStartYaw = 0.f;
+	/** 지금까지 워프 목표로 잡은 회전량(시작 yaw 기준, 부호 = 몽타주 방향). 다음 각도는 여기서 이어서 잰다. */
+	float TurnAmount = 0.f;
 };
 
 /**
@@ -211,7 +220,7 @@ struct KNIGHT_API FknightStateTreeFaceTargetTask : public FStateTreeTaskCommonBa
 private:
 	static bool TryStartTurnMontage(FInstanceDataType& InstanceData);
 	static bool IsTurnMontagePlaying(const FInstanceDataType& InstanceData);
-	static void UpdateTurnWarpTarget(const FInstanceDataType& InstanceData);
+	static void UpdateTurnWarpTarget(FInstanceDataType& InstanceData);
 };
 
 ////////////////////////////////////////////////////////////////////

@@ -215,8 +215,8 @@ namespace knightMonsterStateTree
 	/** 타깃이 반대편으로 넘어가도 회전 몽타주가 이 각도보다 덜 돌지는 않는다(발 디딤과 회전이 크게 어긋나지 않게). */
 	constexpr float TurnWarpMinAngle = 30.f;
 
-	/** 지금 각도에서 고를 수 있는 옆·뒤 전용 공격(MinAngle > 0)이 있는가. */
-	static bool HasUsableSideAttack(const AknightMonsterCharacterBase& Monster, const AActor* Target)
+	/** 지금 각도에서 고를 수 있는 옆·뒤 전용 공격(MinAngle > 0)이 있는가. Tags가 있으면 그 태그를 모두 가진 공격만 본다. */
+	static bool HasUsableSideAttack(const AknightMonsterCharacterBase& Monster, const AActor* Target, const FGameplayTagContainer& Tags)
 	{
 		UAbilitySystemComponent* const ASC = Monster.GetAbilitySystemComponent();
 		if (!ASC || !Target)
@@ -228,7 +228,8 @@ namespace knightMonsterStateTree
 		{
 			const UGameplayAbility* const Instance = Spec.GetPrimaryInstance() ? Spec.GetPrimaryInstance() : Spec.Ability.Get();
 			const UknightGameplayAbility_MonsterAttack* const Attack = Cast<UknightGameplayAbility_MonsterAttack>(Instance);
-			if (Attack && Attack->GetSelection().MinAngle > 0.f && Attack->GetSelectionWeight(AttackContext) > 0.f)
+			if (Attack && Attack->GetSelection().MinAngle > 0.f && (Tags.IsEmpty() || Attack->GetAssetTags().HasAll(Tags))
+				&& Attack->GetSelectionWeight(AttackContext) > 0.f)
 			{
 				return true;
 			}
@@ -245,7 +246,7 @@ EStateTreeRunStatus FknightStateTreeFaceTargetTask::EnterState(FStateTreeExecuti
 	{
 		return EStateTreeRunStatus::Failed;
 	}
-	if (InstanceData.bSkipForSideAttacks && knightMonsterStateTree::HasUsableSideAttack(*InstanceData.Monster, InstanceData.Target))
+	if (InstanceData.bSkipForSideAttacks && knightMonsterStateTree::HasUsableSideAttack(*InstanceData.Monster, InstanceData.Target, InstanceData.SideAttackTags))
 	{
 		UE_LOG(LogknightAI, Verbose, TEXT("%s: Face Target skipped, a side attack is usable."), *GetNameSafe(InstanceData.Monster));
 		return EStateTreeRunStatus::Succeeded;
@@ -269,9 +270,15 @@ EStateTreeRunStatus FknightStateTreeFaceTargetTask::Tick(FStateTreeExecutionCont
 			UpdateTurnWarpTarget(InstanceData);
 			return EStateTreeRunStatus::Running;
 		}
-		// 몽타주가 끝났다. 많이 남았으면 한 번 더 돌고, 아니면 남은 각도를 보간 회전으로 맞춘다.
+		// 몽타주가 끝났다. 그사이 등 뒤 공격을 쓸 수 있게 됐으면(타깃이 계속 뒤로 돈다) 멈추고 공격으로 넘긴다.
+		// 아니면 많이 남았을 때 한 번 더 돌고, 적게 남았으면 보간 회전으로 맞춘다.
 		InstanceData.TurnMontage.Reset();
 		InstanceData.ElapsedTime = 0.f;
+		if (InstanceData.bSkipForSideAttacks && knightMonsterStateTree::HasUsableSideAttack(*InstanceData.Monster, InstanceData.Target, InstanceData.SideAttackTags))
+		{
+			UE_LOG(LogknightAI, Verbose, TEXT("%s: Face Target ended between turns, a side attack is usable."), *GetNameSafe(InstanceData.Monster));
+			return EStateTreeRunStatus::Succeeded;
+		}
 		if (TryStartTurnMontage(InstanceData))
 		{
 			return EStateTreeRunStatus::Running;
@@ -328,6 +335,8 @@ bool FknightStateTreeFaceTargetTask::TryStartTurnMontage(FInstanceDataType& Inst
 	}
 	InstanceData.TurnMontage = Montage;
 	InstanceData.TurnStartYaw = Monster->GetActorRotation().Yaw;
+	// 바로 뒤(±180°)라도 여기서 고른 방향으로 끝까지 돈다.
+	InstanceData.TurnAmount = Delta;
 	// 몽타주의 회전(90°)을 회전 구간 동안 실제로 돌 각도에 맞춘다. 이동은 애니메이션 그대로 둔다.
 	URootMotionModifier_SkewWarp::AddRootMotionModifierSkewWarp(MotionWarping, Montage, Definition->TurnWarpStartTime, Definition->TurnWarpEndTime,
 		knightMonsterStateTree::TurnWarpTargetName, EWarpPointAnimProvider::None, FTransform::Identity, NAME_None,
@@ -345,7 +354,7 @@ bool FknightStateTreeFaceTargetTask::IsTurnMontagePlaying(const FInstanceDataTyp
 	return MontageInstance && !MontageInstance->IsStopped();
 }
 
-void FknightStateTreeFaceTargetTask::UpdateTurnWarpTarget(const FInstanceDataType& InstanceData)
+void FknightStateTreeFaceTargetTask::UpdateTurnWarpTarget(FInstanceDataType& InstanceData)
 {
 	AknightMonsterCharacterBase* const Monster = InstanceData.Monster;
 	const UknightMonsterDefinition* const Definition = Monster ? Monster->GetMonsterDefinition() : nullptr;
@@ -354,13 +363,16 @@ void FknightStateTreeFaceTargetTask::UpdateTurnWarpTarget(const FInstanceDataTyp
 	{
 		return;
 	}
-	// 도는 동안 움직인 타깃을 따라가되, 몽타주 방향과 최대 각도는 넘지 않는다.
+	// 도는 동안 움직인 타깃을 따라가되, 몽타주 방향과 최대 각도는 넘지 않는다. 각도는 직전 값에서 이어서 재야
+	// 타깃이 바로 뒤를 지날 때 +179°가 -179°로 바뀌어 반대 방향 최솟값으로 잘리는 일이 없다.
 	const FVector ToTarget = (InstanceData.Target->GetActorLocation() - Monster->GetActorLocation()).GetSafeNormal2D();
-	float Turn = FRotator::NormalizeAxis(ToTarget.Rotation().Yaw - InstanceData.TurnStartYaw);
+	const float RawTurn = FRotator::NormalizeAxis(ToTarget.Rotation().Yaw - InstanceData.TurnStartYaw);
+	float Turn = InstanceData.TurnAmount + FRotator::NormalizeAxis(RawTurn - InstanceData.TurnAmount);
 	const float MaxAngle = Definition->TurnMontageMaxAngle;
 	Turn = InstanceData.TurnMontage.Get() == Definition->TurnLeftMontage
 		? FMath::Clamp(Turn, -MaxAngle, -knightMonsterStateTree::TurnWarpMinAngle)
 		: FMath::Clamp(Turn, knightMonsterStateTree::TurnWarpMinAngle, MaxAngle);
+	InstanceData.TurnAmount = Turn;
 	MotionWarping->AddOrUpdateWarpTargetFromLocationAndRotation(knightMonsterStateTree::TurnWarpTargetName, Monster->GetActorLocation(),
 		FRotator(0.f, InstanceData.TurnStartYaw + Turn, 0.f));
 }
