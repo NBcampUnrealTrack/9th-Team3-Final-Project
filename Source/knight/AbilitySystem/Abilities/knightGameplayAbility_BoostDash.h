@@ -110,6 +110,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Dash|Directional")
 	bool bFaceDashDirectionWhenFree = true;
 
+	/**
+	 * 대시마다 실행하는 게임플레이 큐(추진기 이펙트). 비우면 실행하지 않는다.
+	 * (2026-10-08 추가: 같은 이동 로직을 쓰는 구르기 회피(knightGameplayAbility_Dodge)는 추진기 큐를 쓰지 않는다)
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Dash", meta=(Categories="GameplayCue"))
+	FGameplayTag DashCueTag;
+
 	/** 대시 소리의 AI 청각 크기. */
 	UPROPERTY(EditDefaultsOnly, Category="Dash|Noise", meta=(ClampMin=0))
 	float NoiseLoudness = 1.f;

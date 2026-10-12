@@ -3,9 +3,20 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "AbilitySystem/Attributes/knightAttributeSet.h"
+#include "Camera/CameraShakeBase.h"
 #include "Curves/CurveFloat.h"
+#include "Engine/World.h"
+#include "GameFramework/Character.h"
 #include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerController.h"
+#include "TimerManager.h"
 #include "System/knightGameplayTags.h"
+
+namespace
+{
+	// 달리기 중. 달리기 공격 조건으로 쓴다(태그는 Config/Tags에 이미 있음).
+	UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_State_Sprinting, "State.Sprinting");
+}
 
 UknightMovementComponent::UknightMovementComponent(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -107,7 +118,8 @@ float UknightMovementComponent::GetMaxSpeed() const
 float UknightMovementComponent::GetMaxAcceleration() const
 {
 	// 잠금 중에는 입력이 있어도 가속이 0 → 엔진이 제동을 걸어 미끄러지며 멈춘다. 이동 방향으로 몸도 돌지 않는다.
-	if (MoveInputLockCount > 0)
+	// 착지 경직(bLandingRecovery, 2026-10-12)도 이동 잠금처럼 가속을 막는다.
+	if (MoveInputLockCount > 0 || bLandingRecovery)
 	{
 		return 0.f;
 	}
@@ -135,7 +147,7 @@ void UknightMovementComponent::ApplyVelocityBraking(float DeltaTime, float Frict
 	{
 		// 정지 Easing: 방향키를 뗐을 때(달리기 → 걷기처럼 최고 속도를 넘었을 때 포함) 부드러운 정지 값을 쓴다.
 		// 이동 잠금(가드·퀵스텝 경직) 중에는 엔진이 넘겨준 값(GroundFriction·BrakingDecelerationWalking)으로 빨리 멈춘다.
-		if (MoveInputLockCount == 0)
+		if (MoveInputLockCount == 0 && !bLandingRecovery)
 		{
 			Friction = StopBrakingFriction;
 			BrakingDeceleration = StopBrakingDeceleration;
@@ -145,6 +157,48 @@ void UknightMovementComponent::ApplyVelocityBraking(float DeltaTime, float Frict
 		BrakingDeceleration *= GetWeightSpeedFactor();
 	}
 	Super::ApplyVelocityBraking(DeltaTime, Friction, BrakingDeceleration);
+}
+
+void UknightMovementComponent::ProcessLanded(const FHitResult& Hit, float remainingTime, int32 Iterations)
+{
+	// Super가 착지 처리를 하면서 수직 속도를 없애므로, 미리 떨어지던 속도를 읽어 둔다.
+	const float ImpactSpeed = FMath::Max(0.f, -Velocity.Z);
+	Super::ProcessLanded(Hit, remainingTime, Iterations);
+	HandleLandingImpact(ImpactSpeed);
+}
+
+void UknightMovementComponent::HandleLandingImpact(float ImpactSpeed)
+{
+	if (ImpactSpeed < LandingShakeMinSpeed || !CharacterOwner)
+	{
+		return;
+	}
+	const float MaxSpeed = FMath::Max(LandingShakeMaxSpeed, LandingShakeMinSpeed + 1.f);
+	const float Alpha = FMath::Clamp((ImpactSpeed - LandingShakeMinSpeed) / (MaxSpeed - LandingShakeMinSpeed), 0.f, 1.f);
+
+	if (LandingShake)
+	{
+		if (APlayerController* const PC = Cast<APlayerController>(CharacterOwner->GetController()))
+		{
+			PC->ClientStartCameraShake(LandingShake, FMath::Lerp(LandingShakeMinScale, LandingShakeMaxScale, Alpha));
+		}
+	}
+
+	// 세게 떨어지면 무게를 받아내느라 잠깐 출발하지 못한다. 퀵스텝·가드 잠금(MoveInputLockCount)과는 따로 둔다.
+	UWorld* const World = GetWorld();
+	if (World && LandingRecoveryMinSpeed > 0.f && LandingRecoveryMaxTime > 0.f && ImpactSpeed >= LandingRecoveryMinSpeed)
+	{
+		const float RecoveryAlpha = FMath::Clamp((ImpactSpeed - LandingRecoveryMinSpeed) / FMath::Max(MaxSpeed - LandingRecoveryMinSpeed, 1.f), 0.f, 1.f);
+		const float Time = FMath::Max(0.05f, LandingRecoveryMaxTime * RecoveryAlpha);
+		bLandingRecovery = true;
+		World->GetTimerManager().SetTimer(LandingRecoveryTimer, this, &ThisClass::EndLandingRecovery, Time, false);
+	}
+	UE_LOG(LogTemp, Verbose, TEXT("Knight landing impact %.0f cm/s"), ImpactSpeed);
+}
+
+void UknightMovementComponent::EndLandingRecovery()
+{
+	bLandingRecovery = false;
 }
 
 bool UknightMovementComponent::DoJump(bool bReplayingMoves, float DeltaTime)
@@ -158,6 +212,32 @@ void UknightMovementComponent::OnMovementModeChanged(EMovementMode PreviousMovem
 {
 	Super::OnMovementModeChanged(PreviousMovementMode, PreviousCustomMode);
 	SyncMovementTags();
+}
+
+bool UknightMovementComponent::ShouldHaveSprintTag() const
+{
+	if (!bWantsToRun || RunLockCount > 0 || !IsMovingOnGround())
+	{
+		return false;
+	}
+	// 걷기 최대 속도(스탯·중량 반영)보다 빠를 때만. 제자리에서 Shift만 누르고 있으면 일반 공격이 나간다.
+	const float WalkMax = BaseWalkSpeed * GetMechAttributeValue(UknightAttributeSet::GetWalkSpeedAttribute(), 1.f) * GetWeightSpeedFactor();
+	return Velocity.SizeSquared2D() > FMath::Square(WalkMax * SprintTagSpeedRatio);
+}
+
+void UknightMovementComponent::OnMovementUpdated(float DeltaSeconds, const FVector& OldLocation, const FVector& OldVelocity)
+{
+	Super::OnMovementUpdated(DeltaSeconds, OldLocation, OldVelocity);
+
+	const bool bSprint = ShouldHaveSprintTag();
+	if (bSprint != bSprintTagged)
+	{
+		if (UAbilitySystemComponent* const ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner()))
+		{
+			ASC->SetLooseGameplayTagCount(TAG_State_Sprinting, bSprint ? 1 : 0);
+			bSprintTagged = bSprint;
+		}
+	}
 }
 
 void UknightMovementComponent::SyncMovementTags() const

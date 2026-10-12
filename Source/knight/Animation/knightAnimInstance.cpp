@@ -2,6 +2,7 @@
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
+#include "Animation/AnimMontage.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 
@@ -45,6 +46,17 @@ void UknightAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		bCachedIsFalling = Movement->IsFalling();
 		bCachedHasAcceleration = !Movement->GetCurrentAcceleration().IsNearlyZero();
 	}
+
+	// 공중 하체 고정: 검 뽑기 같은 몽타주는 땅 위 다리를 써서 고정하고, 공격 몽타주는 다리까지 따르게 한다.
+	float LegLockTarget = 0.f;
+	if (bCachedIsFalling)
+	{
+		UAnimMontage* const Montage = GetCurrentActiveMontage();
+		LegLockTarget = (!Montage || AirLegLockMontages.Contains(Montage)) ? 1.f : 0.f;
+	}
+	AirLegLockAlpha = AirLegLockBlendTime > 0.f
+		? FMath::FInterpConstantTo(AirLegLockAlpha, LegLockTarget, DeltaSeconds, 1.f / AirLegLockBlendTime)
+		: LegLockTarget;
 }
 
 void UknightAnimInstance::NativeThreadSafeUpdateAnimation(float DeltaSeconds)

@@ -6,6 +6,7 @@
 #include "knightAnimInstance.generated.h"
 
 class UAbilitySystemComponent;
+class UAnimMontage;
 
 /**
  * Base Anim Instance for the Knight and monsters.
@@ -47,6 +48,23 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, Category="Knight|Locomotion")
 	bool bHasAcceleration = false;
+
+	/**
+	 * 공중에서 하체(골반·다리)를 몽타주 대신 기본 공중 자세로 덮는 정도 (0~1). (2026-10-12)
+	 * 공중이고, 몽타주가 없거나 AirLegLockMontages 중 하나가 재생 중일 때 1.
+	 * 그 밖의 몽타주(공격 등)는 0이라 공중에서도 다리까지 몽타주를 따른다.
+	 * 애님 블루프린트의 하체 레이어 블렌드 가중치로 쓴다.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category="Knight|Locomotion")
+	float AirLegLockAlpha = 0.f;
+
+	/** 공중에서도 하체를 기본 공중 자세로 두는 몽타주. 검 뽑기·넣기처럼 땅 위 다리 동작이 들어 있는 것. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Locomotion")
+	TArray<TObjectPtr<UAnimMontage>> AirLegLockMontages;
+
+	/** AirLegLockAlpha가 0↔1로 바뀌는 데 걸리는 시간. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Locomotion", meta=(ClampMin=0, Units="s"))
+	float AirLegLockBlendTime = 0.15f;
 
 private:
 	// Game thread copies read by the thread-safe update.
