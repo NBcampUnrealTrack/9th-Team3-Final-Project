@@ -33,6 +33,8 @@ namespace
 			{ UknightAttributeSet::GetMaxBoostGaugeAttribute(), TEXT("최대 부스트") },
 			{ UknightCoreAttributeSet::GetAttackPowerAttribute(), TEXT("공격력") },
 			{ UknightCoreAttributeSet::GetDefenseAttribute(), TEXT("방어력") },
+			{ UknightAttributeSet::GetWalkSpeedAttribute(), TEXT("걷기 속도 배율") },
+			{ UknightAttributeSet::GetRunSpeedAttribute(), TEXT("달리기 속도 배율") },
 			{ UknightCoreAttributeSet::GetMaxPoiseAttribute(), TEXT("강인도") },
 			{ UknightCoreAttributeSet::GetCriticalChanceAttribute(), TEXT("치명타 확률") },
 			{ UknightAttributeSet::GetLoadCapacityAttribute(), TEXT("적재 한도") } };
@@ -241,17 +243,19 @@ void UKnightMaintenanceWidget::RefreshDetails()
 			if (Catalog) for (const UknightEquipmentSetDefinition* Set : Catalog->Sets)
 			{
 				if (!Set || Set->SetTag != SelectedPart->SetTag) continue;
-				Details += FString::Printf(TEXT("%s\n%d개 %s [%s]\n%d개 %s [%s]\n"), *Set->DisplayName.ToString(),
+				Details += FString::Printf(TEXT("%s\n%d개 %s [%s]\n"), *Set->DisplayName.ToString(),
 						Set->TwoPiece.RequiredCount, *Set->TwoPiece.Description.ToString(),
-						Current.SetCounts.FindRef(Set->SetTag) >= Set->TwoPiece.RequiredCount ? TEXT("활성") : TEXT("비활성"),
-						Set->FourPiece.RequiredCount, *Set->FourPiece.Description.ToString(),
+						Current.SetCounts.FindRef(Set->SetTag) >= Set->TwoPiece.RequiredCount ? TEXT("활성") : TEXT("비활성"));
+				if (!Set->FourPiece.StatModifiers.IsEmpty())
+					Details += FString::Printf(TEXT("%d개 %s [%s]\n"), Set->FourPiece.RequiredCount,
+						*Set->FourPiece.Description.ToString(),
 						Current.SetCounts.FindRef(Set->SetTag) >= Set->FourPiece.RequiredCount ? TEXT("활성") : TEXT("비활성"));
 				break;
 			}
 		}
 		if (SelectedRecipe)
 		{
-			Details += TEXT("\n필요 재료\n");
+			Details += SelectedRecipe->Costs.IsEmpty() ? TEXT("\n필요 재료 없음\n") : TEXT("\n필요 재료\n");
 			for (const FknightItemCost& Cost : SelectedRecipe->Costs)
 			{
 				Details += FString::Printf(TEXT("%s  %d / %d\n"), Cost.Item ? *Cost.Item->DisplayName.ToString() : TEXT("없는 아이템"),
