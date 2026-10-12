@@ -390,6 +390,21 @@ void UknightGameplayAbility_JumpHover::EndAbility(const FGameplayAbilitySpecHand
 	const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
 	StopHover();
+	// 다른 동작(내려찍기 등)이 체공을 끊었으면 기울기를 바로 되돌린다. 천천히 되돌리는 동안 그 동작도 메시를 돌리면 서로 어긋난다. (2026-10-12)
+	if (bWasCancelled && bTiltActive)
+	{
+		const ACharacter* const TiltCharacter = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+		if (USkeletalMeshComponent* const Mesh = TiltCharacter ? TiltCharacter->GetMesh() : nullptr)
+		{
+			Mesh->SetRelativeLocationAndRotation(MeshBaseLocation, MeshBaseRotation);
+		}
+		CurrentTilt = FRotator::ZeroRotator;
+		bTiltActive = false;
+		if (UWorld* const World = GetWorld())
+		{
+			World->GetTimerManager().ClearTimer(TickTimer);
+		}
+	}
 	if (bJumped)
 	{
 		bJumped = false;

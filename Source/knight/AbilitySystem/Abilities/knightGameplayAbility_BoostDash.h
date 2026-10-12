@@ -7,6 +7,8 @@
 class ACharacter;
 class UAnimMontage;
 class UCurveFloat;
+class UNiagaraComponent;
+class UNiagaraSystem;
 
 /**
  * 부스트 대시 / 회피 부스트(퀵스텝). 현재 이동 입력 방향으로(입력이 없으면 뒤로) 일정한 힘의
@@ -117,6 +119,35 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Dash", meta=(Categories="GameplayCue"))
 	FGameplayTag DashCueTag;
 
+	/**
+	 * 등 부스터 (2026-10-12). 대시 이동 동안 등에서 대시 반대 방향으로 뿜는다. 이펙트는 로컬 -Z로 뿜는 시스템(NS_Knight_Thruster).
+	 * 위치는 BackThrusterBone 위치에 BackThrusterOffsets(액터 기준: X 앞, Y 오른쪽, Z 위)를 더한 곳이고 매 프레임 따라간다.
+	 * 비워 두면 나오지 않는다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Dash|Back Booster")
+	TObjectPtr<UNiagaraSystem> BackThrusterEffect;
+
+	UPROPERTY(EditDefaultsOnly, Category="Dash|Back Booster")
+	FName BackThrusterBone = TEXT("spine_03");
+
+	UPROPERTY(EditDefaultsOnly, Category="Dash|Back Booster")
+	TArray<FVector> BackThrusterOffsets;
+
+	UPROPERTY(EditDefaultsOnly, Category="Dash|Back Booster", meta=(ClampMin=0.1))
+	float BackThrusterScale = 1.4f;
+
+	/** 뿜는 방향을 아래로 기울이는 각도. 0이면 대시 반대 방향 수평. */
+	UPROPERTY(EditDefaultsOnly, Category="Dash|Back Booster", meta=(ClampMin=0, ClampMax=80, Units="deg"))
+	float BackThrusterDownAngle = 20.f;
+
+	/** 대시 이동이 끝난 뒤 분사를 이만큼 더 유지한다. */
+	UPROPERTY(EditDefaultsOnly, Category="Dash|Back Booster", meta=(ClampMin=0, Units="s"))
+	float BackThrusterLinger = 0.05f;
+
+	/** 디버그: 분사 위치(노란 구)와 뿜는 방향(빨간 선)을 그리고 로그를 남긴다. */
+	UPROPERTY(EditDefaultsOnly, Category="Dash|Back Booster")
+	bool bDebugBackThrusters = false;
+
 	/** 대시 소리의 AI 청각 크기. */
 	UPROPERTY(EditDefaultsOnly, Category="Dash|Noise", meta=(ClampMin=0))
 	float NoiseLoudness = 1.f;
@@ -154,6 +185,16 @@ private:
 
 	void StartCooldown();
 	void RemoveInvulnerability();
+
+	void StartBackThrusters(const ACharacter& Character);
+	void UpdateBackThrusters();
+	void StopBackThrusters();
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UNiagaraComponent>> BackThrusters;
+
+	FTimerHandle BackThrusterTimer;
+	FTimerHandle BackThrusterStopTimer;
 
 	bool bInvulnerableApplied = false;
 	bool bCancelWindowApplied = false;
