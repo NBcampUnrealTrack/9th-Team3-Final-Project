@@ -42,6 +42,9 @@ public:
 	/** 소유자에게 SlowTags 중 하나라도 있으면 true. */
 	bool IsMovementSlowed() const;
 
+	/** 지금 회전 속도에 곱할 값. SlowTags가 있으면 SlowTurnScale, 없으면 1. */
+	float GetTurnScale() const { return IsMovementSlowed() ? SlowTurnScale : 1.f; }
+
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 	virtual float GetMaxSpeed() const override;
 	virtual FRotator GetDeltaRotation(float DeltaTime) const override;
@@ -58,7 +61,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Knight|Monster", meta=(ClampMin=0, ClampMax=1))
 	float SlowSpeedScale = 0.5f;
 
-	/** SlowTags가 있을 때 회전 속도(TurnTowards의 TurnRate, 이동 방향 회전의 RotationRate)에 곱한다. */
+	/** SlowTags가 있을 때 회전 속도(TurnTowards의 TurnRate, 이동 방향 회전의 RotationRate, 제자리 회전 몽타주의 재생 속도)에 곱한다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Knight|Monster", meta=(ClampMin=0, ClampMax=1))
 	float SlowTurnScale = 0.5f;
 
