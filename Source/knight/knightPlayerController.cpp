@@ -309,6 +309,19 @@ bool AknightPlayerController::ShouldUseTouchControls() const
 	return SVirtualJoystick::ShouldDisplayTouchInterface() || bForceTouchControls;
 }
 
+void AknightPlayerController::GetAudioListenerPosition(FVector& OutLocation, FVector& OutFrontDir, FVector& OutRightDir) const
+{
+	Super::GetAudioListenerPosition(OutLocation, OutFrontDir, OutRightDir);
+	// 에디터나 BP가 듣는 위치를 따로 지정했으면(bOverrideAudioListener) 그대로 둔다.
+	const APawn* const ControlledPawn = GetPawn();
+	if (!ControlledPawn || bOverrideAudioListener || AudioListenerPawnWeight <= 0.f)
+	{
+		return;
+	}
+	const FVector PawnEar = ControlledPawn->GetActorLocation() + FVector(0.f, 0.f, AudioListenerHeight);
+	OutLocation = FMath::Lerp(OutLocation, PawnEar, AudioListenerPawnWeight);
+}
+
 void AknightPlayerController::PostProcessInput(const float DeltaTime, const bool bGamePaused)
 {
 	if (SettingsWidget && SettingsWidget->IsInViewport())

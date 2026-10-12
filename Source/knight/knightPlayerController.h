@@ -94,6 +94,21 @@ protected:
 	/** Runs ability input and the input buffer once per frame, after all input for the frame is processed. */
 	virtual void PostProcessInput(const float DeltaTime, const bool bGamePaused) override;
 
+	/**
+	 * 소리 듣는 위치 (2026-10-12). 기본은 카메라 위치라서, 큰 몬스터를 록온해 카메라가 멀리(최대 14m) 빠지면
+	 * 나이트의 칼 휘두르는 소리 같은 가까운 소리가 감쇠 범위 밖으로 나간다. 그래서 위치는 폰 쪽으로 당기고
+	 * 방향(좌우 패닝)은 카메라를 그대로 따른다.
+	 */
+	virtual void GetAudioListenerPosition(FVector& OutLocation, FVector& OutFrontDir, FVector& OutRightDir) const override;
+
+	/** 0 = 카메라 위치, 1 = 폰 위치. */
+	UPROPERTY(EditDefaultsOnly, Category="Audio", meta=(ClampMin=0, ClampMax=1))
+	float AudioListenerPawnWeight = 1.f;
+
+	/** 폰 위치에서 위로 올리는 높이(머리 높이 근처). */
+	UPROPERTY(EditDefaultsOnly, Category="Audio", meta=(Units="cm"))
+	float AudioListenerHeight = 60.f;
+
 	/** Returns true if the player should use UMG touch controls */
 	bool ShouldUseTouchControls() const;
 	void ToggleRaidReturnMenu();
