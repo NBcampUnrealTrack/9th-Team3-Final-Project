@@ -7,7 +7,7 @@
 #include "knightPartsComponent.generated.h"
 
 class UGameplayEffect;
-class USkeletalMeshComponent;
+class UMeshComponent;
 class UknightPartItemDefinition;
 struct FknightPartStatModifier;
 
@@ -36,8 +36,9 @@ struct FknightEquippedPart
 	UPROPERTY()
 	int32 UpgradeLevel = 0;
 
+	/** 파츠 메시 컴포넌트. 스켈레탈 또는 스태틱(2026-10-10) 메시 컴포넌트. */
 	UPROPERTY()
-	TObjectPtr<USkeletalMeshComponent> MeshComponent;
+	TObjectPtr<UMeshComponent> MeshComponent;
 
 	UPROPERTY()
 	FknightAbilitySet_GrantedHandles GrantedHandles;
@@ -98,8 +99,8 @@ public:
 	const TArray<FGameplayTag>& GetLoadoutSlots() const { return LoadoutSlots; }
 	const TArray<TObjectPtr<const UknightPartItemDefinition>>& GetDefaultLoadout() const { return DefaultLoadout; }
 
-	/** Meshes of every equipped part (for damage visuals, dissolves, outlines). */
-	void GetPartMeshes(TArray<USkeletalMeshComponent*>& OutMeshes) const;
+	/** Meshes of every equipped part (for damage visuals, dissolves, outlines). 스켈레탈·스태틱 메시 컴포넌트가 섞여 있다. */
+	void GetPartMeshes(TArray<UMeshComponent*>& OutMeshes) const;
 
 	UPROPERTY(BlueprintAssignable, Category="Knight|Parts")
 	FknightEquipmentChanged OnEquipmentChanged;

@@ -32,6 +32,8 @@ public:
 	KNIGHT_ATTRIBUTE_ACCESSORS(UknightCoreAttributeSet, StaggerPower);
 	KNIGHT_ATTRIBUTE_ACCESSORS(UknightCoreAttributeSet, Defense);
 	KNIGHT_ATTRIBUTE_ACCESSORS(UknightCoreAttributeSet, GuardEfficiency);
+	KNIGHT_ATTRIBUTE_ACCESSORS(UknightCoreAttributeSet, DamageTakenMultiplier);
+	KNIGHT_ATTRIBUTE_ACCESSORS(UknightCoreAttributeSet, PoiseDamageTakenMultiplier);
 	KNIGHT_ATTRIBUTE_ACCESSORS(UknightCoreAttributeSet, CriticalChance);
 	KNIGHT_ATTRIBUTE_ACCESSORS(UknightCoreAttributeSet, CriticalDamageMultiplier);
 	KNIGHT_ATTRIBUTE_ACCESSORS(UknightCoreAttributeSet, Damage);
@@ -106,6 +108,21 @@ private:
 	 */
 	UPROPERTY(BlueprintReadOnly, Category="Knight|Core", meta=(AllowPrivateAccess=true))
 	FGameplayAttributeData GuardEfficiency;
+
+	/**
+	 * 받는 피해 배율(기본 1.0). 피해 계산의 마지막(방어력·가드·부위 배율 뒤)에 곱해서 항상 정확한 비율로 줄인다.
+	 * 예: 잔열 복합 장갑 -0.15 → 0.85 = 받는 피해 -15% (2026-10-10 사용자 결정, 방어력과 따로 둠). 여러 파츠면 더해진다.
+	 * 피해 계산이 맞는 쪽에서 읽으므로 이 세트에 둔다.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category="Knight|Core", meta=(AllowPrivateAccess=true))
+	FGameplayAttributeData DamageTakenMultiplier;
+
+	/**
+	 * 받는 그로기 배율(기본 1.0) = 그로기 저항. 받는 그로기 피해의 마지막에 곱한다.
+	 * 예: 잔향 완충 장치 -0.25 → 0.75 = 받는 그로기 -25% (2026-10-10 사용자 결정, 기획의 '피격 경직 시간 -25%'를 이것으로 대신함).
+	 */
+	UPROPERTY(BlueprintReadOnly, Category="Knight|Core", meta=(AllowPrivateAccess=true))
+	FGameplayAttributeData PoiseDamageTakenMultiplier;
 
 	/** 공격이 치명타가 될 확률(0~1). 피해 계산이 모든 공격자에게서 읽으므로 메카 세트가 아닌 이 세트에 있다. */
 	UPROPERTY(BlueprintReadOnly, Category="Knight|Core", meta=(AllowPrivateAccess=true))

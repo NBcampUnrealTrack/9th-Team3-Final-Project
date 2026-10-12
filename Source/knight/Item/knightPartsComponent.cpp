@@ -4,8 +4,10 @@
 #include "AbilitySystem/knightAbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Engine/GameInstance.h"
 #include "Engine/SkeletalMesh.h"
+#include "Engine/StaticMesh.h"
 #include "GameFramework/Character.h"
 #include "GameplayEffect.h"
 #include "Item/knightItemDefinitions.h"
@@ -133,10 +135,22 @@ bool UknightPartsComponent::EquipPartUnchecked(const UknightPartItemDefinition* 
 	Equipped.Definition = Part;
 	Equipped.UpgradeLevel = FMath::Clamp(UpgradeLevel, 0, Part->GetMaxUpgradeLevel());
 
+	// 메시 컴포넌트: 스켈레탈 메시(Mesh)가 있으면 그것, 없으면 스태틱 메시(StaticMesh, 2026-10-10).
+	UMeshComponent* PartMesh = nullptr;
 	if (USkeletalMesh* const Mesh = UknightAssetManager::GetAsset(Part->Mesh))
 	{
-		USkeletalMeshComponent* const PartMesh = NewObject<USkeletalMeshComponent>(Character, NAME_None, RF_Transient);
-		PartMesh->SetSkeletalMeshAsset(Mesh);
+		USkeletalMeshComponent* const SkeletalPart = NewObject<USkeletalMeshComponent>(Character, NAME_None, RF_Transient);
+		SkeletalPart->SetSkeletalMeshAsset(Mesh);
+		PartMesh = SkeletalPart;
+	}
+	else if (UStaticMesh* const StaticMesh = UknightAssetManager::GetAsset(Part->StaticMesh))
+	{
+		UStaticMeshComponent* const StaticPart = NewObject<UStaticMeshComponent>(Character, NAME_None, RF_Transient);
+		StaticPart->SetStaticMesh(StaticMesh);
+		PartMesh = StaticPart;
+	}
+	if (PartMesh)
+	{
 		PartMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		PartMesh->ComponentTags.Append(Part->MeshComponentTags);
 		PartMesh->RegisterComponent();
@@ -276,7 +290,7 @@ void UknightPartsComponent::RemovePart(FknightEquippedPart& Part)
 			Part.StatEffectHandle.Invalidate();
 		}
 	}
-	if (USkeletalMeshComponent* const Mesh = Part.MeshComponent.Get())
+	if (UMeshComponent* const Mesh = Part.MeshComponent.Get())
 	{
 		if (AActor* const Owner = GetOwner())
 		{
@@ -293,7 +307,7 @@ const UknightPartItemDefinition* UknightPartsComponent::GetEquippedPart(FGamepla
 	return Part ? Part->Definition.Get() : nullptr;
 }
 
-void UknightPartsComponent::GetPartMeshes(TArray<USkeletalMeshComponent*>& OutMeshes) const
+void UknightPartsComponent::GetPartMeshes(TArray<UMeshComponent*>& OutMeshes) const
 {
 	for (const TPair<FGameplayTag, FknightEquippedPart>& Entry : EquippedParts)
 	{

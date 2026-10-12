@@ -35,8 +35,9 @@ namespace knightDamageMath
 		}
 
 		Out.Damage = FMath::Max(0.f, Out.RawDamage * FMath::Max(0.f, In.PartMultiplier) * Out.CriticalMultiplier
-			* Out.DefenseMultiplier * Out.GuardMultiplier);
-		Out.PoiseDamage = FMath::Max(0.f, In.BasePoiseDamage * FMath::Max(0.f, In.StaggerPower) * Out.GuardPoiseMultiplier);
+			* Out.DefenseMultiplier * Out.GuardMultiplier * FMath::Max(0.f, In.DamageTakenMultiplier));
+		Out.PoiseDamage = FMath::Max(0.f, In.BasePoiseDamage * FMath::Max(0.f, In.StaggerPower) * Out.GuardPoiseMultiplier
+			* FMath::Max(0.f, In.PoiseDamageTakenMultiplier));
 		return Out;
 	}
 }
@@ -51,6 +52,8 @@ namespace knightDamageStatics
 		FGameplayEffectAttributeCaptureDefinition StaggerPower;
 		FGameplayEffectAttributeCaptureDefinition Defense;
 		FGameplayEffectAttributeCaptureDefinition GuardEfficiency;
+		FGameplayEffectAttributeCaptureDefinition DamageTakenMultiplier;
+		FGameplayEffectAttributeCaptureDefinition PoiseDamageTakenMultiplier;
 		FGameplayEffectAttributeCaptureDefinition CriticalChance;
 		FGameplayEffectAttributeCaptureDefinition CriticalDamageMultiplier;
 
@@ -65,6 +68,8 @@ namespace knightDamageStatics
 			// 맞는 쪽 스탯은 맞는 순간의 값을 읽는다.
 			Defense = FGameplayEffectAttributeCaptureDefinition(UknightCoreAttributeSet::GetDefenseAttribute(), EGameplayEffectAttributeCaptureSource::Target, false);
 			GuardEfficiency = FGameplayEffectAttributeCaptureDefinition(UknightCoreAttributeSet::GetGuardEfficiencyAttribute(), EGameplayEffectAttributeCaptureSource::Target, false);
+			DamageTakenMultiplier = FGameplayEffectAttributeCaptureDefinition(UknightCoreAttributeSet::GetDamageTakenMultiplierAttribute(), EGameplayEffectAttributeCaptureSource::Target, false);
+			PoiseDamageTakenMultiplier = FGameplayEffectAttributeCaptureDefinition(UknightCoreAttributeSet::GetPoiseDamageTakenMultiplierAttribute(), EGameplayEffectAttributeCaptureSource::Target, false);
 		}
 	};
 
@@ -82,6 +87,8 @@ UknightDamageExecution::UknightDamageExecution()
 	RelevantAttributesToCapture.Add(Defs.StaggerPower);
 	RelevantAttributesToCapture.Add(Defs.Defense);
 	RelevantAttributesToCapture.Add(Defs.GuardEfficiency);
+	RelevantAttributesToCapture.Add(Defs.DamageTakenMultiplier);
+	RelevantAttributesToCapture.Add(Defs.PoiseDamageTakenMultiplier);
 	RelevantAttributesToCapture.Add(Defs.CriticalChance);
 	RelevantAttributesToCapture.Add(Defs.CriticalDamageMultiplier);
 }
@@ -109,6 +116,8 @@ void UknightDamageExecution::Execute_Implementation(const FGameplayEffectCustomE
 	ExecutionParams.AttemptCalculateCapturedAttributeMagnitude(Defs.StaggerPower, EvaluateParams, In.StaggerPower);
 	ExecutionParams.AttemptCalculateCapturedAttributeMagnitude(Defs.Defense, EvaluateParams, In.Defense);
 	ExecutionParams.AttemptCalculateCapturedAttributeMagnitude(Defs.GuardEfficiency, EvaluateParams, In.GuardEfficiency);
+	ExecutionParams.AttemptCalculateCapturedAttributeMagnitude(Defs.DamageTakenMultiplier, EvaluateParams, In.DamageTakenMultiplier);
+	ExecutionParams.AttemptCalculateCapturedAttributeMagnitude(Defs.PoiseDamageTakenMultiplier, EvaluateParams, In.PoiseDamageTakenMultiplier);
 	float CriticalChance = 0.f;
 	ExecutionParams.AttemptCalculateCapturedAttributeMagnitude(Defs.CriticalChance, EvaluateParams, CriticalChance);
 	ExecutionParams.AttemptCalculateCapturedAttributeMagnitude(Defs.CriticalDamageMultiplier, EvaluateParams, In.CriticalDamageMultiplier);
@@ -138,10 +147,10 @@ void UknightDamageExecution::Execute_Implementation(const FGameplayEffectCustomE
 
 	const knightDamageMath::FResult Out = knightDamageMath::Compute(In);
 
-	UE_LOG(LogknightCombat, Verbose, TEXT("Damage %s -> %s: raw %.1f part x%.2f crit x%.2f def x%.2f guard x%.2f (eff %.2f) = %.1f, poise %.1f x stagger %.2f x guard %.2f = %.1f"),
+	UE_LOG(LogknightCombat, Verbose, TEXT("Damage %s -> %s: raw %.1f part x%.2f crit x%.2f def x%.2f guard x%.2f (eff %.2f) taken x%.2f = %.1f, poise %.1f x stagger %.2f x guard %.2f x taken %.2f = %.1f"),
 		*GetNameSafe(AttackerActor), *GetNameSafe(TargetActor), Out.RawDamage, In.PartMultiplier, Out.CriticalMultiplier,
-		Out.DefenseMultiplier, Out.GuardMultiplier, In.GuardEfficiency, Out.Damage,
-		In.BasePoiseDamage, In.StaggerPower, Out.GuardPoiseMultiplier, Out.PoiseDamage);
+		Out.DefenseMultiplier, Out.GuardMultiplier, In.GuardEfficiency, In.DamageTakenMultiplier, Out.Damage,
+		In.BasePoiseDamage, In.StaggerPower, Out.GuardPoiseMultiplier, In.PoiseDamageTakenMultiplier, Out.PoiseDamage);
 
 	if (Out.Damage > 0.f)
 	{

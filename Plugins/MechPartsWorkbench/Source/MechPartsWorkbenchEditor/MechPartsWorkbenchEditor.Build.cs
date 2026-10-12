@@ -17,7 +17,17 @@ public class MechPartsWorkbenchEditor : ModuleRules
 		PrivateDependencyModuleNames.AddRange(new string[] {
 			"UnrealEd",
 			"Slate",
-			"SlateCore"
+			"SlateCore",
+			// 워크벤치 창 (2026-10-10): 미리보기 창·장면, 파츠 목록, 속성 패널, Tools 메뉴, 개인 설정
+			"InputCore",
+			"EditorFramework",
+			"AdvancedPreviewScene",
+			"ContentBrowser",
+			"PropertyEditor",
+			"ToolMenus",
+			"DeveloperSettings",
+			// 파츠 목록 분류 (2026-10-11)
+			"AssetRegistry"
 		});
 	}
 }

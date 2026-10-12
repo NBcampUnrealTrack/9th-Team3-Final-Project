@@ -15,6 +15,8 @@ UknightCoreAttributeSet::UknightCoreAttributeSet()
 	InitStaggerPower(1.f);
 	InitDefense(0.f);
 	InitGuardEfficiency(1.f);
+	InitDamageTakenMultiplier(1.f);
+	InitPoiseDamageTakenMultiplier(1.f);
 	InitCriticalChance(0.f);
 	InitCriticalDamageMultiplier(1.25f);
 	InitDamage(0.f);
@@ -52,9 +54,10 @@ void UknightCoreAttributeSet::ClampAttribute(const FGameplayAttribute& Attribute
 	{
 		NewValue = FMath::Max(NewValue, 0.f);
 	}
-	// 그로기 회복 속도·경직치·가드 효율은 음수만 막는다.
+	// 그로기 회복 속도·경직치·가드 효율·받는 피해/그로기 배율은 음수만 막는다.
 	else if (Attribute == GetPoiseRecoveryRateAttribute() || Attribute == GetStaggerPowerAttribute()
-		|| Attribute == GetGuardEfficiencyAttribute())
+		|| Attribute == GetGuardEfficiencyAttribute() || Attribute == GetDamageTakenMultiplierAttribute()
+		|| Attribute == GetPoiseDamageTakenMultiplierAttribute())
 	{
 		NewValue = FMath::Max(NewValue, 0.f);
 	}
