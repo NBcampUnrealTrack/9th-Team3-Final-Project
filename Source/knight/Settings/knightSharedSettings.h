@@ -45,13 +45,6 @@ public:
 	UPROPERTY(SaveGame, BlueprintReadWrite, Category="Knight|Settings|Camera", meta=(ClampMin=0, ClampMax=1))
 	float CameraShakeScale = 1.f;
 
-	/**
-	 * 달리기 토글. 끄면(기본) 달리기 키를 누르고 있는 동안만 달리고,
-	 * 켜면 누를 때마다 달리기를 켜고 끈다. AknightCharacter가 달리기 입력을 받을 때 읽는다.
-	 */
-	UPROPERTY(SaveGame, BlueprintReadWrite, Category="Knight|Settings|Controls")
-	bool bToggleRun = false;
-
 	UPROPERTY(SaveGame, BlueprintReadWrite, Category="Knight|Settings|Accessibility")
 	bool bSubtitlesEnabled = true;
 

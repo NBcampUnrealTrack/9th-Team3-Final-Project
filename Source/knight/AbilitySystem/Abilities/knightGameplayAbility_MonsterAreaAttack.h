@@ -15,6 +15,8 @@ class UAnimMontage;
  * 가드, 패링, 회피, 피해가 무기 타격과 같은 규칙을 따른다. 스켈레톤 없이도 동작하므로 테스트 맵의 큐브
  * 대역에 쓸 수 있고, 실제 몬스터도 범위 공격에 쓸 수 있다. 이때 Montage는 연출용으로만 재생하고 타이밍은 여기서 잡는다.
  *
+ * ConeHalfAngle을 주면 구체 안에서도 원뿔(ConeOrigin에서 정면으로 좌우 ConeHalfAngle) 안의 대상만 맞는다.
+ *
  * 디버그: knight.Monster.DrawAttacks 1 이면 예고(주황)와 타격 지점(빨강)을 그린다.
  */
 UCLASS()
@@ -51,6 +53,17 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Area", meta=(ClampMin=1, Units="cm"))
 	float AreaRadius = 300.f;
 
+	/**
+	 * 0보다 크면 구체 안이라도 ConeOrigin에서 정면 기준 좌우 이 각도 안에 있는 대상만 맞는다(브레스처럼 입에서 뻗는 공격).
+	 * 0이면 구체 전체를 판정한다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Area", meta=(ClampMin=0, ClampMax=90, Units="deg"))
+	float ConeHalfAngle = 0.f;
+
+	/** 몬스터 로컬 공간 기준 원뿔 꼭짓점(입 위치). ConeHalfAngle이 0보다 클 때만 쓴다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Area", meta=(EditCondition="ConeHalfAngle > 0"))
+	FVector ConeOrigin = FVector::ZeroVector;
+
 	UPROPERTY(EditDefaultsOnly, Category="Attack")
 	FknightMeleeHitParams HitParams;
 
@@ -76,6 +89,7 @@ private:
 	void HandleRecoveryFinished();
 
 	FVector GetAreaCenter() const;
+	bool IsInsideCone(const AActor& Avatar, const FVector& Point) const;
 
 	/** 이번 발동에서 이미 맞은 대상. 판정이 유지되는 동안 같은 대상을 다시 때리지 않는다. */
 	TSet<TWeakObjectPtr<AActor>> HitActors;

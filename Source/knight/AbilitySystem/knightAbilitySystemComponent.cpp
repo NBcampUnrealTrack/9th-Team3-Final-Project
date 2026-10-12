@@ -1,6 +1,7 @@
 #include "AbilitySystem/knightAbilitySystemComponent.h"
 
 #include "AbilitySystem/knightAbilityTagRelationshipMapping.h"
+#include "AbilitySystem/Attributes/knightAttributeSet.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
 #include "Engine/World.h"
 #include "System/knightGameplayTags.h"
@@ -22,6 +23,21 @@ namespace knightPoiseRecovery
 	}
 }
 
+// ---- 행동 에너지 자연 회복: 순수 계산 (테스트 대상, 2026-10-09) ----
+
+namespace knightBoostRecovery
+{
+	float Step(float CurrentGauge, float MaxGauge, float RecoveryRate, float DeltaSeconds,
+		float SecondsSinceLastSpend, float RecoveryDelay)
+	{
+		if (RecoveryRate <= 0.f || CurrentGauge >= MaxGauge || SecondsSinceLastSpend < RecoveryDelay)
+		{
+			return CurrentGauge;
+		}
+		return FMath::Min(MaxGauge, CurrentGauge + RecoveryRate * FMath::Max(0.f, DeltaSeconds));
+	}
+}
+
 UknightAbilitySystemComponent::UknightAbilitySystemComponent(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
@@ -40,6 +56,7 @@ void UknightAbilitySystemComponent::InitAbilityActorInfo(AActor* InOwnerActor, A
 		TryActivateAbilitiesOnSpawn();
 	}
 	StartPoiseRecovery();
+	StartBoostRecovery();
 }
 
 void UknightAbilitySystemComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -47,8 +64,40 @@ void UknightAbilitySystemComponent::EndPlay(const EEndPlayReason::Type EndPlayRe
 	if (const UWorld* const World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(PoiseRecoveryTimer);
+		World->GetTimerManager().ClearTimer(BoostRecoveryTimer);
 	}
 	Super::EndPlay(EndPlayReason);
+}
+
+void UknightAbilitySystemComponent::StartBoostRecovery()
+{
+	UWorld* const World = GetWorld();
+	// 에디터의 BP 미리보기 같은 게임 밖 월드에서는 켜지 않는다.
+	if (!World || !World->IsGameWorld() || World->GetTimerManager().IsTimerActive(BoostRecoveryTimer))
+	{
+		return;
+	}
+	World->GetTimerManager().SetTimer(BoostRecoveryTimer, this, &ThisClass::TickBoostRecovery, BoostRecoveryInterval, true);
+}
+
+void UknightAbilitySystemComponent::TickBoostRecovery()
+{
+	// 행동 에너지는 나이트(메카 속성 세트)만 있다. 몬스터는 여기서 끝난다.
+	const UknightAttributeSet* const MechSet = GetSet<UknightAttributeSet>();
+	const UWorld* const World = GetWorld();
+	if (!MechSet || !World || HasMatchingGameplayTag(knightGameplayTags::State_Dead))
+	{
+		return;
+	}
+
+	const FGameplayAttribute GaugeAttribute = UknightAttributeSet::GetBoostGaugeAttribute();
+	const float CurrentGauge = GetNumericAttributeBase(GaugeAttribute);
+	const float NewGauge = knightBoostRecovery::Step(CurrentGauge, MechSet->GetMaxBoostGauge(), MechSet->GetBoostRecoveryRate(),
+		BoostRecoveryInterval, World->GetTimeSeconds() - MechSet->GetLastBoostSpendTime(), MechSet->GetBoostRecoveryDelay());
+	if (NewGauge != CurrentGauge)
+	{
+		SetNumericAttributeBase(GaugeAttribute, NewGauge);
+	}
 }
 
 void UknightAbilitySystemComponent::StartPoiseRecovery()
@@ -160,17 +209,20 @@ void UknightAbilitySystemComponent::ProcessAbilityInput(float DeltaTime, bool bG
 			continue;
 		}
 		Spec->InputPressed = true;
+		const UknightGameplayAbility* const AbilityCDO = Cast<UknightGameplayAbility>(Spec->Ability);
+		const bool bTriggeredByPress = AbilityCDO && AbilityCDO->GetActivationPolicy() == EknightAbilityActivationPolicy::OnInputTriggered;
 		if (Spec->IsActive())
 		{
 			AbilitySpecInputPressed(*Spec);
-		}
-		else
-		{
-			const UknightGameplayAbility* const AbilityCDO = Cast<UknightGameplayAbility>(Spec->Ability);
-			if (AbilityCDO && AbilityCDO->GetActivationPolicy() == EknightAbilityActivationPolicy::OnInputTriggered)
+			// 재발동을 허용하는 어빌리티(퀵스텝)는 실행 중에도 발동을 시도한다. 받아들일지는 어빌리티의 CanActivateAbility가 정한다. (2026-10-08)
+			if (bTriggeredByPress && AbilityCDO->CanRetriggerWhileActive())
 			{
 				AbilitiesToActivate.AddUnique(Spec->Handle);
 			}
+		}
+		else if (bTriggeredByPress)
+		{
+			AbilitiesToActivate.AddUnique(Spec->Handle);
 		}
 	}
 
@@ -233,7 +285,10 @@ bool UknightAbilitySystemComponent::TryActivateAbilityByInputTag(const FGameplay
 	TArray<FGameplayAbilitySpecHandle, TInlineAllocator<4>> Candidates;
 	for (const FGameplayAbilitySpec& Spec : ActivatableAbilities.Items)
 	{
-		if (Spec.Ability && !Spec.IsActive() && Spec.GetDynamicSpecSourceTags().HasTagExact(InputTag))
+		// 실행 중인 어빌리티는 재발동을 허용할 때만 후보로 둔다 (ProcessAbilityInput과 같은 규칙).
+		const UknightGameplayAbility* const AbilityCDO = Cast<UknightGameplayAbility>(Spec.Ability);
+		const bool bCanTry = !Spec.IsActive() || (AbilityCDO && AbilityCDO->CanRetriggerWhileActive());
+		if (Spec.Ability && bCanTry && Spec.GetDynamicSpecSourceTags().HasTagExact(InputTag))
 		{
 			Candidates.Add(Spec.Handle);
 		}

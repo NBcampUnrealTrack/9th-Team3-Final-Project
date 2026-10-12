@@ -5,7 +5,9 @@
 #include "GameplayTagContainer.h"
 #include "knightMonsterPartData.generated.h"
 
+class AknightMonsterBreakPiece;
 class UGameplayEffect;
+class UStaticMesh;
 
 /** One hittable region of a monster (head, foreleg, tail) and its hitzone and break rules. */
 USTRUCT(BlueprintType)
@@ -51,6 +53,10 @@ struct KNIGHT_API FknightMonsterPartDefinition
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Break", meta=(EditCondition="bBreakable", ClampMin=1))
 	float BreakDamage = 500.f;
 
+	/** Remaining durability ratio (BreakDamage left / BreakDamage) at or below which the part counts as critical (near break). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Break", meta=(EditCondition="bBreakable", ClampMin=0, ClampMax=1))
+	float CriticalRatio = 0.3f;
+
 	/** Hitzone multiplier after the break (a broken horn often becomes softer). */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Break", meta=(EditCondition="bBreakable", ClampMin=0))
 	float BrokenDamageMultiplier = 1.f;
@@ -59,6 +65,13 @@ struct KNIGHT_API FknightMonsterPartDefinition
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Break", meta=(EditCondition="bBreakable"))
 	TSubclassOf<UGameplayEffect> BreakEffect;
 
+	/**
+	 * Loose tags added to the monster's ability system on break (for example Monster.State.Broken.ForelegL).
+	 * Attacks list these in Selection.BlockedOwnerTags to stop being picked, without a GE asset per part.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Break", meta=(EditCondition="bBreakable", Categories="Monster.State.Broken"))
+	FGameplayTagContainer GrantedTagsOnBreak;
+
 	/** Bone hidden on break, including its children (tail cut, horn snapped). None hides nothing. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Break", meta=(EditCondition="bBreakable"))
 	FName HideBoneOnBreak;
@@ -66,6 +79,17 @@ struct KNIGHT_API FknightMonsterPartDefinition
 	/** Hide the part's tagged components and turn off their collision on break. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Break", meta=(EditCondition="bBreakable"))
 	bool bHideComponentsOnBreak = false;
+
+	/**
+	 * 파괴되면 HideBoneOnBreak 자리에서 떨어지는 조각(잘린 꼬리). 원본 메시의 기준 자세에서 잘라 낸 메시로, 피벗은 그 뼈의 관절,
+	 * 크기는 원본 메시와 같아야 한다. 비우면 떨어뜨리지 않는다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Break", meta=(EditCondition="bBreakable"))
+	TObjectPtr<UStaticMesh> BreakPieceMesh;
+
+	/** 조각을 만드는 액터. 남는 시간, 튕겨 나가는 속도, 절단면이 식는 시간은 이 클래스(또는 Blueprint 자식)에서 조정한다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Break", meta=(EditCondition="bBreakable"))
+	TSubclassOf<AknightMonsterBreakPiece> BreakPieceClass;
 };
 
 /** Every part of one monster species. Shared by all instances of that monster. */

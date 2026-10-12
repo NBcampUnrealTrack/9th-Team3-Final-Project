@@ -33,6 +33,12 @@ public:
 	/** Ends the window that began with the same shape. */
 	void EndTrace(const FknightMeleeTraceParams& Params);
 
+	/**
+	 * One overlap of a sphere (UknightAnimNotify_MeleeArea), sent through the same Event.Melee.Hit path as the sweeps.
+	 * If a trace window is open at the same time, its hit list is shared so an actor is still hit only once.
+	 */
+	void HitArea(const FVector& Center, float Radius);
+
 	UFUNCTION(BlueprintPure, Category="Knight|Combat")
 	bool IsTracing() const { return !ActiveTraces.IsEmpty(); }
 

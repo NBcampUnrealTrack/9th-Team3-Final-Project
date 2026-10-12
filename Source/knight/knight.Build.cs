@@ -28,6 +28,8 @@ public class knight : ModuleRules
 			"MechPartsWorkbenchRuntime",
 			"knightAudio",
 			"CommonLoadingScreen",
+			// 메뉴 버튼(UCommonButtonBase). 디자인 쪽 버튼 클래스는 knightUI에 있고, 메뉴는 부모 타입으로만 받는다.
+			"CommonUI",
 			"UMG",
 			"Slate",
 			"SlateCore"

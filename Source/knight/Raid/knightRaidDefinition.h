@@ -107,6 +107,28 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation")
 	FknightRaidMusicStates MusicStates;
 
+	/**
+	 * Track started by the first fight with a target monster (the raid is silent while exploring before that).
+	 * A non-looping track, repeated after CombatMusicLoopGap. Keeps playing until the raid ends.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation|Combat Music")
+	TSoftObjectPtr<USoundBase> CombatMusic;
+
+	/** Replaces CombatMusic with a crossfade once a target monster's health drops below CombatMusicLowHealthRatio. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation|Combat Music")
+	TSoftObjectPtr<USoundBase> CombatMusicLowHealth;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation|Combat Music", meta=(ClampMin=0, ClampMax=1))
+	float CombatMusicLowHealthRatio = 0.5f;
+
+	/** Silence between the end of a combat track and its next play. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation|Combat Music", meta=(ClampMin=0, Units="s"))
+	float CombatMusicLoopGap = 5.f;
+
+	/** Crossfade from CombatMusic to CombatMusicLowHealth, and the fade out when the raid ends. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation|Combat Music", meta=(ClampMin=0, Units="s"))
+	float CombatMusicSwitchFadeTime = 3.f;
+
 	/** Cues loaded when the raid starts so their first use shows (GameplayCue.Hit, GameplayCue.PartBreak, the monster's cues). */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation", meta=(Categories="GameplayCue"))
 	FGameplayTagContainer PreloadGameplayCues;

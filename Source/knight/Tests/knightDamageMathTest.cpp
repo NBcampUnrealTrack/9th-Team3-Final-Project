@@ -114,6 +114,34 @@ bool FknightDamageMathTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("경직치가 음수면 그로기 0"), R.PoiseDamage, 0.f, Tolerance);
 	}
 
+	// ---- 받는 피해·그로기 배율 (2026-10-10, 파츠 효과용): 마지막에 곱해서 정확한 비율로 줄인다 ----
+	{
+		FInputs In = Base;
+		In.DamageTakenMultiplier = 0.85f;
+		In.PoiseDamageTakenMultiplier = 0.75f;
+		const FResult R = Compute(In);
+		TestEqual(TEXT("받는 피해 배율 0.85: 60 x 0.85 = 51 (-15%)"), R.Damage, 51.f, Tolerance);
+		TestEqual(TEXT("받는 그로기 배율 0.75: 20 x 0.75 = 15 (-25%)"), R.PoiseDamage, 15.f, Tolerance);
+	}
+	{
+		FInputs In = Base;
+		In.Defense = 100.f;
+		In.bGuarded = true;
+		In.DamageTakenMultiplier = 0.85f;
+		In.PoiseDamageTakenMultiplier = 0.75f;
+		const FResult R = Compute(In);
+		TestEqual(TEXT("방어 0.5·가드 0.2와 겹쳐도 비율 그대로: 60 x 0.5 x 0.2 x 0.85 = 5.1"), R.Damage, 5.1f, Tolerance);
+		TestEqual(TEXT("가드 0.5와 겹쳐도 비율 그대로: 20 x 0.5 x 0.75 = 7.5"), R.PoiseDamage, 7.5f, Tolerance);
+	}
+	{
+		FInputs In = Base;
+		In.DamageTakenMultiplier = -1.f;
+		In.PoiseDamageTakenMultiplier = -1.f;
+		const FResult R = Compute(In);
+		TestEqual(TEXT("받는 피해 배율이 음수면 피해 0 (회복되지 않음)"), R.Damage, 0.f, Tolerance);
+		TestEqual(TEXT("받는 그로기 배율이 음수면 그로기 0"), R.PoiseDamage, 0.f, Tolerance);
+	}
+
 	return true;
 }
 

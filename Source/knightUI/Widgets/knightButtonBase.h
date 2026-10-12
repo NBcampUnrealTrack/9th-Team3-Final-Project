@@ -48,6 +48,7 @@ protected:
 	virtual void NativeOnCurrentTextStyleChanged() override;
 	virtual void HandleFocusReceived() override;
 	virtual void HandleFocusLost() override;
+	virtual void NativeOnAddedToFocusPath(const FFocusEvent& InFocusEvent) override;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Knight|Button", meta=(ExposeOnSpawn=true))
 	FText ButtonText;
@@ -59,6 +60,14 @@ protected:
 	/** Text style while locked. The style asset has no locked state of its own. */
 	UPROPERTY(EditAnywhere, Category="Knight|Button")
 	TSubclassOf<UCommonTextStyle> LockedTextStyle;
+
+	/** Text style while the button has keyboard focus. The style asset only knows mouse hover. Unset = no change. */
+	UPROPERTY(EditAnywhere, Category="Knight|Button")
+	TSubclassOf<UCommonTextStyle> FocusedTextStyle;
+
+	/** Hovering moves focus here, so a list highlights one item whether the mouse or the keyboard is used. */
+	UPROPERTY(EditAnywhere, Category="Knight|Button")
+	bool bFocusOnHover = false;
 
 	/** Opacity of the whole button while locked. */
 	UPROPERTY(EditAnywhere, Category="Knight|Button", meta=(ClampMin=0, ClampMax=1))

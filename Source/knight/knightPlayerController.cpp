@@ -123,32 +123,61 @@ void AknightPlayerController::SetupInputComponent()
 
 void AknightPlayerController::ToggleSettings()
 {
-	if (!IsLocalController() || !GetWorld() || !GetWorld()->GetAuthGameMode<AknightRaidGameMode>()) return;
+	if (!IsLocalController() || !GetWorld()) return;
 	if (SettingsWidget && SettingsWidget->IsInViewport())
 	{
 		SettingsWidget->RequestClose();
 		return;
 	}
 	if (RaidReturnWidget && RaidReturnWidget->IsInViewport()) return;
+	if (PauseMenuRequestHandler.IsBound())
+	{
+		PauseMenuRequestHandler.Execute();
+		return;
+	}
+	if (!GetWorld()->GetAuthGameMode<AknightRaidGameMode>()) return;
+	OpenSettings(false);
+}
+
+void AknightPlayerController::OpenSettingsFromMenu()
+{
+	if (!IsLocalController() || !GetWorld() || (SettingsWidget && SettingsWidget->IsInViewport())) return;
+	OpenSettings(true);
+}
+
+void AknightPlayerController::OpenSettings(bool bFromMenu)
+{
 	if (!SettingsWidget)
 	{
 		SettingsWidget = CreateWidget<UKnightSettingsWidget>(this, UKnightSettingsWidget::GetSharedWidgetClass());
 		if (SettingsWidget) SettingsWidget->OnClosed.AddUniqueDynamic(this, &ThisClass::CloseSettings);
 	}
 	if (!SettingsWidget) return;
+	bSettingsOpenedFromMenu = bFromMenu;
 	bCursorBeforeSettings = bShowMouseCursor;
 	bSettingsPausedGame = !GetWorld()->IsPaused();
+	// Full screen: the settings screen lays out its own panels.
 	SettingsWidget->AddToViewport(100);
-	SettingsWidget->SetPositionInViewport(FVector2D::ZeroVector, false);
-	SettingsWidget->SetDesiredSizeInViewport(FVector2D(800.f, 620.f));
-	SettingsWidget->SetAnchorsInViewport(FAnchors(0.5f, 0.5f));
-	SettingsWidget->SetAlignmentInViewport(FVector2D(0.5f, 0.5f));
 	SettingsWidget->Open();
 	if (bSettingsPausedGame && !SetPause(true)) bSettingsPausedGame = false;
-	FInputModeUIOnly Mode;
-	Mode.SetWidgetToFocus(SettingsWidget->TakeWidget());
-	Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-	SetInputMode(Mode);
+	if (bFromMenu)
+	{
+		// UIOnly would make the viewport ignore input, and only GameOnly undoes that. The menu underneath hands
+		// back to gameplay through CommonUI, which never touches that flag, so the player would be left frozen.
+		// The game is paused under the menu, so letting input through here is harmless.
+		FInputModeGameAndUI Mode;
+		Mode.SetWidgetToFocus(SettingsWidget->TakeWidget());
+		Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		Mode.SetHideCursorDuringCapture(false);
+		SetInputMode(Mode);
+	}
+	else
+	{
+		FInputModeUIOnly Mode;
+		Mode.SetWidgetToFocus(SettingsWidget->TakeWidget());
+		Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		SetInputMode(Mode);
+	}
 	bShowMouseCursor = true;
 	SettingsWidget->FocusSettings();
 	UE_LOG(Logknight, Log, TEXT("Raid settings opened; paused=%d cursor=%d"), GetWorld()->IsPaused(), bShowMouseCursor);
@@ -157,11 +186,17 @@ void AknightPlayerController::ToggleSettings()
 void AknightPlayerController::CloseSettings()
 {
 	if (SettingsWidget && SettingsWidget->IsInViewport()) SettingsWidget->RemoveFromParent();
-	FInputModeGameOnly Mode;
-	SetInputMode(Mode);
-	bShowMouseCursor = bCursorBeforeSettings;
+	// Opened over a menu (pause): that menu still owns input and focus, so gameplay input is not restored here.
+	if (!bSettingsOpenedFromMenu)
+	{
+		FInputModeGameOnly Mode;
+		SetInputMode(Mode);
+		bShowMouseCursor = bCursorBeforeSettings;
+	}
 	if (bSettingsPausedGame && GetWorld() && GetWorld()->IsPaused()) SetPause(false);
 	bSettingsPausedGame = false;
+	bSettingsOpenedFromMenu = false;
+	OnSettingsClosed.Broadcast();
 	UE_LOG(Logknight, Log, TEXT("Raid settings closed; paused=%d cursor=%d"), GetWorld() && GetWorld()->IsPaused(), bShowMouseCursor);
 }
 
@@ -262,7 +297,9 @@ void AknightPlayerController::KnightRaidDebugReturn()
 void AknightPlayerController::KnightRaidDebugSettings()
 {
 #if WITH_EDITOR
-	ToggleSettings();
+	// Opens the settings window itself, even when Esc is routed to the pause menu.
+	if (SettingsWidget && SettingsWidget->IsInViewport()) SettingsWidget->RequestClose();
+	else if (IsLocalController() && GetWorld() && GetWorld()->GetAuthGameMode<AknightRaidGameMode>()) OpenSettings(false);
 #endif
 }
 

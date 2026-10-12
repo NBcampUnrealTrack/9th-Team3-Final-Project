@@ -10,8 +10,9 @@
  * 피해 계산이 읽는 속성은 여기에 두지 않는다: 몬스터에는 이 세트가 없고,
  * 세트가 없는 ASC에서 속성을 읽으려 하면 GAS가 크래시한다.
  *
- * 부스트 비용은 BoostGauge에 거는 일반적인 GE 비용 모디파이어로 처리한다(비용이 바뀌면 SetByCaller.BoostCost 사용).
- * 회복은 BoostRecoveryRate를 곱한 주기형 무한 GE로 처리하며, State.Boosting·State.Overheated 동안에는 막힌다.
+ * 행동 에너지(BoostGauge, 스테미너) 비용은 어빌리티 BP의 StaminaCost로 낸다(UknightGameplayAbility, SetByCaller.BoostCost). (2026-10-09)
+ * 회복은 UknightAbilitySystemComponent가 처리한다: 마지막으로 줄어든 뒤 BoostRecoveryDelay초가 지나면 초당 BoostRecoveryRate만큼 찬다.
+ * (2026-10-09 전에는 주기형 무한 GE GE_Knight_BoostRecovery로 회복했다. 사용 후 회복 지연을 넣으려고 그로기 회복과 같은 방식으로 옮김)
  */
 UCLASS()
 class KNIGHT_API UknightAttributeSet : public UknightAttributeSetBase
@@ -25,6 +26,10 @@ public:
 	KNIGHT_ATTRIBUTE_ACCESSORS(UknightAttributeSet, BoostGauge);
 	KNIGHT_ATTRIBUTE_ACCESSORS(UknightAttributeSet, MaxBoostGauge);
 	KNIGHT_ATTRIBUTE_ACCESSORS(UknightAttributeSet, BoostRecoveryRate);
+	KNIGHT_ATTRIBUTE_ACCESSORS(UknightAttributeSet, BoostRecoveryDelay);
+
+	/** 행동 에너지가 마지막으로 줄어든(행동에 쓴) 월드 시각. 회복 대기 시간 계산에 쓴다(UknightAbilitySystemComponent). */
+	float GetLastBoostSpendTime() const { return LastBoostSpendTime; }
 
 	// 부위 체력
 	KNIGHT_ATTRIBUTE_ACCESSORS(UknightAttributeSet, HeadHealth);
@@ -48,8 +53,12 @@ public:
 	KNIGHT_ATTRIBUTE_ACCESSORS(UknightAttributeSet, DodgeSpeed);
 	KNIGHT_ATTRIBUTE_ACCESSORS(UknightAttributeSet, DodgeCooldown);
 
+	// 방어
+	KNIGHT_ATTRIBUTE_ACCESSORS(UknightAttributeSet, PerfectGuardWindow);
+
 	// 보조
 	KNIGHT_ATTRIBUTE_ACCESSORS(UknightAttributeSet, RepairEfficiency);
+	KNIGHT_ATTRIBUTE_ACCESSORS(UknightAttributeSet, RepairKitCount);
 
 	/** BoostGauge가 0이 됐을 때. 부스트 어빌리티가 이를 받아 State.Overheated를 건다. */
 	mutable FknightAttributeEvent OnBoostDepleted;
@@ -76,6 +85,13 @@ private:
 	/** 부스트를 쓰지 않는 동안 초당 회복하는 게이지 양. */
 	UPROPERTY(BlueprintReadOnly, Category="Knight|Mech", meta=(AllowPrivateAccess=true))
 	FGameplayAttributeData BoostRecoveryRate;
+
+	/**
+	 * 행동 에너지를 쓴 뒤 회복이 시작되기까지의 시간(초). 쓸 때마다 다시 센다. 0이면 바로 회복.
+	 * 기본 1.5초(2026-10-09 사용자 결정). 파츠·강화로 바뀔 수 있다.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category="Knight|Mech", meta=(AllowPrivateAccess=true))
+	FGameplayAttributeData BoostRecoveryDelay;
 
 	// ---- 부위 체력 ----
 	// 필수 4부위가 각자 체력을 가진다. 부위에 맞으면 부위 체력과 전체 체력(Core의 Health)이 같이 준다.
@@ -152,11 +168,33 @@ private:
 	UPROPERTY(BlueprintReadOnly, Category="Knight|Mech|Speed", meta=(AllowPrivateAccess=true))
 	FGameplayAttributeData DodgeCooldown;
 
+	// ---- 방어 ----
+
+	/**
+	 * 퍼펙트 가드 판정 시간(초). 가드를 누른 뒤 이 시간 동안 정면에서 막은 패리 가능한 공격은 퍼펙트 가드가 된다
+	 * (피해 0, 공격한 적에게 그로기 피해). 그 뒤는 일반 가드. 0이면 퍼펙트 가드 없음.
+	 * 기본 0.25초(2026-10-08 사용자 결정). 파츠·강화로 바뀔 수 있다. 가드를 누를 때 읽는다(knightGameplayAbility_Guard).
+	 */
+	UPROPERTY(BlueprintReadOnly, Category="Knight|Mech|Defense", meta=(AllowPrivateAccess=true))
+	FGameplayAttributeData PerfectGuardWindow;
+
 	// ---- 보조 ----
 
 	/** 수리 키트 회복량 배율(기본 1.0). 특수 파츠·업그레이드로만 오른다. */
 	UPROPERTY(BlueprintReadOnly, Category="Knight|Mech", meta=(AllowPrivateAccess=true))
 	FGameplayAttributeData RepairEfficiency;
 
+	/**
+	 * 남은 수리 키트 개수(정수로 쓴다). 수리 키트 어빌리티(knightGameplayAbility_RepairKit)가 사용할 때 1 줄인다.
+	 * 스탯이 아니라 소모품 개수지만, HUD가 다른 값처럼 어트리뷰트 변경 알림으로 읽을 수 있게 여기 둔다(2026-10-09).
+	 * 기본 3 = 기획 문서 '출격당 3개'. 출격할 때마다 새 캐릭터라 3개로 시작한다. 보유 수량·상점 연결은 인벤토리 담당이 정해진 뒤.
+	 * 테스트 보충: knight.Player.SetStat RepairKitCount 3
+	 */
+	UPROPERTY(BlueprintReadOnly, Category="Knight|Mech", meta=(AllowPrivateAccess=true))
+	FGameplayAttributeData RepairKitCount;
+
 	bool bBoostDepleted = false;
+
+	/** 아직 쓴 적이 없으면 아주 먼 과거로 두어, 처음부터 회복 대기 시간이 지난 것으로 본다. */
+	float LastBoostSpendTime = -UE_BIG_NUMBER;
 };

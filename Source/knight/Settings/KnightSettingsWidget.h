@@ -2,117 +2,171 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
-#include "Components/ComboBoxString.h"
-#include "Styling/SlateTypes.h"
+#include "Containers/Ticker.h"
 #include "Settings/knightGameUserSettings.h"
 #include "KnightSettingsWidget.generated.h"
 
-class UButton;
-class UCheckBox;
-class UComboBoxString;
-class UHorizontalBox;
-class UInputKeySelector;
-class USlider;
-class UTextBlock;
-class UVerticalBox;
 class UknightSharedSettings;
+class UknightSettingsSubsystem;
 
-UENUM()
-enum class EKnightSettingControl : uint8 { Combo, Slider, Check, Key };
+UENUM(BlueprintType)
+enum class EKnightSettingControl : uint8
+{
+	/** Steps through Options with left / right (on / off switches too). */
+	Rotator,
+	/** Number between Min and Max. */
+	Slider,
+	/** Keyboard or mouse key for an Enhanced Input mapping. */
+	Key
+};
 
-class UKnightSettingsWidget;
-
-/** A single generated row; only it binds the UMG control events. */
-UCLASS()
-class KNIGHT_API UKnightSettingRow : public UUserWidget
+/** One editable setting as the screen shows it. Values are strings so every control type shares OptionEdited. */
+USTRUCT(BlueprintType)
+struct KNIGHT_API FKnightSettingItem
 {
 	GENERATED_BODY()
-public:
-	void Configure(UKnightSettingsWidget* InOwner, FName InId, const FText& Label, EKnightSettingControl Type,
-		const TArray<FString>& Options, const FString& Value, float Min = 0.f, float Max = 1.f);
-	void SetValue(const FString& Value);
-	bool IsCapturingKey() const;
 
-private:
-	UFUNCTION() void HandleCombo(FString Selected, ESelectInfo::Type SelectionType);
-	UFUNCTION() void HandleSlider(float Value);
-	UFUNCTION() void HandleCheck(bool bChecked);
-	UFUNCTION() void HandleKey(FInputChord SelectedKey);
-	void Notify(const FString& Value);
-	void UpdateValueText(float Value);
+	UPROPERTY(BlueprintReadOnly, Category="Settings") FName Id;
+	UPROPERTY(BlueprintReadOnly, Category="Settings") FText Label;
+	UPROPERTY(BlueprintReadOnly, Category="Settings") FText Description;
+	UPROPERTY(BlueprintReadOnly, Category="Settings") EKnightSettingControl Type = EKnightSettingControl::Rotator;
+	/** Rotator choices, also the values passed to OptionEdited. */
+	UPROPERTY(BlueprintReadOnly, Category="Settings") TArray<FString> Options;
+	/** Rotator: one of Options. Slider: number. Key: FKey name. */
+	UPROPERTY(BlueprintReadOnly, Category="Settings") FString Value;
+	UPROPERTY(BlueprintReadOnly, Category="Settings") float Min = 0.f;
+	UPROPERTY(BlueprintReadOnly, Category="Settings") float Max = 1.f;
+	UPROPERTY(BlueprintReadOnly, Category="Settings") float Step = 1.f;
+	UPROPERTY(BlueprintReadOnly, Category="Settings") bool bEnabled = true;
+	/** Edited but not applied yet. */
+	UPROPERTY(BlueprintReadOnly, Category="Settings") bool bDirty = false;
+};
 
-	TWeakObjectPtr<UKnightSettingsWidget> Owner;
-	FName Id;
-	float MinValue = 0.f;
-	float MaxValue = 1.f;
-	bool bUpdating = false;
-	UPROPERTY(Transient) TObjectPtr<UComboBoxString> Combo;
-	UPROPERTY(Transient) TObjectPtr<USlider> Slider;
-	UPROPERTY(Transient) TObjectPtr<UCheckBox> Check;
-	UPROPERTY(Transient) TObjectPtr<UInputKeySelector> KeySelector;
-	UPROPERTY(Transient) TObjectPtr<UTextBlock> ValueText;
+/** A titled group of settings within a tab. */
+USTRUCT(BlueprintType)
+struct KNIGHT_API FKnightSettingSection
+{
+	GENERATED_BODY()
+
+	/** Small caps header ("VOLUME"). */
+	UPROPERTY(BlueprintReadOnly, Category="Settings") FText Caption;
+	UPROPERTY(BlueprintReadOnly, Category="Settings") TArray<FKnightSettingItem> Items;
+	/** Optional line under the items. */
+	UPROPERTY(BlueprintReadOnly, Category="Settings") FText Note;
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FKnightSettingsClosed);
 
-/** Shared, scrollable settings screen used by title, lobby and raid. */
-UCLASS()
+/**
+ * Settings model shared by title, lobby and raid: graphics (UknightGameUserSettings), personal settings
+ * (UknightSharedSettings) and key bindings (Enhanced Input user settings), each edited as a draft and saved by Apply.
+ * Graphics apply at once. A window mode or resolution change then waits DisplayConfirmSeconds for Keep and goes back to
+ * the previous values otherwise, so a mode the monitor cannot show recovers by itself.
+ *
+ * This class has no layout. The screen is a Blueprint of a knightUI subclass (UknightSettingsScreen) found through
+ * GetSharedWidgetClass; it lists GetTabSections, sends edits to OptionEdited and redraws in the Handle* hooks.
+ */
+UCLASS(Abstract)
 class KNIGHT_API UKnightSettingsWidget : public UUserWidget
 {
 	GENERATED_BODY()
+
 public:
+	static constexpr int32 TabCount = 4;
+
 	UPROPERTY(BlueprintAssignable, Category="Knight|Settings")
 	FKnightSettingsClosed OnClosed;
 
+	/** Loads the stored values into a fresh draft and shows the first tab. */
 	void Open();
 	void FocusSettings();
+	/** Closes, or asks first when there are unapplied edits. */
 	void RequestClose();
-	bool IsCapturingKey() const;
+	/** True while a key row waits for a key; Esc then cancels the capture instead of closing. */
+	virtual bool IsCapturingKey() const { return false; }
 	static TSubclassOf<UKnightSettingsWidget> GetSharedWidgetClass();
+
 	void OptionEdited(FName Id, const FString& Value);
+	void SetTab(int32 Index);
+	int32 GetCurrentTab() const { return CurrentTab; }
+	static FText GetTabLabel(int32 Index);
+	/** English caption above the tab label. */
+	static FText GetTabCaption(int32 Index);
+	void GetTabSections(int32 Tab, TArray<FKnightSettingSection>& OutSections) const;
+	int32 GetDirtyCount() const;
+	bool IsDirty() const;
+
+	void Apply();
+	/** Drops the draft back to the stored values. */
+	void Revert();
+	/** Loads the defaults into the draft; Apply saves them. */
+	void RestoreDefaults();
+
+	/** Answers to the unsaved-changes prompt. */
+	void ConfirmApply();
+	void ConfirmDiscard();
+	void ConfirmContinue();
+
+	static constexpr double DisplayConfirmSeconds = 15.0;
+	/** True while a new window mode or resolution waits for KeepDisplay. Editing is locked meanwhile. */
+	bool IsDisplayConfirmShown() const { return bDisplayConfirmShown; }
+	void KeepDisplay();
+	/** Goes back to the window mode and resolution from before Apply. Also runs when the countdown ends. */
+	void RevertDisplay();
+
+	static const FString OnText;
+	static const FString OffText;
 
 protected:
-	virtual bool Initialize() override;
 	virtual FReply NativeOnPreviewKeyDown(const FGeometry& Geometry, const FKeyEvent& Event) override;
+	virtual void NativeDestruct() override;
+
+	/** The tab changed or its rows changed shape (Open, Revert, defaults): rebuild the list. */
+	virtual void HandleTabChanged() {}
+	/** Values changed in place, possibly on other rows (presets, window mode): refresh the rows' values. */
+	virtual void HandleValuesChanged() {}
+	virtual void HandleStatusChanged(const FText& Status) {}
+	virtual void HandleUnsavedPrompt(bool bShow) {}
+	/** Show or hide the keep / revert choice after a display change. The countdown arrives through HandleStatusChanged. */
+	virtual void HandleDisplayConfirm(bool bShow) {}
+	/** Called when FocusSettings runs; put focus on the first row. */
+	virtual void HandleFocusRequested() { SetKeyboardFocus(); }
+	/** Start of Open, before the first HandleTabChanged. */
+	virtual void HandleOpened() {}
+	/** Esc that is not a key capture or the unsaved prompt. Return true when the screen used it (leaving a sub-list). */
+	virtual bool HandleBackRequested() { return false; }
 
 private:
-	void BuildLayout();
-	void BuildTab();
-	void AddCombo(FName Id, const FText& Label, const TArray<FString>& Options, const FString& Value);
-	void AddSlider(FName Id, const FText& Label, float Value, float Min, float Max);
-	void AddCheck(FName Id, const FText& Label, bool bChecked);
-	void AddKey(FName Id, const FText& Label, const FKey& Key);
-	void AddRow(FName Id, const FText& Label, EKnightSettingControl Type, const TArray<FString>& Options,
-		const FString& Value, float Min = 0.f, float Max = 1.f);
-	void SetTab(int32 Index);
+	FString GetValue(FName Id, bool bSaved) const;
+	bool IsItemDirty(FName Id) const;
 	void SetStatus(const FText& Text);
-	void RefreshApply();
-	bool IsDirty() const;
 	bool IsPersonalDirty() const;
 	bool IsKeyDirty() const;
 	void CopyPersonal(UknightSharedSettings* To, const UknightSharedSettings* From) const;
-	void Apply();
-	void Cancel();
-	void RestoreDefaults();
+	/** Plays the draft volumes, so sliders are heard while dragging. Revert and close play the stored ones again. */
+	void PreviewAudio(const UknightSharedSettings* Settings) const;
+	void PreviewDisplay(const UknightSharedSettings* Settings) const;
+	void EndDisplayPreview() const;
 	void CloseNow();
 	void ApplyPreset(int32 Quality);
-	void RefreshPresetRows();
-	void ShowConfirm(bool bShow);
-	UFUNCTION() void TabGraphics();
-	UFUNCTION() void TabControls();
-	UFUNCTION() void TabAudio();
-	UFUNCTION() void TabDisplay();
-	UFUNCTION() void ClickApply();
-	UFUNCTION() void ClickCancel();
-	UFUNCTION() void ClickDefaults();
-	UFUNCTION() void ClickClose();
-	UFUNCTION() void ConfirmApply();
-	UFUNCTION() void ConfirmDiscard();
-	UFUNCTION() void ConfirmContinue();
-	UFUNCTION() void ClickSubtitleExample();
+
+	void ShowUnsavedPrompt(bool bShow);
+	void StartDisplayConfirm(const FKnightGraphicsChoice& Previous);
+	void StopDisplayConfirm();
+	bool TickDisplayConfirm(float DeltaTime);
+	void UpdateDisplayCountdown();
+	/** bRefreshScreen is false while the widget is being destroyed. */
+	void RestoreDisplay(bool bRefreshScreen);
 
 	int32 CurrentTab = 0;
-	bool bPendingClose = false;
+	bool bUnsavedPromptShown = false;
+	bool bDisplayConfirmShown = false;
+	/** Set when Apply came from the close prompt: keeping the display then closes the screen. */
+	bool bCloseAfterDisplayConfirm = false;
+	double DisplayConfirmDeadline = 0.0;
+	int32 DisplaySecondsShown = -1;
+	FKnightGraphicsChoice DisplayRevertGraphics;
+	FTSTicker::FDelegateHandle DisplayTicker;
 	FKnightGraphicsChoice SavedGraphics;
 	FKnightGraphicsChoice DraftGraphics;
 	UPROPERTY(Transient) TObjectPtr<UknightSharedSettings> SavedPersonal;
@@ -120,10 +174,5 @@ private:
 	TMap<FName, FKey> SavedKeys;
 	TMap<FName, FKey> DraftKeys;
 	TMap<FName, FKey> DefaultKeys;
-	TMap<FName, FString> KeyLabels;
-	TMap<FName, TObjectPtr<UKnightSettingRow>> Rows;
-	UPROPERTY(Transient) TObjectPtr<UVerticalBox> RowsBox;
-	UPROPERTY(Transient) TObjectPtr<UTextBlock> StatusText;
-	UPROPERTY(Transient) TObjectPtr<UButton> ApplyButton;
-	UPROPERTY(Transient) TObjectPtr<UHorizontalBox> ConfirmBox;
+	TMap<FName, FText> KeyLabels;
 };

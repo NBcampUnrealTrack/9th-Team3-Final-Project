@@ -21,6 +21,9 @@ class UAnimMontage;
  *
  * Bind to InputTag.Attack.Secondary. The heavy combo steps are ordinary knightGameplayAbility_MeleeAttack Blueprints
  * with no input tag; chain them with Combo tags exactly like the light combo.
+ *
+ * (2026-10-08) 행동 속도(ActionSpeed): 차지 몽타주 3개와 발사 돌진은 행동 속도 배속을 따른다(반복 몽타주가 빨라지면 차지 중 타격도 잦아진다).
+ * HoldThreshold·MaxChargeTime·TapBufferTime은 버튼을 누르는 시간 기준이라 그대로 둔다.
  */
 UCLASS()
 class KNIGHT_API UknightGameplayAbility_HeavyAttack : public UknightGameplayAbility

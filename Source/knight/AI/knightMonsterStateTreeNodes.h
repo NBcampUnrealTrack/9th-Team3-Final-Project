@@ -9,6 +9,7 @@
 #include "knightMonsterStateTreeNodes.generated.h"
 
 class AknightMonsterCharacterBase;
+class UAnimMontage;
 class UAbilitySystemComponent;
 
 /*
@@ -62,6 +63,16 @@ struct FknightMonsterTargetEvaluatorInstanceData
 	/** 반응(다운, 경직, 포효)이 진행 중이다: State.Monster.Reacting. 행동하지 말고 기다린다. */
 	UPROPERTY(EditAnywhere, Category="Output")
 	bool bIsReacting = false;
+
+	/** 몬스터 정의(UknightMonsterDefinition)의 AI 거리. 공용 StateTree가 몬스터 크기에 맞춰 추격·원거리 판단을 하도록 바인딩한다. */
+	UPROPERTY(EditAnywhere, Category="Output")
+	float ChaseStopDistance = 900.f;
+
+	UPROPERTY(EditAnywhere, Category="Output")
+	float RangedMinDistance = 533.f;
+
+	UPROPERTY(EditAnywhere, Category="Output")
+	float RangedMaxDistance = 2000.f;
 };
 
 USTRUCT(meta=(DisplayName="Knight Monster Target", Category="Knight"))
@@ -157,9 +168,38 @@ struct FknightFaceTargetTaskInstanceData
 
 	UPROPERTY(EditAnywhere, Category="Parameter", meta=(ClampMin=0, Units="deg"))
 	float Tolerance = 10.f;
+
+	/** 이 시간이 지나면 다 돌지 못해도 성공으로 끝낸다(타깃이 계속 옆으로 돌 때 공격이 영영 안 나가지 않게). 0이면 제한 없음. */
+	UPROPERTY(EditAnywhere, Category="Parameter", meta=(ClampMin=0, Units="s"))
+	float MaxTime = 1.5f;
+
+	/**
+	 * 지금 각도에서 쓸 수 있는 옆·뒤 전용 공격(Selection.MinAngle이 있는 공격, 예: 꼬리 휩쓸기)이 있으면 돌지 않고 바로 성공한다.
+	 * 돌아서 타깃을 정면에 두면 그런 공격은 고를 수 없게 되기 때문이다.
+	 */
+	UPROPERTY(EditAnywhere, Category="Parameter")
+	bool bSkipForSideAttacks = true;
+
+	/**
+	 * 건너뛸 근거로 볼 옆·뒤 공격의 태그. 이어지는 Knight Activate Ability의 AbilityTags와 같게 둔다(원거리 상태의 조준이면
+	 * Ability.Attack.Ranged). 다음 단계가 쓸 수 없는 공격 때문에 건너뛰면 아무것도 못 하고 다시 들어오는 루프가 된다. 비면 모든 공격.
+	 */
+	UPROPERTY(EditAnywhere, Category="Parameter", meta=(EditCondition="bSkipForSideAttacks"))
+	FGameplayTagContainer SideAttackTags;
+
+	float ElapsedTime = 0.f;
+	/** 재생 중인 회전 몽타주(몬스터 정의의 TurnLeft/RightMontage). */
+	TWeakObjectPtr<UAnimMontage> TurnMontage;
+	float TurnStartYaw = 0.f;
+	/** 지금까지 워프 목표로 잡은 회전량(시작 yaw 기준, 부호 = 몽타주 방향). 다음 각도는 여기서 이어서 잰다. */
+	float TurnAmount = 0.f;
 };
 
-/** 몬스터를 제자리에서 타깃 쪽으로 돌리고, 타깃을 바라보면 성공한다. 회전 몽타주가 필요하면 Activate Ability를 쓴다. */
+/**
+ * 몬스터를 제자리에서 타깃 쪽으로 돌리고, 타깃을 바라보면 성공한다.
+ * 몬스터 정의에 회전 몽타주가 있고 타깃이 TurnMontageMinAngle 이상 벗어나 있으면 몽타주로 돌고(발을 디디며 돈다),
+ * 남은 작은 각도는 이동 컴포넌트의 보간 회전으로 맞춘다. MaxTime은 몽타주가 끝난 뒤부터 센다.
+ */
 USTRUCT(meta=(DisplayName="Knight Face Target", Category="Knight"))
 struct KNIGHT_API FknightStateTreeFaceTargetTask : public FStateTreeTaskCommonBase
 {
@@ -175,6 +215,12 @@ struct KNIGHT_API FknightStateTreeFaceTargetTask : public FStateTreeTaskCommonBa
 
 	virtual EStateTreeRunStatus EnterState(FStateTreeExecutionContext& Context, const FStateTreeTransitionResult& Transition) const override;
 	virtual EStateTreeRunStatus Tick(FStateTreeExecutionContext& Context, const float DeltaTime) const override;
+	virtual void ExitState(FStateTreeExecutionContext& Context, const FStateTreeTransitionResult& Transition) const override;
+
+private:
+	static bool TryStartTurnMontage(FInstanceDataType& InstanceData);
+	static bool IsTurnMontagePlaying(const FInstanceDataType& InstanceData);
+	static void UpdateTurnWarpTarget(FInstanceDataType& InstanceData);
 };
 
 ////////////////////////////////////////////////////////////////////

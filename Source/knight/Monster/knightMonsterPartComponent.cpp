@@ -2,10 +2,14 @@
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
+#include "AnimationRuntime.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/SkinnedMeshComponent.h"
 #include "GameFramework/Character.h"
+#include "Engine/SkinnedAsset.h"
+#include "Engine/World.h"
 #include "GameplayEffect.h"
+#include "Monster/knightMonsterBreakPiece.h"
 #include "Monster/knightMonsterPartData.h"
 #include "System/knightGameplayTags.h"
 #include "knight.h"
@@ -184,10 +188,22 @@ void UknightMonsterPartComponent::ApplyPartDamage(FGameplayTag PartTag, float Da
 		return;
 	}
 	FknightMonsterPartState& State = PartStates[Index];
+	const EknightPartCondition OldCondition = GetCondition(Index);
 	State.DamageTaken += Damage;
-	if (Definition->bBreakable && !State.bBroken && State.DamageTaken >= Definition->BreakDamage)
+	if (!Definition->bBreakable || State.bBroken)
+	{
+		return;
+	}
+	OnPartDamaged.Broadcast(State.PartTag, GetHealthRatio(Index));
+	if (State.DamageTaken >= Definition->BreakDamage)
 	{
 		BreakPart(Index, DamageInstigator);
+		return;
+	}
+	const EknightPartCondition NewCondition = GetCondition(Index);
+	if (NewCondition != OldCondition)
+	{
+		OnPartConditionChanged.Broadcast(State.PartTag, NewCondition);
 	}
 }
 
@@ -251,6 +267,7 @@ void UknightMonsterPartComponent::BreakPart(int32 PartIndex, AActor* BreakInstig
 		}
 		if (!Definition->HideBoneOnBreak.IsNone())
 		{
+			SpawnBreakPiece(*Definition, Mesh);
 			Mesh->HideBoneByName(Definition->HideBoneOnBreak, PBO_Term);
 		}
 	}
@@ -260,6 +277,10 @@ void UknightMonsterPartComponent::BreakPart(int32 PartIndex, AActor* BreakInstig
 		if (Definition->BreakEffect)
 		{
 			ASC->ApplyGameplayEffectToSelf(Definition->BreakEffect->GetDefaultObject<UGameplayEffect>(), 1.f, ASC->MakeEffectContext());
+		}
+		if (!Definition->GrantedTagsOnBreak.IsEmpty())
+		{
+			ASC->AddLooseGameplayTags(Definition->GrantedTagsOnBreak);
 		}
 
 		FGameplayCueParameters CueParams;
@@ -276,7 +297,77 @@ void UknightMonsterPartComponent::BreakPart(int32 PartIndex, AActor* BreakInstig
 		ASC->HandleGameplayEvent(Payload.EventTag, &Payload);
 	}
 
+	OnPartConditionChanged.Broadcast(Definition->PartTag, EknightPartCondition::Broken);
 	OnPartBroken.Broadcast(Definition->PartTag, BreakInstigator);
+}
+
+void UknightMonsterPartComponent::SpawnBreakPiece(const FknightMonsterPartDefinition& Definition, USkinnedMeshComponent* Mesh) const
+{
+	const USkinnedAsset* const Asset = Mesh ? Mesh->GetSkinnedAsset() : nullptr;
+	UWorld* const World = GetWorld();
+	if (!Definition.BreakPieceMesh || !Asset || !World)
+	{
+		return;
+	}
+	const FReferenceSkeleton& RefSkeleton = Asset->GetRefSkeleton();
+	const int32 BoneIndex = RefSkeleton.FindBoneIndex(Definition.HideBoneOnBreak);
+	if (BoneIndex == INDEX_NONE)
+	{
+		return;
+	}
+
+	// 조각은 기준 자세의 메시 축 그대로 잘려 있다(피벗만 관절로 옮김). 기준 자세의 뼈 회전을 되돌린 뒤 지금 뼈 변환을 씌우면
+	// 숨겨지는 원래 부위와 같은 자리, 같은 자세, 같은 크기(메시 배율)가 된다.
+	const FQuat RefRotation = FAnimationRuntime::GetComponentSpaceTransformRefPose(RefSkeleton, BoneIndex).GetRotation();
+	const FTransform BoneTransform = Mesh->GetSocketTransform(Definition.HideBoneOnBreak, RTS_World);
+	const FTransform SpawnTransform = FTransform(RefRotation.Inverse()) * BoneTransform;
+
+	FActorSpawnParameters Params;
+	Params.Owner = GetOwner();
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	UClass* const PieceClass = Definition.BreakPieceClass ? Definition.BreakPieceClass.Get() : AknightMonsterBreakPiece::StaticClass();
+	if (AknightMonsterBreakPiece* const Piece = World->SpawnActor<AknightMonsterBreakPiece>(PieceClass, SpawnTransform, Params))
+	{
+		Piece->Launch(Definition.BreakPieceMesh, GetOwner()->GetVelocity(), BoneTransform.GetLocation() - GetOwner()->GetActorLocation());
+	}
+}
+
+float UknightMonsterPartComponent::GetPartHealthRatio(FGameplayTag PartTag) const
+{
+	return GetHealthRatio(FindPartIndex(PartTag));
+}
+
+EknightPartCondition UknightMonsterPartComponent::GetPartCondition(FGameplayTag PartTag) const
+{
+	return GetCondition(FindPartIndex(PartTag));
+}
+
+float UknightMonsterPartComponent::GetHealthRatio(int32 PartIndex) const
+{
+	const FknightMonsterPartDefinition* const Definition = GetDefinition(PartIndex);
+	if (!Definition || !Definition->bBreakable)
+	{
+		return 1.f;
+	}
+	if (PartStates[PartIndex].bBroken || Definition->BreakDamage <= 0.f)
+	{
+		return 0.f;
+	}
+	return FMath::Clamp(1.f - PartStates[PartIndex].DamageTaken / Definition->BreakDamage, 0.f, 1.f);
+}
+
+EknightPartCondition UknightMonsterPartComponent::GetCondition(int32 PartIndex) const
+{
+	const FknightMonsterPartDefinition* const Definition = GetDefinition(PartIndex);
+	if (!Definition || !Definition->bBreakable)
+	{
+		return EknightPartCondition::Unbreakable;
+	}
+	if (PartStates[PartIndex].bBroken)
+	{
+		return EknightPartCondition::Broken;
+	}
+	return GetHealthRatio(PartIndex) <= Definition->CriticalRatio ? EknightPartCondition::Critical : EknightPartCondition::Normal;
 }
 
 int32 UknightMonsterPartComponent::FindPartIndex(const FGameplayTag& PartTag) const

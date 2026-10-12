@@ -561,26 +561,42 @@ void FknightAttackPreviewModel::Draw(FPrimitiveDrawInterface* PDI) const
 		const FknightSelectionRow* const Row = SelectionRows.FindByPredicate([this](const FknightSelectionRow& Candidate) { return Candidate.AbilityIndex == AbilityIndex; });
 		const FLinearColor Color = Row && Row->Result.bAvailable ? FLinearColor(0.2f, 1.f, 0.4f) : FLinearColor(1.f, 0.85f, 0.2f);
 		const float HalfAngle = FMath::Clamp(Shape.MaxAngle, 0.f, 180.f);
-		const int32 Segments = FMath::Max(8, FMath::RoundToInt(HalfAngle / 5.f) * 2);
+		const float InnerAngle = FMath::Clamp(Shape.MinAngle, 0.f, HalfAngle);
 		auto ArcPoint = [](float Radius, float Angle) { return FRotator(0.f, Angle, 0.f).RotateVector(FVector::ForwardVector) * Radius + FVector(0.f, 0.f, 3.f); };
-		for (const float Radius : { Shape.MinRange, Shape.MaxRange })
+		// 허용 각도 구간: MinAngle이 0이면 [-Max, Max] 하나, 아니면 좌우 [Min, Max] 두 개.
+		TArray<TPair<float, float>> Spans;
+		if (InnerAngle <= 0.f)
 		{
-			if (Radius <= 0.f)
-			{
-				continue;
-			}
-			for (int32 Segment = 0; Segment < Segments; ++Segment)
-			{
-				const float A0 = -HalfAngle + 2.f * HalfAngle * Segment / Segments;
-				const float A1 = -HalfAngle + 2.f * HalfAngle * (Segment + 1) / Segments;
-				PDI->DrawLine(ArcPoint(Radius, A0), ArcPoint(Radius, A1), Color, Depth, 2.f);
-			}
+			Spans.Emplace(-HalfAngle, HalfAngle);
 		}
-		if (HalfAngle < 180.f)
+		else
 		{
-			for (const float Angle : { -HalfAngle, HalfAngle })
+			Spans.Emplace(-HalfAngle, -InnerAngle);
+			Spans.Emplace(InnerAngle, HalfAngle);
+		}
+		for (const TPair<float, float>& Span : Spans)
+		{
+			const int32 Segments = FMath::Max(4, FMath::RoundToInt((Span.Value - Span.Key) / 5.f));
+			for (const float Radius : { Shape.MinRange, Shape.MaxRange })
 			{
-				PDI->DrawLine(ArcPoint(Shape.MinRange, Angle), ArcPoint(Shape.MaxRange, Angle), Color, Depth, 2.f);
+				if (Radius <= 0.f)
+				{
+					continue;
+				}
+				for (int32 Segment = 0; Segment < Segments; ++Segment)
+				{
+					const float A0 = Span.Key + (Span.Value - Span.Key) * Segment / Segments;
+					const float A1 = Span.Key + (Span.Value - Span.Key) * (Segment + 1) / Segments;
+					PDI->DrawLine(ArcPoint(Radius, A0), ArcPoint(Radius, A1), Color, Depth, 2.f);
+				}
+			}
+			for (const float Angle : { Span.Key, Span.Value })
+			{
+				// 전 방향(±180)의 뒤쪽 끝은 같은 선이라 그리지 않는다.
+				if (FMath::Abs(Angle) < 180.f || InnerAngle > 0.f)
+				{
+					PDI->DrawLine(ArcPoint(Shape.MinRange, Angle), ArcPoint(Shape.MaxRange, Angle), Color, Depth, 2.f);
+				}
 			}
 		}
 	}

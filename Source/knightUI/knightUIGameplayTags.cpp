@@ -10,6 +10,6 @@ namespace knightUIGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(HUD_Slot_PlayerStatus, "HUD.Slot.PlayerStatus", "Health, boost gauge.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(HUD_Slot_BossStatus, "HUD.Slot.BossStatus", "Target monster status.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(HUD_Slot_RaidInfo, "HUD.Slot.RaidInfo", "Raid timer and phase.");
-	UE_DEFINE_GAMEPLAY_TAG_COMMENT(HUD_Slot_Reticle, "HUD.Slot.Reticle", "Lock-on marker and reticle.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(HUD_Slot_Reticle, "HUD.Slot.Reticle", "Lock-on marker.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(HUD_Slot_Notifications, "HUD.Slot.Notifications", "Part breaks, pickups, messages.");
 }

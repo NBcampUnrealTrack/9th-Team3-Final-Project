@@ -1,6 +1,8 @@
 #include "Widgets/knightButtonBase.h"
 
+#include "CommonButtonBase.h"
 #include "CommonTextBlock.h"
+#include "Framework/Application/SlateApplication.h"
 
 void UknightButtonBase::SetButtonText(const FText& InText)
 {
@@ -47,6 +49,11 @@ void UknightButtonBase::NativeDestruct()
 void UknightButtonBase::NativeOnHovered()
 {
 	Super::NativeOnHovered();
+	// Focus sits on the inner Slate button, so check descendants too.
+	if (bFocusOnHover && GetIsEnabled() && !HasAnyUserFocus() && !HasFocusedDescendants())
+	{
+		SetFocus();
+	}
 	RefreshTargets();
 }
 
@@ -95,6 +102,24 @@ void UknightButtonBase::HandleFocusReceived()
 	Super::HandleFocusReceived();
 	bFocusedVisual = true;
 	RefreshTargets();
+	ApplyLabelStyle();
+}
+
+void UknightButtonBase::NativeOnAddedToFocusPath(const FFocusEvent& InFocusEvent)
+{
+	Super::NativeOnAddedToFocusPath(InFocusEvent);
+
+	// The style plays the hover sound for the mouse only. Keyboard navigation gets the same sound here; focus set
+	// by code (a screen opening) or by a click stays silent, so nothing plays twice.
+	if (InFocusEvent.GetCause() != EFocusCause::Navigation || IsHovered())
+	{
+		return;
+	}
+	if (const UCommonButtonStyle* const ButtonStyle = GetStyleCDO())
+	{
+		const FSlateSound& Sound = GetLocked() && ButtonStyle->LockedHoveredSlateSound ? ButtonStyle->LockedHoveredSlateSound.Sound : ButtonStyle->HoveredSlateSound;
+		FSlateApplication::Get().PlaySound(Sound);
+	}
 }
 
 void UknightButtonBase::HandleFocusLost()
@@ -102,6 +127,7 @@ void UknightButtonBase::HandleFocusLost()
 	Super::HandleFocusLost();
 	bFocusedVisual = false;
 	RefreshTargets();
+	ApplyLabelStyle();
 }
 
 void UknightButtonBase::HandleLockClicked()
@@ -147,6 +173,10 @@ void UknightButtonBase::ApplyLabelStyle()
 	if (GetLocked() && LockedTextStyle)
 	{
 		Txt_Label->SetStyle(LockedTextStyle);
+	}
+	else if (bFocusedVisual && FocusedTextStyle && GetIsEnabled())
+	{
+		Txt_Label->SetStyle(FocusedTextStyle);
 	}
 	else if (const TSubclassOf<UCommonTextStyle> StyleClass = GetCurrentTextStyleClass())
 	{

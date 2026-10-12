@@ -26,6 +26,20 @@ namespace knightPoiseRecovery
 }
 
 /**
+ * 행동 에너지(BoostGauge, 스테미너) 자연 회복의 순수 계산. 테스트: knightBoostRecoveryTest.cpp (2026-10-09)
+ */
+namespace knightBoostRecovery
+{
+	/**
+	 * 한 번의 회복 단계 후의 행동 에너지.
+	 * 회복 속도가 0 이하이거나, 이미 최대치이거나, 마지막으로 쓴 뒤 회복 대기 시간이 아직 지나지 않았으면 그대로.
+	 * 그 외에는 초당 RecoveryRate만큼, 최대치를 넘지 않게 올린다. (그로기와 달리 0에서도 회복한다)
+	 */
+	KNIGHT_API float Step(float CurrentGauge, float MaxGauge, float RecoveryRate, float DeltaSeconds,
+		float SecondsSinceLastSpend, float RecoveryDelay);
+}
+
+/**
  * 프로젝트 ASC. 입력 태그로 어빌리티 발동, 활성화 그룹, 데이터 기반 태그 관계를 추가한다.
  *
  * 입력 흐름: PlayerController가 InputTag 누름·뗌을 여기로 넘기고, PostProcessInput에서 매 프레임
@@ -37,6 +51,10 @@ namespace knightPoiseRecovery
  *   플레이어와 몬스터가 모두 이 클래스를 쓰므로 같은 규칙이 적용된다.
  *   회복 속도는 각자의 초기값 GE에서, 대기 시간은 각 BP의 AbilitySystemComponent 디테일에서 정한다.
  *   회복 속도 기본값이 0이라 따로 정하지 않으면 회복하지 않는다(기존 동작과 같음).
+ *
+ * 행동 에너지(스테미너) 자연 회복 (2026-10-09):
+ *   마지막으로 쓴 뒤 BoostRecoveryDelay초(메카 속성, 기본 1.5)가 지나면 초당 BoostRecoveryRate(메카 속성, 기본 25)만큼 찬다.
+ *   메카 속성 세트가 있는 나이트만 해당된다.
  */
 UCLASS()
 class KNIGHT_API UknightAbilitySystemComponent : public UAbilitySystemComponent
@@ -91,6 +109,12 @@ protected:
 	/** 타이머마다 호출: 조건을 확인하고 Poise를 올린다. */
 	void TickPoiseRecovery();
 
+	/** 행동 에너지 자연 회복 타이머를 켠다. 메카 속성 세트(UknightAttributeSet)가 없는 액터는 틱에서 아무것도 하지 않는다. (2026-10-09) */
+	void StartBoostRecovery();
+
+	/** 타이머마다 호출: 마지막으로 쓴 뒤 BoostRecoveryDelay(메카 속성)초가 지났으면 BoostRecoveryRate만큼 올린다. */
+	void TickBoostRecovery();
+
 	/** 선택 사항. 아바타가 자신의 폰 데이터나 기본값에서 지정한다. */
 	UPROPERTY()
 	TObjectPtr<UknightAbilityTagRelationshipMapping> TagRelationshipMapping;
@@ -107,6 +131,12 @@ protected:
 	float PoiseRecoveryInterval = 0.1f;
 
 	FTimerHandle PoiseRecoveryTimer;
+
+	/** 행동 에너지 회복 확인 간격(초). 회복 지연·속도는 메카 속성(BoostRecoveryDelay·BoostRecoveryRate)이다. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Boost", meta=(ClampMin=0.02, Units="s"))
+	float BoostRecoveryInterval = 0.1f;
+
+	FTimerHandle BoostRecoveryTimer;
 
 	TArray<FGameplayAbilitySpecHandle> InputPressedSpecHandles;
 	TArray<FGameplayAbilitySpecHandle> InputReleasedSpecHandles;

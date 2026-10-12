@@ -12,14 +12,20 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GameplayEffect.h"
+#include "Monster/knightGameplayEffect_ParriedPoiseDamage.h"
+#include "Monster/knightMonsterBodyBlockerComponent.h"
 #include "Monster/knightMonsterDefinition.h"
 #include "Monster/knightMonsterMovementComponent.h"
 #include "Monster/knightMonsterPartComponent.h"
+#include "Monster/knightMonsterPushOutComponent.h"
 #include "Monster/knightMonsterTargetingComponent.h"
 #include "MotionWarpingComponent.h"
+#include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
 #include "Perception/AIPerceptionComponent.h"
 #include "System/knightGameplayTags.h"
 #include "System/knightTeams.h"
+#include "TimerManager.h"
 #include "knight.h"
 #include "knightPerfCounters.h"
 
@@ -49,6 +55,7 @@ AknightMonsterCharacterBase::AknightMonsterCharacterBase(const FObjectInitialize
 	HitStop = CreateDefaultSubobject<UknightHitStopComponent>(TEXT("HitStop"));
 	HitReaction = CreateDefaultSubobject<UknightHitReactionComponent>(TEXT("HitReaction"));
 	MotionWarping = CreateDefaultSubobject<UMotionWarpingComponent>(TEXT("MotionWarping"));
+	PushOut = CreateDefaultSubobject<UknightMonsterPushOutComponent>(TEXT("PushOut"));
 }
 
 UAbilitySystemComponent* AknightMonsterCharacterBase::GetAbilitySystemComponent() const
@@ -69,10 +76,50 @@ void AknightMonsterCharacterBase::BeginPlay()
 	MonsterAttributeSet->OnRageMaxed.AddUObject(this, &ThisClass::HandleRageMaxed);
 	MonsterAttributeSet->OnStaminaDepleted.AddUObject(this, &ThisClass::HandleStaminaDepleted);
 	TargetingComponent->OnTargetChanged.AddUniqueDynamic(this, &ThisClass::HandleTargetChanged);
+	AbilitySystemComponent->GenericGameplayEventCallbacks.FindOrAdd(knightGameplayTags::Event_Parried).AddUObject(this, &ThisClass::HandleParried);
 
 	// 배치된 몬스터는 빙의 전에 BeginPlay가 불릴 수 있다. 부위와 위협도는 어느 쪽이든 동작한다.
 	InitializeAbilitySystem();
 	SetCountedAlive(true);
+	PrewarmEffects();
+}
+
+void AknightMonsterCharacterBase::PrewarmEffects()
+{
+	UWorld* const World = GetWorld();
+	if (!MonsterDefinition || !World || !World->IsGameWorld())
+	{
+		return;
+	}
+	// 레이드 로딩 화면 동안은 월드를 그리지 않아 실제로 그려서 데우는 방법은 통하지 않는다. 대신 숨긴 채 켜면 Niagara가
+	// 초기화하면서 PSO 준비를 비동기로 걸어 두고, 실제 공격 때는 준비된 PSO를 쓴다.
+	TArray<TWeakObjectPtr<UNiagaraComponent>> Spawned;
+	for (UNiagaraSystem* const System : MonsterDefinition->PrewarmEffects)
+	{
+		UNiagaraComponent* const Effect = System ? UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, System, GetActorLocation(),
+			FRotator::ZeroRotator, FVector::OneVector, false, false) : nullptr;
+		if (Effect)
+		{
+			Effect->SetHiddenInGame(true);
+			Effect->Activate(true);
+			Spawned.Add(Effect);
+		}
+	}
+	if (Spawned.IsEmpty())
+	{
+		return;
+	}
+	FTimerHandle Handle;
+	World->GetTimerManager().SetTimer(Handle, FTimerDelegate::CreateWeakLambda(this, [Spawned]()
+	{
+		for (const TWeakObjectPtr<UNiagaraComponent>& Effect : Spawned)
+		{
+			if (Effect.IsValid())
+			{
+				Effect->DestroyComponent();
+			}
+		}
+	}), 2.f, false);
 }
 
 void AknightMonsterCharacterBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -219,6 +266,13 @@ void AknightMonsterCharacterBase::HandleOutOfHealth(AActor* DamageInstigator, AA
 	// 플레이어가 갈무리 지점에 닿도록 시체를 밟거나 통과할 수 있게 한다. 부위 바디는 연출용으로 남긴다.
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+	// 큰 몬스터의 몸 아래 차단 상자도 같은 이유로 끈다.
+	TArray<UknightMonsterBodyBlockerComponent*> BodyBlockers;
+	GetComponents<UknightMonsterBodyBlockerComponent>(BodyBlockers);
+	for (UknightMonsterBodyBlockerComponent* const BodyBlocker : BodyBlockers)
+	{
+		BodyBlocker->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
 
 	UE_LOG(LogknightAI, Log, TEXT("%s defeated by %s."), *GetNameSafe(this), *GetNameSafe(DamageInstigator));
 	OnMonsterDefeated.Broadcast(this, DamageInstigator);
@@ -248,6 +302,27 @@ void AknightMonsterCharacterBase::HandleTargetChanged(AActor* OldTarget, AActor*
 	Payload.Instigator = NewTarget;
 	Payload.Target = this;
 	AbilitySystemComponent->HandleGameplayEvent(Payload.EventTag, &Payload);
+}
+
+void AknightMonsterCharacterBase::HandleParried(const FGameplayEventData* Payload)
+{
+	const float Ratio = MonsterDefinition ? MonsterDefinition->ParriedPoiseDamageRatio : 0.f;
+	if (IsDead() || Ratio <= 0.f)
+	{
+		return;
+	}
+	const float PoiseDamage = CoreAttributeSet->GetMaxPoise() * Ratio;
+	AActor* const Defender = Payload ? const_cast<AActor*>(Payload->Instigator.Get()) : nullptr;
+	FGameplayEffectContextHandle Context = AbilitySystemComponent->MakeEffectContext();
+	if (Defender)
+	{
+		Context.AddInstigator(Defender, Defender);
+	}
+	FGameplayEffectSpec Spec(GetDefault<UknightGameplayEffect_ParriedPoiseDamage>(), Context, 1.f);
+	Spec.SetSetByCallerMagnitude(knightGameplayTags::SetByCaller_PoiseDamage, PoiseDamage);
+	AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(Spec);
+	UE_LOG(LogknightAI, Log, TEXT("%s: parried by %s, poise -%.0f -> %.0f / %.0f."), *GetNameSafe(this), *GetNameSafe(Defender),
+		PoiseDamage, CoreAttributeSet->GetPoise(), CoreAttributeSet->GetMaxPoise());
 }
 
 void AknightMonsterCharacterBase::HandleStaminaDepleted(AActor* EffectInstigator, AActor* EffectCauser, const FGameplayEffectSpec* EffectSpec,

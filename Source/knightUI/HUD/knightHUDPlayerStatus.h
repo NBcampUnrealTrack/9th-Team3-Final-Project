@@ -11,7 +11,8 @@ class UProgressBar;
 class UknightVM_PlayerStatus;
 
 /**
- * Top-left player panel of the HUD: health with a delayed "ghost" bar, boost gauge and the overheat warning.
+ * Player panel of the HUD, laid out over the whole screen: health (large number + bar with a delayed "ghost" bar) at the
+ * bottom left, boost gauge at the bottom centre with the overheat warning and a red blinking frame when it runs low.
  *
  * Reads the PlayerStatus view model owned by UknightUISubsystem. Widgets are found by name (see the BindWidgetOptional
  * properties), so the layout can be redesigned in the Widget Blueprint as long as the names stay.
@@ -36,9 +37,17 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category="Knight|HUD", meta=(BindWidgetOptional))
 	TObjectPtr<UProgressBar> Bar_Boost;
 
-	/** "580 / 1000" */
+	/** Current health, "72" */
 	UPROPERTY(BlueprintReadOnly, Category="Knight|HUD", meta=(BindWidgetOptional))
 	TObjectPtr<UCommonTextBlock> Txt_Health;
+
+	/** "/100" */
+	UPROPERTY(BlueprintReadOnly, Category="Knight|HUD", meta=(BindWidgetOptional))
+	TObjectPtr<UCommonTextBlock> Txt_HealthMax;
+
+	/** Frame around the boost bar; blinks while the gauge is at or below LowBoostThreshold. */
+	UPROPERTY(BlueprintReadOnly, Category="Knight|HUD", meta=(BindWidgetOptional))
+	TObjectPtr<UWidget> Img_BoostAlert;
 
 	/** "84%" */
 	UPROPERTY(BlueprintReadOnly, Category="Knight|HUD", meta=(BindWidgetOptional))
@@ -66,6 +75,10 @@ protected:
 	/** Health fraction at or below which the health bar turns red and pulses. */
 	UPROPERTY(EditAnywhere, Category="Knight|HUD|Motion", meta=(ClampMin=0, ClampMax=1))
 	float LowHealthThreshold = 0.3f;
+
+	/** Boost fraction at or below which the frame around the boost bar blinks red. */
+	UPROPERTY(EditAnywhere, Category="Knight|HUD|Motion", meta=(ClampMin=0, ClampMax=1))
+	float LowBoostThreshold = 0.2f;
 
 	UPROPERTY(EditAnywhere, Category="Knight|HUD|Motion", meta=(ClampMin=0, Units="s"))
 	float GhostHoldTime = 0.5f;
@@ -97,6 +110,7 @@ private:
 	float PulseTime = 0.f;
 	bool bLowHealth = false;
 	bool bOverheated = false;
+	bool bLowBoost = false;
 
 	FTSTicker::FDelegateHandle AnimTicker;
 };

@@ -26,7 +26,28 @@ public class knightEditor : ModuleRules
 			"CommonUI",
 			"knightUI",
 			"Slate",
-			"SlateCore"
+			"SlateCore",
+			// 몬스터 레시피 생성기(knightMonsterRecipeLibrary).
+			"AIModule",
+			"AnimGraph",
+			"AnimGraphRuntime",
+			"AssetRegistry",
+			"AssetTools",
+			"BlueprintGraph",
+			"GameplayStateTreeModule",
+			"PropertyBindingUtils",
+			"StateTreeEditorModule",
+			"StateTreeModule",
+			// 몬스터 연출 Niagara 생성(knightMonsterFXBuilder). 경량 이미터 헤더는 Niagara의 Internal 폴더에 있다.
+			"Niagara",
+			"NiagaraCore",
+			"NiagaraShader",
+			"RenderCore",
+			"RHI",
+			"VectorVM"
 		});
+
+		PrivateIncludePaths.Add(System.IO.Path.Combine(GetModuleDirectory("Niagara"), "Internal"));
+		PrivateIncludePaths.Add(System.IO.Path.Combine(GetModuleDirectory("NiagaraShader"), "Internal"));
 	}
 }

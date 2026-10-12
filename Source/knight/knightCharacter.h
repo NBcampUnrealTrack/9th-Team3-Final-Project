@@ -184,14 +184,15 @@ protected:
 	void Input_LockOnSwitchRight();
 
 	/**
-	 * 달리기 입력. 기본은 누르고 있는 동안만 달린다.
-	 * 개인 설정의 bToggleRun이 켜져 있으면 누를 때마다 달리기를 켜고 끈다(뗄 때는 아무것도 안 함).
+	 * 달리기 입력(InputTag.Run, 기본 LeftShift). 누르고 있는 동안만 달린다.
+	 * (2026-10-08 달리기와 퀵스텝 키 분리: Shift 달리기, Ctrl 퀵스텝, Space는 점프 예정.
+	 *  전에는 Shift를 누르고 있으면 달리고 두 번 탭하면 퀵스텝이었다. 같은 날 달리기 토글 설정은 빼기로 함)
 	 */
 	void Input_RunPressed();
 	void Input_RunReleased();
 
-	/** 개인 설정에서 달리기 토글이 켜져 있는지. 설정을 읽을 수 없으면 false(누르고 있는 동안). */
-	bool IsRunToggleEnabled() const;
+	/** 달리기를 켜고 끈다: 무브먼트 속도 + State.Sprinting(켜져 있는 동안 공격 키가 1타 대신 달리기 공격). */
+	void SetRunning(bool bRun);
 
 	void InitializeAbilitySystem();
 

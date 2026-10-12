@@ -25,6 +25,8 @@ UknightGameplayAbility_HeavyAttack::UknightGameplayAbility_HeavyAttack(const FOb
 	LoopHitParams.PoiseDamage = 5.f;
 	ReleaseHitParams.MotionValue = 80.f;
 	ReleaseHitParams.PoiseDamage = 40.f;
+	// 차지를 시작할 때 쓰는 행동 에너지. 탭 강공격 콤보는 각 강공격 단계(일반 공격 BP)의 값을 쓴다. 2026-10-09 임시값.
+	StaminaCost = 20.f;
 }
 
 void UknightGameplayAbility_HeavyAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
@@ -77,7 +79,8 @@ void UknightGameplayAbility_HeavyAttack::OnReleased(float TimeHeld)
 			PlayMontage(ChargeReleaseMontage, TEXT("ChargeRelease"), false);
 			if (bWarp)
 			{
-				UknightCombatLibrary::StartAttackLunge(this, ChargeReleaseMontage, 1.f, WarpLocation, WarpTravel, 0.25f);
+				// 발사 몽타주와 같은 배속(행동 속도)을 넘겨야 돌진이 모션과 같이 끝난다. (2026-10-08)
+				UknightCombatLibrary::StartAttackLunge(this, ChargeReleaseMontage, GetActionSpeed(), WarpLocation, WarpTravel, 0.25f);
 			}
 		}
 		else
@@ -160,7 +163,15 @@ void UknightGameplayAbility_HeavyAttack::StartCharge()
 		Finish(true);
 		return;
 	}
+	// 차지를 시작할 때 비용(행동 에너지 StaminaCost)을 낸다. 탭으로 끝나면 이 어빌리티는 비용을 내지 않는다. (2026-10-09)
+	if (!CommitAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo()))
+	{
+		Finish(true);
+		return;
+	}
 	Phase = EPhase::Charging;
+	// 방향키를 누른 채 차지를 시작하면 그 방향을 바로 본다(락온 중 제외). 탭 콤보는 일반 공격 어빌리티가 같은 처리를 한다. (2026-10-08)
+	FaceMoveInputDirection();
 	const UWorld* const World = GetWorld();
 	ChargeStartTime = World ? World->GetTimeSeconds() : 0.0;
 	ActiveHitParams = LoopHitParams;
@@ -199,7 +210,8 @@ void UknightGameplayAbility_HeavyAttack::PlayLoop()
 
 void UknightGameplayAbility_HeavyAttack::PlayMontage(UAnimMontage* Montage, FName TaskName, bool bLoopOnEnd)
 {
-	UAbilityTask_PlayMontageAndWait* const Task = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, TaskName, Montage);
+	// 차지 시작·반복·발사 몽타주 모두 행동 속도 배속으로 재생한다. (2026-10-08)
+	UAbilityTask_PlayMontageAndWait* const Task = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, TaskName, Montage, GetActionSpeed());
 	if (Phase == EPhase::Releasing)
 	{
 		Task->OnCompleted.AddDynamic(this, &ThisClass::OnReleaseFinished);

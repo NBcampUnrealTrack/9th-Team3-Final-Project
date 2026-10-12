@@ -1,5 +1,6 @@
 #include "AbilitySystem/Attributes/knightAttributeSet.h"
 
+#include "Engine/World.h"
 #include "GameplayEffect.h"
 #include "GameplayEffectExtension.h"
 
@@ -8,6 +9,8 @@ UknightAttributeSet::UknightAttributeSet()
 	InitBoostGauge(100.f);
 	InitMaxBoostGauge(100.f);
 	InitBoostRecoveryRate(25.f);
+	// 행동 에너지를 쓴 뒤 1.5초가 지나야 회복이 시작된다 (2026-10-09).
+	InitBoostRecoveryDelay(1.5f);
 
 	// 부위 체력 기본값: 4부위 x 25 = 100으로, Core의 MaxHealth 기본값(100)과 맞춘다.
 	InitHeadHealth(25.f);
@@ -32,7 +35,13 @@ UknightAttributeSet::UknightAttributeSet()
 	InitDodgeSpeed(1.f);
 	InitDodgeCooldown(0.5f);
 
+	// 퍼펙트 가드 판정 시간 0.25초 (2026-10-08).
+	InitPerfectGuardWindow(0.25f);
+
 	InitRepairEfficiency(1.f);
+
+	// 수리 키트 출격당 3개 (기획 문서).
+	InitRepairKitCount(3.f);
 }
 
 void UknightAttributeSet::PreAttributeBaseChange(const FGameplayAttribute& Attribute, float& NewValue) const
@@ -57,7 +66,7 @@ void UknightAttributeSet::ClampAttribute(const FGameplayAttribute& Attribute, fl
 	{
 		NewValue = FMath::Max(NewValue, 1.f);
 	}
-	else if (Attribute == GetBoostRecoveryRateAttribute())
+	else if (Attribute == GetBoostRecoveryRateAttribute() || Attribute == GetBoostRecoveryDelayAttribute())
 	{
 		NewValue = FMath::Max(NewValue, 0.f);
 	}
@@ -93,7 +102,8 @@ void UknightAttributeSet::ClampAttribute(const FGameplayAttribute& Attribute, fl
 	// 나머지는 음수만 막는다.
 	else if (Attribute == GetWeightAttribute() || Attribute == GetWalkSpeedAttribute()
 		|| Attribute == GetRunSpeedAttribute() || Attribute == GetJumpSpeedAttribute()
-		|| Attribute == GetDodgeCooldownAttribute() || Attribute == GetRepairEfficiencyAttribute())
+		|| Attribute == GetDodgeCooldownAttribute() || Attribute == GetPerfectGuardWindowAttribute() || Attribute == GetRepairEfficiencyAttribute()
+		|| Attribute == GetRepairKitCountAttribute())
 	{
 		NewValue = FMath::Max(NewValue, 0.f);
 	}
@@ -107,9 +117,20 @@ void UknightAttributeSet::PostAttributeChange(const FGameplayAttribute& Attribut
 	{
 		AdjustForMaxChange(GetOwningAbilitySystemComponent(), GetBoostGaugeAttribute(), OldValue, NewValue, true);
 	}
-	else if (Attribute == GetBoostGaugeAttribute() && NewValue > 0.f)
+	else if (Attribute == GetBoostGaugeAttribute())
 	{
-		bBoostDepleted = false;
+		if (NewValue > 0.f)
+		{
+			bBoostDepleted = false;
+		}
+		// 줄어들면(행동에 씀) 회복 대기 시간을 처음부터 다시 센다. 회복으로 늘어날 때는 기록하지 않는다. (2026-10-09)
+		if (NewValue < OldValue)
+		{
+			if (const UWorld* const World = GetWorld())
+			{
+				LastBoostSpendTime = World->GetTimeSeconds();
+			}
+		}
 	}
 	// 부위 최대 체력이 바뀌면(파츠 교체) 현재 부위 체력을 같은 비율로 맞춘다.
 	else if (Attribute == GetMaxHeadHealthAttribute())

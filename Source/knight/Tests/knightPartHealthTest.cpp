@@ -1,4 +1,4 @@
-// 부위 체력 피해 분배(knightPartHealth::DistributeDamage) 자동화 테스트
+// 부위 체력 피해 분배(knightPartHealth::DistributeDamage)·수리 분배(DistributeRepair) 자동화 테스트
 //
 // 실행 방법: 에디터 출력 로그의 명령 입력칸(Cmd)에
 //   Automation RunTests Knight.Combat.PartHealth
@@ -68,6 +68,42 @@ bool FknightPartHealthTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("피해 음수면 변화 없음"), H[1], 25.f, Tolerance);
 		DistributeDamage(H, 10.f, 7);
 		TestEqual(TEXT("잘못된 부위 번호(7)는 부위를 모르는 피해로 처리: 몸통 -2.5"), H[1], 22.5f, Tolerance);
+	}
+
+	// ---- 수리(DistributeRepair): 체력 비율이 낮은 부위부터 최대치까지, 남은 양은 다음 부위로 (2026-10-09) ----
+	using knightPartHealth::DistributeRepair;
+	{
+		const float Max[4] = { 25.f, 25.f, 25.f, 25.f };
+		float H[4] = { 10.f, 25.f, 0.f, 20.f };
+		DistributeRepair(H, Max, 30.f);
+		TestEqual(TEXT("수리 30: 가장 낮은 팔(0%) 0 -> 25"), H[2], 25.f, Tolerance);
+		TestEqual(TEXT("수리 30: 남은 5는 다음으로 낮은 머리(40%) 10 -> 15"), H[0], 15.f, Tolerance);
+		TestEqual(TEXT("수리 30: 그다음 다리(80%)는 그대로"), H[3], 20.f, Tolerance);
+		TestEqual(TEXT("수리 30: 가득 찬 몸통은 그대로"), H[1], 25.f, Tolerance);
+	}
+	{
+		// 최대치가 부위마다 달라도 '비율'로 순서를 정한다. 비율이 같으면 머리 → 몸통 → 팔 순서.
+		const float Max[4] = { 20.f, 60.f, 40.f, 20.f };
+		float H[4] = { 10.f, 30.f, 20.f, 20.f };
+		DistributeRepair(H, Max, 15.f);
+		TestEqual(TEXT("비율 동률(50%): 머리 먼저 10 -> 20"), H[0], 20.f, Tolerance);
+		TestEqual(TEXT("비율 동률(50%): 남은 5는 몸통 30 -> 35"), H[1], 35.f, Tolerance);
+		TestEqual(TEXT("비율 동률(50%): 팔은 차례가 오기 전에 수리량 소진"), H[2], 20.f, Tolerance);
+	}
+	{
+		const float Max[4] = { 25.f, 25.f, 25.f, 25.f };
+		float H[4] = { 25.f, 25.f, 5.f, 25.f };
+		DistributeRepair(H, Max, 30.f);
+		TestEqual(TEXT("수리량이 남아도 최대치를 넘지 않음 (팔 5 -> 25)"), H[2], 25.f, Tolerance);
+		TestEqual(TEXT("모든 부위가 차면 남은 양은 버림 (머리 25 그대로)"), H[0], 25.f, Tolerance);
+	}
+	{
+		const float Max[4] = { 25.f, 25.f, 25.f, 25.f };
+		float H[4] = { 10.f, 10.f, 10.f, 10.f };
+		DistributeRepair(H, Max, 0.f);
+		TestEqual(TEXT("수리량 0이면 변화 없음"), H[0], 10.f, Tolerance);
+		DistributeRepair(H, Max, -5.f);
+		TestEqual(TEXT("수리량 음수면 변화 없음"), H[0], 10.f, Tolerance);
 	}
 
 	return true;

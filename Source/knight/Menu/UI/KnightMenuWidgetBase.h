@@ -5,7 +5,7 @@
 #include "GameFlow/KnightFlowTypes.h"
 #include "KnightMenuWidgetBase.generated.h"
 
-class UButton;
+class UCommonButtonBase;
 class UPanelWidget;
 class UTextBlock;
 class UWidgetSwitcher;
@@ -36,7 +36,7 @@ protected:
 	TObjectPtr<UWidgetSwitcher> Switcher_Pages;
 
 	UPROPERTY(meta=(BindWidget))
-	TObjectPtr<UButton> Button_Back;
+	TObjectPtr<UCommonButtonBase> Button_Back;
 
 	UPROPERTY(meta=(BindWidget))
 	TObjectPtr<UTextBlock> Text_Status;
@@ -55,6 +55,9 @@ protected:
 	bool IsTravelPending() const;
 	UKnightGameFlowSubsystem* GetFlow() const;
 	void RefreshTravelControls();
+
+	/** Visible, enabled and focusable: the only buttons focus may land on. */
+	static bool CanFocusButton(const UCommonButtonBase* Button);
 
 private:
 	UFUNCTION()

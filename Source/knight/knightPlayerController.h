@@ -28,6 +28,18 @@ public:
 	/** Closes the raid return overlay and restores gameplay input. */
 	void CloseRaidReturnMenu();
 
+	/**
+	 * Esc handler set by the UI (knightUI's HUD binds its pause menu here). This module cannot see the UI classes,
+	 * so the UI plugs in. When unbound, Esc opens the settings window directly as before.
+	 */
+	FSimpleDelegate PauseMenuRequestHandler;
+
+	/** Opens the settings window over a menu. Closing it leaves input and pause to that menu. */
+	void OpenSettingsFromMenu();
+
+	/** Fires after the settings window closes, however it was opened. */
+	FSimpleMulticastDelegate OnSettingsClosed;
+
 	/** Editor-only raid API probes. These never run as part of normal combat. */
 	UFUNCTION(Exec) void KnightRaidDebugStatus();
 	UFUNCTION(Exec) void KnightRaidDebugStart();
@@ -66,6 +78,7 @@ protected:
 
 	bool bSettingsPausedGame = false;
 	bool bCursorBeforeSettings = false;
+	bool bSettingsOpenedFromMenu = false;
 
 	/** If true, the player will use UMG touch controls even if not playing on mobile platforms */
 	UPROPERTY(EditAnywhere, Config, Category = "Input|Touch Controls")
@@ -85,6 +98,7 @@ protected:
 	bool ShouldUseTouchControls() const;
 	void ToggleRaidReturnMenu();
 	void ToggleSettings();
+	void OpenSettings(bool bFromMenu);
 	UFUNCTION() void CloseSettings();
 
 };

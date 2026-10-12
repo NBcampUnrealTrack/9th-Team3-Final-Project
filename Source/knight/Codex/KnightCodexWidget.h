@@ -25,7 +25,6 @@ public:
 	UPROPERTY(BlueprintAssignable, Category="Knight|Codex") FKnightCodexBossSelected OnSelected;
 	void Configure(FName InId, const FText& Name, UTexture2D* Icon);
 	void SetSelected(bool bSelected);
-	UButton* GetSelectionButton() const { return Button_Select; }
 	FName GetBossId() const { return BossId; }
 protected:
 	virtual void NativeOnInitialized() override;
@@ -60,14 +59,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|Codex") void RequestClose();
 	UFUNCTION(BlueprintCallable, Category="Knight|Codex") void SelectCategory(int32 Category);
 	UFUNCTION(BlueprintCallable, Category="Knight|Codex") bool SelectBoss(FName BossId);
-	UFUNCTION(BlueprintPure, Category="Knight|Codex") FName GetSelectedBossId() const { return SelectedBossId; }
-	UFUNCTION(BlueprintPure, Category="Knight|Codex") int32 GetActiveCategory() const { return ActiveCategory; }
-	UFUNCTION(BlueprintPure, Category="Knight|Codex") int32 GetBossEntryCount() const { return GeneratedEntries.Num(); }
-	UFUNCTION(BlueprintPure, Category="Knight|Codex") FText GetDisplayedBossName() const;
-	UFUNCTION(BlueprintPure, Category="Knight|Codex") FText GetDisplayedBossDescription() const;
-	UFUNCTION(BlueprintPure, Category="Knight|Codex") UTexture2D* GetDisplayedPortrait() const;
-	UFUNCTION(BlueprintPure, Category="Knight|Codex") FText GetDisplayedWorldBody() const;
-	UFUNCTION(BlueprintPure, Category="Knight|Codex") int32 GetDropRowCount() const;
 	UButton* GetFocusButton() const;
 
 protected:

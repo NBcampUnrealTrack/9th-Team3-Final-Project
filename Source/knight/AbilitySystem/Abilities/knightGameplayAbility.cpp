@@ -1,7 +1,11 @@
 #include "AbilitySystem/Abilities/knightGameplayAbility.h"
 
 #include "AbilitySystem/knightAbilitySystemComponent.h"
+#include "AbilitySystem/Attributes/knightAttributeSet.h"
+#include "AbilitySystem/Effects/knightGameplayEffect_StaminaCost.h"
 #include "AbilitySystemGlobals.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "System/knightGameplayTags.h"
 
 UknightGameplayAbility::UknightGameplayAbility(const FObjectInitializer& ObjectInitializer)
@@ -13,6 +17,73 @@ UknightGameplayAbility::UknightGameplayAbility(const FObjectInitializer& ObjectI
 UknightAbilitySystemComponent* UknightGameplayAbility::GetKnightAbilitySystemComponentFromActorInfo() const
 {
 	return CurrentActorInfo ? Cast<UknightAbilitySystemComponent>(CurrentActorInfo->AbilitySystemComponent.Get()) : nullptr;
+}
+
+bool UknightGameplayAbility::CheckCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+	FGameplayTagContainer* OptionalRelevantTags) const
+{
+	if (!Super::CheckCost(Handle, ActorInfo, OptionalRelevantTags))
+	{
+		return false;
+	}
+	const UAbilitySystemComponent* const ASC = ActorInfo ? ActorInfo->AbilitySystemComponent.Get() : nullptr;
+	const FGameplayAttribute Attribute = UknightAttributeSet::GetBoostGaugeAttribute();
+	if (StaminaCost <= 0.f || !ASC || !ASC->HasAttributeSetForAttribute(Attribute))
+	{
+		return true;
+	}
+	const float Stamina = ASC->GetNumericAttribute(Attribute);
+	const bool bEnough = bRequireFullStaminaCost ? Stamina >= StaminaCost : Stamina > 0.f;
+	if (!bEnough && OptionalRelevantTags)
+	{
+		OptionalRelevantTags->AddTag(knightGameplayTags::Ability_ActivateFail_Cost);
+	}
+	return bEnough;
+}
+
+void UknightGameplayAbility::ApplyCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayAbilityActivationInfo ActivationInfo) const
+{
+	Super::ApplyCost(Handle, ActorInfo, ActivationInfo);
+	const UAbilitySystemComponent* const ASC = ActorInfo ? ActorInfo->AbilitySystemComponent.Get() : nullptr;
+	if (StaminaCost <= 0.f || !ASC || !ASC->HasAttributeSetForAttribute(UknightAttributeSet::GetBoostGaugeAttribute()))
+	{
+		return;
+	}
+	const FGameplayEffectSpecHandle SpecHandle = MakeOutgoingGameplayEffectSpec(Handle, ActorInfo, ActivationInfo,
+		UknightGameplayEffect_StaminaCost::StaticClass());
+	if (SpecHandle.IsValid())
+	{
+		// 남은 양보다 많아도 그대로 뺀다. BoostGauge는 속성 세트에서 0 아래로 내려가지 않는다.
+		SpecHandle.Data->SetSetByCallerMagnitude(knightGameplayTags::SetByCaller_BoostCost, -StaminaCost);
+		ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, SpecHandle);
+	}
+}
+
+float UknightGameplayAbility::GetActionSpeed() const
+{
+	const UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();
+	const FGameplayAttribute Attribute = UknightAttributeSet::GetActionSpeedAttribute();
+	return ASC && ASC->HasAttributeSetForAttribute(Attribute) ? ASC->GetNumericAttribute(Attribute) : 1.f;
+}
+
+bool UknightGameplayAbility::FaceMoveInputDirection() const
+{
+	ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	const UCharacterMovementComponent* const Movement = Character ? Character->GetCharacterMovement() : nullptr;
+	const UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();
+	if (!Movement || (ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_LockedOn)))
+	{
+		return false;
+	}
+	// 퀵스텝(knightGameplayAbility_BoostDash)과 같은 입력 방향: 무브먼트가 마지막으로 받은 이동 입력.
+	const FVector Direction = Movement->GetLastInputVector().GetSafeNormal2D();
+	if (Direction.IsNearlyZero())
+	{
+		return false;
+	}
+	Character->SetActorRotation(FRotator(0.f, Direction.Rotation().Yaw, 0.f));
+	return true;
 }
 
 void UknightGameplayAbility::TryActivateAbilityOnSpawn(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec) const

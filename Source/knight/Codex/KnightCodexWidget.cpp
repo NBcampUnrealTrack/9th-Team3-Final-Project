@@ -75,7 +75,7 @@ void UKnightCodexDropEntryWidget::Configure(const FknightRaidReward& Reward)
 TSubclassOf<UKnightCodexWidget> UKnightCodexWidget::GetSharedWidgetClass()
 {
 	static TSubclassOf<UKnightCodexWidget> Class = LoadClass<UKnightCodexWidget>(nullptr,
-		TEXT("/Game/Knight/UI/Codex/WBP_Codex.WBP_Codex_C"));
+		TEXT("/Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C"));
 	return Class ? Class : TSubclassOf<UKnightCodexWidget>(StaticClass());
 }
 
@@ -146,31 +146,6 @@ UButton* UKnightCodexWidget::GetFocusButton() const
 	}
 }
 
-FText UKnightCodexWidget::GetDisplayedBossName() const
-{
-	return Text_BossName ? Text_BossName->GetText() : FText::GetEmpty();
-}
-
-FText UKnightCodexWidget::GetDisplayedBossDescription() const
-{
-	return Text_BossDescription ? Text_BossDescription->GetText() : FText::GetEmpty();
-}
-
-UTexture2D* UKnightCodexWidget::GetDisplayedPortrait() const
-{
-	return Image_Portrait ? Cast<UTexture2D>(Image_Portrait->GetBrush().GetResourceObject()) : nullptr;
-}
-
-FText UKnightCodexWidget::GetDisplayedWorldBody() const
-{
-	return Text_WorldBody ? Text_WorldBody->GetText() : FText::GetEmpty();
-}
-
-int32 UKnightCodexWidget::GetDropRowCount() const
-{
-	return Box_Drops ? Box_Drops->GetChildrenCount() : 0;
-}
-
 const FKnightCodexBossEntry* UKnightCodexWidget::FindBoss(FName BossId) const
 {
 	if (!LoadedData) return nullptr;
@@ -197,7 +172,7 @@ void UKnightCodexWidget::RebuildBosses()
 			}
 			SeenIds.Add(Boss.BossId);
 			TSubclassOf<UKnightCodexBossEntryWidget> Class = BossEntryClass;
-			if (!Class) Class = LoadClass<UKnightCodexBossEntryWidget>(nullptr, TEXT("/Game/Knight/UI/Codex/WBP_CodexBossEntry.WBP_CodexBossEntry_C"));
+			if (!Class) Class = LoadClass<UKnightCodexBossEntryWidget>(nullptr, TEXT("/Game/Knight/UI/Menu/Codex/WBP_KnightCodexBossEntry.WBP_KnightCodexBossEntry_C"));
 			if (!Class) continue;
 			UKnightCodexBossEntryWidget* Entry = CreateWidget<UKnightCodexBossEntryWidget>(GetOwningPlayer(), Class);
 			if (!Entry) continue;
@@ -262,7 +237,7 @@ void UKnightCodexWidget::RefreshBoss()
 	if (bMatchingRaid && Box_Drops && GetOwningPlayer())
 	{
 		TSubclassOf<UKnightCodexDropEntryWidget> Class = DropEntryClass;
-		if (!Class) Class = LoadClass<UKnightCodexDropEntryWidget>(nullptr, TEXT("/Game/Knight/UI/Codex/WBP_CodexDropEntry.WBP_CodexDropEntry_C"));
+		if (!Class) Class = LoadClass<UKnightCodexDropEntryWidget>(nullptr, TEXT("/Game/Knight/UI/Menu/Codex/WBP_KnightCodexDropEntry.WBP_KnightCodexDropEntry_C"));
 		if (Class)
 		{
 			for (const FknightRaidReward& Reward : Raid->Rewards)

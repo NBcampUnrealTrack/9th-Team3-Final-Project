@@ -16,7 +16,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FknightMonsterTargetChanged, AActor
  * 후보는 AI Perception(UknightBossAIController가 시야/청각/피해를 전달)과 AddObjective에서 들어온다.
  * 점수 = Priority / (1 + 거리 / DistanceFalloff) + 최근 피해 위협도.
  * 피해 위협도는 시간이 지나며 줄어들므로, 몬스터를 때리면 한동안 어그로가 끌린다. 더 이상 감지되지
- * 않는 후보도 LoseTargetDelay초 동안은 유효하다.
+ * 않는 후보도 LoseTargetDelay초 동안은 유효하다. CloseAwarenessRadius 안에 있는 후보는 시야 밖(등 뒤)이어도 감지한 것으로 본다.
  */
 UCLASS(ClassGroup=(Knight), meta=(BlueprintSpawnableComponent))
 class KNIGHT_API UknightMonsterTargetingComponent : public UActorComponent
@@ -48,6 +48,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="Knight|Monster")
 	AActor* GetCurrentTarget() const { return CurrentTarget.Get(); }
+
+	/** 현재 타깃이 등 뒤(정면에서 BehindAngle 이상)에 계속 머문 시간(초). 평가 간격(EvaluationInterval)마다 갱신한다. */
+	float GetTargetBehindTime() const;
 
 	UPROPERTY(BlueprintAssignable, Category="Knight|Monster")
 	FknightMonsterTargetChanged OnTargetChanged;
@@ -86,6 +89,18 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Monster", meta=(ClampMin=0, Units="s"))
 	float LoseTargetDelay = 8.f;
 
+	/**
+	 * 이 수평 거리(몬스터 중심 기준) 안에 있는 후보는 시야 밖이어도 계속 감지한 것으로 본다. 0이면 끈다.
+	 * 시야는 앞쪽만 보므로, 공격하지 않고 등 뒤에 머무는 플레이어를 LoseTargetDelay 뒤에 잊어버리는 것을 막는다.
+	 * 이미 한 번 감지한 후보에만 적용된다(처음 발견은 여전히 시야·청각·피해로).
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Monster", meta=(ClampMin=0, Units="cm"))
+	float CloseAwarenessRadius = 2500.f;
+
+	/** 타깃이 정면에서 이 각도 이상 벗어나 있으면 등 뒤로 본다(GetTargetBehindTime, 뒤쪽 공격의 MinTargetBehindTime). */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Monster", meta=(ClampMin=0, ClampMax=180, Units="deg"))
+	float BehindAngle = 120.f;
+
 private:
 	struct FCandidate
 	{
@@ -104,11 +119,14 @@ private:
 	float ScoreCandidate(const FCandidate& Candidate) const;
 	bool IsCandidateValid(const FCandidate& Candidate, double Now) const;
 	void SetCurrentTarget(AActor* NewTarget);
+	void UpdateTargetBehind(double Now);
 
 	TArray<FCandidate> Candidates;
 	TWeakObjectPtr<AActor> CurrentTarget;
 	TWeakObjectPtr<UAbilitySystemComponent> BoundASC;
 	FTimerHandle EvaluationTimer;
 	double LastEvaluationTime = 0.0;
+	/** 현재 타깃이 등 뒤로 들어간 월드 시간. 등 뒤가 아니면 음수. */
+	double TargetBehindSince = -1.0;
 	bool bStopped = false;
 };

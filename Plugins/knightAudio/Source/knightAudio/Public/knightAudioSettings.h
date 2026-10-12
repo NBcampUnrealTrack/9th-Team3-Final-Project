@@ -37,4 +37,12 @@ public:
 
 	UPROPERTY(EditAnywhere, Config, Category="Music", meta=(ClampMin=0, Units="s"))
 	float DefaultMusicFadeTime = 2.f;
+
+	/** Pause between a voice line and the queued one after it. */
+	UPROPERTY(EditAnywhere, Config, Category="Voice", meta=(ClampMin=0, Units="s"))
+	float VoiceQueueGap = 0.3f;
+
+	/** A queued voice line that has waited longer than this is dropped. */
+	UPROPERTY(EditAnywhere, Config, Category="Voice", meta=(ClampMin=0, Units="s"))
+	float VoiceMaxWait = 3.f;
 };

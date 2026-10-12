@@ -9,6 +9,7 @@
 #include "knightItemDefinitions.generated.h"
 
 class USkeletalMesh;
+class UStaticMesh;
 class UknightAbilitySet;
 class UknightMonsterDefinition;
 
@@ -89,8 +90,16 @@ public:
 	/** Highest upgrade level (the number of upgrade steps). */
 	int32 GetMaxUpgradeLevel() const { return UpgradeSteps.Num(); }
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Part", meta=(Categories="Equipment.Slot"))
+	/**
+	 * 장착 부위. (2026-10-11) AssetRegistrySearchable: 값이 에셋 목록 정보에 저장되어, Mech Parts Workbench가
+	 * 파츠를 열지 않고 부위별로 걸러 보여 준다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, AssetRegistrySearchable, Category="Part", meta=(Categories="Equipment.Slot"))
 	FGameplayTag SlotTag;
+
+	/** Exact set identity. Only Head, Torso, Arms, Legs and Weapon count toward set tiers. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Part", meta=(Categories="Equipment.Set"))
+	FGameplayTag SetTag;
 
 	/**
 	 * 파츠 중량 (2026-10-07). 장착한 파츠 중량의 합이 메카의 Weight 스탯이 되어 이동·퀵스텝 속도를 낮추고,
@@ -99,8 +108,16 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Part", meta=(ClampMin=0))
 	float Weight = 0.f;
 
+	/** 스켈레탈 메시 파츠(SK_). 나이트 뼈대를 따라 변형되게 붙일 수 있다(Attachment LeaderPose). StaticMesh보다 먼저 쓴다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Part")
 	TSoftObjectPtr<USkeletalMesh> Mesh;
+
+	/**
+	 * 스태틱 메시 파츠(SM_, 2026-10-10). 팀원이 모델링한 파츠는 대부분 이것이다. Mesh가 비어 있을 때 쓴다.
+	 * 뼈대가 없어서 Attachment는 Socket 모드로(붙일 뼈·소켓 + 위치·회전·크기) 지정한다. 값은 Mech Parts Workbench에서 맞춘다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Part")
+	TSoftObjectPtr<UStaticMesh> StaticMesh;
 
 	/** Written by the Mech Parts Workbench. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Part")

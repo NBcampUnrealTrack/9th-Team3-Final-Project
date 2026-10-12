@@ -4,17 +4,12 @@
 #include "Animation/AnimNotifies/AnimNotifyState.h"
 #include "knightAnimNotifyState_PlayRate.generated.h"
 
-struct FAnimMontageInstance;
-
 /**
- * 몽타주 재생 속도를 이 구간 동안만 PlayRateScale배로 바꾼다. (2026-10-12, 공격 무게감)
+ * 몽타주의 이 구간만 PlayRate배로 재생한다. 원본 애니메이션을 고치지 않고 동작의 완급(예: 천천히 들어 올렸다 빠르게 내려찍기)을 만든다.
  *
- * 공격 준비 동작(칼을 들어 올리는 구간)을 살짝 느리게 해서 "힘을 모았다가 내려치는" 느낌을 낸다.
- * 판정·콤보·워프 노티파이는 몽타주 시간 기준이라 위치가 어긋나지 않는다. 실제 걸리는 시간만 늘어난다.
- *
- * - 몽타주에 둘 때만 동작한다(시퀀스에 직접 두면 무시).
- * - 시작할 때 현재 재생 속도에 곱하고, 끝날 때 나눠서 되돌린다. 어빌리티가 정한 재생 속도(PlayRate)는 유지된다.
- * - 히트스톱은 CustomTimeDilation을 쓰므로 이 노티파이와 겹쳐도 서로 영향을 주지 않는다.
+ * 몽타주 재생 속도를 바꾸는 방식이라 몽타주 시간축은 그대로다. 같은 몽타주의 다른 노티파이(근접 판정 등)는 위치를 옮길 필요가 없고,
+ * 실제 시간으로만 빨라진다. 실제 초로 타이밍을 재는 값(범위 공격의 WindupTime 등)은 줄어든 시간만큼 직접 맞춰야 한다.
+ * 몽타주에 넣을 때만 동작한다(시퀀스에 넣으면 무시). 구간이 끝나거나 몽타주가 끊기면 원래 속도로 돌아간다.
  */
 UCLASS(meta=(DisplayName="Knight Play Rate"))
 class KNIGHT_API UknightAnimNotifyState_PlayRate : public UAnimNotifyState
@@ -27,10 +22,10 @@ public:
 	virtual FString GetNotifyName_Implementation() const override;
 
 protected:
-	/** 이 구간의 재생 속도 배율. 1보다 작으면 느려진다(0.8 = 20% 느리게). */
-	UPROPERTY(EditAnywhere, Category="Play Rate", meta=(ClampMin=0.1, ClampMax=3))
-	float PlayRateScale = 0.8f;
+	/** 구간 안의 재생 배율. 2 = 두 배 빠르게. 몽타주에 이미 걸린 재생 속도에 곱해진다. */
+	UPROPERTY(EditAnywhere, Category="Play Rate", meta=(ClampMin=0.1, ClampMax=10))
+	float PlayRate = 2.f;
 
 private:
-	FAnimMontageInstance* FindInstance(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation) const;
+	void ScalePlayRate(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation, float Scale) const;
 };
