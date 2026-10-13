@@ -12,6 +12,8 @@
 //   knight.Player.Easing Curve [값...]     출발 곡선을 바꾼다. 값은 속도 0%~100%에 고르게 놓인다
 //                                          (예: Curve 0.35 1 0.6 → 0%, 50%, 100%). 값 없이 쓰면 곡선을 비워 일정한 가속
 //   knight.Player.MoveLog [1|0]            출발·가속·정지에 걸린 시간과 거리를 화면과 로그에 찍는다. 인자가 없으면 켜고 끈다
+//   knight.Player.AttackSpeed [배율]        (2026-10-14) 공격 몽타주 재생 속도 배율을 바꾼다 (예: 0.9). 인자가 없으면 지금 값 출력.
+//                                          행동 속도(ActionSpeed)에 곱하며 발도·가드는 그대로. 새로 시작하는 공격부터 적용
 //
 // Easing으로 바꾼 값은 지금 PIE의 플레이어에게만 적용되고 PIE를 끝내면 사라진다.
 // 마음에 드는 값은 BP_Knight의 CharacterMovement 컴포넌트(Knight|Movement|Easing)에 넣거나 C++ 기본값으로 옮긴다.
@@ -23,6 +25,7 @@
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
+#include "AbilitySystem/knightAbilitySystemComponent.h"
 #include "AbilitySystem/Attributes/knightAttributeSet.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
 #include "AttributeSet.h"
@@ -239,6 +242,27 @@ namespace knightPlayerCheats
 		const bool bRun = Args.IsValidIndex(0) ? FCString::Atoi(*Args[0]) != 0 : !Movement->GetWantsToRun();
 		Movement->SetWantsToRun(bRun);
 		LogMovement(Character, CommandName);
+	}
+
+	// knight.Player.AttackSpeed [배율] (2026-10-14). 공격 몽타주 재생 속도 배율(ASC AttackAnimationSpeed)을 바꾼다.
+	// 인자가 없으면 지금 값만 출력한다. 새로 시작하는 공격부터 적용되고, 지금 PIE의 플레이어에게만 적용된다.
+	static void AttackSpeedCommand(const TArray<FString>& Args, UWorld* World)
+	{
+		const TCHAR* const CommandName = TEXT("knight.Player.AttackSpeed");
+		UknightAbilitySystemComponent* const ASC = Cast<UknightAbilitySystemComponent>(
+			UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetPlayerPawn(World, CommandName)));
+		if (!ASC)
+		{
+			UE_LOG(LogknightDev, Warning, TEXT("%s: no player pawn with a knight ability system."), CommandName);
+			return;
+		}
+		const float Before = ASC->GetAttackAnimationSpeed();
+		if (Args.IsValidIndex(0))
+		{
+			ASC->SetAttackAnimationSpeed(FCString::Atof(*Args[0]));
+		}
+		UE_LOG(LogknightDev, Log, TEXT("%s: attack animation speed x%.2f -> x%.2f (multiplied with ActionSpeed; draw and guard unchanged)."),
+			CommandName, Before, ASC->GetAttackAnimationSpeed());
 	}
 
 	// knight.Player.Status. 그로기 회복을 확인할 때 피격 후 몇 번 입력해 Poise가 오르는지 본다.
@@ -588,6 +612,12 @@ namespace knightPlayerCheats
 		TEXT("knight.Player.Run"),
 		TEXT("knight.Player.Run <1|0>. Turns running on or off for testing before the run key is bound. No argument toggles."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&RunCommand),
+		ECVF_Cheat);
+
+	static FAutoConsoleCommandWithWorldAndArgs AttackSpeedCmd(
+		TEXT("knight.Player.AttackSpeed"),
+		TEXT("knight.Player.AttackSpeed [Multiplier]. Sets the attack montage play rate multiplier (e.g. 0.9) for this PIE. No argument logs the current value."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&AttackSpeedCommand),
 		ECVF_Cheat);
 
 	static FAutoConsoleCommandWithWorldAndArgs StatusCmd(

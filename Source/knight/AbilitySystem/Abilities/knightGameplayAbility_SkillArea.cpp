@@ -25,7 +25,7 @@ void UknightGameplayAbility_SkillArea::StartSkill()
 		return;
 	}
 	ListenForMeleeHits(bHitOncePerActor);
-	const float Rate = FMath::Max(PlayRate * GetActionSpeed(), 0.01f);
+	const float Rate = FMath::Max(PlayRate * GetAttackSpeed(), 0.01f);
 	PulseTimers.SetNum(Pulses.Num());
 	for (int32 Index = 0; Index < Pulses.Num(); ++Index)
 	{

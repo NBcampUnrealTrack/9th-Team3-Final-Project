@@ -77,6 +77,60 @@ public:
 	TArray<FName> SkinLegRootBones;
 
 	/**
+	 * (2026-10-13) '원본을 부위별로 나누기'에서 부위가 시작되는 뼈(이 뼈와 그 아래 전부). 삼각형마다 가장 많이 따라가는 부위로 나눈다.
+	 * 어느 목록에도 안 걸리는 뼈(골반·척추·목 등)는 몸통이 된다. 기본값은 Config/DefaultEditorPerProjectUserSettings.ini
+	 * (나이트: 머리 neck_01, 팔 clavicle_l / clavicle_r, 다리 thigh_l / thigh_r). 바꾸면 다시 나눠야 반영된다.
+	 * 팔을 쇄골부터 잡은 이유: 풀암 파츠가 어깨까지 덮는 경우가 많아서. 가슴은 RegionArmSplitRatio로 몸통에 남긴다.
+	 * (10-13 2차) 머리를 head로 잡았더니 머리 삼각형이 517개뿐이었다(나이트 머리는 head 뼈를 거의 따라가지 않음) → neck_01로.
+	 * 그래도 얼굴이 가슴 뼈를 따라가는 부분은 RegionHeadCaptureRadius로 머리에 넣는다.
+	 */
+	UPROPERTY(config, EditAnywhere, Category="Body Regions")
+	TArray<FName> RegionHeadRootBones;
+
+	UPROPERTY(config, EditAnywhere, Category="Body Regions")
+	TArray<FName> RegionArmLeftRootBones;
+
+	UPROPERTY(config, EditAnywhere, Category="Body Regions")
+	TArray<FName> RegionArmRightRootBones;
+
+	UPROPERTY(config, EditAnywhere, Category="Body Regions")
+	TArray<FName> RegionLegLeftRootBones;
+
+	UPROPERTY(config, EditAnywhere, Category="Body Regions")
+	TArray<FName> RegionLegRightRootBones;
+
+	/**
+	 * (2026-10-13 2차) 팔 시작 뼈(쇄골) 자체를 가장 많이 따라가는 삼각형은 그 뼈의 몸 쪽 관절 → 어깨 관절 사이에서
+	 * 이 비율보다 몸 쪽이면 몸통에 남긴다. 기본 0.5.
+	 * 나이트는 가슴판 절반이 쇄골을 따라가서, 0이면(가중치만으로 나누면) 팔을 숨길 때 가슴 절반이 같이 사라진다.
+	 * 어깨가 덜 빠지면 낮추고(0.3), 가슴이 아직 빠지면 올린다(0.7). 바꾸면 다시 나눠야 반영된다.
+	 */
+	UPROPERTY(config, EditAnywhere, Category="Body Regions", meta=(ClampMin="0", ClampMax="1"))
+	float RegionArmSplitRatio = 0.5f;
+
+	/**
+	 * (2026-10-13 3차) 위와 같고 다리(허벅지 뼈)용. 기본 0 = 자르지 않음.
+	 * 허벅지는 뼈 전체가 다리라서, 0.5로 자르니 다리를 숨겨도 허벅지 위쪽이 몸통에 남았다(사용자 확인).
+	 */
+	UPROPERTY(config, EditAnywhere, Category="Body Regions", meta=(ClampMin="0", ClampMax="1"))
+	float RegionLegSplitRatio = 0.f;
+
+	/**
+	 * (2026-10-13 3차) 몸통으로 나뉜 삼각형 중 머리 부위 관절의 가장 낮은 높이(나이트 head 169cm)보다 위이고,
+	 * 머리 관절들을 지나는 수직축에서 이 반지름(cm) 안에 있으면 머리로 옮긴다. 0이면 끈다.
+	 * 나이트는 얼굴·머리 위쪽이 가슴 뼈(spine_05, 삼각형 높이 162~190cm)를 따라가게 가중치가 잡혀 있어서
+	 * 가중치만으로 나누면 머리를 숨겨도 얼굴이 남고 몸통을 숨겨야 사라졌다.
+	 * (4~5차) 뼈 방향 대신 위쪽 고정(나이트는 neck_01이 head보다 위), 실제 반지름은 이 값과 머리 자체 폭
+	 * (머리 뼈 삼각형 수평 거리 95% 지점, 나이트 8.3cm) 중 작은 쪽 → 머리 옆 목 가드는 몸통에 남는다. 이 값은 상한이다.
+	 */
+	UPROPERTY(config, EditAnywhere, Category="Body Regions", meta=(ClampMin="0", Units="cm"))
+	float RegionHeadCaptureRadius = 20.f;
+
+	/** (2026-10-13 3차) 위 규칙의 시작 높이: 머리 부위 관절의 가장 낮은 높이에서 이만큼(cm) 올라간 곳부터. 목 장식이 머리로 빠지면 올린다. */
+	UPROPERTY(config, EditAnywhere, Category="Body Regions", meta=(Units="cm"))
+	float RegionHeadCaptureOffset = 0.f;
+
+	/**
 	 * (2026-10-12) '뼈대에 입히기'를 할 때 천 시뮬레이션도 만든다 (망토·치마 자락이 흔들림).
 	 * 파츠를 감싼 매끈한 천 계산용 메시(LOD1)로 천을 계산하고 원래 메시가 그걸 따라간다. 다시 구우면 천도 새로 만든다. 갑옷처럼 딱딱한 파츠는 끈다.
 	 */

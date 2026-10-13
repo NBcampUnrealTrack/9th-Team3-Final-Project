@@ -12,6 +12,7 @@
 #include "GameplayEffect.h"
 #include "Item/knightItemDefinitions.h"
 #include "Item/knightEquipmentData.h"
+#include "MechBodyRegionSet.h"
 #include "Progression/knightProgressionSubsystem.h"
 #include "System/knightAssetManager.h"
 #include "System/knightGameplayTags.h"
@@ -40,6 +41,9 @@ void UknightPartsComponent::ApplyLoadout()
 {
 	const UGameInstance* const GameInstance = GetWorld() ? GetWorld()->GetGameInstance() : nullptr;
 	const UknightProgressionSubsystem* const Progression = GameInstance ? GameInstance->GetSubsystem<UknightProgressionSubsystem>() : nullptr;
+
+	// 부위 메시를 먼저 만들어 둬야 아래 장착에서 Replace Regions가 바로 반영되고, 피격 표시도 부위 메시까지 칠한다.
+	CreateBodyRegionMeshes();
 
 	for (const FGameplayTag& Slot : LoadoutSlots)
 	{
@@ -172,6 +176,7 @@ bool UknightPartsComponent::EquipPartUnchecked(const UknightPartItemDefinition* 
 
 	UpdateWeightAttribute();
 	RefreshSetBonuses();
+	RefreshBodyRegionVisibility();
 
 	UE_LOG(Logknight, Verbose, TEXT("%s equipped %s (level %d) in %s."), *GetNameSafe(Character), *Part->GetName(), Equipped.UpgradeLevel, *Part->SlotTag.ToString());
 	OnEquipmentChanged.Broadcast(Part->SlotTag, const_cast<UknightPartItemDefinition*>(Part));
@@ -186,6 +191,7 @@ void UknightPartsComponent::UnequipSlot(FGameplayTag SlotTag)
 		RemovePart(Removed);
 		UpdateWeightAttribute();
 		RefreshSetBonuses();
+		RefreshBodyRegionVisibility();
 		OnEquipmentChanged.Broadcast(SlotTag, nullptr);
 	}
 }
@@ -316,6 +322,68 @@ void UknightPartsComponent::GetPartMeshes(TArray<UMeshComponent*>& OutMeshes) co
 			OutMeshes.Add(Entry.Value.MeshComponent);
 		}
 	}
+	for (USkeletalMeshComponent* const RegionMesh : BodyRegionMeshes)
+	{
+		if (RegionMesh)
+		{
+			OutMeshes.Add(RegionMesh);
+		}
+	}
+}
+
+void UknightPartsComponent::CreateBodyRegionMeshes()
+{
+	ACharacter* const Character = Cast<ACharacter>(GetOwner());
+	USkeletalMeshComponent* const Body = Character ? Character->GetMesh() : nullptr;
+	if (!BodyRegions || !Body || !BodyRegionMeshes.IsEmpty())
+	{
+		return;
+	}
+	// 다른 메시용으로 나눈 세트면 부위가 어긋나므로 쓰지 않는다.
+	if (BodyRegions->SourceMesh.ToSoftObjectPath() != FSoftObjectPath(Body->GetSkeletalMeshAsset()))
+	{
+		UE_LOG(Logknight, Warning, TEXT("%s: Body Regions %s was made from %s, but the body mesh is %s. Showing the body as is."),
+			*GetNameSafe(Character), *BodyRegions->GetName(), *BodyRegions->SourceMesh.ToString(), *GetNameSafe(Body->GetSkeletalMeshAsset()));
+		return;
+	}
+
+	for (const FMechBodyRegionMesh& Region : BodyRegions->Regions)
+	{
+		USkeletalMesh* const Mesh = UknightAssetManager::GetAsset(Region.Mesh);
+		if (!Mesh)
+		{
+			continue;
+		}
+		USkeletalMeshComponent* const RegionMesh = NewObject<USkeletalMeshComponent>(Character, NAME_None, RF_Transient);
+		UMechBodyRegionSet::SetupRegionComponent(RegionMesh, Mesh, Body);
+		RegionMesh->RegisterComponent();
+		Character->AddInstanceComponent(RegionMesh);
+		BodyRegionMeshes.Add(RegionMesh);
+		BodyRegionFlags.Add(static_cast<int32>(Region.Region));
+	}
+	if (!BodyRegionMeshes.IsEmpty())
+	{
+		UMechBodyRegionSet::SetMechBodyHidden(Body, true);
+	}
+}
+
+void UknightPartsComponent::RefreshBodyRegionVisibility()
+{
+	int32 HiddenRegions = 0;
+	for (const TPair<FGameplayTag, FknightEquippedPart>& Entry : EquippedParts)
+	{
+		if (const UknightPartItemDefinition* const Part = Entry.Value.Definition.Get())
+		{
+			HiddenRegions |= Part->Attachment.ReplaceRegions;
+		}
+	}
+	for (int32 Index = 0; Index < BodyRegionMeshes.Num(); ++Index)
+	{
+		if (BodyRegionMeshes[Index])
+		{
+			BodyRegionMeshes[Index]->SetVisibility((BodyRegionFlags[Index] & HiddenRegions) == 0);
+		}
+	}
 }
 
 void UknightPartsComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -333,5 +401,18 @@ void UknightPartsComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		RemovePart(Entry.Value);
 	}
 	EquippedParts.Reset();
+	for (USkeletalMeshComponent* const RegionMesh : BodyRegionMeshes)
+	{
+		if (RegionMesh)
+		{
+			if (AActor* const Owner = GetOwner())
+			{
+				Owner->RemoveInstanceComponent(RegionMesh);
+			}
+			RegionMesh->DestroyComponent();
+		}
+	}
+	BodyRegionMeshes.Reset();
+	BodyRegionFlags.Reset();
 	Super::EndPlay(EndPlayReason);
 }

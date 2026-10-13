@@ -8,6 +8,8 @@
 #include "EditorViewportClient.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/StaticMesh.h"
+#include "MechBodyRegionSet.h"
+#include "MechBodyRegionSplitter.h"
 #include "MechPartAttachment.h"
 #include "MechPartReflection.h"
 #include "MechPartsWorkbenchSettings.h"
@@ -55,6 +57,23 @@ public:
 private:
 	TOptional<FBox> PendingFocus;
 };
+
+namespace
+{
+	/** 컴포넌트가 지금 그리는 메시(스켈레탈 또는 스태틱). 없으면 null. */
+	const UObject* GetComponentMesh(const UMeshComponent* Component)
+	{
+		if (const USkeletalMeshComponent* const SkeletalPart = Cast<USkeletalMeshComponent>(Component))
+		{
+			return SkeletalPart->GetSkeletalMeshAsset();
+		}
+		if (const UStaticMeshComponent* const StaticPart = Cast<UStaticMeshComponent>(Component))
+		{
+			return StaticPart->GetStaticMesh();
+		}
+		return nullptr;
+	}
+}
 
 void SMechPartsWorkbenchViewport::Construct(const FArguments& InArgs)
 {
@@ -108,34 +127,10 @@ void SMechPartsWorkbenchViewport::RefreshPart()
 	UObject* const Mesh = Asset ? MechPartReflection::LoadPartMesh(Asset) : nullptr;
 
 	// 메시가 바뀐 경우에만 컴포넌트를 새로 만든다 (숫자를 끌어 바꾸는 동안 매번 새로 만들지 않게).
-	const UObject* CurrentMesh = nullptr;
-	if (const USkeletalMeshComponent* const SkeletalPart = Cast<USkeletalMeshComponent>(PartComponent))
-	{
-		CurrentMesh = SkeletalPart->GetSkeletalMeshAsset();
-	}
-	else if (const UStaticMeshComponent* const StaticPart = Cast<UStaticMeshComponent>(PartComponent))
-	{
-		CurrentMesh = StaticPart->GetStaticMesh();
-	}
-	if (CurrentMesh != Mesh)
+	if (GetComponentMesh(PartComponent) != Mesh)
 	{
 		RemovePartComponent();
-		if (USkeletalMesh* const SkeletalMesh = Cast<USkeletalMesh>(Mesh))
-		{
-			USkeletalMeshComponent* const Component = NewObject<USkeletalMeshComponent>(GetTransientPackage(), NAME_None, RF_Transient);
-			Component->SetSkeletalMeshAsset(SkeletalMesh);
-			PartComponent = Component;
-		}
-		else if (UStaticMesh* const StaticMesh = Cast<UStaticMesh>(Mesh))
-		{
-			UStaticMeshComponent* const Component = NewObject<UStaticMeshComponent>(GetTransientPackage(), NAME_None, RF_Transient);
-			Component->SetStaticMesh(StaticMesh);
-			PartComponent = Component;
-		}
-		if (PartComponent)
-		{
-			PreviewScene->AddComponent(PartComponent, FTransform::Identity);
-		}
+		PartComponent = CreateMeshComponent(Mesh);
 	}
 
 	if (PartComponent)
@@ -145,9 +140,154 @@ void SMechPartsWorkbenchViewport::RefreshPart()
 			Attachment->Apply(PartComponent, MechComponent);
 		}
 	}
+	// 고른 파츠의 Replace Regions가 바뀌었을 수 있다.
+	UpdateMechVisibility();
 	if (ViewportClient.IsValid())
 	{
 		ViewportClient->Invalidate();
+	}
+}
+
+UMeshComponent* SMechPartsWorkbenchViewport::CreateMeshComponent(UObject* Mesh)
+{
+	UMeshComponent* Component = nullptr;
+	if (USkeletalMesh* const SkeletalMesh = Cast<USkeletalMesh>(Mesh))
+	{
+		USkeletalMeshComponent* const SkeletalPart = NewObject<USkeletalMeshComponent>(GetTransientPackage(), NAME_None, RF_Transient);
+		SkeletalPart->SetSkeletalMeshAsset(SkeletalMesh);
+		Component = SkeletalPart;
+	}
+	else if (UStaticMesh* const StaticMesh = Cast<UStaticMesh>(Mesh))
+	{
+		UStaticMeshComponent* const StaticPart = NewObject<UStaticMeshComponent>(GetTransientPackage(), NAME_None, RF_Transient);
+		StaticPart->SetStaticMesh(StaticMesh);
+		Component = StaticPart;
+	}
+	if (Component)
+	{
+		PreviewScene->AddComponent(Component, FTransform::Identity);
+	}
+	return Component;
+}
+
+void SMechPartsWorkbenchViewport::SetLoadout(const TArray<UObject*>& InParts)
+{
+	// 이미 있던 파츠는 컴포넌트를 그대로 쓰고, 빠진 파츠의 컴포넌트만 치운다.
+	TArray<FLoadoutPart> OldParts = MoveTemp(LoadoutParts);
+	LoadoutParts.Reset();
+	for (UObject* const Asset : InParts)
+	{
+		FLoadoutPart& Entry = LoadoutParts.AddDefaulted_GetRef();
+		Entry.Asset = Asset;
+		if (FLoadoutPart* const Existing = OldParts.FindByPredicate([Asset](const FLoadoutPart& Old) { return Old.Asset.Get() == Asset; }))
+		{
+			Entry.Component = Existing->Component;
+			Existing->Component = nullptr;
+		}
+	}
+	for (FLoadoutPart& Removed : OldParts)
+	{
+		if (Removed.Component)
+		{
+			PreviewScene->RemoveComponent(Removed.Component);
+		}
+	}
+	RefreshLoadout();
+}
+
+void SMechPartsWorkbenchViewport::RefreshLoadout()
+{
+	for (FLoadoutPart& Entry : LoadoutParts)
+	{
+		UObject* const Asset = Entry.Asset.Get();
+		UObject* const Mesh = Asset ? MechPartReflection::LoadPartMesh(Asset) : nullptr;
+		if (GetComponentMesh(Entry.Component) != Mesh)
+		{
+			if (Entry.Component)
+			{
+				PreviewScene->RemoveComponent(Entry.Component);
+			}
+			Entry.Component = CreateMeshComponent(Mesh);
+		}
+		const FMechPartAttachment* const Attachment = Asset ? MechPartReflection::FindAttachment(Asset) : nullptr;
+		if (Entry.Component && Attachment)
+		{
+			Attachment->Apply(Entry.Component, MechComponent);
+		}
+	}
+	UpdateMechVisibility();
+	if (ViewportClient.IsValid())
+	{
+		ViewportClient->Invalidate();
+	}
+}
+
+void SMechPartsWorkbenchViewport::SetHideWholeMech(bool bHide)
+{
+	bHideWholeMech = bHide;
+	UpdateMechVisibility();
+	if (ViewportClient.IsValid())
+	{
+		ViewportClient->Invalidate();
+	}
+}
+
+void SMechPartsWorkbenchViewport::RefreshBodyRegions()
+{
+	for (USkeletalMeshComponent* const Region : RegionComponents)
+	{
+		if (Region)
+		{
+			PreviewScene->RemoveComponent(Region);
+		}
+	}
+	RegionComponents.Reset();
+	RegionFlags.Reset();
+
+	// 게임과 같은 방식: 본체 메시로 나눈 세트가 있으면 부위 메시를 본체 자세에 붙인다.
+	if (const UMechBodyRegionSet* const RegionSet = MechBodyRegionSplitter::FindRegionSet(MechComponent->GetSkeletalMeshAsset()))
+	{
+		for (const FMechBodyRegionMesh& Region : RegionSet->Regions)
+		{
+			USkeletalMesh* const Mesh = Region.Mesh.LoadSynchronous();
+			if (!Mesh)
+			{
+				continue;
+			}
+			USkeletalMeshComponent* const Component = NewObject<USkeletalMeshComponent>(GetTransientPackage(), NAME_None, RF_Transient);
+			PreviewScene->AddComponent(Component, FTransform::Identity);
+			UMechBodyRegionSet::SetupRegionComponent(Component, Mesh, MechComponent);
+			RegionComponents.Add(Component);
+			RegionFlags.Add(static_cast<int32>(Region.Region));
+		}
+	}
+	UpdateMechVisibility();
+}
+
+void SMechPartsWorkbenchViewport::UpdateMechVisibility()
+{
+	int32 HiddenRegions = 0;
+	auto AddReplacedRegions = [&HiddenRegions](UObject* Asset)
+	{
+		if (const FMechPartAttachment* const Attachment = Asset ? MechPartReflection::FindAttachment(Asset) : nullptr)
+		{
+			HiddenRegions |= Attachment->ReplaceRegions;
+		}
+	};
+	AddReplacedRegions(PartAsset.Get());
+	for (const FLoadoutPart& Entry : LoadoutParts)
+	{
+		AddReplacedRegions(Entry.Asset.Get());
+	}
+
+	// 부위 메시가 있으면 본체는 항상 숨기고(게임과 같음) 부위 메시를 켜고 끈다. 없으면 '원본 전부 숨기기'일 때만 본체를 숨긴다.
+	UMechBodyRegionSet::SetMechBodyHidden(MechComponent, HasBodyRegions() || bHideWholeMech);
+	for (int32 Index = 0; Index < RegionComponents.Num(); ++Index)
+	{
+		if (RegionComponents[Index])
+		{
+			RegionComponents[Index]->SetVisibility(!bHideWholeMech && (RegionFlags[Index] & HiddenRegions) == 0);
+		}
 	}
 }
 
@@ -161,8 +301,16 @@ void SMechPartsWorkbenchViewport::RefreshMech()
 {
 	const UMechPartsWorkbenchSettings* const Settings = GetDefault<UMechPartsWorkbenchSettings>();
 
-	// 파츠가 메카에 붙어 있으므로 먼저 떼고, 메카를 바꾼 뒤 다시 붙인다.
+	// 파츠가 메카에 붙어 있으므로 먼저 떼고, 메카를 바꾼 뒤 다시 붙인다(착용 미리보기 파츠도 같음).
 	RemovePartComponent();
+	for (FLoadoutPart& Entry : LoadoutParts)
+	{
+		if (Entry.Component)
+		{
+			PreviewScene->RemoveComponent(Entry.Component);
+			Entry.Component = nullptr;
+		}
+	}
 
 	USkeletalMesh* const MechMesh = Settings->PreviewMechMesh.LoadSynchronous();
 	const bool bMechMeshChanged = MechComponent->GetSkeletalMeshAsset() != MechMesh;
@@ -195,7 +343,13 @@ void SMechPartsWorkbenchViewport::RefreshMech()
 		MechComponent->SetAnimation(nullptr);
 	}
 
+	// 메카 메시가 바뀌었으면 그 메시용 부위 메시 세트로 바꾼다.
+	if (bMechMeshChanged || RegionComponents.IsEmpty())
+	{
+		RefreshBodyRegions();
+	}
 	RefreshPart();
+	RefreshLoadout();
 	// 자세만 바꿀 때는 보던 카메라를 그대로 두고, 메카 메시가 바뀌었을 때(처음 열 때 포함)만 메카에 맞춘다.
 	if (bMechMeshChanged && ViewportClient.IsValid())
 	{

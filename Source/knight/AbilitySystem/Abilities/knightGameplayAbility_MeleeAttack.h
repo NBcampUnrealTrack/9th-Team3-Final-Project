@@ -121,7 +121,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Motion Warping", meta=(ClampMin=1, ClampMax=180, Units="deg", EditCondition="bUseSoftTarget"))
 	float SoftTargetAngle = 75.f;
 
-	/** Movement input during Window.Cancel stops the montage and ends the attack. */
+	/**
+	 * Movement input during Window.Cancel stops the montage and ends the attack.
+	 * (2026-10-14) ASC의 bOnlyDashCancelsAttackRecovery가 켜져 있으면(공격 후딜은 퀵스텝만) 이동으로는 끊지 않는다.
+	 */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Recovery")
 	bool bCancelRecoveryOnMove = true;
 
