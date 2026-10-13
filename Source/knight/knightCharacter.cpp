@@ -17,6 +17,7 @@
 #include "Abilities/GameplayAbilityTypes.h"
 #include "GameplayEffect.h"
 #include "Character/knightMovementComponent.h"
+#include "Combat/knightGroggyFeedbackComponent.h"
 #include "Combat/knightHitReactionComponent.h"
 #include "Combat/knightHitStopComponent.h"
 #include "Combat/knightMeleeTraceComponent.h"
@@ -69,6 +70,7 @@ AknightCharacter::AknightCharacter(const FObjectInitializer& ObjectInitializer)
 	MeleeTrace = CreateDefaultSubobject<UknightMeleeTraceComponent>(TEXT("MeleeTrace"));
 	HitStop = CreateDefaultSubobject<UknightHitStopComponent>(TEXT("HitStop"));
 	HitReaction = CreateDefaultSubobject<UknightHitReactionComponent>(TEXT("HitReaction"));
+	GroggyFeedback = CreateDefaultSubobject<UknightGroggyFeedbackComponent>(TEXT("GroggyFeedback"));
 	TargetLock = CreateDefaultSubobject<UknightTargetLockComponent>(TEXT("TargetLock"));
 	MotionWarping = CreateDefaultSubobject<UMotionWarpingComponent>(TEXT("MotionWarping"));
 	Parts = CreateDefaultSubobject<UknightPartsComponent>(TEXT("Parts"));
@@ -266,6 +268,9 @@ void AknightCharacter::LookMouse(const FInputActionValue& Value)
 
 void AknightCharacter::ApplyLookInput(FVector2D LookAxisVector, bool bFromMouse)
 {
+	// 패드의 락온 대상 전환은 감도와 상관없이 스틱 기울기로 본다(Y축 반전만 따름). (2026-10-14)
+	FVector2D StickTilt = LookAxisVector;
+
 	// 개인 설정: 장치별 감도와 Y축 반전.
 	const APlayerController* const PC = Cast<APlayerController>(GetController());
 	const ULocalPlayer* const LocalPlayer = PC ? PC->GetLocalPlayer() : nullptr;
@@ -282,8 +287,13 @@ void AknightCharacter::ApplyLookInput(FVector2D LookAxisVector, bool bFromMouse)
 		if (Shared->bInvertLookY)
 		{
 			LookAxisVector.Y = -LookAxisVector.Y;
+			StickTilt.Y = -StickTilt.Y;
 		}
 	}
+
+	// 락온 중에는 시점 입력을 휙 움직인 방향의 다른 대상(부위)으로 바꾸는 데 쓴다(다크소울 방식, knightTargetLockComponent).
+	// 락온 직전부터 움직이던 입력을 거르려고 락온이 아닐 때도 넘긴다.
+	TargetLock->AddSwitchLookInput(bFromMouse ? LookAxisVector : StickTilt, !bFromMouse);
 
 	// 입력 전달
 	DoLook(LookAxisVector.X, LookAxisVector.Y);
@@ -334,7 +344,7 @@ void AknightCharacter::DoMove(float Right, float Forward)
 
 void AknightCharacter::DoLook(float Yaw, float Pitch)
 {
-	// 락온 중에는 락온이 시점을 정한다. 대상 전환은 전용 입력을 쓴다.
+	// 락온 중에는 락온이 시점을 정한다. 대상 전환은 전용 입력(휠)과 시점 입력(ApplyLookInput → AddSwitchLookInput)으로 한다.
 	if (GetController() != nullptr && !TargetLock->IsLockedOn())
 	{
 		// 컨트롤러에 좌우·상하 회전 입력 추가

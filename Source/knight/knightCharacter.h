@@ -22,6 +22,7 @@ class UknightCoreAttributeSet;
 class UknightInputBufferComponent;
 class UknightHitReactionComponent;
 class UknightHitStopComponent;
+class UknightGroggyFeedbackComponent;
 class UknightInputConfig;
 class UknightMeleeTraceComponent;
 class UknightMovementComponent;
@@ -74,6 +75,10 @@ class KNIGHT_API AknightCharacter : public ACharacter, public IAbilitySystemInte
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UknightHitReactionComponent> HitReaction;
+
+	/** (2026-10-14) 내가 상대의 그로기를 일으키면 큰 히트스탑·이펙트(GCN_Hit_Groggy). 값은 이 컴포넌트에서 조절. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UknightGroggyFeedbackComponent> GroggyFeedback;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UknightTargetLockComponent> TargetLock;
