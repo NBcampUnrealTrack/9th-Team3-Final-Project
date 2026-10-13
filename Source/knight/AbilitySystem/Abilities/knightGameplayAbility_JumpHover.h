@@ -19,7 +19,8 @@ class USoundBase;
  * 체공 느낌 (2026-10-08, "아이언맨처럼"):
  *   - 이동 모드는 낙하(MOVE_Falling) 그대로 두고 중력만 끈다. 비행 모드로 바꾸면 애니메이션이 땅 위 이동으로 바뀌어
  *     공중에서 다리가 걷는다. 낙하 상태라 애님 블루프린트는 공중 자세를 유지한다.
- *   - 떨어지던 속도를 한 번에 0으로 만들지 않고 HoverCatchSpeed로 부드럽게 잡는다. 떨어지는 중에 켜면 살짝 위로 튄다.
+ *   - (2026-10-13 호버 느낌) 높이는 기준 높이에 스프링으로 끌린다: 떨어지다 잡히면 살짝 가라앉았다 되튀고,
+ *     제자리에서도 수평으로 천천히 떠돈다. 출발할 때 추력이 천천히 올라오고, 멈출 때 몸을 뒤로 젖히며 오래 미끄러진다.
  *   - 제자리에서는 HoverBobAmplitude만큼 천천히 오르내린다(추진기로 버티는 느낌).
  *   - 수평 이동은 관성이 있다: 입력으로 밀고(HoverAirControl), 손을 떼면 HoverDrag로 천천히 멈춘다.
  *   - 몸(메시)을 미는 방향으로 기울인다: 앞으로 밀면 앞으로 숙이고, 옆으로 밀면 옆으로 기운다(최대 HoverMaxTilt).
@@ -54,13 +55,45 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Hover|Cost", meta=(ClampMin=0))
 	float MinGaugeToHover = 5.f;
 
-	/** 떨어지는 중에 체공을 켜면 이 속도로 살짝 위로 튄다. 0이면 튀지 않는다. */
+	/** 떨어지는 중에 체공을 켜면 낙하 속도를 여기까지만 남긴다(가라앉는 깊이). 그다음은 아래 스프링이 되돌린다. (2026-10-13) */
 	UPROPERTY(EditDefaultsOnly, Category="Hover|Vertical", meta=(ClampMin=0, Units="CentimetersPerSecond"))
-	float HoverStartLift = 180.f;
+	float HoverCatchMaxFallSpeed = 250.f;
 
-	/** 수직 속도를 목표값으로 맞추는 빠르기. 클수록 딱 멈추고, 작을수록 둥실하게 잡힌다. */
-	UPROPERTY(EditDefaultsOnly, Category="Hover|Vertical", meta=(ClampMin=0.1))
-	float HoverCatchSpeed = 4.f;
+	/**
+	 * 호버 높이 스프링 (2026-10-13). 멈춘 높이에 몸을 고정하지 않고, 기준 높이에 용수철로 달린 것처럼 끌어당긴다.
+	 * 떨어지다 잡히면 살짝 가라앉았다가 되튀고, 올라가던 중이면 조금 더 올라가다 내려와 자리 잡는다.
+	 * 주파수(Hz)가 낮을수록 둥실하고, 감쇠(0~1)가 낮을수록 더 출렁인다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Hover|Vertical", meta=(ClampMin=0.1, ClampMax=5, Units="Hz"))
+	float HoverSpringFrequency = 0.9f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Hover|Vertical", meta=(ClampMin=0.05, ClampMax=1.5))
+	float HoverSpringDamping = 0.45f;
+
+	/** 올라가던 중에 체공을 켜면 이 감속으로 멈출 때까지 더 올라간 높이를 기준으로 잡는다. */
+	UPROPERTY(EditDefaultsOnly, Category="Hover|Vertical", meta=(ClampMin=100))
+	float HoverRiseDeceleration = 1800.f;
+
+	/**
+	 * 누르고 있으면 상승 (2026-10-13). 체공을 시작하고 HoverClimbDelay초 넘게 키를 계속 누르고 있으면
+	 * 기준 높이가 천천히 올라간다(HoverClimbRampTime 동안 HoverClimbSpeed까지 빨라짐). 체공 시작 높이에서 최대 HoverMaxClimb까지.
+	 * 짧게 눌렀다 떼면 지금처럼 그 높이에서 떠 있다 떨어진다. HoverClimbSpeed가 0이면 상승하지 않는다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Hover|Climb", meta=(ClampMin=0, Units="s"))
+	float HoverClimbDelay = 0.35f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Hover|Climb", meta=(ClampMin=0, Units="CentimetersPerSecond"))
+	float HoverClimbSpeed = 180.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Hover|Climb", meta=(ClampMin=0, Units="s"))
+	float HoverClimbRampTime = 0.6f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Hover|Climb", meta=(ClampMin=0, Units="cm"))
+	float HoverMaxClimb = 900.f;
+
+	/** 상승하는 동안 더 쓰는 부스트 게이지(초당, 상승 속도가 최대일 때). */
+	UPROPERTY(EditDefaultsOnly, Category="Hover|Climb", meta=(ClampMin=0))
+	float HoverClimbExtraDrain = 8.f;
 
 	/** 제자리에서 오르내리는 폭(위아래 각각). 0이면 흔들리지 않는다. */
 	UPROPERTY(EditDefaultsOnly, Category="Hover|Vertical", meta=(ClampMin=0, Units="cm"))
@@ -74,17 +107,49 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Hover|Horizontal", meta=(ClampMin=0, ClampMax=1))
 	float HoverAirControl = 0.75f;
 
-	/** 입력이 없을 때 수평 속도가 줄어드는 정도. 작을수록 오래 미끄러진다. */
+	/** 방향을 바꿀 때 속도가 새 방향으로 꺾이는 정도(낙하 마찰). 작을수록 미끄러지며 돌아간다. */
 	UPROPERTY(EditDefaultsOnly, Category="Hover|Horizontal", meta=(ClampMin=0))
-	float HoverDrag = 1.5f;
+	float HoverDrag = 0.5f;
 
-	/** 미는 방향으로 몸이 기우는 최대 각도. 0이면 기울지 않는다. */
+	/** 입력이 없을 때의 감속(cm/s²). 작을수록 오래 미끄러진다. (2026-10-13) */
+	UPROPERTY(EditDefaultsOnly, Category="Hover|Horizontal", meta=(ClampMin=0))
+	float HoverBrakingDeceleration = 90.f;
+
+	/**
+	 * 추력 올라오기 (2026-10-13). 방향키를 누른 직후에는 이동 입력이 HoverThrustStartScale배만 먹고,
+	 * HoverThrustRampTime 동안 1배까지 올라간다. 추진기가 돌기 시작하는 느낌.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Hover|Horizontal", meta=(ClampMin=0, Units="s"))
+	float HoverThrustRampTime = 0.45f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Hover|Horizontal", meta=(ClampMin=0, ClampMax=1))
+	float HoverThrustStartScale = 0.25f;
+
+	/** 제자리에서도 수평으로 천천히 떠도는 폭(cm). 0이면 떠돌지 않는다. (2026-10-13) */
+	UPROPERTY(EditDefaultsOnly, Category="Hover|Horizontal", meta=(ClampMin=0, Units="cm"))
+	float HoverDriftAmplitude = 6.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Hover|Horizontal", meta=(ClampMin=0.5, Units="s"))
+	float HoverDriftPeriod = 3.3f;
+
+	/**
+	 * 몸이 기우는 최대 각도. 0이면 기울지 않는다.
+	 * (2026-10-13) 입력이 아니라 실제 가속을 따른다: 출발할 때 앞으로 숙이고, 멈출 때는 뒤로 젖혀서 역분사하는 자세.
+	 * 가속이 HoverTiltAccelReference면 최대 각도.
+	 */
 	UPROPERTY(EditDefaultsOnly, Category="Hover|Tilt", meta=(ClampMin=0, ClampMax=45, Units="deg"))
 	float HoverMaxTilt = 14.f;
 
 	/** 기울기가 따라가는 빠르기. */
 	UPROPERTY(EditDefaultsOnly, Category="Hover|Tilt", meta=(ClampMin=0.1))
 	float HoverTiltSpeed = 5.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Hover|Tilt", meta=(ClampMin=1))
+	float HoverTiltAccelReference = 700.f;
+
+	/** 제자리에서 몸이 천천히 흔들리는 각도(앞뒤·좌우). 0이면 흔들리지 않는다. (2026-10-13) */
+	UPROPERTY(EditDefaultsOnly, Category="Hover|Tilt", meta=(ClampMin=0, ClampMax=10, Units="deg"))
+	float HoverIdleSwayAngle = 1.5f;
 
 	/** 체공 중 분사 이펙트. 로컬 -Z 방향으로 뿜는 시스템을 쓴다 (NS_Knight_Thruster). */
 	UPROPERTY(EditDefaultsOnly, Category="Hover|Effects")
@@ -168,6 +233,16 @@ private:
 	float SavedAirControl = 0.2f;
 	float SavedLateralFriction = 0.f;
 	float SavedBrakingFalling = 0.f;
+	float SavedAirControlBoost = 2.f;
+
+	// 호버 움직임 (2026-10-13).
+	float HoverAnchorZ = 0.f;
+	float HoverStartAnchorZ = 0.f;
+	float CurrentClimbRate = 0.f;
+	float ThrustHeldTime = 0.f;
+	FVector PrevHorizontalVelocity = FVector::ZeroVector;
+	FVector SmoothedAccel = FVector::ZeroVector;
+	FVector PrevDriftVelocity = FVector::ZeroVector;
 
 	// Mesh tilt: base relative transform captured when the tilt starts from upright.
 	FVector MeshBaseLocation = FVector::ZeroVector;
