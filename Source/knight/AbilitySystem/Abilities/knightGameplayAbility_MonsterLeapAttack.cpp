@@ -8,15 +8,12 @@
 #include "Combat/knightCombatLibrary.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "DrawDebugHelpers.h"
-#include "Engine/OverlapResult.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
-#include "GenericTeamAgentInterface.h"
-#include "HAL/IConsoleManager.h"
-#include "Interfaces/CombatInterface.h"
 #include "Monster/knightMonsterCharacterBase.h"
 #include "Monster/knightMonsterTargetingComponent.h"
+#include "Monster/knightMonsterDebug.h"
 #include "knight.h"
 
 namespace knightMonsterLeap
@@ -24,12 +21,6 @@ namespace knightMonsterLeap
 	constexpr float TickInterval = 1.f / 30.f;
 	/** 반복 작업의 횟수 상한. 실제로는 몽타주가 끝날 때 작업을 끝낸다. */
 	constexpr int32 MaxTicks = 100000;
-
-	bool ShouldDraw()
-	{
-		static const IConsoleVariable* const CVar = IConsoleManager::Get().FindConsoleVariable(TEXT("knight.Monster.DrawAttacks"));
-		return CVar && CVar->GetInt() != 0;
-	}
 }
 
 UknightGameplayAbility_MonsterLeapAttack::UknightGameplayAbility_MonsterLeapAttack(const FObjectInitializer& ObjectInitializer)
@@ -191,7 +182,7 @@ void UknightGameplayAbility_MonsterLeapAttack::HandleTick(int32 ActionNumber)
 	}
 
 #if ENABLE_DRAW_DEBUG
-	if (knightMonsterLeap::ShouldDraw() && Position <= BiteTime)
+	if (knightMonsterDebug::ShouldDrawAttacks() && Position <= BiteTime)
 	{
 		const float Ahead = GetTravel(Position, LeapStartTime) + GetTravel(FMath::Max(Position, LeapStartTime), BiteTime) * LeapScale + BiteReach;
 		const FVector BitePoint = Monster->GetActorLocation() + Monster->GetActorForwardVector().GetSafeNormal2D() * Ahead;
@@ -230,44 +221,10 @@ void UknightGameplayAbility_MonsterLeapAttack::ApplyHits()
 	const USkeletalMeshComponent* const Mesh = GetCurrentActorInfo() ? GetCurrentActorInfo()->SkeletalMeshComponent.Get() : nullptr;
 	const FVector Anchor = Mesh && !HitSocket.IsNone() && Mesh->DoesSocketExist(HitSocket) ? Mesh->GetSocketLocation(HitSocket) : Avatar->GetActorLocation();
 	const FVector Center = Anchor + Avatar->GetActorQuat().RotateVector(HitOffset);
-	FCollisionObjectQueryParams ObjectParams;
-	ObjectParams.AddObjectTypesToQuery(ECC_Pawn);
-	ObjectParams.AddObjectTypesToQuery(ECC_PhysicsBody);
-	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(knightMonsterLeap), false, Avatar);
-	TArray<FOverlapResult> Overlaps;
-	World->OverlapMultiByObjectType(Overlaps, Center, FQuat::Identity, ObjectParams, FCollisionShape::MakeSphere(HitRadius), QueryParams);
-
-	int32 NewHits = 0;
-	for (const FOverlapResult& Overlap : Overlaps)
-	{
-		AActor* const Target = Overlap.GetActor();
-		UPrimitiveComponent* const Component = Overlap.GetComponent();
-		if (!Target || !Component || HitActors.Contains(Target)
-			|| !Target->GetClass()->ImplementsInterface(UCombatInterface::StaticClass())
-			|| !ICombatInterface::Execute_CanReceiveHitBP(Target, Avatar)
-			|| FGenericTeamId::GetAttitude(Avatar, Target) != ETeamAttitude::Hostile)
-		{
-			continue;
-		}
-		HitActors.Add(Target);
-		++NewHits;
-
-		FVector ImpactPoint = Component->GetComponentLocation();
-		FVector ClosestPoint;
-		if (Component->GetClosestPointOnCollision(Center, ClosestPoint) >= 0.f)
-		{
-			ImpactPoint = ClosestPoint;
-		}
-		FHitResult Hit(Target, Component, ImpactPoint, (Center - ImpactPoint).GetSafeNormal());
-		Hit.bBlockingHit = true;
-		Hit.TraceStart = Center;
-		Hit.TraceEnd = ImpactPoint;
-		const EknightHitOutcome Outcome = UknightCombatLibrary::ApplyMeleeHit(Avatar, Hit, HitParams);
-		UE_LOG(LogknightAI, Verbose, TEXT("%s: %s hit %s (outcome %d)."), *GetNameSafe(Avatar), *GetName(), *GetNameSafe(Target), static_cast<int32>(Outcome));
-	}
+	const int32 NewHits = UknightCombatLibrary::ApplyAreaMeleeHits(Avatar, Center, FCollisionShape::MakeSphere(HitRadius), HitParams, HitActors);
 
 #if ENABLE_DRAW_DEBUG
-	if (knightMonsterLeap::ShouldDraw())
+	if (knightMonsterDebug::ShouldDrawAttacks())
 	{
 		DrawDebugSphere(World, Center, HitRadius, 16, NewHits == 0 ? FColor::Red : FColor::Magenta, false, knightMonsterLeap::TickInterval, 0, 3.f);
 	}

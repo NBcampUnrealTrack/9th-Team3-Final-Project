@@ -3,23 +3,14 @@
 #include "Combat/knightCombatLibrary.h"
 #include "Components/StaticMeshComponent.h"
 #include "DrawDebugHelpers.h"
-#include "Engine/OverlapResult.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
-#include "GenericTeamAgentInterface.h"
-#include "HAL/IConsoleManager.h"
-#include "Interfaces/CombatInterface.h"
 #include "NiagaraFunctionLibrary.h"
+#include "Monster/knightMonsterDebug.h"
 #include "knight.h"
 
 namespace knightMonsterSpike
 {
-	bool ShouldDraw()
-	{
-		static const IConsoleVariable* const CVar = IConsoleManager::Get().FindConsoleVariable(TEXT("knight.Monster.DrawAttacks"));
-		return CVar && CVar->GetInt() != 0;
-	}
-
 	UStaticMeshComponent* CreateHalf(AActor& Owner, USceneComponent* Parent, const TCHAR* Name)
 	{
 		UStaticMeshComponent* const Half = Owner.CreateDefaultSubobject<UStaticMeshComponent>(Name);
@@ -128,50 +119,15 @@ void AknightMonsterSpikeProjectile::Land()
 		return;
 	}
 
-	FCollisionObjectQueryParams ObjectParams;
-	ObjectParams.AddObjectTypesToQuery(ECC_Pawn);
-	ObjectParams.AddObjectTypesToQuery(ECC_PhysicsBody);
-	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(knightMonsterSpike), false, AttackerActor);
-	// 가시는 대상을 통과해 땅에 박히므로, 착탄점 위 낙하 경로(기둥) 안에 있던 대상이 맞는다.
+	// 가시는 대상을 통과해 땅에 박히므로, 착탄점 위 낙하 경로(기둥) 안에 있던 대상이 맞는다. 맞은 목록은 볼리 전체가 같이 쓴다.
 	const float HalfHeight = FMath::Max(Impact.PathHeight * 0.5f, Impact.HitRadius);
 	const FVector PathCenter = Impact.Landing + FVector::UpVector * HalfHeight;
-	TArray<FOverlapResult> Overlaps;
-	World->OverlapMultiByObjectType(Overlaps, PathCenter, FQuat::Identity, ObjectParams, FCollisionShape::MakeCapsule(Impact.HitRadius, HalfHeight), QueryParams);
-
-	int32 NewHits = 0;
-	for (const FOverlapResult& Overlap : Overlaps)
-	{
-		AActor* const Target = Overlap.GetActor();
-		UPrimitiveComponent* const Component = Overlap.GetComponent();
-		if (!Target || !Component || (VolleyHits && VolleyHits->Contains(Target))
-			|| !Target->GetClass()->ImplementsInterface(UCombatInterface::StaticClass())
-			|| !ICombatInterface::Execute_CanReceiveHitBP(Target, AttackerActor)
-			|| FGenericTeamId::GetAttitude(AttackerActor, Target) != ETeamAttitude::Hostile)
-		{
-			continue;
-		}
-		if (VolleyHits)
-		{
-			VolleyHits->Add(Target);
-		}
-		++NewHits;
-
-		FVector ImpactPoint = Component->GetComponentLocation();
-		FVector ClosestPoint;
-		if (Component->GetClosestPointOnCollision(PathCenter, ClosestPoint) >= 0.f)
-		{
-			ImpactPoint = ClosestPoint;
-		}
-		FHitResult Hit(Target, Component, ImpactPoint, FVector::UpVector);
-		Hit.bBlockingHit = true;
-		Hit.TraceStart = PathCenter;
-		Hit.TraceEnd = ImpactPoint;
-		const EknightHitOutcome Outcome = UknightCombatLibrary::ApplyMeleeHit(AttackerActor, Hit, HitParams);
-		UE_LOG(LogknightAI, Verbose, TEXT("%s: spike hit %s (outcome %d)."), *GetNameSafe(AttackerActor), *GetNameSafe(Target), static_cast<int32>(Outcome));
-	}
+	FknightSpikeVolleyHits LocalHits;
+	const int32 NewHits = UknightCombatLibrary::ApplyAreaMeleeHits(AttackerActor, PathCenter, FCollisionShape::MakeCapsule(Impact.HitRadius, HalfHeight),
+		HitParams, VolleyHits ? *VolleyHits : LocalHits, [](const AActor&) { return true; }, [](AActor&, EknightHitOutcome) {}, FVector::UpVector);
 
 #if ENABLE_DRAW_DEBUG
-	if (knightMonsterSpike::ShouldDraw())
+	if (knightMonsterDebug::ShouldDrawAttacks())
 	{
 		DrawDebugCapsule(World, PathCenter, HalfHeight, Impact.HitRadius, FQuat::Identity, NewHits == 0 ? FColor::Red : FColor::Magenta, false, 1.f, 0, 3.f);
 	}
