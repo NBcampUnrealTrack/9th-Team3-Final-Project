@@ -91,14 +91,14 @@ namespace knightMonsterFX
 		Distribution.ChannelConstantsAndRanges = { Min, Max };
 	}
 
-	void SetSprite(UNiagaraStatelessEmitter& Emitter, UMaterialInterface* Material)
+	void SetSprite(UNiagaraStatelessEmitter& Emitter, UMaterialInterface* Material, ENiagaraSpriteAlignment Alignment = ENiagaraSpriteAlignment::Unaligned)
 	{
 		for (UNiagaraRendererProperties* const Renderer : Emitter.GetRenderers())
 		{
 			if (UNiagaraSpriteRendererProperties* const Sprite = Cast<UNiagaraSpriteRendererProperties>(Renderer))
 			{
 				Sprite->Material = Material;
-				Sprite->Alignment = ENiagaraSpriteAlignment::Unaligned;
+				Sprite->Alignment = Alignment;
 				Sprite->FacingMode = ENiagaraSpriteFacingMode::FaceCamera;
 				Sprite->SortMode = ENiagaraSortMode::ViewDepth;
 			}
@@ -323,6 +323,100 @@ UNiagaraSystem* UknightMonsterFXBuilder::BuildGroundDustSystem(const FString& Pa
 		SetSprite(*Emitter, Material);
 
 		if (FBox* const Bounds = GetProtected<FBox>(*Emitter, TEXT("FixedBounds"))) *Bounds = FBox(FVector(-Radius * 2.5f, -Radius * 2.5f, -Radius * 0.5f), FVector(Radius * 2.5f, Radius * 2.5f, Radius * 1.5f));
+		Emitter->PostEditChange();
+	}
+	return Finish(System, bCreated);
+}
+
+UNiagaraSystem* UknightMonsterFXBuilder::BuildWindStreakSystem(const FString& PackagePath, UMaterialInterface* Material, FVector BoxCenter, FVector BoxExtent,
+	float Speed, float StreakLength)
+{
+	using namespace knightMonsterFX;
+	bool bCreated = false;
+	UNiagaraSystem* const System = Material ? LoadOrDuplicateTemplate(PackagePath, bCreated) : nullptr;
+	if (!System)
+	{
+		return nullptr;
+	}
+
+	// 줄기 하나가 몸 길이 정도를 지나가고 사라진다.
+	const float Lifetime = FMath::Max(BoxExtent.X * 2.f / FMath::Max(Speed, 1.f), 0.1f);
+	for (const FNiagaraEmitterHandle& Handle : System->GetEmitterHandles())
+	{
+		UNiagaraStatelessEmitter* const Emitter = Handle.GetStatelessEmitter();
+		if (!Emitter)
+		{
+			continue;
+		}
+		EnableOnly(*Emitter, { UNiagaraStatelessModule_InitializeParticle::StaticClass(), UNiagaraStatelessModule_ShapeLocation::StaticClass(),
+			UNiagaraStatelessModule_AddVelocity::StaticClass(), UNiagaraStatelessModule_ScaleColor::StaticClass(),
+			UNiagaraStatelessModule_ScaleSpriteSize::StaticClass() });
+
+		for (int32 Index = 0; Index < Emitter->GetNumSpawnInfos(); ++Index)
+		{
+			Emitter->GetSpawnInfoByIndex(Index)->bEnabled = false;
+		}
+		FNiagaraStatelessSpawnInfo& Spawn = *Emitter->GetSpawnInfoByIndex(0);
+		Spawn.bEnabled = true;
+		Spawn.Type = ENiagaraStatelessSpawnInfoType::Rate;
+		Spawn.Rate.InitConstant(120.f);
+
+		if (UNiagaraStatelessModule_InitializeParticle* const Init = Get<UNiagaraStatelessModule_InitializeParticle>(*Emitter))
+		{
+			Init->LifetimeDistribution.InitRange(Lifetime * 0.6f, Lifetime);
+			// 속도 방향 정렬 스프라이트는 Y가 진행 방향이다. 가늘고 길게 둔다.
+			Init->SpriteSizeDistribution.Mode = ENiagaraDistributionMode::NonUniformRange;
+			Init->SpriteSizeDistribution.Min = FVector2f(16.f, StreakLength * 0.6f);
+			Init->SpriteSizeDistribution.Max = FVector2f(30.f, StreakLength);
+			Init->SpriteSizeDistribution.ChannelConstantsAndRanges = { 16.f, StreakLength * 0.6f, 30.f, StreakLength };
+			Init->ColorDistribution = FNiagaraDistributionColor(FLinearColor(0.9f, 0.92f, 0.95f, 1.f));
+		}
+		if (UNiagaraStatelessModule_ShapeLocation* const Shape = Get<UNiagaraStatelessModule_ShapeLocation>(*Emitter))
+		{
+			Shape->ShapePrimitive = ENSM_ShapePrimitive::Box;
+			// 몸 속에서 나온 줄기는 메시에 가려지므로 상자 겉면에서만 나오게 한다.
+			Shape->BoxSize.InitConstant(FVector3f(BoxExtent * 2.f));
+			Shape->bBoxSurfaceOnly = true;
+			Shape->TransformOffset = FNiagaraDistributionPosition(FVector3f(BoxCenter));
+		}
+		if (UNiagaraStatelessModule_AddVelocity* const Velocity = Get<UNiagaraStatelessModule_AddVelocity>(*Emitter))
+		{
+			const FVector3f Min(-Speed, -Speed * 0.03f, -Speed * 0.02f);
+			const FVector3f Max(-Speed * 0.8f, Speed * 0.03f, Speed * 0.02f);
+			Velocity->VelocityType = ENSM_VelocityType::Linear;
+			Velocity->CoordinateSpace = ENiagaraCoordinateSpace::Local;
+			Velocity->LinearVelocityDistribution.Mode = ENiagaraDistributionMode::NonUniformRange;
+			Velocity->LinearVelocityDistribution.Min = Min;
+			Velocity->LinearVelocityDistribution.Max = Max;
+			Velocity->LinearVelocityDistribution.ChannelConstantsAndRanges = { Min.X, Min.Y, Min.Z, Max.X, Max.Y, Max.Z };
+			Velocity->LinearVelocityScale.InitConstant(1.f);
+		}
+		if (UNiagaraStatelessModule_ScaleColor* const Color = Get<UNiagaraStatelessModule_ScaleColor>(*Emitter))
+		{
+			FNiagaraDistributionColor& Curve = Color->ScaleDistribution;
+			Curve.Mode = ENiagaraDistributionMode::NonUniformCurve;
+			Curve.ChannelCurves.SetNum(4);
+			for (int32 Channel = 0; Channel < 3; ++Channel)
+			{
+				SetCurve(Curve.ChannelCurves[Channel], { {0.f, 1.f}, {1.f, 1.f} });
+			}
+			SetCurve(Curve.ChannelCurves[3], { {0.f, 0.f}, {0.2f, 0.6f}, {0.6f, 0.4f}, {1.f, 0.f} });
+			Curve.UpdateValuesFromDistribution();
+		}
+		// 나타날 때 짧았다가 늘어난다.
+		if (UNiagaraStatelessModule_ScaleSpriteSize* const Size = Get<UNiagaraStatelessModule_ScaleSpriteSize>(*Emitter))
+		{
+			FNiagaraDistributionVector2& Curve = Size->ScaleDistribution;
+			Curve.Mode = ENiagaraDistributionMode::NonUniformCurve;
+			Curve.ChannelCurves.SetNum(2);
+			SetCurve(Curve.ChannelCurves[0], { {0.f, 1.f}, {1.f, 0.6f} });
+			SetCurve(Curve.ChannelCurves[1], { {0.f, 0.3f}, {0.3f, 1.f}, {1.f, 1.2f} });
+			Curve.UpdateValuesFromDistribution();
+		}
+		SetSprite(*Emitter, Material, ENiagaraSpriteAlignment::VelocityAligned);
+
+		const FVector Margin(Speed * Lifetime + StreakLength, StreakLength, StreakLength);
+		if (FBox* const Bounds = GetProtected<FBox>(*Emitter, TEXT("FixedBounds"))) *Bounds = FBox(BoxCenter - BoxExtent - Margin, BoxCenter + BoxExtent + FVector(StreakLength));
 		Emitter->PostEditChange();
 	}
 	return Finish(System, bCreated);

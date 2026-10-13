@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "AbilitySystem/Abilities/knightGameplayAbility_MonsterAttack.h"
 #include "Combat/knightCombatTypes.h"
+#include "Monster/knightMonsterRushEffects.h"
 #include "knightGameplayAbility_MonsterChargeAttack.generated.h"
 
 class UAbilityTask_Repeat;
@@ -107,6 +108,10 @@ protected:
 	/** 몽타주가 끝난 뒤 어빌리티가 끝나기까지 서 있는 시간. 플레이어가 반격할 수 있는 구간이다. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Timing", meta=(ClampMin=0, Units="s"))
 	float RecoveryTime = 1.5f;
+
+	/** 판정이 열린 뒤부터 Stop 섹션 전까지 켜는 바람 줄기와 흙먼지. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Effects")
+	FknightMonsterRushEffects RushEffects;
 
 private:
 	UFUNCTION()
