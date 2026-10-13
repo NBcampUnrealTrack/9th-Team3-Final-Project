@@ -66,6 +66,13 @@ public:
 	bool GetWantsToRun() const { return bWantsToRun; }
 
 	/**
+	 * (2026-10-13) 지금 실제로 달리는 중인지: 달리기 키를 누르고, 달리기·이동이 막히지 않았고, 땅 위에서 이동 입력이 있을 때.
+	 * 달리기 키만 누르고 서 있거나 공중이면 아니다. 달리는 동안 행동 에너지 회복을 멈추는 데 쓴다(UknightAbilitySystemComponent).
+	 */
+	UFUNCTION(BlueprintPure, Category="Knight|Movement")
+	bool IsRunning() const;
+
+	/**
 	 * 중량 계수. 적재율(중량 / 적재 한도)이 0이면 1.0, 1이면 MinWeightSpeedFactor.
 	 * WeightSpeedCurve가 있으면 직선 대신 그 커브를 쓴다. 퀵스텝 등 다른 이동에서도 쓰도록 공개한다.
 	 */
