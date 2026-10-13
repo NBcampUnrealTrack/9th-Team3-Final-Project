@@ -165,6 +165,139 @@ void UknightTargetLockComponent::SwitchTarget(bool bRight)
 	}
 }
 
+bool UknightTargetLockComponent::SwitchTargetInDirection(FVector2D ScreenDirection)
+{
+	ScreenDirection = ScreenDirection.GetSafeNormal();
+	FVector CurrentLocation;
+	const APawn* const Pawn = Cast<APawn>(GetOwner());
+	APlayerController* const PC = Pawn ? Cast<APlayerController>(Pawn->GetController()) : nullptr;
+	if (ScreenDirection.IsNearlyZero() || !PC || !GetLockedTargetLocation(CurrentLocation))
+	{
+		return false;
+	}
+	FVector2D CurrentScreen;
+	if (!PC->ProjectWorldLocationToScreen(CurrentLocation, CurrentScreen))
+	{
+		return false;
+	}
+
+	FVector ViewLocation;
+	FRotator ViewRotation;
+	GetViewPoint(ViewLocation, ViewRotation);
+
+	TArray<FCandidate> Candidates;
+	GatherCandidates(Candidates);
+
+	const float CosMaxAngle = FMath::Cos(FMath::DegreesToRadians(SwitchMaxAngle));
+	const FCandidate* Best = nullptr;
+	float BestScore = TNumericLimits<float>::Max();
+	for (const FCandidate& Candidate : Candidates)
+	{
+		if (Candidate.Point.Component == LockedComponent.Get() && Candidate.Point.SocketName == LockedSocket)
+		{
+			continue;
+		}
+		const FVector PointLocation = Candidate.Point.GetLocation();
+		FVector2D Screen;
+		if (!PC->ProjectWorldLocationToScreen(PointLocation, Screen) || !HasLineOfSight(ViewLocation, PointLocation, Candidate.Actor.Get()))
+		{
+			continue;
+		}
+		const FVector2D Delta = Screen - CurrentScreen;
+		const float Distance = Delta.Size();
+		// 화면에서 거의 겹친 지점은 방향을 정할 수 없어 뺀다.
+		if (Distance < 1.f)
+		{
+			continue;
+		}
+		const float CosAngle = FVector2D::DotProduct(Delta / Distance, ScreenDirection);
+		if (CosAngle < CosMaxAngle)
+		{
+			continue;
+		}
+		// 입력 방향에 가까울수록, 화면에서 가까울수록 먼저 고른다.
+		const float AngleDegrees = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(CosAngle, -1.f, 1.f)));
+		const float Score = Distance * (1.f + AngleDegrees / SwitchMaxAngle);
+		if (Score < BestScore)
+		{
+			BestScore = Score;
+			Best = &Candidate;
+		}
+	}
+	if (!Best)
+	{
+		return false;
+	}
+	SetLock(*Best);
+	return true;
+}
+
+void UknightTargetLockComponent::AddSwitchLookInput(const FVector2D& LookInput, bool bFromStick)
+{
+	const UWorld* const World = GetWorld();
+	if (!bSwitchByLookInput || !World)
+	{
+		return;
+	}
+
+	if (bFromStick)
+	{
+		// 스틱 입력은 데드존 안에서는 오지 않는다. 한 프레임이라도 끊겼거나 충분히 돌아왔으면 가운데로 돌아온 것으로 본다.
+		const float Tilt = LookInput.Size();
+		if (GFrameCounter > LastSwitchStickFrame + 1 || Tilt < SwitchStickRearmThreshold)
+		{
+			bSwitchStickArmed = true;
+		}
+		LastSwitchStickFrame = GFrameCounter;
+		if (!IsLockedOn())
+		{
+			// 락온 전부터 기울이던 스틱은 한 번 되돌리기 전까지 전환으로 치지 않는다.
+			bSwitchStickArmed = false;
+			return;
+		}
+		if (bSwitchStickArmed && Tilt >= SwitchStickThreshold)
+		{
+			bSwitchStickArmed = false;
+			const bool bSwitched = SwitchTargetInDirection(LookInput);
+			UE_LOG(LogknightCombat, Log, TEXT("%s: lock-on switch by stick (%.2f, %.2f) -> %s %s."), *GetNameSafe(GetOwner()), LookInput.X, LookInput.Y,
+				bSwitched ? *GetNameSafe(LockedActor.Get()) : TEXT("no target in that direction"), bSwitched ? *LockedPartTag.ToString() : TEXT(""));
+		}
+		return;
+	}
+
+	// 마우스: 실제 시간 기준(히트스탑·슬로모션과 상관없이 손 움직임 그대로).
+	const double Now = World->GetRealTimeSeconds();
+	if (!IsLockedOn())
+	{
+		// 락온 전부터 움직이던 마우스는 락온 직후 SwitchMouseCooldown 동안 전환으로 치지 않는다.
+		SwitchMouseCooldownEndTime = Now + SwitchMouseCooldown;
+		SwitchMouseStartTime = -1.0;
+		return;
+	}
+	if (Now < SwitchMouseCooldownEndTime)
+	{
+		SwitchMouseStartTime = -1.0;
+		return;
+	}
+	// SwitchMouseWindow가 지나면 새로 모은다 → 천천히 미는 움직임은 문턱에 못 미친다.
+	if (SwitchMouseStartTime < 0.0 || Now - SwitchMouseStartTime > SwitchMouseWindow)
+	{
+		SwitchMouseSum = FVector2D::ZeroVector;
+		SwitchMouseStartTime = Now;
+	}
+	SwitchMouseSum += LookInput;
+	if (SwitchMouseSum.SizeSquared() < FMath::Square(SwitchMouseThreshold))
+	{
+		return;
+	}
+	const bool bSwitched = SwitchTargetInDirection(SwitchMouseSum);
+	UE_LOG(LogknightCombat, Log, TEXT("%s: lock-on switch by mouse (%.1f, %.1f) -> %s %s."), *GetNameSafe(GetOwner()), SwitchMouseSum.X, SwitchMouseSum.Y,
+		bSwitched ? *GetNameSafe(LockedActor.Get()) : TEXT("no target in that direction"), bSwitched ? *LockedPartTag.ToString() : TEXT(""));
+	// 대상이 없었어도 쉬어야 매 프레임 다시 찾지 않는다.
+	SwitchMouseStartTime = -1.0;
+	SwitchMouseCooldownEndTime = Now + SwitchMouseCooldown;
+}
+
 bool UknightTargetLockComponent::GetLockedTargetLocation(FVector& OutLocation) const
 {
 	const USceneComponent* const Component = LockedComponent.Get();
@@ -251,6 +384,12 @@ void UknightTargetLockComponent::TickComponent(float DeltaTime, ELevelTick TickT
 	FVector TargetLocation;
 	if (!Target || !Target->GetClass()->ImplementsInterface(UTargetableInterface::StaticClass())
 		|| !ITargetableInterface::Execute_CanBeTargeted(Target) || !GetLockedTargetLocation(TargetLocation))
+	{
+		ClearLockOn();
+		return;
+	}
+	// 잠근 지점이 락온 지점 목록에서 빠졌으면(잘려 나간 꼬리 등) 같은 대상의 가장 가까운 지점으로 옮긴다. (2026-10-14)
+	if (!KeepLockedPointAvailable(Target, TargetLocation))
 	{
 		ClearLockOn();
 		return;
@@ -396,6 +535,39 @@ void UknightTargetLockComponent::SetLock(const FCandidate& Candidate)
 		UE_LOG(LogknightCombat, Verbose, TEXT("Locked on %s (%s)."), *GetNameSafe(LockedActor.Get()), *LockedPartTag.ToString());
 		OnLockOnTargetChanged.Broadcast(LockedActor.Get(), LockedPartTag);
 	}
+}
+
+bool UknightTargetLockComponent::KeepLockedPointAvailable(AActor* Target, FVector& InOutLocation)
+{
+	// 몬스터는 부위가 잘려 숨겨지면 그 지점을 목록에서 뺀다(UknightMonsterPartComponent::GetTargetPoints).
+	const TArray<FknightTargetPoint> Points = ITargetableInterface::Execute_QueryTargetPoints(Target);
+	const FknightTargetPoint* Nearest = nullptr;
+	float NearestDistSq = TNumericLimits<float>::Max();
+	for (const FknightTargetPoint& Point : Points)
+	{
+		if (!Point.Component)
+		{
+			continue;
+		}
+		if (Point.Component == LockedComponent.Get() && Point.SocketName == LockedSocket)
+		{
+			return true;
+		}
+		const float DistSq = FVector::DistSquared(Point.GetLocation(), InOutLocation);
+		if (DistSq < NearestDistSq)
+		{
+			NearestDistSq = DistSq;
+			Nearest = &Point;
+		}
+	}
+	if (!Nearest)
+	{
+		return false;
+	}
+	UE_LOG(LogknightCombat, Log, TEXT("%s: lock-on point %s is gone, moved to %s."), *GetNameSafe(GetOwner()), *LockedPartTag.ToString(), *Nearest->PartTag.ToString());
+	InOutLocation = Nearest->GetLocation();
+	SetLock({ Target, *Nearest });
+	return true;
 }
 
 void UknightTargetLockComponent::UpdateControlRotation(float DeltaTime) const
