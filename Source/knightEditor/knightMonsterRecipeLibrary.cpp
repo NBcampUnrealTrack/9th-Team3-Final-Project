@@ -1573,4 +1573,48 @@ UknightMonsterRecipe* UknightMonsterRecipeLibrary::CreateRecipeFromMonster(TSubc
 	return Recipe;
 }
 
+UAnimMontage* UknightMonsterRecipeLibrary::BuildSectionMontage(const FString& PackagePath, const TArray<UAnimSequence*>& Sequences,
+	const TArray<FName>& SectionNames, FName LoopSection)
+{
+	if (Sequences.IsEmpty() || Sequences.Num() != SectionNames.Num() || Sequences.Contains(nullptr))
+	{
+		UE_LOG(LogTemp, Error, TEXT("BuildSectionMontage %s: 시퀀스와 섹션 이름의 개수가 같아야 합니다."), *PackagePath);
+		return nullptr;
+	}
+	bool bCreated = false;
+	UAnimMontage* const Montage = knightRecipe::FindOrCreateAsset<UAnimMontage>(PackagePath, bCreated);
+	Montage->Modify();
+	Montage->SetSkeleton(Sequences[0]->GetSkeleton());
+	if (Montage->SlotAnimTracks.IsEmpty())
+	{
+		Montage->SlotAnimTracks.AddDefaulted();
+	}
+	FSlotAnimationTrack& SlotTrack = Montage->SlotAnimTracks[0];
+	SlotTrack.SlotName = FAnimSlotGroup::DefaultSlotName;
+	SlotTrack.AnimTrack.AnimSegments.Reset();
+	Montage->CompositeSections.Reset();
+
+	float Length = 0.f;
+	for (int32 Index = 0; Index < Sequences.Num(); ++Index)
+	{
+		FAnimSegment Segment;
+		Segment.SetAnimReference(Sequences[Index], true);
+		Segment.StartPos = Length;
+		SlotTrack.AnimTrack.AnimSegments.Add(Segment);
+
+		FCompositeSection Section;
+		Section.SectionName = SectionNames[Index];
+		Section.Link(Montage, Length);
+		Section.NextSectionName = SectionNames[Index] == LoopSection ? LoopSection
+			: SectionNames.IsValidIndex(Index + 1) ? SectionNames[Index + 1] : NAME_None;
+		Montage->CompositeSections.Add(Section);
+		Length += Sequences[Index]->GetPlayLength();
+	}
+	Montage->SetCompositeLength(Length);
+	Montage->RefreshCacheData();
+	Montage->PostEditChange();
+	Montage->MarkPackageDirty();
+	return Montage;
+}
+
 #undef LOCTEXT_NAMESPACE
