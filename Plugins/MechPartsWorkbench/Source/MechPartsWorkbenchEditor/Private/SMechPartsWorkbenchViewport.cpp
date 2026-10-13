@@ -58,7 +58,9 @@ private:
 
 void SMechPartsWorkbenchViewport::Construct(const FArguments& InArgs)
 {
-	PreviewScene = MakeShared<FAdvancedPreviewScene>(FPreviewScene::ConstructionValues());
+	// 물리 계산을 켜 둬야 천 시뮬레이션이 돈다 (엔진은 bShouldSimulatePhysics인 장면에서만 천 계산을 만든다).
+	// 엔진 스켈레탈 메시 편집기(Persona) 미리보기와 같은 설정. 10-12까지는 꺼져 있어서 워크벤치에서 천이 전혀 움직이지 않았다.
+	PreviewScene = MakeShared<FAdvancedPreviewScene>(FPreviewScene::ConstructionValues().ShouldSimulatePhysics(true));
 
 	MechComponent = NewObject<USkeletalMeshComponent>(GetTransientPackage(), NAME_None, RF_Transient);
 	PreviewScene->AddComponent(MechComponent, FTransform::Identity);
@@ -147,6 +149,12 @@ void SMechPartsWorkbenchViewport::RefreshPart()
 	{
 		ViewportClient->Invalidate();
 	}
+}
+
+void SMechPartsWorkbenchViewport::RecreatePart()
+{
+	RemovePartComponent();
+	RefreshPart();
 }
 
 void SMechPartsWorkbenchViewport::RefreshMech()

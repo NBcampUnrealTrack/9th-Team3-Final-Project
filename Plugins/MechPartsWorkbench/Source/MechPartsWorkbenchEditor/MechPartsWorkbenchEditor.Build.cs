@@ -34,7 +34,14 @@ public class MechPartsWorkbenchEditor : ModuleRules
 			"GeometryScriptingEditor",
 			"SkeletalMeshDescription",
 			"AnimationCore",
-			"GeometryCore"
+			"GeometryCore",
+			// 천 시뮬레이션 만들기 (2026-10-12)
+			"ClothingSystemRuntimeCommon",
+			"ClothingSystemRuntimeInterface",
+			"ClothingSystemEditorInterface",
+			"SkeletalMeshUtilitiesCommon",
+			"ChaosCloth",
+			"PhysicsUtilities"
 		});
 	}
 }

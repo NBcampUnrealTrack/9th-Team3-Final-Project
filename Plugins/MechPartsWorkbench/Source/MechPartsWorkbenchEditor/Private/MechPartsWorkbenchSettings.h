@@ -54,8 +54,8 @@ public:
 
 	/**
 	 * (2026-10-12) '뼈대에 입히기'에서 팔 뼈(SkinArmRootBones와 그 아래 전부)도 따라 휘게 할지.
-	 * 끄면(기본) 팔에 실린 가중치를 가장 가까운 몸통 쪽 뼈(쇄골 등)로 옮긴다 → 망토 옆면이 팔에 끌려가지 않는다(팔은 망토 밑으로 나온다).
-	 * 장갑·소매처럼 팔에 입는 파츠는 켠다.
+	 * 끄면(기본) 팔에 실린 가중치를 가장 가까운 몸통 쪽 뼈로 옮긴다 → 망토 옆면이 팔에 끌려가지 않는다(팔은 망토 밑으로 나온다).
+	 * 나이트는 시작 뼈가 쇄골이라 가슴 뼈(spine_05)로 간다. 장갑·소매처럼 팔에 입는 파츠는 켠다.
 	 */
 	UPROPERTY(config, EditAnywhere, Category="Skin")
 	bool bSkinFollowArms = false;
@@ -64,11 +64,88 @@ public:
 	UPROPERTY(config, EditAnywhere, Category="Skin")
 	bool bSkinFollowLegs = false;
 
-	/** 팔로 볼 뼈(이 뼈와 그 아래 전부). 기본값은 Config/DefaultEditorPerProjectUserSettings.ini (나이트: upperarm_l, upperarm_r). */
+	/**
+	 * 팔로 볼 뼈(이 뼈와 그 아래 전부). 기본값은 Config/DefaultEditorPerProjectUserSettings.ini (나이트: clavicle_l, clavicle_r).
+	 * (10-13) 처음엔 upperarm이었는데, 그러면 팔 가중치가 쇄골로 가서 망토의 64%가 쇄골을 따라갔고, 팔을 들면 쇄골이 돌며
+	 * 망토 옆면이 날개처럼 솟았다. 쇄골부터 빼서 가슴 뼈(spine_05)를 따라가게 했다.
+	 */
 	UPROPERTY(config, EditAnywhere, Category="Skin")
 	TArray<FName> SkinArmRootBones;
 
-	/** 다리로 볼 뼈(이 뼈와 그 아래 전부). 기본값은 위 ini (나이트: thigh_l, thigh_r). */
+	/** 다리로 볼 뼈(이 뼈와 그 아래 전부). 기본값은 위 ini (나이트: thigh_l, thigh_r → 다리 가중치는 pelvis로 간다). */
 	UPROPERTY(config, EditAnywhere, Category="Skin")
 	TArray<FName> SkinLegRootBones;
+
+	/**
+	 * (2026-10-12) '뼈대에 입히기'를 할 때 천 시뮬레이션도 만든다 (망토·치마 자락이 흔들림).
+	 * 파츠를 감싼 매끈한 천 계산용 메시(LOD1)로 천을 계산하고 원래 메시가 그걸 따라간다. 다시 구우면 천도 새로 만든다. 갑옷처럼 딱딱한 파츠는 끈다.
+	 */
+	UPROPERTY(config, EditAnywhere, Category="Cloth")
+	bool bMakeCloth = false;
+
+	/**
+	 * (10-12) 켜면 천 계산용 메시에서 몸 쪽 면을 지워 바깥 한 장만 쓴다.
+	 * (10-13) 기본 끔: 파츠를 감싸 부풀린 닫힌 껍데기를 그대로 쓰는 쪽이, 보이는 망토(안·밖 두 겹과 가시 장식)를 빈틈없이 덮어
+	 * 점이 튀지 않는다. 한 장으로 자르면 구멍과 가장자리가 많이 생겨, 그 위의 보이는 점이 천 밖으로 크게 외삽되어 길게 튀었다
+	 * (진단: 한 장 5천여 개 vs 닫힌 껍데기 40개).
+	 */
+	UPROPERTY(config, EditAnywhere, Category="Cloth", meta=(EditCondition="bMakeCloth"))
+	bool bClothOuterLayerOnly = false;
+
+	/**
+	 * (10-12) 천 계산용 메시를 만들 때 파츠를 감싸는 복셀 칸 크기(cm). 3D 생성 도구로 만든 망토(두께 있는 껍데기 + 가시 장식)는
+	 * 그대로 천으로 쓰면 조각조각 따로 떨어져서, 이 크기로 감싸고 원본과 함께 칸 1.5개만큼 부풀린 매끈한 껍데기를 천 계산에 쓴다
+	 * (보이는 메시는 원본 그대로).
+	 * 작을수록 원래 모양에 가깝지만 가는 틈·가시까지 따라간다. 크면 뭉툭해지고 망토와 몸 사이 틈이 메워질 수 있다.
+	 */
+	UPROPERTY(config, EditAnywhere, Category="Cloth", meta=(ClampMin="0.5", ClampMax="10", Units="cm", EditCondition="bMakeCloth"))
+	float ClothProxyCellSize = 2.f;
+
+	/** 천 계산용 메시의 정점 수. 많을수록 자연스럽지만 무겁다. 망토 하나에 2000~4000 정도. */
+	UPROPERTY(config, EditAnywhere, Category="Cloth", meta=(ClampMin="300", ClampMax="20000", EditCondition="bMakeCloth"))
+	int32 ClothSimVertexCount = 3000;
+
+	/** 위에서부터 이 비율만큼은 고정(흔들리지 않음). 망토는 후드·어깨가 고정되도록 0.3 정도. */
+	UPROPERTY(config, EditAnywhere, Category="Cloth", meta=(ClampMin="0", ClampMax="0.95", EditCondition="bMakeCloth"))
+	float ClothFixedTopRatio = 0.3f;
+
+	/**
+	 * 맨 아래 자락이 원래 자리에서 벗어날 수 있는 최대 거리(cm). 고정 구간 아래부터 맨 아래까지 0 → 이 값으로 늘어난다.
+	 * (10-12) 30 → 60으로 올렸었는데, 그땐 천이 실제로 돌지 않던 때였다. (10-13) 천이 돈 뒤 시험에서 40이 더 망토 같아 기본 40.
+	 * 크게 하면 중력 방향으로 멀리 쏟아져 몸 앞을 덮거나 한쪽에 뭉친다.
+	 */
+	UPROPERTY(config, EditAnywhere, Category="Cloth", meta=(ClampMin="1", Units="cm", EditCondition="bMakeCloth"))
+	float ClothMaxDistance = 40.f;
+
+	/**
+	 * (10-12) 몸의 움직임(속도·회전)을 천에 물려주는 비율 (Chaos 천 Linear/Angular Velocity Scale). 엔진 기본은 0.75.
+	 * 낮을수록 자락이 늦게 따라와 휘날리고, 높을수록 몸에 붙어 같이 움직인다.
+	 * (10-13) 시험 값 0.8을 기본으로: 낮으면 빠른 동작에서 천이 뒤처지며 망토가 깨져 보였다.
+	 */
+	UPROPERTY(config, EditAnywhere, Category="Cloth", meta=(ClampMin="0", ClampMax="1", EditCondition="bMakeCloth"))
+	float ClothFollowBody = 0.8f;
+
+	/**
+	 * (10-12) 천이 접히는 것에 버티는 정도 (Chaos 천 Bending Stiffness). 엔진 기본은 1(뻣뻣함). 낮을수록 부드럽게 접힌다.
+	 * (10-13) 시험 값 0.8을 기본으로: 낮으면 구겨져 덩어리로 뭉친다.
+	 */
+	UPROPERTY(config, EditAnywhere, Category="Cloth", meta=(ClampMin="0", ClampMax="1", EditCondition="bMakeCloth"))
+	float ClothBendingStiffness = 0.8f;
+
+	/**
+	 * (10-13) 형태 유지 - 위쪽 (Chaos 천 Anim Drive Stiffness). 천을 원래 모양(뼈를 따라가는 스킨 모양) 쪽으로 당기는 힘.
+	 * 0이면 진짜 천처럼 중력에 자유롭게 쏠리고, 1에 가까울수록 원래 모양을 지킨다. 게임 망토처럼 모양은 지키고 자락만 휘날리게 하려는 값.
+	 * 높이에 따라 고정 구간(어깨·후드)에서 이 값 → 자락 끝에서 Cloth Shape Keep Hem 값으로 줄어든다.
+	 * 기본 0.7 (Hem 0.3과 함께): 10-13 시험에서 0.4 / 0.05일 땐 역동적인 동작에서 망토가 깨졌고, 이 값에서 사라졌다.
+	 */
+	UPROPERTY(config, EditAnywhere, Category="Cloth", meta=(ClampMin="0", ClampMax="1", EditCondition="bMakeCloth"))
+	float ClothShapeKeepTop = 0.7f;
+
+	/** (10-13) 형태 유지 - 자락 끝. 낮을수록 자락 끝이 자유롭게 휘날린다. 위 값보다 작게 둔다. 기본 0.3 (위 설명 참고). */
+	UPROPERTY(config, EditAnywhere, Category="Cloth", meta=(ClampMin="0", ClampMax="1", EditCondition="bMakeCloth"))
+	float ClothShapeKeepHem = 0.3f;
+
+	/** (10-13) 천에 거는 중력 배율 (Chaos 천 Gravity Scale). 1 = 실제 중력. 낮추면 덜 처지고 등 뒤에서 가볍게 날린다. */
+	UPROPERTY(config, EditAnywhere, Category="Cloth", meta=(ClampMin="0", ClampMax="2", EditCondition="bMakeCloth"))
+	float ClothGravityScale = 1.f;
 };
