@@ -126,7 +126,7 @@ private:
 	/** 지금 위치(Position)에서 BiteTime에 입 앞이 타깃에 닿도록 도약 이동 배율을 정한다. */
 	void UpdateLeapScale(const AActor& Target, float Position);
 	void ApplyHits();
-	void SetAirborne(bool bAirborne);
+	void SetAirborne(bool bInAirborne);
 
 	TWeakObjectPtr<UAbilityTask_Repeat> TickTask;
 	TSet<TWeakObjectPtr<AActor>> HitActors;

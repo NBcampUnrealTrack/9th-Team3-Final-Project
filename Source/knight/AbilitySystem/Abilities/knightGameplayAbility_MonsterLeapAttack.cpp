@@ -48,7 +48,7 @@ void UknightGameplayAbility_MonsterLeapAttack::ActivateAbility(const FGameplayAb
 	AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetAvatarActorFromActorInfo());
 	if (!Montage || !Monster)
 	{
-		UE_LOG(LogknightAbility, Error, TEXT("%s has no Montage."), *GetName());
+		UE_LOG(LogknightAbility, Error, TEXT("%s needs a Montage and a monster avatar."), *GetName());
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
@@ -283,6 +283,11 @@ void UknightGameplayAbility_MonsterLeapAttack::HandleMontageEnded()
 	bMontageEnded = true;
 	SetAirborne(false);
 	RushEffects.Stop();
+	// 후딜 동안 다른 루트 모션이 끼어들어도 도약 배율이 남지 않게 바로 되돌린다.
+	if (ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
+	{
+		Character->SetAnimRootMotionTranslationScale(1.f);
+	}
 	UAbilityTask_WaitDelay* const RecoveryTask = UAbilityTask_WaitDelay::WaitDelay(this, RecoveryTime);
 	RecoveryTask->OnFinish.AddDynamic(this, &ThisClass::HandleRecoveryFinished);
 	RecoveryTask->ReadyForActivation();
