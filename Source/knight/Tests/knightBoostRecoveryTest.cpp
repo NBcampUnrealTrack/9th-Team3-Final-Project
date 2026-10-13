@@ -20,7 +20,7 @@ bool FknightBoostRecoveryTest::RunTest(const FString& Parameters)
 	constexpr float Tolerance = 0.001f;
 
 	// 공통 조건: 최대 100, 초당 25 회복(기본값), 0.1초 간격, 사용 후 대기 1.5초
-	// (2026-10-13 기본값이 1초로 바뀌었지만, 계산 규칙 검사라 대기 시간은 그대로 1.5초로 둔다)
+	// (2026-10-13 기본값이 1.2초로 바뀌었지만, 계산 규칙 검사라 대기 시간은 그대로 1.5초로 둔다)
 	constexpr float Max = 100.f;
 	constexpr float Rate = 25.f;
 	constexpr float Dt = 0.1f;

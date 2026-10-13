@@ -55,7 +55,7 @@ namespace knightBoostRecovery
  *   회복 속도 기본값이 0이라 따로 정하지 않으면 회복하지 않는다(기존 동작과 같음).
  *
  * 행동 에너지(스테미너) 자연 회복 (2026-10-09):
- *   마지막으로 쓴 뒤 BoostRecoveryDelay초(메카 속성, 기본 1)가 지나면 초당 BoostRecoveryRate(메카 속성, 기본 25)만큼 찬다.
+ *   마지막으로 쓴 뒤 BoostRecoveryDelay초(메카 속성, 기본 1.2)가 지나면 초당 BoostRecoveryRate(메카 속성, 기본 25)만큼 찬다.
  *   (2026-10-13) 달리는 동안에는 회복이 멈춘다(bPauseBoostRecoveryWhileRunning). 달리기는 쓰는 게 아니라서 대기 시간을 다시 세지 않는다.
  *   메카 속성 세트가 있는 나이트만 해당된다.
  */
