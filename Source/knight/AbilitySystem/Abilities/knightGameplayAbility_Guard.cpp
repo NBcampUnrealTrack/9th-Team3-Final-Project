@@ -10,6 +10,7 @@
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "Abilities/Tasks/AbilityTask_WaitInputRelease.h"
 #include "Character/knightMovementComponent.h"
+#include "Combat/knightTargetLockComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "GameplayEffect.h"
@@ -54,7 +55,11 @@ void UknightGameplayAbility_Guard::ActivateAbility(const FGameplayAbilitySpecHan
 	}
 
 	// 방향키를 누른 채 가드를 올리면 그 방향을 바로 본다(락온 중 제외). 가드 중에는 몸을 돌리지 않는다. (2026-10-08)
-	FaceMoveInputDirection();
+	// 락온 중에는 락온 대상을 바로 본다. 패링은 정면 범위에서만 되므로, 몸이 다른 쪽을 보고 있으면 실패했다. (2026-10-12)
+	if (!FaceMoveInputDirection())
+	{
+		FaceLockedTarget(-1.f);
+	}
 	EnterGuardStance();
 
 	// 퍼펙트 가드 판정 시간은 누를 때 한 번 읽는다. 가드 도중 스탯이 바뀌면 다음 가드부터 반영된다. (2026-10-08)
@@ -235,11 +240,39 @@ void UknightGameplayAbility_Guard::CheckMoveCancel()
 	{
 		return;
 	}
+	// 락온 중에는 가드하는 동안에도 움직이는 대상을 따라 몸을 돌린다(초당 GuardLockOnTurnRate도). (2026-10-12)
+	if (GuardLockOnTurnRate > 0.f)
+	{
+		FaceLockedTarget(GuardLockOnTurnRate * GuardMoveCancelCheckInterval);
+	}
 	MovePress.Update(*Character);
 	if (MovePress.HasFreshPress() && !Character->GetLastMovementInputVector().IsNearlyZero())
 	{
 		EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, false);
 	}
+}
+
+bool UknightGameplayAbility_Guard::FaceLockedTarget(float MaxDeltaYaw) const
+{
+	ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	const UknightTargetLockComponent* const TargetLock = Character ? Character->FindComponentByClass<UknightTargetLockComponent>() : nullptr;
+	FVector TargetLocation;
+	if (!TargetLock || !TargetLock->GetLockedTargetLocation(TargetLocation))
+	{
+		return false;
+	}
+	const FVector ToTarget = (TargetLocation - Character->GetActorLocation()).GetSafeNormal2D();
+	if (ToTarget.IsNearlyZero())
+	{
+		return false;
+	}
+	const float CurrentYaw = Character->GetActorRotation().Yaw;
+	const float TargetYaw = ToTarget.Rotation().Yaw;
+	const float NewYaw = MaxDeltaYaw < 0.f
+		? TargetYaw
+		: CurrentYaw + FMath::Clamp(FMath::FindDeltaAngleDegrees(CurrentYaw, TargetYaw), -MaxDeltaYaw, MaxDeltaYaw);
+	Character->SetActorRotation(FRotator(0.f, NewYaw, 0.f));
+	return true;
 }
 
 void UknightGameplayAbility_Guard::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,

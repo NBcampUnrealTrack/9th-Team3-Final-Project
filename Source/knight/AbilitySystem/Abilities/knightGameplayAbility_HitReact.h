@@ -5,6 +5,7 @@
 #include "knightGameplayAbility_HitReact.generated.h"
 
 class UAnimMontage;
+class UCameraShakeBase;
 class UGameplayEffect;
 
 UENUM(BlueprintType)
@@ -34,6 +35,36 @@ struct FknightDirectionalMontages
 	TObjectPtr<UAnimMontage> Right = nullptr;
 
 	UAnimMontage* Pick(const FVector& AvatarForward, const FVector& AvatarRight, const FVector& ToInstigator) const;
+};
+
+/**
+ * 맞는 맛 (2026-10-12). 반응 종류(경직·크게 휘청·다운)마다 따로 정한다. 모두 0이면 아무것도 하지 않는다.
+ *   넉백: 때린 쪽에서 멀어지는 방향(수평)으로 KnockbackTime 동안 KnockbackDistance만큼 밀린다.
+ *   흔들림·슬로: 플레이어가 조종하는 폰일 때만. 슬로는 게임 전체 시간을 SlowMoDilation배로 SlowMoDuration(실제 초) 동안 늦춘다.
+ */
+USTRUCT(BlueprintType)
+struct FknightHitImpactFeel
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditDefaultsOnly, Category="Impact", meta=(ClampMin=0, Units="cm"))
+	float KnockbackDistance = 0.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Impact", meta=(ClampMin=0.02, Units="s"))
+	float KnockbackTime = 0.2f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Impact")
+	TSubclassOf<UCameraShakeBase> CameraShake;
+
+	UPROPERTY(EditDefaultsOnly, Category="Impact", meta=(ClampMin=0))
+	float CameraShakeScale = 1.f;
+
+	/** 1이면 슬로 없음. 0.3이면 30% 속도. */
+	UPROPERTY(EditDefaultsOnly, Category="Impact", meta=(ClampMin=0.05, ClampMax=1))
+	float SlowMoDilation = 1.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Impact", meta=(ClampMin=0, Units="s"))
+	float SlowMoDuration = 0.f;
 };
 
 /**
@@ -81,7 +112,20 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Hit React")
 	TSubclassOf<UGameplayEffect> PoiseRecoveryEffect;
 
+	/** 맞는 맛 (2026-10-12). 반응 종류별 넉백·흔들림·슬로. */
+	UPROPERTY(EditDefaultsOnly, Category="Hit React|Impact")
+	FknightHitImpactFeel FlinchImpact;
+
+	UPROPERTY(EditDefaultsOnly, Category="Hit React|Impact")
+	FknightHitImpactFeel StaggerImpact;
+
+	UPROPERTY(EditDefaultsOnly, Category="Hit React|Impact")
+	FknightHitImpactFeel KnockdownImpact;
+
 private:
+	void ApplyImpactFeel(AActor& Avatar, const AActor* EventInstigator);
+	const FknightHitImpactFeel& GetImpactFeel(EknightHitReactType Type) const;
+
 	UFUNCTION()
 	void OnMontageFinished();
 

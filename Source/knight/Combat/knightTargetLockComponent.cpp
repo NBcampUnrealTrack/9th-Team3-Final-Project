@@ -10,8 +10,16 @@
 #include "GameFramework/PlayerController.h"
 #include "GenericTeamAgentInterface.h"
 #include "HAL/IConsoleManager.h"
+#include "Combat/knightCombatLibrary.h"
+#include "NativeGameplayTags.h"
 #include "System/knightGameplayTags.h"
 #include "knight.h"
+
+namespace
+{
+	// 락온 대상이 멀리 있음. 부스트 돌진 베기(GA_Knight_BoostLunge)의 발동 조건, 약공격 1타·달리기 공격의 차단 조건. (2026-10-12)
+	UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_State_LockOn_Far, "State.LockOn.Far");
+}
 
 namespace knightTargetLockCVars
 {
@@ -98,6 +106,7 @@ void UknightTargetLockComponent::ClearLockOn()
 	TimeOutOfSight = 0.f;
 	SetComponentTickEnabled(false);
 	SetLockedOnTag(false);
+	SetFarTag(false);
 	OnLockOnTargetChanged.Broadcast(nullptr, FGameplayTag());
 }
 
@@ -273,6 +282,17 @@ void UknightTargetLockComponent::TickComponent(float DeltaTime, ELevelTick TickT
 		UpdateControlRotation(DeltaTime);
 	}
 
+	// 공격이 닿는 지점(대상 표면 앞 FarStopDistance)까지 남은 거리로 멀다/가깝다를 정한다. 공격 워프와 같은 계산. (2026-10-12)
+	if (FarTagDistance > 0.f)
+	{
+		FVector WarpLocation;
+		FRotator WarpRotation;
+		float Travel = 0.f;
+		const bool bHasWarp = UknightCombatLibrary::ComputeAttackWarp(GetOwner(), BreakRange, FarStopDistance, false, 0.f, 0.f,
+			WarpLocation, WarpRotation, Travel);
+		SetFarTag(bHasWarp && Travel > FarTagDistance);
+	}
+
 	if (knightTargetLockCVars::DrawLockOn != 0)
 	{
 		DrawDebugSphere(GetWorld(), TargetLocation, 40.f, 12, FColor::Red, false, 0.f);
@@ -394,6 +414,19 @@ void UknightTargetLockComponent::UpdateControlRotation(float DeltaTime) const
 	Desired.Roll = 0.f;
 	const FRotator Current = Controller->GetControlRotation();
 	Controller->SetControlRotation(FMath::RInterpTo(Current, Desired, DeltaTime, ControlRotationInterpSpeed));
+}
+
+void UknightTargetLockComponent::SetFarTag(bool bFar)
+{
+	if (bFar == bFarTagged)
+	{
+		return;
+	}
+	if (UAbilitySystemComponent* const ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner()))
+	{
+		ASC->SetLooseGameplayTagCount(TAG_State_LockOn_Far, bFar ? 1 : 0);
+		bFarTagged = bFar;
+	}
 }
 
 void UknightTargetLockComponent::SetLockedOnTag(bool bLocked) const
