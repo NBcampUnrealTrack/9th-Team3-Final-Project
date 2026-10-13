@@ -88,7 +88,8 @@ private:
 
 	/**
 	 * 행동 에너지를 쓴 뒤 회복이 시작되기까지의 시간(초). 쓸 때마다 다시 센다. 0이면 바로 회복.
-	 * 기본 1.5초(2026-10-09 사용자 결정). 파츠·강화로 바뀔 수 있다.
+	 * 기본 1.2초(2026-10-13 사용자 결정, 전에는 1.5초). 파츠·강화로 바뀔 수 있다.
+	 * 달리는 동안에는 이 시간과 별개로 회복이 멈춘다(UknightAbilitySystemComponent::bPauseBoostRecoveryWhileRunning).
 	 */
 	UPROPERTY(BlueprintReadOnly, Category="Knight|Mech", meta=(AllowPrivateAccess=true))
 	FGameplayAttributeData BoostRecoveryDelay;

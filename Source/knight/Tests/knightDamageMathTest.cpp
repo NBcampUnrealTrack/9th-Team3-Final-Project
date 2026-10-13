@@ -142,6 +142,28 @@ bool FknightDamageMathTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("받는 그로기 배율이 음수면 그로기 0"), R.PoiseDamage, 0.f, Tolerance);
 	}
 
+	// ---- 가드 범위 (2026-10-12): 전체 150° = 정면 좌우 75°씩, 수평으로만 본다 ----
+	{
+		const FVector Origin = FVector::ZeroVector;
+		const FVector Forward = FVector::ForwardVector;
+		auto AtAngle = [](float Degrees) { return FVector(FMath::Cos(FMath::DegreesToRadians(Degrees)), FMath::Sin(FMath::DegreesToRadians(Degrees)), 0.f) * 500.f; };
+		TestTrue(TEXT("정면에서 온 공격은 범위 안"), IsInGuardArc(Origin, Forward, AtAngle(0.f), 150.f));
+		TestTrue(TEXT("74°는 범위 안"), IsInGuardArc(Origin, Forward, AtAngle(74.f), 150.f));
+		TestFalse(TEXT("76°는 범위 밖"), IsInGuardArc(Origin, Forward, AtAngle(76.f), 150.f));
+		TestFalse(TEXT("등 뒤에서 온 공격은 범위 밖"), IsInGuardArc(Origin, Forward, AtAngle(180.f), 150.f));
+		TestTrue(TEXT("높이 차이는 무시 (정면 위에서 내려찍기)"), IsInGuardArc(Origin, Forward, FVector(100.f, 0.f, 2000.f), 150.f));
+		TestTrue(TEXT("같은 자리에서 온 공격은 범위 안"), IsInGuardArc(Origin, Forward, Origin, 150.f));
+	}
+	{
+		// 잔열(12배) 물기 예시: 몸 중심 (0,0), 머리 (840,0). 플레이어는 머리 옆 2m (840,200)에서 머리를 보고(-Y) 가드한다.
+		const FVector Player(840.f, 200.f, 0.f);
+		const FVector PlayerForward(0.f, -1.f, 0.f);
+		TestFalse(TEXT("잔열 물기: 몸 중심 기준이면 약 77°로 범위 밖 (예전 판정, 정면으로 막아도 실패)"),
+			IsInGuardArc(Player, PlayerForward, FVector(0.f, 0.f, 0.f), 150.f));
+		TestTrue(TEXT("잔열 물기: 공격이 들어온 지점(머리 스윕 직전 위치) 기준이면 범위 안"),
+			IsInGuardArc(Player, PlayerForward, FVector(840.f, 40.f, 0.f), 150.f));
+	}
+
 	return true;
 }
 

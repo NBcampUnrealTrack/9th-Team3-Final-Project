@@ -3,7 +3,9 @@
 #include "AbilitySystem/knightAbilityTagRelationshipMapping.h"
 #include "AbilitySystem/Attributes/knightAttributeSet.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
+#include "Character/knightMovementComponent.h"
 #include "Engine/World.h"
+#include "GameFramework/Character.h"
 #include "System/knightGameplayTags.h"
 #include "TimerManager.h"
 #include "knight.h"
@@ -28,9 +30,9 @@ namespace knightPoiseRecovery
 namespace knightBoostRecovery
 {
 	float Step(float CurrentGauge, float MaxGauge, float RecoveryRate, float DeltaSeconds,
-		float SecondsSinceLastSpend, float RecoveryDelay)
+		float SecondsSinceLastSpend, float RecoveryDelay, bool bRecoveryPaused)
 	{
-		if (RecoveryRate <= 0.f || CurrentGauge >= MaxGauge || SecondsSinceLastSpend < RecoveryDelay)
+		if (bRecoveryPaused || RecoveryRate <= 0.f || CurrentGauge >= MaxGauge || SecondsSinceLastSpend < RecoveryDelay)
 		{
 			return CurrentGauge;
 		}
@@ -92,12 +94,20 @@ void UknightAbilitySystemComponent::TickBoostRecovery()
 
 	const FGameplayAttribute GaugeAttribute = UknightAttributeSet::GetBoostGaugeAttribute();
 	const float CurrentGauge = GetNumericAttributeBase(GaugeAttribute);
+	const bool bPaused = bPauseBoostRecoveryWhileRunning && IsAvatarRunning();
 	const float NewGauge = knightBoostRecovery::Step(CurrentGauge, MechSet->GetMaxBoostGauge(), MechSet->GetBoostRecoveryRate(),
-		BoostRecoveryInterval, World->GetTimeSeconds() - MechSet->GetLastBoostSpendTime(), MechSet->GetBoostRecoveryDelay());
+		BoostRecoveryInterval, World->GetTimeSeconds() - MechSet->GetLastBoostSpendTime(), MechSet->GetBoostRecoveryDelay(), bPaused);
 	if (NewGauge != CurrentGauge)
 	{
 		SetNumericAttributeBase(GaugeAttribute, NewGauge);
 	}
+}
+
+bool UknightAbilitySystemComponent::IsAvatarRunning() const
+{
+	const ACharacter* const Character = Cast<ACharacter>(GetAvatarActor());
+	const UknightMovementComponent* const Movement = Character ? Cast<UknightMovementComponent>(Character->GetCharacterMovement()) : nullptr;
+	return Movement && Movement->IsRunning();
 }
 
 void UknightAbilitySystemComponent::StartPoiseRecovery()

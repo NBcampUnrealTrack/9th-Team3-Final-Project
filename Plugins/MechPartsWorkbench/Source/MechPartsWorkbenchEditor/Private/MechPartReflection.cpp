@@ -30,13 +30,31 @@ namespace MechPartReflection
 		return Paths;
 	}
 
-	FMechPartAttachment* FindAttachment(UObject* Asset)
+	FStructProperty* FindAttachmentProperty(const UObject* Asset)
 	{
 		for (TFieldIterator<FStructProperty> PropIt(Asset->GetClass()); PropIt; ++PropIt)
 		{
 			if (PropIt->Struct == FMechPartAttachment::StaticStruct())
 			{
-				return PropIt->ContainerPtrToValuePtr<FMechPartAttachment>(Asset);
+				return *PropIt;
+			}
+		}
+		return nullptr;
+	}
+
+	FMechPartAttachment* FindAttachment(UObject* Asset)
+	{
+		const FStructProperty* const Property = FindAttachmentProperty(Asset);
+		return Property ? Property->ContainerPtrToValuePtr<FMechPartAttachment>(Asset) : nullptr;
+	}
+
+	FSoftObjectProperty* FindSkeletalMeshProperty(const UObject* Asset)
+	{
+		for (TFieldIterator<FSoftObjectProperty> PropIt(Asset->GetClass()); PropIt; ++PropIt)
+		{
+			if (PropIt->PropertyClass && PropIt->PropertyClass->IsChildOf(USkeletalMesh::StaticClass()))
+			{
+				return *PropIt;
 			}
 		}
 		return nullptr;
@@ -65,6 +83,11 @@ namespace MechPartReflection
 			return SkeletalMesh;
 		}
 		return LoadFirstMesh(Asset, UStaticMesh::StaticClass());
+	}
+
+	UStaticMesh* LoadPartStaticMesh(const UObject* Asset)
+	{
+		return Cast<UStaticMesh>(LoadFirstMesh(Asset, UStaticMesh::StaticClass()));
 	}
 
 	TArray<const FProperty*> FindGroupingProperties(const TArray<FTopLevelAssetPath>& PartClassPaths)
@@ -98,7 +121,8 @@ namespace MechPartReflection
 		{
 			TagName = Text.Mid(10, Text.Len() - 12);
 		}
-		return TagName == TEXT("None") ? FString() : TagName;
+		// 빈 태그는 "None" 또는 (이 엔진 버전에서) "()"로 나온다 → 둘 다 '없음' (10-12).
+		return TagName == TEXT("None") || TagName == TEXT("()") ? FString() : TagName;
 	}
 
 	FString GetGroupingValue(const FAssetData& AssetData, const FProperty* Property)

@@ -4,6 +4,9 @@
 #include "UObject/TopLevelAssetPath.h"
 
 class FProperty;
+class FSoftObjectProperty;
+class FStructProperty;
+class UStaticMesh;
 struct FAssetData;
 struct FMechPartAttachment;
 
@@ -21,8 +24,17 @@ namespace MechPartReflection
 	/** 에셋 안의 FMechPartAttachment 값. 없으면 null. */
 	FMechPartAttachment* FindAttachment(UObject* Asset);
 
+	/** FMechPartAttachment 속성 자체(값을 바꾸고 변경 알림을 보낼 때). 없으면 null. */
+	FStructProperty* FindAttachmentProperty(const UObject* Asset);
+
 	/** 파츠 메시(USkeletalMesh 또는 UStaticMesh)를 불러온다. 둘 다 비어 있으면 null. */
 	UObject* LoadPartMesh(const UObject* Asset);
+
+	/** (2026-10-12) 파츠의 스태틱 메시(첫 번째 UStaticMesh 소프트 참조). '뼈대에 입히기'의 원본. 없으면 null. */
+	UStaticMesh* LoadPartStaticMesh(const UObject* Asset);
+
+	/** (2026-10-12) 스켈레탈 메시 칸(첫 번째 USkeletalMesh 소프트 참조 속성). '뼈대에 입히기' 결과를 넣는 곳. 없으면 null. */
+	FSoftObjectProperty* FindSkeletalMeshProperty(const UObject* Asset);
 
 	/**
 	 * (2026-10-11) 목록 분류에 쓸 속성 = 파츠 클래스들의 AssetRegistrySearchable 속성 (지금은 파츠 정의의 SlotTag).

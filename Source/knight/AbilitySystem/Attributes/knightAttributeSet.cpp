@@ -9,8 +9,8 @@ UknightAttributeSet::UknightAttributeSet()
 	InitBoostGauge(100.f);
 	InitMaxBoostGauge(100.f);
 	InitBoostRecoveryRate(25.f);
-	// 행동 에너지를 쓴 뒤 1.5초가 지나야 회복이 시작된다 (2026-10-09).
-	InitBoostRecoveryDelay(1.5f);
+	// 행동 에너지를 쓴 뒤 1.2초가 지나야 회복이 시작된다 (2026-10-09 1.5초 → 2026-10-13 사용자 결정 1.2초).
+	InitBoostRecoveryDelay(1.2f);
 
 	// 부위 체력 기본값: 4부위 x 25 = 100으로, Core의 MaxHealth 기본값(100)과 맞춘다.
 	InitHeadHealth(25.f);

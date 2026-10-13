@@ -32,11 +32,13 @@ namespace knightBoostRecovery
 {
 	/**
 	 * 한 번의 회복 단계 후의 행동 에너지.
-	 * 회복 속도가 0 이하이거나, 이미 최대치이거나, 마지막으로 쓴 뒤 회복 대기 시간이 아직 지나지 않았으면 그대로.
+	 * 회복 속도가 0 이하이거나, 이미 최대치이거나, 마지막으로 쓴 뒤 회복 대기 시간이 아직 지나지 않았거나,
+	 * bRecoveryPaused(달리는 중, 2026-10-13)면 그대로. 멈춤은 대기 시간을 다시 세게 하지 않는다: 대기 시간이 이미 지났으면
+	 * 멈춤이 풀리는 즉시 다시 회복한다.
 	 * 그 외에는 초당 RecoveryRate만큼, 최대치를 넘지 않게 올린다. (그로기와 달리 0에서도 회복한다)
 	 */
 	KNIGHT_API float Step(float CurrentGauge, float MaxGauge, float RecoveryRate, float DeltaSeconds,
-		float SecondsSinceLastSpend, float RecoveryDelay);
+		float SecondsSinceLastSpend, float RecoveryDelay, bool bRecoveryPaused = false);
 }
 
 /**
@@ -53,7 +55,8 @@ namespace knightBoostRecovery
  *   회복 속도 기본값이 0이라 따로 정하지 않으면 회복하지 않는다(기존 동작과 같음).
  *
  * 행동 에너지(스테미너) 자연 회복 (2026-10-09):
- *   마지막으로 쓴 뒤 BoostRecoveryDelay초(메카 속성, 기본 1.5)가 지나면 초당 BoostRecoveryRate(메카 속성, 기본 25)만큼 찬다.
+ *   마지막으로 쓴 뒤 BoostRecoveryDelay초(메카 속성, 기본 1.2)가 지나면 초당 BoostRecoveryRate(메카 속성, 기본 25)만큼 찬다.
+ *   (2026-10-13) 달리는 동안에는 회복이 멈춘다(bPauseBoostRecoveryWhileRunning). 달리기는 쓰는 게 아니라서 대기 시간을 다시 세지 않는다.
  *   메카 속성 세트가 있는 나이트만 해당된다.
  */
 UCLASS()
@@ -135,6 +138,16 @@ protected:
 	/** 행동 에너지 회복 확인 간격(초). 회복 지연·속도는 메카 속성(BoostRecoveryDelay·BoostRecoveryRate)이다. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Boost", meta=(ClampMin=0.02, Units="s"))
 	float BoostRecoveryInterval = 0.1f;
+
+	/**
+	 * (2026-10-13 사용자 결정) 달리는 동안(달리기 키 + 이동 입력, 땅 위, UknightMovementComponent::IsRunning) 행동 에너지 회복을 멈춘다.
+	 * 전투 여부와 상관없이 적용한다. 깎지는 않고, 회복 대기 시간도 다시 세지 않는다. 끄면 달리는 중에도 회복한다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Boost")
+	bool bPauseBoostRecoveryWhileRunning = true;
+
+	/** 아바타의 나이트 무브먼트가 지금 달리는 중인지. */
+	bool IsAvatarRunning() const;
 
 	FTimerHandle BoostRecoveryTimer;
 
