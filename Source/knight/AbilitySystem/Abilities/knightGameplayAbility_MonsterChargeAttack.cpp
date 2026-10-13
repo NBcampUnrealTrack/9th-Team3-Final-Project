@@ -82,6 +82,7 @@ void UknightGameplayAbility_MonsterChargeAttack::ActivateAbility(const FGameplay
 void UknightGameplayAbility_MonsterChargeAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
+	RushEffects.Stop();
 	HitActors.Reset();
 	TickTask.Reset();
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
@@ -135,6 +136,15 @@ void UknightGameplayAbility_MonsterChargeAttack::HandleTick(int32 ActionNumber)
 	{
 		ApplyHits();
 	}
+	if (Section == StopSection)
+	{
+		RushEffects.Stop();
+	}
+	else if (bHitOpen)
+	{
+		RushEffects.Start(*Monster);
+	}
+	RushEffects.Tick(*Monster, DeltaTime, Monster->GetCharacterMovement()->IsMovingOnGround());
 
 	const FVector Location = Monster->GetActorLocation();
 	const float Speed = FVector::Dist2D(Location, LastLocation) / DeltaTime;
@@ -318,6 +328,7 @@ void UknightGameplayAbility_MonsterChargeAttack::HandleMontageEnded()
 		return;
 	}
 	bMontageEnded = true;
+	RushEffects.Stop();
 	UAbilityTask_WaitDelay* const RecoveryTask = UAbilityTask_WaitDelay::WaitDelay(this, RecoveryTime);
 	RecoveryTask->OnFinish.AddDynamic(this, &ThisClass::HandleRecoveryFinished);
 	RecoveryTask->ReadyForActivation();
