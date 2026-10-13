@@ -80,6 +80,7 @@ FknightEquipmentStats knightEquipmentStats::Calculate(const FLoadout& Loadout, c
 		UknightCoreAttributeSet::GetAttackPowerAttribute(), UknightCoreAttributeSet::GetDefenseAttribute(),
 		UknightCoreAttributeSet::GetCriticalChanceAttribute(), UknightCoreAttributeSet::GetGuardEfficiencyAttribute(),
 		UknightAttributeSet::GetMaxBoostGaugeAttribute(), UknightAttributeSet::GetLoadCapacityAttribute(),
+		UknightAttributeSet::GetWalkSpeedAttribute(), UknightAttributeSet::GetRunSpeedAttribute(),
 		UknightAttributeSet::GetMaxHeadHealthAttribute(), UknightAttributeSet::GetMaxTorsoHealthAttribute(),
 		UknightAttributeSet::GetMaxArmsHealthAttribute(), UknightAttributeSet::GetMaxLegsHealthAttribute() };
 	for (const FGameplayAttribute& Attribute : DisplayAttributes)

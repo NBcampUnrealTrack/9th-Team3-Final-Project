@@ -4,6 +4,7 @@
 #include "Engine/DataAsset.h"
 #include "knightMonsterDefinition.generated.h"
 
+class UAnimMontage;
 class UGameplayEffect;
 class UknightAbilitySet;
 class UknightAbilityTagRelationshipMapping;
@@ -48,6 +49,13 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="States", meta=(ClampMin=0, ClampMax=1))
 	float ParriedPoiseDamageRatio = 0.f;
 
+	/**
+	 * 체력이 이 비율 밑으로 내려가면 State.Monster.Phase2를 붙인다(한 생에 한 번, 떼지 않는다). 0이면 2페이즈가 없다.
+	 * 다운·경직·포효 중에 넘으면 그 반응이 끝난 뒤에 붙인다. 전환 포효는 이 태그를 트리거로 쓰는 반응 어빌리티로 만든다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="States", meta=(ClampMin=0, ClampMax=1))
+	float Phase2HealthRatio = 0.f;
+
 	/** Rough radius for lock-on camera framing. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Targeting", meta=(ClampMin=0, Units="cm"))
 	float TargetRadius = 600.f;
@@ -66,6 +74,31 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="cm"))
 	float RangedMaxDistance = 2000.f;
+
+	/**
+	 * 제자리 회전 몽타주(루트 모션으로 90° 도는 애니메이션). Knight Face Target이 타깃이 TurnMontageMinAngle 이상 벗어났을 때
+	 * 재생하고, MotionWarping으로 TurnWarpStartTime~TurnWarpEndTime 구간의 회전량을 실제 각도에 맞춘다. 비어 있으면 코드 회전만 쓴다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI|Turn")
+	TObjectPtr<UAnimMontage> TurnLeftMontage;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI|Turn")
+	TObjectPtr<UAnimMontage> TurnRightMontage;
+
+	/** 이 각도보다 작게 벗어나면 몽타주 없이 코드로 돈다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI|Turn", meta=(ClampMin=0, ClampMax=180, Units="deg"))
+	float TurnMontageMinAngle = 45.f;
+
+	/** 몽타주 한 번에 도는 최대 각도. 더 남으면 몽타주를 한 번 더 재생한다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI|Turn", meta=(ClampMin=0, ClampMax=180, Units="deg"))
+	float TurnMontageMaxAngle = 135.f;
+
+	/** 회전 몽타주에서 몸이 실제로 도는 구간(초). 이 구간의 회전량을 늘리거나 줄인다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI|Turn", meta=(ClampMin=0, Units="s"))
+	float TurnWarpStartTime = 0.45f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI|Turn", meta=(ClampMin=0, Units="s"))
+	float TurnWarpEndTime = 1.45f;
 
 	/**
 	 * 등장할 때 셰이더 파이프라인(PSO)을 미리 준비해 둘 이펙트(브레스, 땅울림 먼지). 처음 쓰일 때 셰이더를 즉석에서 만드느라

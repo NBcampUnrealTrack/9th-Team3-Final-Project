@@ -9,6 +9,7 @@
 #include "knightMonsterStateTreeNodes.generated.h"
 
 class AknightMonsterCharacterBase;
+class UAnimMontage;
 class UAbilitySystemComponent;
 
 /*
@@ -179,10 +180,26 @@ struct FknightFaceTargetTaskInstanceData
 	UPROPERTY(EditAnywhere, Category="Parameter")
 	bool bSkipForSideAttacks = true;
 
+	/**
+	 * 건너뛸 근거로 볼 옆·뒤 공격의 태그. 이어지는 Knight Activate Ability의 AbilityTags와 같게 둔다(원거리 상태의 조준이면
+	 * Ability.Attack.Ranged). 다음 단계가 쓸 수 없는 공격 때문에 건너뛰면 아무것도 못 하고 다시 들어오는 루프가 된다. 비면 모든 공격.
+	 */
+	UPROPERTY(EditAnywhere, Category="Parameter", meta=(EditCondition="bSkipForSideAttacks"))
+	FGameplayTagContainer SideAttackTags;
+
 	float ElapsedTime = 0.f;
+	/** 재생 중인 회전 몽타주(몬스터 정의의 TurnLeft/RightMontage). */
+	TWeakObjectPtr<UAnimMontage> TurnMontage;
+	float TurnStartYaw = 0.f;
+	/** 지금까지 워프 목표로 잡은 회전량(시작 yaw 기준, 부호 = 몽타주 방향). 다음 각도는 여기서 이어서 잰다. */
+	float TurnAmount = 0.f;
 };
 
-/** 몬스터를 제자리에서 타깃 쪽으로 돌리고, 타깃을 바라보면 성공한다. 회전 몽타주가 필요하면 Activate Ability를 쓴다. */
+/**
+ * 몬스터를 제자리에서 타깃 쪽으로 돌리고, 타깃을 바라보면 성공한다.
+ * 몬스터 정의에 회전 몽타주가 있고 타깃이 TurnMontageMinAngle 이상 벗어나 있으면 몽타주로 돌고(발을 디디며 돈다),
+ * 남은 작은 각도는 이동 컴포넌트의 보간 회전으로 맞춘다. MaxTime은 몽타주가 끝난 뒤부터 센다.
+ */
 USTRUCT(meta=(DisplayName="Knight Face Target", Category="Knight"))
 struct KNIGHT_API FknightStateTreeFaceTargetTask : public FStateTreeTaskCommonBase
 {
@@ -198,6 +215,12 @@ struct KNIGHT_API FknightStateTreeFaceTargetTask : public FStateTreeTaskCommonBa
 
 	virtual EStateTreeRunStatus EnterState(FStateTreeExecutionContext& Context, const FStateTreeTransitionResult& Transition) const override;
 	virtual EStateTreeRunStatus Tick(FStateTreeExecutionContext& Context, const float DeltaTime) const override;
+	virtual void ExitState(FStateTreeExecutionContext& Context, const FStateTreeTransitionResult& Transition) const override;
+
+private:
+	static bool TryStartTurnMontage(FInstanceDataType& InstanceData);
+	static bool IsTurnMontagePlaying(const FInstanceDataType& InstanceData);
+	static void UpdateTurnWarpTarget(FInstanceDataType& InstanceData);
 };
 
 ////////////////////////////////////////////////////////////////////

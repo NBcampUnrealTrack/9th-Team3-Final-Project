@@ -28,6 +28,9 @@ FknightMonsterAttackContext FknightMonsterAttackContext::Make(const AActor* Mons
 		Context.AngleToTarget = FRotator::NormalizeAxis(ToTarget.GetSafeNormal2D().Rotation().Yaw - Monster->GetActorRotation().Yaw);
 		const UAbilitySystemComponent* const TargetASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Target);
 		Context.bTargetAirborne = TargetASC && TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_Airborne);
+		const AknightMonsterCharacterBase* const MonsterCharacter = Cast<AknightMonsterCharacterBase>(Monster);
+		const UknightMonsterTargetingComponent* const Targeting = MonsterCharacter ? MonsterCharacter->GetTargetingComponent() : nullptr;
+		Context.TargetBehindTime = Targeting && Targeting->GetCurrentTarget() == Target ? Targeting->GetTargetBehindTime() : 0.f;
 	}
 	return Context;
 }
@@ -72,7 +75,22 @@ float UknightGameplayAbility_MonsterAttack::GetSelectionWeight(const FknightMons
 	{
 		return 0.f;
 	}
+	if (Selection.MinTargetBehindTime > 0.f && Context.TargetBehindTime < Selection.MinTargetBehindTime)
+	{
+		return 0.f;
+	}
 	return Selection.Weight;
+}
+
+bool UknightGameplayAbility_MonsterAttack::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
+{
+	if (ActorInfo && ActorInfo->AbilitySystemComponent.IsValid()
+		&& ActorInfo->AbilitySystemComponent->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Exhausted))
+	{
+		return false;
+	}
+	return Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags);
 }
 
 float UknightGameplayAbility_MonsterAttack::GetCooldownRemaining(double WorldTime) const

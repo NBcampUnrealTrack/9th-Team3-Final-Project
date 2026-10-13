@@ -12,7 +12,8 @@ class UAnimMontage;
  * 동안 몬스터의 UknightMeleeTraceComponent가 보낸 Event.Melee.Hit를 UknightCombatLibrary::ApplyMeleeHit으로
  * 처리하므로, 가드, 패링, 회피, 부위 배율이 플레이어 무기 타격과 같은 규칙을 따른다.
  *
- * 판정 구간이 여러 개면 노티파이를 여러 개 놓는다. 몽타주가 끝나면 어빌리티도 끝난다.
+ * 판정 구간이 여러 개면 노티파이를 여러 개 놓는다. 연타의 마무리처럼 착지 순간 넓게 덮는 타격은 Knight Melee Area 노티파이로
+ * 같은 몽타주 안에 섞을 수 있다(같은 HitParams). 몽타주가 끝나면 어빌리티도 끝난다.
  * 한 번의 오버랩으로 충분한 공격(내려찍기 착지 등)은 UknightGameplayAbility_MonsterAreaAttack을 쓴다.
  */
 UCLASS()

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GameplayTagContainer.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "knightMonsterRecipeLibrary.generated.h"
 
@@ -11,6 +12,8 @@ class UknightMonsterRecipe;
  * 몬스터 레시피(UknightMonsterRecipe)로 에셋 세트를 만드는 도구. 레시피 에셋의 Build 버튼이 부르고,
  * 헤드리스 확인을 위해 Python에서도 부를 수 있다(unreal.knightMonsterRecipeLibrary).
  */
+class UStateTree;
+
 UCLASS()
 class KNIGHTEDITOR_API UknightMonsterRecipeLibrary : public UBlueprintFunctionLibrary
 {
@@ -36,4 +39,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
 	static UknightMonsterRecipe* CreateRecipeFromMonster(TSubclassOf<AknightMonsterCharacterBase> MonsterClass, const FString& RecipePackagePath,
 		FName MonsterName, const FString& OutputFolder);
+
+	/**
+	 * StateTree에서 StateName 상태의 Knight Face Target 태스크의 옆·뒤 공격 건너뛰기(bSkipForSideAttacks, SideAttackTags)를
+	 * 바꾸고 컴파일한다(저장은 호출한 쪽). 원거리 상태의 조준(Aim)은 SideAttackTags를 Ability.Attack.Ranged로 둔다.
+	 * 상태나 태스크가 없으면 false.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
+	static bool SetFaceTargetSideAttacks(UStateTree* StateTree, FName StateName, bool bSkip, const FGameplayTagContainer& SideAttackTags);
 };

@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "GameplayTagContainer.h"
 #include "knightMonsterPushOutComponent.generated.h"
 
 class UPrimitiveComponent;
@@ -46,10 +47,23 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Push Out")
 	bool bPushOutOfMesh = false;
 
+	/**
+	 * 몬스터에 이 태그 중 하나가 있으면 메시 바디로는 밀어내지 않는다(차단 상자는 그대로). 기본값은 다운(State.HitReact.Knockdown):
+	 * 쓰러진 자세는 바디가 땅에 넓게 깔려 플레이어가 머리·몸통에 닿기 전에 밀려나므로, 다운 중에는 몸에 붙어 때릴 수 있게 한다.
+	 * 일어나면 다시 밀어낸다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Push Out", meta=(EditCondition="bPushOutOfMesh"))
+	FGameplayTagContainer MeshPushOutPauseTags;
+
 private:
-	bool IsOverlappingBody(const class ACharacter* Character) const;
+	bool IsOverlappingBody(const class ACharacter* Character, bool bIncludeMesh) const;
+	bool IsMeshPushOutPaused() const;
 	FVector GetPushDirection(const FVector& Location) const;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UPrimitiveComponent>> BodyPrimitives;
+
+	/** BodyPrimitives 중 메시. MeshPushOutPauseTags가 걸리면 건너뛴다. */
+	UPROPERTY(Transient)
+	TObjectPtr<UPrimitiveComponent> MeshPrimitive;
 };

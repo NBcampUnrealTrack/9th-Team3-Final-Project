@@ -4,6 +4,11 @@
 #include "AbilitySystemGlobals.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
 #include "Abilities/GameplayAbility.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimMontage.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "MotionWarpingComponent.h"
+#include "RootMotionModifier_SkewWarp.h"
 #include "AbilitySystem/Abilities/knightGameplayAbility_MonsterAttack.h"
 #include "Monster/knightMonsterCharacterBase.h"
 #include "Monster/knightMonsterDefinition.h"
@@ -206,8 +211,12 @@ void FknightStateTreeActivateAbilityTask::ExitState(FStateTreeExecutionContext& 
 
 namespace knightMonsterStateTree
 {
-	/** 지금 각도에서 고를 수 있는 옆·뒤 전용 공격(MinAngle > 0)이 있는가. */
-	static bool HasUsableSideAttack(const AknightMonsterCharacterBase& Monster, const AActor* Target)
+	const FName TurnWarpTargetName(TEXT("MonsterTurn"));
+	/** 타깃이 반대편으로 넘어가도 회전 몽타주가 이 각도보다 덜 돌지는 않는다(발 디딤과 회전이 크게 어긋나지 않게). */
+	constexpr float TurnWarpMinAngle = 30.f;
+
+	/** 지금 각도에서 고를 수 있는 옆·뒤 전용 공격(MinAngle > 0)이 있는가. Tags가 있으면 그 태그를 모두 가진 공격만 본다. */
+	static bool HasUsableSideAttack(const AknightMonsterCharacterBase& Monster, const AActor* Target, const FGameplayTagContainer& Tags)
 	{
 		UAbilitySystemComponent* const ASC = Monster.GetAbilitySystemComponent();
 		if (!ASC || !Target)
@@ -219,7 +228,8 @@ namespace knightMonsterStateTree
 		{
 			const UGameplayAbility* const Instance = Spec.GetPrimaryInstance() ? Spec.GetPrimaryInstance() : Spec.Ability.Get();
 			const UknightGameplayAbility_MonsterAttack* const Attack = Cast<UknightGameplayAbility_MonsterAttack>(Instance);
-			if (Attack && Attack->GetSelection().MinAngle > 0.f && Attack->GetSelectionWeight(AttackContext) > 0.f)
+			if (Attack && Attack->GetSelection().MinAngle > 0.f && (Tags.IsEmpty() || Attack->GetAssetTags().HasAll(Tags))
+				&& Attack->GetSelectionWeight(AttackContext) > 0.f)
 			{
 				return true;
 			}
@@ -236,11 +246,12 @@ EStateTreeRunStatus FknightStateTreeFaceTargetTask::EnterState(FStateTreeExecuti
 	{
 		return EStateTreeRunStatus::Failed;
 	}
-	if (InstanceData.bSkipForSideAttacks && knightMonsterStateTree::HasUsableSideAttack(*InstanceData.Monster, InstanceData.Target))
+	if (InstanceData.bSkipForSideAttacks && knightMonsterStateTree::HasUsableSideAttack(*InstanceData.Monster, InstanceData.Target, InstanceData.SideAttackTags))
 	{
 		UE_LOG(LogknightAI, Verbose, TEXT("%s: Face Target skipped, a side attack is usable."), *GetNameSafe(InstanceData.Monster));
 		return EStateTreeRunStatus::Succeeded;
 	}
+	TryStartTurnMontage(InstanceData);
 	return EStateTreeRunStatus::Running;
 }
 
@@ -251,6 +262,27 @@ EStateTreeRunStatus FknightStateTreeFaceTargetTask::Tick(FStateTreeExecutionCont
 	if (!Movement || !InstanceData.Target)
 	{
 		return EStateTreeRunStatus::Failed;
+	}
+	if (InstanceData.TurnMontage.IsValid())
+	{
+		if (IsTurnMontagePlaying(InstanceData))
+		{
+			UpdateTurnWarpTarget(InstanceData);
+			return EStateTreeRunStatus::Running;
+		}
+		// 몽타주가 끝났다. 그사이 등 뒤 공격을 쓸 수 있게 됐으면(타깃이 계속 뒤로 돈다) 멈추고 공격으로 넘긴다.
+		// 아니면 많이 남았을 때 한 번 더 돌고, 적게 남았으면 보간 회전으로 맞춘다.
+		InstanceData.TurnMontage.Reset();
+		InstanceData.ElapsedTime = 0.f;
+		if (InstanceData.bSkipForSideAttacks && knightMonsterStateTree::HasUsableSideAttack(*InstanceData.Monster, InstanceData.Target, InstanceData.SideAttackTags))
+		{
+			UE_LOG(LogknightAI, Verbose, TEXT("%s: Face Target ended between turns, a side attack is usable."), *GetNameSafe(InstanceData.Monster));
+			return EStateTreeRunStatus::Succeeded;
+		}
+		if (TryStartTurnMontage(InstanceData))
+		{
+			return EStateTreeRunStatus::Running;
+		}
 	}
 	if (Movement->TurnTowards(InstanceData.Target->GetActorLocation(), DeltaTime, InstanceData.TurnRate, InstanceData.Tolerance))
 	{
@@ -263,6 +295,88 @@ EStateTreeRunStatus FknightStateTreeFaceTargetTask::Tick(FStateTreeExecutionCont
 		return EStateTreeRunStatus::Succeeded;
 	}
 	return EStateTreeRunStatus::Running;
+}
+
+void FknightStateTreeFaceTargetTask::ExitState(FStateTreeExecutionContext& Context, const FStateTreeTransitionResult& Transition) const
+{
+	FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
+	UAnimMontage* const Montage = InstanceData.TurnMontage.Get();
+	USkeletalMeshComponent* const Mesh = InstanceData.Monster ? InstanceData.Monster->GetMesh() : nullptr;
+	UAnimInstance* const AnimInstance = Mesh ? Mesh->GetAnimInstance() : nullptr;
+	// 반응 몽타주가 끊었으면 이미 멈춰 있다. 다른 전이로 상태를 벗어날 때만 여기서 멈춘다.
+	if (Montage && AnimInstance && AnimInstance->Montage_IsActive(Montage) && IsTurnMontagePlaying(InstanceData))
+	{
+		AnimInstance->Montage_Stop(0.25f, Montage);
+	}
+	InstanceData.TurnMontage.Reset();
+}
+
+bool FknightStateTreeFaceTargetTask::TryStartTurnMontage(FInstanceDataType& InstanceData)
+{
+	AknightMonsterCharacterBase* const Monster = InstanceData.Monster;
+	const UknightMonsterDefinition* const Definition = Monster ? Monster->GetMonsterDefinition() : nullptr;
+	UknightMonsterMovementComponent* const Movement = Monster ? Monster->GetMonsterMovementComponent() : nullptr;
+	UMotionWarpingComponent* const MotionWarping = Monster ? Monster->FindComponentByClass<UMotionWarpingComponent>() : nullptr;
+	UAnimInstance* const AnimInstance = Monster && Monster->GetMesh() ? Monster->GetMesh()->GetAnimInstance() : nullptr;
+	if (!Definition || !Movement || !MotionWarping || !AnimInstance || !InstanceData.Target || Movement->IsMovementLocked())
+	{
+		return false;
+	}
+	const FVector ToTarget = (InstanceData.Target->GetActorLocation() - Monster->GetActorLocation()).GetSafeNormal2D();
+	const float Delta = FRotator::NormalizeAxis(ToTarget.Rotation().Yaw - Monster->GetActorRotation().Yaw);
+	UAnimMontage* const Montage = Delta < 0.f ? Definition->TurnLeftMontage : Definition->TurnRightMontage;
+	if (!Montage || ToTarget.IsNearlyZero() || FMath::Abs(Delta) < Definition->TurnMontageMinAngle)
+	{
+		return false;
+	}
+	// 탈진처럼 느려진 상태면 보간 회전과 같은 비율로 천천히 돈다.
+	const float PlayRate = Movement->GetTurnScale();
+	if (PlayRate <= UE_KINDA_SMALL_NUMBER || AnimInstance->Montage_Play(Montage, PlayRate) <= 0.f)
+	{
+		return false;
+	}
+	InstanceData.TurnMontage = Montage;
+	InstanceData.TurnStartYaw = Monster->GetActorRotation().Yaw;
+	// 바로 뒤(±180°)라도 여기서 고른 방향으로 끝까지 돈다.
+	InstanceData.TurnAmount = Delta;
+	// 몽타주의 회전(90°)을 회전 구간 동안 실제로 돌 각도에 맞춘다. 이동은 애니메이션 그대로 둔다.
+	URootMotionModifier_SkewWarp::AddRootMotionModifierSkewWarp(MotionWarping, Montage, Definition->TurnWarpStartTime, Definition->TurnWarpEndTime,
+		knightMonsterStateTree::TurnWarpTargetName, EWarpPointAnimProvider::None, FTransform::Identity, NAME_None,
+		/*bInWarpTranslation*/ false, /*bInIgnoreZAxis*/ true, /*bInWarpRotation*/ true);
+	UpdateTurnWarpTarget(InstanceData);
+	UE_LOG(LogknightAI, Verbose, TEXT("%s: turn montage %s for %.0f deg at %.2fx."), *GetNameSafe(Monster), *GetNameSafe(Montage), Delta, PlayRate);
+	return true;
+}
+
+bool FknightStateTreeFaceTargetTask::IsTurnMontagePlaying(const FInstanceDataType& InstanceData)
+{
+	const UAnimInstance* const AnimInstance = InstanceData.Monster && InstanceData.Monster->GetMesh() ? InstanceData.Monster->GetMesh()->GetAnimInstance() : nullptr;
+	const FAnimMontageInstance* const MontageInstance = AnimInstance ? AnimInstance->GetActiveInstanceForMontage(InstanceData.TurnMontage.Get()) : nullptr;
+	// 블렌드 아웃(몽타주의 BlendOutTriggerTime)에 들어가면 끝난 것으로 본다. 정지 동작의 꼬리를 기다리지 않는다.
+	return MontageInstance && !MontageInstance->IsStopped();
+}
+
+void FknightStateTreeFaceTargetTask::UpdateTurnWarpTarget(FInstanceDataType& InstanceData)
+{
+	AknightMonsterCharacterBase* const Monster = InstanceData.Monster;
+	const UknightMonsterDefinition* const Definition = Monster ? Monster->GetMonsterDefinition() : nullptr;
+	UMotionWarpingComponent* const MotionWarping = Monster ? Monster->FindComponentByClass<UMotionWarpingComponent>() : nullptr;
+	if (!Definition || !MotionWarping || !InstanceData.Target)
+	{
+		return;
+	}
+	// 도는 동안 움직인 타깃을 따라가되, 몽타주 방향과 최대 각도는 넘지 않는다. 각도는 직전 값에서 이어서 재야
+	// 타깃이 바로 뒤를 지날 때 +179°가 -179°로 바뀌어 반대 방향 최솟값으로 잘리는 일이 없다.
+	const FVector ToTarget = (InstanceData.Target->GetActorLocation() - Monster->GetActorLocation()).GetSafeNormal2D();
+	const float RawTurn = FRotator::NormalizeAxis(ToTarget.Rotation().Yaw - InstanceData.TurnStartYaw);
+	float Turn = InstanceData.TurnAmount + FRotator::NormalizeAxis(RawTurn - InstanceData.TurnAmount);
+	const float MaxAngle = Definition->TurnMontageMaxAngle;
+	Turn = InstanceData.TurnMontage.Get() == Definition->TurnLeftMontage
+		? FMath::Clamp(Turn, -MaxAngle, -knightMonsterStateTree::TurnWarpMinAngle)
+		: FMath::Clamp(Turn, knightMonsterStateTree::TurnWarpMinAngle, MaxAngle);
+	InstanceData.TurnAmount = Turn;
+	MotionWarping->AddOrUpdateWarpTargetFromLocationAndRotation(knightMonsterStateTree::TurnWarpTargetName, Monster->GetActorLocation(),
+		FRotator(0.f, InstanceData.TurnStartYaw + Turn, 0.f));
 }
 
 // Knight Has Gameplay Tag
