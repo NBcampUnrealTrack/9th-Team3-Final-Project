@@ -5,6 +5,7 @@
 #include "Input/knightMovePressTracker.h"
 #include "knightGameplayAbility_Guard.generated.h"
 
+class ACharacter;
 class UAnimMontage;
 class UGameplayEffect;
 
@@ -88,6 +89,23 @@ protected:
 	TSubclassOf<UGameplayEffect> ParryCounterEffect;
 
 	/**
+	 * 패링 성공 때 뒤로 살짝 주춤하는 모션. 가드가 끝난 뒤에 재생되므로 반격(공격 키)이 바로 끊고 들어갈 수 있다. (2026-10-13)
+	 * 비어 있으면 모션 없이 밀리기만 한다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Guard|Parry Recoil")
+	TObjectPtr<UAnimMontage> ParryRecoilMontage;
+
+	UPROPERTY(EditDefaultsOnly, Category="Guard|Parry Recoil", meta=(ClampMin=0.1))
+	float ParryRecoilPlayRate = 1.f;
+
+	/** 패링 성공 때 공격한 적 반대쪽(수평)으로 밀리는 거리. 0이면 밀리지 않는다. (2026-10-13) */
+	UPROPERTY(EditDefaultsOnly, Category="Guard|Parry Recoil", meta=(ClampMin=0, Units="cm"))
+	float ParryRecoilDistance = 0.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Guard|Parry Recoil", meta=(ClampMin=0.02, Units="s"))
+	float ParryRecoilTime = 0.15f;
+
+	/**
 	 * 퍼펙트 가드 때 공격한 적에게 주는 기본 그로기 피해. (2026-10-08 임시값 20 → 2026-10-09 0)
 	 * 몬스터도 퍼펙트 가드를 당하면 스스로 '최대 그로기 x 몬스터별 비율'을 깎는다(MonsterDefinition.ParriedPoiseDamageRatio, Samooyang).
 	 * 그래서 몬스터별 기본은 몬스터 쪽이 맡고, 여기서는 아래 공격력 몫만 보너스로 준다(사용자 결정: 역할 나눠 둘 다 유지).
@@ -112,6 +130,9 @@ private:
 
 	/** 공격한 적에게 퍼펙트 가드 그로기 피해를 준다 (피해는 0). */
 	void ApplyPerfectGuardPoiseDamage(const AActor* Attacker) const;
+
+	/** 패링 성공 뒤 주춤: 밀리기 + 모션. 가드를 끝낸 뒤에 부른다(어빌리티가 끝나도 유지되게). */
+	void PlayParryRecoil(ACharacter* Character, const AActor* Attacker) const;
 
 	UFUNCTION()
 	void OnParrySucceeded(FGameplayEventData Payload);

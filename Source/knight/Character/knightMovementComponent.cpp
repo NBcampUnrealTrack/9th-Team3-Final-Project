@@ -35,7 +35,9 @@ UknightMovementComponent::UknightMovementComponent(const FObjectInitializer& Obj
 
 	// 출발 곡선 기본값: 느리게 떼고, 중간에 붙었다가, 최고 속도 근처에서 부드럽게 닿는다 (헤더 설명 참고).
 	FRichCurve* const StartCurve = StartAccelerationCurve.GetRichCurve();
-	StartCurve->AddKey(0.f, 0.35f);
+	// (2026-10-13) 로봇 느낌: 서 있다가 출발할 때 처음을 더 느리게(0.35 → 0.15, 0.2에서 0.45). 모터가 돌기 시작하는 느낌.
+	StartCurve->AddKey(0.f, 0.15f);
+	StartCurve->AddKey(0.2f, 0.45f);
 	StartCurve->AddKey(0.5f, 1.f);
 	StartCurve->AddKey(1.f, 0.6f);
 
