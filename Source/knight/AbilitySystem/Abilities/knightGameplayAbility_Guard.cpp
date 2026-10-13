@@ -13,6 +13,10 @@
 #include "Combat/knightTargetLockComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
+#include "GameFramework/RootMotionSource.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimMontage.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "GameplayEffect.h"
 #include "TimerManager.h"
 #include "System/knightGameplayTags.h"
@@ -156,7 +160,48 @@ void UknightGameplayAbility_Guard::OnParrySucceeded(FGameplayEventData Payload)
 		}
 	}
 	// End the guard so the attack key can start the counter right away.
+	ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	const AActor* const Attacker = Payload.Instigator.Get();
 	EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, false);
+	// 가드 모션이 멈춘 뒤에 주춤 모션을 건다. 반격 모션이 같은 슬롯에서 이것을 끊는다. (2026-10-13)
+	PlayParryRecoil(Character, Attacker);
+}
+
+void UknightGameplayAbility_Guard::PlayParryRecoil(ACharacter* Character, const AActor* Attacker) const
+{
+	if (!Character)
+	{
+		return;
+	}
+	if (ParryRecoilDistance > 0.f)
+	{
+		FVector Away = Attacker ? (Character->GetActorLocation() - Attacker->GetActorLocation()).GetSafeNormal2D() : FVector::ZeroVector;
+		if (Away.IsNearlyZero())
+		{
+			Away = -Character->GetActorForwardVector().GetSafeNormal2D();
+		}
+		if (UCharacterMovementComponent* const Movement = Character->GetCharacterMovement())
+		{
+			// 어빌리티가 끝나도 남도록 무브먼트에 직접 건다. 반격 모션의 루트 모션을 덮지 않게 더하기.
+			const float Time = FMath::Max(ParryRecoilTime, 0.02f);
+			const TSharedPtr<FRootMotionSource_ConstantForce> Force = MakeShared<FRootMotionSource_ConstantForce>();
+			Force->InstanceName = TEXT("ParryRecoil");
+			Force->AccumulateMode = ERootMotionAccumulateMode::Additive;
+			Force->Priority = 5;
+			Force->Force = Away * (ParryRecoilDistance / Time);
+			Force->Duration = Time;
+			Force->FinishVelocityParams.Mode = ERootMotionFinishVelocityMode::SetVelocity;
+			Force->FinishVelocityParams.SetVelocity = FVector::ZeroVector;
+			Movement->ApplyRootMotionSource(Force);
+		}
+	}
+	if (ParryRecoilMontage)
+	{
+		if (UAnimInstance* const AnimInstance = Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr)
+		{
+			AnimInstance->Montage_Play(ParryRecoilMontage, ParryRecoilPlayRate);
+		}
+	}
 }
 
 void UknightGameplayAbility_Guard::OnParryWindowEnded()

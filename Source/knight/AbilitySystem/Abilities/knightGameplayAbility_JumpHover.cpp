@@ -27,8 +27,6 @@ UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_State_Hovering, "State.Hovering");
 namespace
 {
 	constexpr float TickInterval = 1.f / 60.f;
-	/** Braking used while hovering with no input (cm/s^2). The normal falling value is much stronger. */
-	constexpr float HoverBraking = 150.f;
 }
 
 UknightGameplayAbility_JumpHover::UknightGameplayAbility_JumpHover(const FObjectInitializer& ObjectInitializer)
@@ -102,16 +100,32 @@ bool UknightGameplayAbility_JumpHover::StartHover()
 	SavedAirControl = Movement->AirControl;
 	SavedLateralFriction = Movement->FallingLateralFriction;
 	SavedBrakingFalling = Movement->BrakingDecelerationFalling;
+	SavedAirControlBoost = Movement->AirControlBoostMultiplier;
 	Movement->GravityScale = 0.f;
-	Movement->AirControl = HoverAirControl;
+	Movement->AirControl = HoverAirControl * HoverThrustStartScale;
 	Movement->FallingLateralFriction = HoverDrag;
-	Movement->BrakingDecelerationFalling = HoverBraking;
+	Movement->BrakingDecelerationFalling = HoverBrakingDeceleration;
+	// 엔진은 느릴 때 공중 조작을 2배로 키운다. 추력이 천천히 올라오게 하려고 체공 중에는 둔다.
+	Movement->AirControlBoostMultiplier = 1.f;
 
-	// 떨어지는 중이면 살짝 위로 튀고, 올라가는 중이면 그 속도에서 부드럽게 멈춘다(Tick).
-	if (Movement->Velocity.Z < 0.f)
+	// 높이 스프링의 기준 높이 (2026-10-13).
+	// 올라가던 중이면 멈출 때까지 더 올라간 곳, 떨어지던 중이면 지금 높이(속도는 줄여서 살짝 가라앉았다 되튀게).
+	const float StartVz = Movement->Velocity.Z;
+	HoverAnchorZ = Character->GetActorLocation().Z;
+	if (StartVz > 0.f)
 	{
-		Movement->Velocity.Z = HoverStartLift;
+		HoverAnchorZ += StartVz * StartVz / (2.f * FMath::Max(HoverRiseDeceleration, 100.f));
 	}
+	else
+	{
+		Movement->Velocity.Z = FMath::Max(StartVz, -HoverCatchMaxFallSpeed);
+	}
+	HoverStartAnchorZ = HoverAnchorZ;
+	CurrentClimbRate = 0.f;
+	ThrustHeldTime = 0.f;
+	PrevHorizontalVelocity = FVector(Movement->Velocity.X, Movement->Velocity.Y, 0.f);
+	SmoothedAccel = FVector::ZeroVector;
+	PrevDriftVelocity = FVector::ZeroVector;
 
 	ASC->AddLooseGameplayTag(TAG_State_Hovering);
 	bHovering = true;
@@ -159,11 +173,50 @@ void UknightGameplayAbility_JumpHover::TickHover()
 			return;
 		}
 
-		// 수직: 오르내림 목표 속도로 부드럽게 맞춘다. 위치 sin → 속도 cos.
+		const float HoverTime = static_cast<float>(Now - HoverStartTime);
+
+		// 수직 (2026-10-13): 기준 높이 + 오르내림에 스프링·댐퍼로 끌려간다. 목표 속도에 바로 맞추면 벽에 걸린 것처럼 딱딱했다.
 		const float Omega = 2.f * PI / HoverBobPeriod;
-		const float Phase = static_cast<float>(Now - HoverStartTime) * Omega;
-		const float TargetZ = HoverBobAmplitude * Omega * FMath::Cos(Phase);
-		Movement->Velocity.Z = FMath::FInterpTo(Movement->Velocity.Z, TargetZ, DeltaTime, HoverCatchSpeed);
+		const float BobOffset = HoverBobAmplitude * FMath::Sin(HoverTime * Omega);
+		const float BobVelocity = HoverBobAmplitude * Omega * FMath::Cos(HoverTime * Omega);
+		const float CurrentZ = static_cast<float>(Character->GetActorLocation().Z);
+
+		// 계속 누르고 있으면 기준 높이가 천천히 올라간다 (2026-10-13). 체공은 키를 누르고 있는 동안만 유지되므로 체공 시간 = 누른 시간.
+		// 최대 높이 근처(남은 100cm)에서는 부드럽게 멈추고, 천장에 막히면 기준 높이가 몸보다 너무 앞서지 않게 한다.
+		CurrentClimbRate = 0.f;
+		if (HoverClimbSpeed > 0.f && HoverTime > HoverClimbDelay)
+		{
+			const float RampIn = HoverClimbRampTime > 0.f ? FMath::SmoothStep(0.f, 1.f, (HoverTime - HoverClimbDelay) / HoverClimbRampTime) : 1.f;
+			const float Remaining = HoverStartAnchorZ + HoverMaxClimb - HoverAnchorZ;
+			const float RampOut = FMath::Clamp(Remaining / 100.f, 0.f, 1.f);
+			CurrentClimbRate = HoverClimbSpeed * RampIn * RampOut;
+			HoverAnchorZ = FMath::Min(HoverAnchorZ + CurrentClimbRate * DeltaTime, CurrentZ + 150.f);
+		}
+
+		const float SpringOmega = 2.f * PI * HoverSpringFrequency;
+		const float HeightError = HoverAnchorZ + BobOffset - CurrentZ;
+		const float VerticalAccel = SpringOmega * SpringOmega * HeightError
+			+ 2.f * HoverSpringDamping * SpringOmega * (BobVelocity + CurrentClimbRate - static_cast<float>(Movement->Velocity.Z));
+		Movement->Velocity.Z += VerticalAccel * DeltaTime;
+
+		// 수평 추력: 방향키를 누르고 있는 시간에 따라 입력이 먹는 정도가 올라간다. 떼면 빨리 내려간다.
+		const bool bHasInput = !Movement->GetCurrentAcceleration().IsNearlyZero();
+		ThrustHeldTime = bHasInput ? ThrustHeldTime + DeltaTime : FMath::Max(0.f, ThrustHeldTime - DeltaTime * 3.f);
+		const float RampAlpha = HoverThrustRampTime > 0.f ? FMath::SmoothStep(0.f, 1.f, ThrustHeldTime / HoverThrustRampTime) : 1.f;
+		Movement->AirControl = HoverAirControl * FMath::Lerp(HoverThrustStartScale, 1.f, RampAlpha);
+
+		// 제자리에서도 천천히 떠돈다: 두 축을 서로 다른 주기로 흔든다(위치 sin → 속도 cos, 변화분만 더함).
+		if (HoverDriftAmplitude > 0.f)
+		{
+			const float DriftOmegaX = 2.f * PI / HoverDriftPeriod;
+			const float DriftOmegaY = DriftOmegaX * 0.73f;
+			const FVector DriftVelocity(
+				HoverDriftAmplitude * DriftOmegaX * FMath::Cos(HoverTime * DriftOmegaX),
+				HoverDriftAmplitude * DriftOmegaY * FMath::Cos(HoverTime * DriftOmegaY + 1.3f),
+				0.f);
+			Movement->Velocity += DriftVelocity - PrevDriftVelocity;
+			PrevDriftVelocity = DriftVelocity;
+		}
 
 		// 게이지.
 		float GaugeValue = -1.f;
@@ -174,6 +227,10 @@ void UknightGameplayAbility_JumpHover::TickHover()
 			{
 				// 부스트 회복 GE는 지금 항상 돌고 있어서(막는 태그 없음), 켜 두면 그만큼 더 빼서 체공 중에는 회복이 없게 한다.
 				float Drain = HoverDrainPerSecond;
+				if (HoverClimbSpeed > 0.f)
+				{
+					Drain += HoverClimbExtraDrain * CurrentClimbRate / HoverClimbSpeed;
+				}
 				if (bCancelGaugeRecovery && ASC->HasAttributeSetForAttribute(UknightAttributeSet::GetBoostRecoveryRateAttribute()))
 				{
 					Drain += FMath::Max(0.f, ASC->GetNumericAttribute(UknightAttributeSet::GetBoostRecoveryRateAttribute()));
@@ -189,10 +246,17 @@ void UknightGameplayAbility_JumpHover::TickHover()
 			}
 		}
 
-		// 기울기: 미는 방향(가속 입력) 기준. 앞이면 앞으로 숙이고(피치 -), 오른쪽이면 오른쪽으로 기운다(롤 +).
-		const FVector Accel = Movement->GetCurrentAcceleration().GetSafeNormal2D();
-		const FVector Local = Character->GetActorRotation().UnrotateVector(Accel);
-		TargetTilt = FRotator(-Local.X * HoverMaxTilt, 0.f, Local.Y * HoverMaxTilt);
+		// 기울기 (2026-10-13): 실제 수평 가속 기준. 출발하면 앞으로 숙이고(피치 -), 멈추면 뒤로 젖힌다.
+		// 오른쪽으로 가속하면 오른쪽으로 기운다(롤 +). 제자리에서는 천천히 흔들린다.
+		const FVector HorizontalVelocity(Movement->Velocity.X, Movement->Velocity.Y, 0.f);
+		const FVector RawAccel = (HorizontalVelocity - PrevHorizontalVelocity) / DeltaTime;
+		PrevHorizontalVelocity = HorizontalVelocity;
+		SmoothedAccel = FMath::VInterpTo(SmoothedAccel, RawAccel, DeltaTime, 6.f);
+		const FVector Local = Character->GetActorRotation().UnrotateVector(SmoothedAccel) / FMath::Max(HoverTiltAccelReference, 1.f);
+		const float SwayPitch = HoverIdleSwayAngle * FMath::Sin(HoverTime * 2.f * PI / 2.9f);
+		const float SwayRoll = HoverIdleSwayAngle * FMath::Sin(HoverTime * 2.f * PI / 3.7f + 0.8f);
+		TargetTilt = FRotator(-FMath::Clamp(Local.X, -1.f, 1.f) * HoverMaxTilt + SwayPitch, 0.f,
+			FMath::Clamp(Local.Y, -1.f, 1.f) * HoverMaxTilt + SwayRoll);
 
 		UpdateLoopAudio(DeltaTime, Movement->Velocity.Size2D(), GaugeValue, Now);
 	}
@@ -258,6 +322,7 @@ void UknightGameplayAbility_JumpHover::StopHover()
 		Movement->AirControl = SavedAirControl;
 		Movement->FallingLateralFriction = SavedLateralFriction;
 		Movement->BrakingDecelerationFalling = SavedBrakingFalling;
+		Movement->AirControlBoostMultiplier = SavedAirControlBoost;
 	}
 	StopEffects();
 	// 기울기는 Tick이 계속 돌면서 똑바로 되돌린 뒤 멈춘다.

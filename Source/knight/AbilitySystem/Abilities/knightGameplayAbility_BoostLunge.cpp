@@ -98,7 +98,14 @@ void UknightGameplayAbility_BoostLunge::ActivateAbility(const FGameplayAbilitySp
 	{
 		if (UAnimInstance* const Anim = Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr)
 		{
-			Anim->Montage_Play(DashMontage, DashPlayRate * GetAttackSpeed());
+			Anim->Montage_Play(DashMontage, DashPlayRate * GetActionSpeed());
+			// 돌진 자세는 베기가 시작될 때까지 반복한다. 공중 돌진 자세(Plunge_Hold)는 0.33초짜리라
+			// 돌진(최대 0.6초)보다 먼저 끝나서 중간에 기본 공중 자세로 끊겼다. (2026-10-13)
+			const FName DashSection = DashMontage->GetSectionName(0);
+			if (DashSection != NAME_None)
+			{
+				Anim->Montage_SetNextSection(DashSection, DashSection, DashMontage);
+			}
 		}
 	}
 
