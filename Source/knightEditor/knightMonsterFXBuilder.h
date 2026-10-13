@@ -35,4 +35,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|FX")
 	static UNiagaraSystem* BuildWindStreakSystem(const FString& PackagePath, UMaterialInterface* Material, FVector BoxCenter, FVector BoxExtent,
 		float Speed = 3500.f, float StreakLength = 450.f);
+
+	/** 위로 솟구치는 불꽃 한 번(가시 발사). 월드에 스폰하는 용도라 cm 그대로다. */
+	UFUNCTION(BlueprintCallable, Category="Knight|FX")
+	static UNiagaraSystem* BuildFireBurstSystem(const FString& PackagePath, UMaterialInterface* Material, float Height = 800.f);
+
+	/** 바닥을 따라 사방으로 퍼지는 짧은 줄기 한 번(착탄 충격파). 월드에 스폰하는 용도라 cm 그대로다. */
+	UFUNCTION(BlueprintCallable, Category="Knight|FX")
+	static UNiagaraSystem* BuildShockwaveSystem(const FString& PackagePath, UMaterialInterface* Material, float Radius = 500.f);
 };
