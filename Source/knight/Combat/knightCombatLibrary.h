@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "CollisionShape.h"
 #include "Combat/knightCombatTypes.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
 class UAnimMontage;
@@ -26,6 +27,16 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category="Knight|Combat")
 	static EknightHitOutcome ApplyMeleeHit(AActor* Attacker, const FHitResult& Hit, const FknightMeleeHitParams& Params);
+
+	/**
+	 * Shape(중심 Center) 안의 적대 ICombatInterface 액터마다 ApplyMeleeHit을 한 번씩 적용한다(몬스터 범위·몸통·투사체 판정).
+	 * HitActors에 있는 액터와 Filter가 false인 액터는 건너뛰고, 새로 맞은 액터는 HitActors에 넣는다. 히트 결과는 Center에서
+	 * 가장 가까운 표면 지점으로 만들며, 법선은 FixedNormal이 0이 아니면 그것, 아니면 표면에서 Center 쪽이다.
+	 * OnHit은 적용 직후 결과와 함께 불린다. 새로 맞은 수를 반환한다.
+	 */
+	static int32 ApplyAreaMeleeHits(AActor* Attacker, const FVector& Center, const FCollisionShape& Shape, const FknightMeleeHitParams& Params,
+		TSet<TWeakObjectPtr<AActor>>& HitActors, TFunctionRef<bool(const AActor&)> Filter = [](const AActor&) { return true; },
+		TFunctionRef<void(AActor&, EknightHitOutcome)> OnHit = [](AActor&, EknightHitOutcome) {}, const FVector& FixedNormal = FVector::ZeroVector);
 
 	/**
 	 * 스윕 타격을 액터당 하나로 줄인다. 순서는 액터가 처음 나온 순서를 따른다. 액터마다 부위로
