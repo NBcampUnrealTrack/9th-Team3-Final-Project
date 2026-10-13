@@ -6,6 +6,8 @@
 #include "knightMonsterRecipeLibrary.generated.h"
 
 class AknightMonsterCharacterBase;
+class UAnimMontage;
+class UAnimSequence;
 class UknightMonsterRecipe;
 
 /**
@@ -47,4 +49,11 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
 	static bool SetFaceTargetSideAttacks(UStateTree* StateTree, FName StateName, bool bSkip, const FGameplayTagContainer& SideAttackTags);
+
+	/**
+	 * 시퀀스마다 섹션 하나인 몽타주를 만들거나 고친다(돌진의 Start, Loop, Stop처럼). 섹션은 순서대로 이어지고,
+	 * LoopSection은 자기 자신으로 이어져 어빌리티가 다음 섹션을 정할 때까지 반복한다. 노티파이는 남긴다. 저장은 호출한 쪽.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
+	static UAnimMontage* BuildSectionMontage(const FString& PackagePath, const TArray<UAnimSequence*>& Sequences, const TArray<FName>& SectionNames, FName LoopSection);
 };

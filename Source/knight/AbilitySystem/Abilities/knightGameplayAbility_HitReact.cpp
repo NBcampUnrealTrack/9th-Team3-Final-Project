@@ -2,6 +2,14 @@
 
 #include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
+#include "Abilities/Tasks/AbilityTask_ApplyRootMotionConstantForce.h"
+#include "Camera/CameraShakeBase.h"
+#include "Engine/World.h"
+#include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerController.h"
+#include "GameFramework/RootMotionSource.h"
+#include "Kismet/GameplayStatics.h"
+#include "TimerManager.h"
 #include "Animation/AnimMontage.h"
 #include "GameFramework/Actor.h"
 #include "GameplayEffect.h"
@@ -130,6 +138,7 @@ void UknightGameplayAbility_HitReact::ActivateAbility(const FGameplayAbilitySpec
 	bStateTagApplied = true;
 
 	const AActor* const EventInstigator = TriggerEventData->Instigator.Get();
+	ApplyImpactFeel(*Avatar, EventInstigator);
 	const FVector ToInstigator = EventInstigator ? EventInstigator->GetActorLocation() - Avatar->GetActorLocation() : Avatar->GetActorForwardVector();
 	UAnimMontage* const Montage = GetMontages(ActiveType).Pick(Avatar->GetActorForwardVector(), Avatar->GetActorRightVector(), ToInstigator);
 	if (!Montage)
@@ -145,6 +154,63 @@ void UknightGameplayAbility_HitReact::ActivateAbility(const FGameplayAbilitySpec
 	Task->OnInterrupted.AddDynamic(this, &ThisClass::OnMontageFinished);
 	Task->OnCancelled.AddDynamic(this, &ThisClass::OnMontageFinished);
 	Task->ReadyForActivation();
+}
+
+const FknightHitImpactFeel& UknightGameplayAbility_HitReact::GetImpactFeel(EknightHitReactType Type) const
+{
+	switch (Type)
+	{
+	case EknightHitReactType::Stagger:
+		return StaggerImpact;
+	case EknightHitReactType::Knockdown:
+		return KnockdownImpact;
+	default:
+		return FlinchImpact;
+	}
+}
+
+void UknightGameplayAbility_HitReact::ApplyImpactFeel(AActor& Avatar, const AActor* EventInstigator)
+{
+	const FknightHitImpactFeel& Feel = GetImpactFeel(ActiveType);
+
+	// 넉백: 때린 쪽에서 멀어지는 방향. 몽타주 루트 모션에 더해지도록 더하기(Additive)로 건다.
+	if (Feel.KnockbackDistance > 0.f && EventInstigator)
+	{
+		const FVector Away = (Avatar.GetActorLocation() - EventInstigator->GetActorLocation()).GetSafeNormal2D();
+		if (!Away.IsNearlyZero())
+		{
+			const float Time = FMath::Max(Feel.KnockbackTime, 0.02f);
+			UAbilityTask_ApplyRootMotionConstantForce* const Task = UAbilityTask_ApplyRootMotionConstantForce::ApplyRootMotionConstantForce(
+				this, TEXT("HitKnockback"), Away, Feel.KnockbackDistance / Time, Time, true, nullptr,
+				ERootMotionFinishVelocityMode::SetVelocity, FVector::ZeroVector, 0.f, true);
+			Task->ReadyForActivation();
+		}
+	}
+
+	// 흔들림·슬로는 플레이어가 맞았을 때만.
+	const APawn* const Pawn = Cast<APawn>(&Avatar);
+	if (!Pawn || !Pawn->IsPlayerControlled())
+	{
+		return;
+	}
+	if (Feel.CameraShake && Feel.CameraShakeScale > 0.f)
+	{
+		if (APlayerController* const PC = Cast<APlayerController>(Pawn->GetController()))
+		{
+			PC->ClientStartCameraShake(Feel.CameraShake, Feel.CameraShakeScale);
+		}
+	}
+	UWorld* const World = Avatar.GetWorld();
+	if (World && Feel.SlowMoDuration > 0.f && Feel.SlowMoDilation < 1.f)
+	{
+		UGameplayStatics::SetGlobalTimeDilation(World, Feel.SlowMoDilation);
+		// 타이머도 느려진 시간으로 세므로, 실제 시간 SlowMoDuration에 맞추려고 배율을 곱한다.
+		FTimerHandle RestoreTimer;
+		World->GetTimerManager().SetTimer(RestoreTimer, FTimerDelegate::CreateWeakLambda(World, [World]()
+		{
+			UGameplayStatics::SetGlobalTimeDilation(World, 1.f);
+		}), Feel.SlowMoDuration * Feel.SlowMoDilation, false);
+	}
 }
 
 void UknightGameplayAbility_HitReact::OnMontageFinished()

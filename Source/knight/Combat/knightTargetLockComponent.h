@@ -89,6 +89,17 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|LockOn")
 	TArray<TEnumAsByte<EObjectTypeQuery>> TargetObjectTypes;
 
+	/**
+	 * 락온 대상의 공격 지점(표면에서 FarStopDistance 앞)까지 남은 거리가 이보다 멀면 State.LockOn.Far를 붙인다. (2026-10-12)
+	 * 멀 때는 공격 키로 부스트 돌진 베기가 나가고, 가까우면 평소 공격이 나간다. 0이면 태그를 붙이지 않는다.
+	 * 일반 공격의 돌진(MaxWarpDistance 300)보다 조금 멀게 둔다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|LockOn|Lunge", meta=(ClampMin=0, Units="cm"))
+	float FarTagDistance = 450.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|LockOn|Lunge", meta=(ClampMin=0, Units="cm"))
+	float FarStopDistance = 170.f;
+
 	UPROPERTY(EditDefaultsOnly, Category="Knight|LockOn|Camera")
 	bool bRotateControllerToTarget = true;
 
@@ -119,6 +130,9 @@ private:
 	void UpdateControlRotation(float DeltaTime) const;
 	/** Mirrors the lock onto the owner's ASC as State.LockedOn, which selects the lock-on camera mode. */
 	void SetLockedOnTag(bool bLocked) const;
+	/** State.LockOn.Far를 켜거나 끈다(바뀔 때만). */
+	void SetFarTag(bool bFar);
+	bool bFarTagged = false;
 
 	TWeakObjectPtr<AActor> LockedActor;
 	TWeakObjectPtr<USceneComponent> LockedComponent;

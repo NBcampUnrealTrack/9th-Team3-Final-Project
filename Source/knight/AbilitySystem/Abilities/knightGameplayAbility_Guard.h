@@ -61,6 +61,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Guard", meta=(ClampMin=0, Units="s"))
 	float ParryWindow = 0.2f;
 
+	/**
+	 * 락온 중 가드하는 동안 대상을 따라 도는 속도(도/초). 0이면 누를 때 한 번만 대상을 본다. (2026-10-12)
+	 * 누른 순간에는 항상 대상을 바로 본다(패링은 정면 범위에서만 되므로).
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Guard", meta=(ClampMin=0, Units="deg"))
+	float GuardLockOnTurnRate = 540.f;
+
 	/** Optional looping guard pose. The ability ends on input release, not when this montage ends. */
 	UPROPERTY(EditDefaultsOnly, Category="Guard")
 	TObjectPtr<UAnimMontage> GuardMontage;
@@ -117,6 +124,9 @@ private:
 
 	void RemoveParryTag();
 	void WaitForRelease();
+
+	/** 락온 대상 쪽으로 몸을 돌린다. MaxDeltaYaw < 0이면 바로 돌리고, 아니면 최대 그 각도만큼. 락온이 없으면 false. */
+	bool FaceLockedTarget(float MaxDeltaYaw) const;
 
 	/** 가드 자세 상태를 켠다: 캔슬 창(다른 행동이 가드를 대신), 이동 잠금, 새 이동 입력 감시. */
 	void EnterGuardStance();

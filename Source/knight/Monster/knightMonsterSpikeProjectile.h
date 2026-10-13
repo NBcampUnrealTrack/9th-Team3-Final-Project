@@ -1,0 +1,82 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Combat/knightCombatTypes.h"
+#include "GameFramework/Actor.h"
+#include "knightMonsterSpikeProjectile.generated.h"
+
+class UMaterialInterface;
+class UNiagaraSystem;
+class UStaticMesh;
+class UStaticMeshComponent;
+
+/** 한 번의 가시 비에서 이미 맞은 대상. 같은 발사에서 나온 가시들이 나눠 써서 대상마다 한 번만 맞게 한다. */
+using FknightSpikeVolleyHits = TSet<TWeakObjectPtr<AActor>>;
+
+/** 가시 외형. 원뿔 메시 두 개를 밑면끼리 붙여 가운데가 두껍고 양끝이 뾰족한 가시를 만든다. */
+struct FknightSpikeLook
+{
+	/** 끝이 +Z를 향하는 원뿔(엔진 기본 원뿔). */
+	TObjectPtr<UStaticMesh> Mesh;
+	TObjectPtr<UMaterialInterface> Material;
+	/** 원뿔 하나의 스케일. 가시 전체 길이는 원뿔 높이 x Z x 2다. */
+	FVector Scale = FVector::OneVector;
+};
+
+/** 떨어지는 가시의 착탄 설정. */
+struct FknightSpikeImpact
+{
+	FVector Landing = FVector::ZeroVector;
+	float HitRadius = 150.f;
+	/** 착탄점에서 위로 이 높이까지(낙하 경로)에 있는 대상이 맞는다. */
+	float PathHeight = 400.f;
+	TArray<TObjectPtr<UNiagaraSystem>> Effects;
+	/** 착탄 뒤 땅에 꽂혀 있는 시간. */
+	float StuckTime = 1.5f;
+};
+
+/**
+ * 몬스터가 쏘는 가시 하나. 두 가지로 쓴다(충돌 없음).
+ * - LaunchUp: 위로 곧게 솟아 Duration 뒤에 사라진다(연출만).
+ * - LaunchDown: 착탄점 위에서 수직으로 꽂힌다. 대상에 걸리지 않고 통과해 항상 땅에 박히며, 착탄 순간 낙하 경로
+ *   (반지름 HitRadius, 높이 PathHeight 기둥) 안의 적대 대상을 근접 타격과 같은 규칙(UknightCombatLibrary::ApplyMeleeHit)으로 때린다.
+ * 디버그: knight.Monster.DrawAttacks 1 이면 착탄 판정 캡슐을 그린다.
+ */
+UCLASS()
+class KNIGHT_API AknightMonsterSpikeProjectile : public AActor
+{
+	GENERATED_BODY()
+
+public:
+	AknightMonsterSpikeProjectile();
+
+	void SetLook(const FknightSpikeLook& Look);
+	void LaunchUp(float Speed, float Duration);
+	void LaunchDown(AActor* InAttacker, const FknightMeleeHitParams& InHitParams, const FknightSpikeImpact& InImpact, float FallTime,
+		const TSharedPtr<FknightSpikeVolleyHits>& InVolleyHits);
+
+	virtual void Tick(float DeltaSeconds) override;
+
+private:
+	void Land();
+
+	UPROPERTY(VisibleAnywhere, Category="Spike")
+	TObjectPtr<USceneComponent> Root;
+
+	/** 가시 앞쪽 절반(+X로 뾰족). */
+	UPROPERTY(VisibleAnywhere, Category="Spike")
+	TObjectPtr<UStaticMeshComponent> FrontHalf;
+
+	/** 가시 뒤쪽 절반(-X로 뾰족). */
+	UPROPERTY(VisibleAnywhere, Category="Spike")
+	TObjectPtr<UStaticMeshComponent> BackHalf;
+
+	TWeakObjectPtr<AActor> Attacker;
+	FknightMeleeHitParams HitParams;
+	FknightSpikeImpact Impact;
+	TSharedPtr<FknightSpikeVolleyHits> VolleyHits;
+	FVector Velocity = FVector::ZeroVector;
+	float Remaining = 0.f;
+	bool bFalling = false;
+	bool bLanded = false;
+};
