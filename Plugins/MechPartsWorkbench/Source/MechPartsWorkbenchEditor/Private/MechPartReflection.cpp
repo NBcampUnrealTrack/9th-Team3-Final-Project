@@ -121,7 +121,8 @@ namespace MechPartReflection
 		{
 			TagName = Text.Mid(10, Text.Len() - 12);
 		}
-		return TagName == TEXT("None") ? FString() : TagName;
+		// 빈 태그는 "None" 또는 (이 엔진 버전에서) "()"로 나온다 → 둘 다 '없음' (10-12).
+		return TagName == TEXT("None") || TagName == TEXT("()") ? FString() : TagName;
 	}
 
 	FString GetGroupingValue(const FAssetData& AssetData, const FProperty* Property)
