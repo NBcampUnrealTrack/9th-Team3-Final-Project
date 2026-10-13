@@ -18,6 +18,23 @@ enum class EMechPartAttachMode : uint8
 };
 
 /**
+ * (2026-10-13) 원본 메카 몸의 부위. 파츠가 어느 부위를 대신하는지(FMechPartAttachment::ReplaceRegions) 고를 때 쓴다.
+ * 여러 개를 함께 고를 수 있다(비트 마스크). 실제로 숨기려면 원본을 부위별 메시로 나눠 둬야 한다(UMechBodyRegionSet).
+ */
+UENUM(BlueprintType, meta=(Bitflags, UseEnumValuesAsMaskValuesInEditor="true"))
+enum class EMechBodyRegion : uint8
+{
+	None = 0 UMETA(Hidden),
+	Head = 1 << 0,
+	Torso = 1 << 1,
+	ArmLeft = 1 << 2,
+	ArmRight = 1 << 3,
+	LegLeft = 1 << 4,
+	LegRight = 1 << 5,
+};
+ENUM_CLASS_FLAGS(EMechBodyRegion)
+
+/**
  * Where and how a part mesh sits on the mech. Written precisely in the Mech Parts Workbench viewport,
  * read by the game when a part is equipped.
  */
@@ -36,6 +53,15 @@ struct MECHPARTSWORKBENCHRUNTIME_API FMechPartAttachment
 	/** Offset from the socket. Used in Socket mode. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Attachment", meta=(EditCondition="AttachMode==EMechPartAttachMode::Socket"))
 	FTransform RelativeTransform = FTransform::Identity;
+
+	/**
+	 * (2026-10-13) 이 파츠를 끼는 동안 숨길 원본 메카 부위. 비우면 원본 위에 겹쳐 입는다(원본 유지).
+	 * 예: 투구가 머리를 통째로 대신하면 Head, 잔열 풀암 L이면 ArmLeft.
+	 * 원본을 부위별 메시로 나눈 메카에서만 보인다 (워크벤치 목록 우클릭 '원본을 부위별로 나누기',
+	 * 게임은 나이트 파츠 컴포넌트의 Body Regions에 그 세트를 넣어야 함).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Attachment", meta=(Bitmask, BitmaskEnum="/Script/MechPartsWorkbenchRuntime.EMechBodyRegion"))
+	int32 ReplaceRegions = 0;
 
 	/**
 	 * Attaches PartMesh to MechMesh according to this data.

@@ -2,12 +2,15 @@
 
 #include "CoreMinimal.h"
 #include "ContentBrowserDelegates.h"
+#include "MechPartAttachment.h"
 #include "UObject/TopLevelAssetPath.h"
 #include "Widgets/SCompoundWidget.h"
 
 class IDetailsView;
 class SMechPartsWorkbenchViewport;
 class SVerticalBox;
+class UAnimationAsset;
+class UPackage;
 struct FAssetData;
 
 /**
@@ -28,6 +31,14 @@ struct FAssetData;
  *      팔·다리를 따라갈지는 미리보기 설정의 Skin Follow Arms / Legs (기본 끔: 망토가 팔·다리에 끌려가지 않음).
  *   오른쪽 아래 '미리보기 설정'에서 메카 메시와 자세(애니메이션 반복 재생, 또는 멈춘 시점)를 바꿀 수 있다 (개인 설정).
  *   파츠를 고르거나 F를 누르면 카메라가 파츠에 맞춰진다. 작은 파츠도 최소 크기(FocusMinSize)만큼 떨어져서 본다.
+ *   (10-13) 목록에서 파츠를 우클릭하면 저장, 바뀐 파츠 모두 저장, 뼈대에 입히기, 스태틱 메시로 되돌리기,
+ *   배치 복사·붙여넣기, 미리보기 애니메이션 끄기·다시 켜기를 쓸 수 있다.
+ *   저장 안 된 파츠가 있으면 목록 위에 개수와 '모두 저장' 버튼이 나온다.
+ *   (10-13) 착용 미리보기(우클릭): 여러 파츠를 같이 끼워 본다. 부위(Slot Tag)마다 하나, 같은 부위를 끼우면 바뀐다.
+ *   '이 세트 전부 끼기'는 같은 폴더의 파츠를 부위마다 하나씩(이름순 첫 번째 = A) 끼운다. 고른 파츠는 같은 부위의 착용 파츠 대신 보인다.
+ *   '원본 전부 숨기기'로 파츠만 남겨 볼 수 있다.
+ *   (10-13) 원본 부위 교체: 파츠 Attachment의 Replace Regions에 고른 부위는 그 파츠가 보이는 동안 원본에서 숨는다.
+ *   먼저 우클릭 '원본을 부위별로 나누기'로 미리보기 메카 메시를 부위 메시로 나눠 둬야 한다(MechBodyRegionSplitter).
  */
 class SMechPartsWorkbench : public SCompoundWidget
 {
@@ -79,6 +90,47 @@ private:
 	FReply HandleBakeSkinClicked();
 	bool CanBakeSkin() const;
 
+	/** (10-13) 목록 우클릭 메뉴. 고른 파츠에 대한 기능은 오른쪽 버튼과 같은 함수를 쓴다. */
+	TSharedPtr<SWidget> MakePartContextMenu(const TArray<FAssetData>& SelectedAssets);
+
+	/** (10-13) 불러온 파츠 에셋 중 저장 안 된 것들의 패키지. 목록 위 알림 줄과 '모두 저장'이 쓴다. */
+	TArray<UPackage*> GetDirtyPartPackages() const;
+	void SaveAllDirtyParts();
+
+	/** (10-13) 스켈레탈 메시 칸을 비우고 붙이는 방식을 Socket으로 돌린다 → 스태틱 메시로 위치를 다시 맞출 수 있다. 되돌리기 가능. */
+	void RevertToStaticMesh();
+	bool CanRevertToStaticMesh() const;
+
+	/** (10-13) 배치(소켓·위치·회전·크기) 복사·붙여넣기. 붙여넣기는 대상의 붙이는 방식(Socket/LeaderPose)은 그대로 둔다. 되돌리기 가능. */
+	void CopyPlacement();
+	void PastePlacement();
+
+	/** (10-13) 미리보기 애니메이션을 비워 기본 자세로 보거나, 이 창에서 비웠던 애니메이션을 다시 넣는다. */
+	void TogglePreviewAnimation();
+
+	/** (10-13) 파츠의 부위 키(첫 번째 분류 속성 = Slot Tag 값). 값이 없으면 에셋 경로(다른 파츠와 겹치지 않음). */
+	FString GetSlotKey(const FSoftObjectPath& PartPath) const;
+	/** (10-13) 파츠의 세트(폴더) 이름. */
+	FString GetFolderKey(const FSoftObjectPath& PartPath) const;
+
+	/** (10-13) 착용 미리보기에 끼운다. 같은 부위에 있던 파츠는 빠진다. */
+	void AddToLoadout(const FSoftObjectPath& PartPath);
+	void RemoveFromLoadout(const FSoftObjectPath& PartPath);
+	bool IsInLoadout(const FSoftObjectPath& PartPath) const;
+	/** (10-13) 같은 폴더의 파츠를 부위마다 하나씩(이름순 첫 번째) 끼운다. */
+	void AddFolderToLoadout(const FString& FolderKey);
+	void ClearLoadout();
+	/** (10-13) 착용 미리보기 파츠 중 고른 파츠와 같은 부위인 것을 빼고 미리보기에 넘긴다. 고르기·착용 변경 때마다 부른다. */
+	void PushLoadoutToViewport();
+
+	/** (10-13) 미리보기 메카 메시를 부위 메시로 나눈다(확인 창 → MechBodyRegionSplitter). */
+	void SplitBodyRegions();
+
+	/** (10-13) 목록 위 착용 미리보기 요약(부위·파츠 이름, 원본 숨김 여부). */
+	FText GetLoadoutSummary() const;
+	/** (10-13) 보이는 파츠에 Replace Regions가 있는데 부위 메시가 없어서 미리보기에 반영되지 않는지. */
+	bool IsReplaceRegionsUnavailable() const;
+
 	TSharedPtr<SMechPartsWorkbenchViewport> Viewport;
 	TSharedPtr<IDetailsView> PartDetails;
 	TSharedPtr<IDetailsView> SettingsDetails;
@@ -94,4 +146,17 @@ private:
 	TSharedPtr<SVerticalBox> FilterBox;
 	FRefreshAssetViewDelegate RefreshPartList;
 	bool bFiltersDirty = false;
+
+	/** (10-13) 배치 복사 값과 어디서 복사했는지. 창을 닫으면 사라진다. */
+	TOptional<FMechPartAttachment> CopiedPlacement;
+	FString CopiedPlacementSource;
+
+	/** (10-13) '미리보기 애니메이션 끄기'로 비운 애니메이션. '다시 켜기'에 쓴다. 창을 닫으면 사라진다. */
+	TSoftObjectPtr<UAnimationAsset> ClearedPreviewAnimation;
+
+	/** (10-13) 착용 미리보기 파츠들(끼운 순서). 부위마다 하나. 창을 닫으면 사라진다. */
+	TArray<FSoftObjectPath> LoadoutParts;
+
+	/** (10-13) '원본 전부 숨기기'. 창을 닫으면 꺼진다. */
+	bool bHideWholeMech = false;
 };
