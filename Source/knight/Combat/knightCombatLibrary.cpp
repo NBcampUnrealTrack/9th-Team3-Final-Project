@@ -25,7 +25,8 @@ namespace
 {
 	// 공격의 피해 이펙트가 쓰는 피해 실행(UknightDamageExecution)의 가드 범위로 판정한다. 퍼펙트 가드가 일반 가드와 같은 각도를 쓰게 하려는 것.
 	// 피해 이펙트가 없거나 다른 실행을 쓰면 기본 피해 실행의 각도를 쓴다.
-	bool IsAttackerInGuardArc(const TSubclassOf<UGameplayEffect>& DamageEffect, const AActor* Target, const AActor* Attacker)
+	// (2026-10-12) 방향은 타격 결과의 공격이 들어온 지점(TraceStart)에서 잰다. 피해 실행과 같은 기준이다.
+	bool IsAttackerInGuardArc(const TSubclassOf<UGameplayEffect>& DamageEffect, const AActor* Target, const AActor* Attacker, const FHitResult& Hit)
 	{
 		if (const UGameplayEffect* const Effect = DamageEffect ? DamageEffect->GetDefaultObject<UGameplayEffect>() : nullptr)
 		{
@@ -34,11 +35,11 @@ namespace
 				const UObject* const CalculationCDO = Execution.CalculationClass ? Execution.CalculationClass->GetDefaultObject() : nullptr;
 				if (const UknightDamageExecution* const DamageExecution = Cast<UknightDamageExecution>(CalculationCDO))
 				{
-					return DamageExecution->IsAttackerInGuardArc(Target, Attacker);
+					return DamageExecution->IsAttackerInGuardArc(Target, Attacker, &Hit);
 				}
 			}
 		}
-		return GetDefault<UknightDamageExecution>()->IsAttackerInGuardArc(Target, Attacker);
+		return GetDefault<UknightDamageExecution>()->IsAttackerInGuardArc(Target, Attacker, &Hit);
 	}
 }
 
@@ -68,7 +69,7 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 	// 패링할 수 없는 공격은 패링 판정을 건너뛴다. 패링 구간에도 State.Guarding이 붙어 있어 아래 가드로 처리된다.
 	// 패링(퍼펙트 가드)도 일반 가드처럼 가드 범위(정면) 안에서 들어온 공격만 막는다. 범위 밖이면 아래에서 그냥 맞는다. (2026-10-08)
 	const bool bInParryWindow = TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_Parrying);
-	const bool bInGuardArc = bInParryWindow && IsAttackerInGuardArc(Params.DamageEffect, Target, Attacker);
+	const bool bInGuardArc = bInParryWindow && IsAttackerInGuardArc(Params.DamageEffect, Target, Attacker, Hit);
 	if (bInParryWindow && !(Params.bCanBeParried && bInGuardArc))
 	{
 		// 판정 시간 중인데 퍼펙트 가드가 안 된 이유. 플레이 테스트에서 '판정이 이상하다'를 가려내려고 남긴다.
@@ -116,12 +117,15 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 	SpecHandle.Data->SetSetByCallerMagnitude(knightGameplayTags::SetByCaller_PoiseDamage, Params.PoiseDamage);
 
 	// 적용 전에 읽어 둔다. 타격으로 타깃이 죽으면서 태그가 바뀔 수 있다.
-	const bool bGuarding = TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_Guarding);
+	// (2026-10-12) 가드 중이어도 가드 범위 밖(등 뒤 등)에서 들어온 공격은 아래 일반 피격으로 처리한다.
+	// 피해 실행도 같은 범위로 가드 감소를 정하므로, 가드 이펙트·히트 스톱과 실제 피해가 어긋나지 않는다.
+	const bool bGuarding = TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_Guarding)
+		&& IsAttackerInGuardArc(Params.DamageEffect, Target, Attacker, Hit);
 	SourceASC->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data, TargetASC);
 
 	if (bGuarding)
 	{
-		// 타격이 가드 범위 안에서 들어왔는지, 어떻게 반응할지는 가드 어빌리티가 판단한다.
+		// 가드 범위 안에서 막은 타격이다. 어떻게 반응할지는 가드 어빌리티가 Event.Guarded를 받아 정한다.
 		FGameplayEventData Payload;
 		Payload.EventTag = knightGameplayTags::Event_Guarded;
 		Payload.Instigator = Attacker;

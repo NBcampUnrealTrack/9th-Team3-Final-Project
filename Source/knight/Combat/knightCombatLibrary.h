@@ -19,10 +19,12 @@ public:
 	 * Attacker가 Hit.GetActor()에 가한 무기 타격 하나를 처리한다.
 	 *   무적         -> Evaded, 아무것도 적용하지 않는다
 	 *   패리 중      -> Parried: 공격자에게 Event.Parried, 패리 큐, 긴 히트 스톱, 피해 없음
-	 *                   (Params.bCanBeParried가 false이거나 공격자가 가드 범위(정면) 밖이면 패리 대신 아래 가드 경로로 처리.
+	 *                   (Params.bCanBeParried가 false이거나 공격이 가드 범위(정면) 밖에서 들어오면 패리 대신 아래 경로로 처리.
 	 *                    범위 밖이면 피해 계산에서 가드 감소도 없다 — 2026-10-08)
 	 *   그 외        -> 컨텍스트에 타격 결과를 담은 피해 이펙트(부위 배율 계산에 필요),
 	 *                   타격 또는 약점 큐, 히트 스톱. 가드 중인 타깃에는 Event.Guarded
+	 *                   (2026-10-12: 가드 범위 안에서 막았을 때만. 범위 밖에서 들어오면 가드 중이어도 일반 피격.
+	 *                    방향은 Hit.TraceStart(공격이 들어온 지점)에서 재고, 없으면 공격자 위치)
 	 */
 	UFUNCTION(BlueprintCallable, Category="Knight|Combat")
 	static EknightHitOutcome ApplyMeleeHit(AActor* Attacker, const FHitResult& Hit, const FknightMeleeHitParams& Params);

@@ -19,7 +19,8 @@ bool FknightBoostRecoveryTest::RunTest(const FString& Parameters)
 	using knightBoostRecovery::Step;
 	constexpr float Tolerance = 0.001f;
 
-	// 공통 조건: 최대 100, 초당 25 회복(기본값), 0.1초 간격, 사용 후 대기 1.5초(기본값)
+	// 공통 조건: 최대 100, 초당 25 회복(기본값), 0.1초 간격, 사용 후 대기 1.5초
+	// (2026-10-13 기본값이 1.2초로 바뀌었지만, 계산 규칙 검사라 대기 시간은 그대로 1.5초로 둔다)
 	constexpr float Max = 100.f;
 	constexpr float Rate = 25.f;
 	constexpr float Dt = 0.1f;
@@ -37,6 +38,10 @@ bool FknightBoostRecoveryTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("쓴 뒤 1초(대기 중)면 그대로"), Step(50.f, Max, Rate, Dt, 1.f, Delay), 50.f, Tolerance);
 	TestEqual(TEXT("회복 속도 0이면 그대로"), Step(50.f, Max, 0.f, Dt, 2.f, Delay), 50.f, Tolerance);
 	TestEqual(TEXT("이미 최대치면 그대로"), Step(100.f, Max, Rate, Dt, 2.f, Delay), 100.f, Tolerance);
+
+	// ---- 달리는 중 멈춤 (2026-10-13) ----
+	TestEqual(TEXT("달리는 중이면 대기 시간이 지났어도 그대로"), Step(50.f, Max, Rate, Dt, 2.f, Delay, true), 50.f, Tolerance);
+	TestEqual(TEXT("멈췄다 풀리면 대기 시간을 다시 세지 않고 바로 회복"), Step(50.f, Max, Rate, Dt, 2.f, Delay, false), 52.5f, Tolerance);
 
 	// ---- 연속 회복: 대기가 끝난 뒤 0.1초 간격으로 1초(10회) 지나면 +25 ----
 	{

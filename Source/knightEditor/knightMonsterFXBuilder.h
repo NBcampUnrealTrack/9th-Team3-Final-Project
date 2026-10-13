@@ -27,4 +27,20 @@ public:
 	/** 바닥에서 옆으로 퍼지며 피어오르는 먼지 한 번(땅울림). 붙이지 않고 월드에 스폰하는 용도라 cm 그대로다. */
 	UFUNCTION(BlueprintCallable, Category="Knight|FX")
 	static UNiagaraSystem* BuildGroundDustSystem(const FString& PackagePath, UMaterialInterface* Material, float Radius = 900.f);
+
+	/**
+	 * 몸 주변(BoxExtent 상자 겉면, 로컬 BoxCenter 중심)에서 로컬 -X로 흘러가는 가늘고 긴 바람 줄기. 돌진처럼 빠르게 달릴 때 붙여 둔다.
+	 * 캡슐처럼 스케일 1인 컴포넌트에 붙이는 용도라 cm 그대로다.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|FX")
+	static UNiagaraSystem* BuildWindStreakSystem(const FString& PackagePath, UMaterialInterface* Material, FVector BoxCenter, FVector BoxExtent,
+		float Speed = 3500.f, float StreakLength = 450.f);
+
+	/** 위로 솟구치는 불꽃 한 번(가시 발사). 월드에 스폰하는 용도라 cm 그대로다. */
+	UFUNCTION(BlueprintCallable, Category="Knight|FX")
+	static UNiagaraSystem* BuildFireBurstSystem(const FString& PackagePath, UMaterialInterface* Material, float Height = 800.f);
+
+	/** 바닥을 따라 사방으로 퍼지는 짧은 줄기 한 번(착탄 충격파). 월드에 스폰하는 용도라 cm 그대로다. */
+	UFUNCTION(BlueprintCallable, Category="Knight|FX")
+	static UNiagaraSystem* BuildShockwaveSystem(const FString& PackagePath, UMaterialInterface* Material, float Radius = 500.f);
 };
