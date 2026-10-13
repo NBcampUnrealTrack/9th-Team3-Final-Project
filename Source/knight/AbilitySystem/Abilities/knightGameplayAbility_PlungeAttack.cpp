@@ -98,7 +98,7 @@ void UknightGameplayAbility_PlungeAttack::ActivateAbility(const FGameplayAbility
 
 void UknightGameplayAbility_PlungeAttack::PlayMontage(UAnimMontage* Montage, bool bEndOnFinish)
 {
-	const float Rate = PlayRate * GetActionSpeed();
+	const float Rate = PlayRate * GetAttackSpeed();
 	if (bEndOnFinish)
 	{
 		// 마지막 동작만 태스크로 재생해서, 끝나면(또는 끊기면) 어빌리티를 끝낸다.
@@ -275,7 +275,7 @@ void UknightGameplayAbility_PlungeAttack::TickPlunge()
 		{
 			if (!Anim->Montage_IsPlaying(LoopMontage))
 			{
-				Anim->Montage_Play(LoopMontage, PlayRate * GetActionSpeed());
+				Anim->Montage_Play(LoopMontage, PlayRate * GetAttackSpeed());
 			}
 		}
 		break;
@@ -342,7 +342,7 @@ void UknightGameplayAbility_PlungeAttack::StartLand()
 	PlayMontage(EndMontage, true);
 	if (World)
 	{
-		const float Rate = FMath::Max(PlayRate * GetActionSpeed(), 0.01f);
+		const float Rate = FMath::Max(PlayRate * GetAttackSpeed(), 0.01f);
 		if (ImpactDelay > 0.f)
 		{
 			World->GetTimerManager().SetTimer(ImpactTimer, this, &ThisClass::OnImpact, ImpactDelay / Rate, false);

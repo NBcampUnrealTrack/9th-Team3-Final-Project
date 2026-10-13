@@ -1,6 +1,7 @@
 #include "AbilitySystem/Abilities/knightGameplayAbility_HeavyAttack.h"
 
 #include "AbilitySystemComponent.h"
+#include "AbilitySystem/knightAbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
@@ -80,7 +81,7 @@ void UknightGameplayAbility_HeavyAttack::OnReleased(float TimeHeld)
 			if (bWarp)
 			{
 				// 발사 몽타주와 같은 배속(행동 속도)을 넘겨야 돌진이 모션과 같이 끝난다. (2026-10-08)
-				UknightCombatLibrary::StartAttackLunge(this, ChargeReleaseMontage, GetActionSpeed(), WarpLocation, WarpTravel, 0.25f);
+				UknightCombatLibrary::StartAttackLunge(this, ChargeReleaseMontage, GetAttackSpeed(), WarpLocation, WarpTravel, 0.25f);
 			}
 		}
 		else
@@ -118,7 +119,9 @@ bool UknightGameplayAbility_HeavyAttack::CanStartCharge() const
 	{
 		return false;
 	}
-	if (ASC->HasMatchingGameplayTag(knightGameplayTags::Window_Cancel))
+	// (2026-10-14) 공격 후딜은 퀵스텝만 끊는다 → 그때는 캔슬 창이어도 차지를 시작하지 않는다(아래에서 실행 중인 공격에 걸림).
+	const UknightAbilitySystemComponent* const KnightASC = GetKnightAbilitySystemComponentFromActorInfo();
+	if (ASC->HasMatchingGameplayTag(knightGameplayTags::Window_Cancel) && !(KnightASC && KnightASC->IsAttackRecoveryDashOnly()))
 	{
 		return true;
 	}
@@ -211,7 +214,7 @@ void UknightGameplayAbility_HeavyAttack::PlayLoop()
 void UknightGameplayAbility_HeavyAttack::PlayMontage(UAnimMontage* Montage, FName TaskName, bool bLoopOnEnd)
 {
 	// 차지 시작·반복·발사 몽타주 모두 행동 속도 배속으로 재생한다. (2026-10-08)
-	UAbilityTask_PlayMontageAndWait* const Task = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, TaskName, Montage, GetActionSpeed());
+	UAbilityTask_PlayMontageAndWait* const Task = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, TaskName, Montage, GetAttackSpeed());
 	if (Phase == EPhase::Releasing)
 	{
 		Task->OnCompleted.AddDynamic(this, &ThisClass::OnReleaseFinished);

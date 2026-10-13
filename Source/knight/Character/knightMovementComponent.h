@@ -152,13 +152,19 @@ protected:
 	/** 메카 속성 값을 읽는다. 소유자에게 ASC나 해당 속성 세트가 없으면 Fallback을 돌려준다. */
 	float GetMechAttributeValue(const FGameplayAttribute& Attribute, float Fallback) const;
 
-	/** 배율 1.0일 때의 걷기 속도. */
+	/**
+	 * 배율 1.0일 때의 걷기 속도. 바뀔 수 있는 값.
+	 * (2026-10-14) 600 → 540 (-10%): '게임이 너무 스피디하다'는 의견으로 시험. MaxAcceleration도 같이 낮춤(생성자).
+	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Speed", meta=(ClampMin=0, Units="CentimetersPerSecond"))
-	float BaseWalkSpeed = 600.f;
+	float BaseWalkSpeed = 540.f;
 
-	/** 배율 1.0일 때의 달리기 속도. 무거운 메카 느낌을 위해 걷기의 1.5배로 시작한다. */
+	/**
+	 * 배율 1.0일 때의 달리기 속도. 무거운 메카 느낌을 위해 걷기의 1.5배로 시작한다. 바뀔 수 있는 값.
+	 * (2026-10-14) 900 → 810 (-10%), 걷기와 같은 이유.
+	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Speed", meta=(ClampMin=0, Units="CentimetersPerSecond"))
-	float BaseRunSpeed = 900.f;
+	float BaseRunSpeed = 810.f;
 
 	/** 배율 1.0일 때의 점프 힘(위쪽 초기 속도). */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Speed", meta=(ClampMin=0, Units="CentimetersPerSecond"))
@@ -176,6 +182,7 @@ protected:
 	 * 출발 곡선. X = 지금 속도 / 최고 속도(0~1), Y = 가속 배율(MaxAcceleration에 곱함). 땅 위에서만 쓴다.
 	 * 기본값(2026-10-09 사용자 결정 'S자, 조금 더 묵직하게', 바뀔 수 있는 값): 0 → 0.35, 0.5 → 1.0, 1.0 → 0.6 (직선 보간).
 	 * 이때 최고 속도까지 걷기 약 0.73초, 달리기 약 1.09초. 키를 모두 지우면 일정한 가속(배율 1)으로 돌아간다.
+	 * (2026-10-14) 속도 -10%·MaxAcceleration 1200 → 900으로 최고 속도까지 약 20% 더 걸린다: 걷기 약 0.88초, 달리기 약 1.31초.
 	 * 배율이 0이면 출발할 수 없으므로 0.05 아래로는 내려가지 않는다.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Easing")
@@ -184,7 +191,8 @@ protected:
 	/**
 	 * 방향키를 뗐을 때(달리기 → 걷기로 속도가 줄 때 포함)의 마찰. 속도에 비례하는 감속이라 멈추는 끝이 부드럽다. 클수록 빨리 멈춘다.
 	 * 엔진이 BrakingFrictionFactor(기본 2)를 곱해서 쓴다.
-	 * 기본값 2(바뀔 수 있는 값): StopBrakingDeceleration 600과 함께 걷기 약 0.40초·86cm, 달리기 약 0.48초·145cm에 멈춘다.
+	 * 기본값 2(바뀔 수 있는 값): StopBrakingDeceleration 600과 함께 걷기 약 0.40초·86cm, 달리기 약 0.48초·145cm에 멈춘다
+	 * (걷기 600·달리기 900 기준. 10-14에 속도를 10% 낮춰서 지금은 조금 더 짧게 멈춘다).
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Easing", meta=(ClampMin=0))
 	float StopBrakingFriction = 2.f;

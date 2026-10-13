@@ -87,8 +87,25 @@ public:
 	 * Exclusive_Blocking 어빌리티는 다른 모든 배타 어빌리티를 막는다.
 	 * 실행 중인 Exclusive_Replaceable 어빌리티는 Window.Cancel 안에서만,
 	 * 또는 새 어빌리티가 Ability.Attack일 때 Window.Combo 안에서만 교체될 수 있다.
+	 * (2026-10-14) 공격 후딜(공격 실행 중의 Window.Cancel)은 퀵스텝(Ability.Boost.Dash)만 끊을 수 있다(IsAttackRecoveryDashOnly).
+	 * 콤보 창이 함께 열려 있으면 다음 공격은 지금처럼 이어진다.
 	 */
 	bool IsActivationGroupBlocked(EknightAbilityActivationGroup Group, const FGameplayTagContainer& AbilityTags) const;
+
+	/**
+	 * (2026-10-14) 지금 공격 후딜이라 퀵스텝만 끊을 수 있는지: bOnlyDashCancelsAttackRecovery가 켜져 있고,
+	 * 공격(Ability.Attack, 교체 가능 배타 어빌리티)이 실행 중이며, Window.Cancel이 열린 지 AttackRecoveryDashOnlyTime초가 안 됐을 때.
+	 * 그 뒤(검을 들어 올리는 꼬리 동작)는 예전처럼 무엇이든 공격을 끊는다.
+	 * 교체 규칙 말고도 강공격 차지 시작·공격의 이동 캔슬이 이걸 보고 멈춘다.
+	 */
+	bool IsAttackRecoveryDashOnly() const;
+
+	/**
+	 * (2026-10-14) 공격 몽타주 재생 속도 배율. 공격 어빌리티가 PlayRate x 행동 속도에 곱한다(발도·가드 몽타주는 제외).
+	 * 기본 0.7(10-14 결정, 1이면 몽타주 원래 속도). PIE에서 knight.Player.AttackSpeed로 바꿔 시험한다(새로 시작하는 공격부터 적용).
+	 */
+	float GetAttackAnimationSpeed() const { return AttackAnimationSpeed; }
+	void SetAttackAnimationSpeed(float NewSpeed) { AttackAnimationSpeed = FMath::Max(0.1f, NewSpeed); }
 	void CancelActivationGroupAbilities(EknightAbilityActivationGroup Group, const UknightGameplayAbility* IgnoreAbility);
 
 	// 태그 관계
@@ -148,6 +165,35 @@ protected:
 
 	/** 아바타의 나이트 무브먼트가 지금 달리는 중인지. */
 	bool IsAvatarRunning() const;
+
+	/**
+	 * (2026-10-14 사용자 결정, 시험 중) 공격 후딜은 퀵스텝만 끊을 수 있다. '게임이 너무 스피디하다'는 의견으로 시험.
+	 * 켜면 공격 캔슬 창에서 가드·강공격(탭·차지)·스킬·새 공격(콤보 창 밖)·이동 캔슬이 막히고 퀵스텝만 된다.
+	 * 끄면 예전처럼 캔슬 창에서 무엇이든 공격을 끊는다. 가드·퀵스텝 경직의 캔슬 창은 영향 없음.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack")
+	bool bOnlyDashCancelsAttackRecovery = true;
+
+	/**
+	 * (2026-10-14 사용자 결정) 후딜 길이 = 공격의 캔슬 창이 열린 뒤 퀵스텝만 끊을 수 있는 시간(초, 실제 시간). 바뀔 수 있는 값.
+	 * 공격 몽타주의 캔슬 창은 타격 직후부터 몽타주 끝(검을 등 쪽으로 들어 올리는 동작)까지라, 창 전체를 후딜로 잡으면
+	 * 0.7배속에서 1타 기준 2.5초 동안 아무것도 못 했다. 공격 배속과 상관없이 이 시간만큼만 묶인다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack", meta=(ClampMin=0, Units="s", EditCondition="bOnlyDashCancelsAttackRecovery"))
+	float AttackRecoveryDashOnlyTime = 0.5f;
+
+	/** (2026-10-14) Window.Cancel 태그 수가 늘 때(창이 열릴 때) 시각을 기록한다. */
+	void HandleCancelWindowChanged(const FGameplayTag Tag, int32 NewCount);
+	FDelegateHandle CancelWindowHandle;
+	int32 CancelWindowCount = 0;
+	double CancelWindowOpenedTime = -UE_BIG_NUMBER;
+
+	/**
+	 * (2026-10-14) 공격 몽타주 재생 속도 배율(GetAttackAnimationSpeed). 바뀔 수 있는 값. 시험은 knight.Player.AttackSpeed.
+	 * 1.0 → 0.7: '게임이 너무 스피디하다'는 의견으로 사용자 플레이 테스트 후 결정(10-14). 후딜 0.5초와 함께 정함.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack", meta=(ClampMin=0.1))
+	float AttackAnimationSpeed = 0.7f;
 
 	FTimerHandle BoostRecoveryTimer;
 

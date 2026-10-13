@@ -3,6 +3,7 @@
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "AbilitySystemComponent.h"
+#include "AbilitySystem/knightAbilitySystemComponent.h"
 #include "Combat/knightCombatLibrary.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
@@ -173,7 +174,8 @@ void UknightGameplayAbility_MeleeAttack::StartAttack()
 	HitTask->ReadyForActivation();
 
 	// 실제 재생 속도 = PlayRate x 행동 속도. 돌진도 같은 배속을 넘겨야 모션과 같이 끝난다. (2026-10-08)
-	const float Rate = PlayRate * GetActionSpeed();
+	// (2026-10-14) x 공격 배속(ASC AttackAnimationSpeed, 시험 치트 knight.Player.AttackSpeed).
+	const float Rate = PlayRate * GetAttackSpeed();
 	UAbilityTask_PlayMontageAndWait* const MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, AttackMontage, Rate, StartSection);
 	MontageTask->OnCompleted.AddDynamic(this, &ThisClass::OnMontageFinished);
 	MontageTask->OnBlendOut.AddDynamic(this, &ThisClass::OnMontageFinished);
@@ -213,6 +215,14 @@ void UknightGameplayAbility_MeleeAttack::CheckMoveCancel()
 	if (!ASC->HasMatchingGameplayTag(knightGameplayTags::Window_Cancel))
 	{
 		return;
+	}
+	// (2026-10-14) 공격 후딜은 퀵스텝만 끊는다(ASC bOnlyDashCancelsAttackRecovery) → 이동으로는 끊지 않는다.
+	if (const UknightAbilitySystemComponent* const KnightASC = GetKnightAbilitySystemComponentFromActorInfo())
+	{
+		if (KnightASC->IsAttackRecoveryDashOnly())
+		{
+			return;
+		}
 	}
 	if (!bMoveCancelInComboWindow && ASC->HasMatchingGameplayTag(knightGameplayTags::Window_Combo))
 	{

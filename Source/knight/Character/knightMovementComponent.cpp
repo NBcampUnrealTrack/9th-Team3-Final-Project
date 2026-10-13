@@ -27,7 +27,8 @@ UknightMovementComponent::UknightMovementComponent(const FObjectInitializer& Obj
 	// BrakingDecelerationWalking·GroundFriction은 이동 잠금(가드·퀵스텝 경직) 중 정지와 방향 전환에 쓰인다.
 	MaxWalkSpeed = BaseWalkSpeed;
 	MinAnalogWalkSpeed = 20.f;
-	MaxAcceleration = 1200.f;
+	// (2026-10-14) 1200 → 900: 속도 -10%와 함께 최고 속도까지 걸리는 시간을 약 20% 늘림(시간 ∝ 최고 속도 / 가속). 바뀔 수 있는 값.
+	MaxAcceleration = 900.f;
 	BrakingDecelerationWalking = 1400.f;
 	GroundFriction = 6.f;
 	RotationRate = FRotator(0.f, 360.f, 0.f);

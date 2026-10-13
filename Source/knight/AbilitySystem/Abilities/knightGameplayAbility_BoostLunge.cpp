@@ -98,7 +98,7 @@ void UknightGameplayAbility_BoostLunge::ActivateAbility(const FGameplayAbilitySp
 	{
 		if (UAnimInstance* const Anim = Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr)
 		{
-			Anim->Montage_Play(DashMontage, DashPlayRate * GetActionSpeed());
+			Anim->Montage_Play(DashMontage, DashPlayRate * GetAttackSpeed());
 		}
 	}
 
@@ -166,7 +166,7 @@ void UknightGameplayAbility_BoostLunge::OnLungeFinished()
 	UknightCombatLibrary::SetAttackWarpTarget(GetAvatarActorFromActorInfo(), WarpTargetName, StopDistance, StopDistance, false, 0.f, 0.f);
 
 	UAbilityTask_PlayMontageAndWait* const StrikeTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
-		this, TEXT("LungeStrike"), StrikeMontage, StrikePlayRate * GetActionSpeed());
+		this, TEXT("LungeStrike"), StrikeMontage, StrikePlayRate * GetAttackSpeed());
 	StrikeTask->OnCompleted.AddDynamic(this, &ThisClass::OnStrikeFinished);
 	StrikeTask->OnBlendOut.AddDynamic(this, &ThisClass::OnStrikeFinished);
 	StrikeTask->OnInterrupted.AddDynamic(this, &ThisClass::OnStrikeFinished);

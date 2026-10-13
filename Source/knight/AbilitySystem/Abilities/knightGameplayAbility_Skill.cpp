@@ -95,7 +95,7 @@ void UknightGameplayAbility_Skill::PlaySkillMontage(UAnimMontage* Montage, float
 		return;
 	}
 	UAbilityTask_PlayMontageAndWait* const Task = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
-		this, TEXT("Skill"), Montage, FMath::Max(Rate, 0.01f) * GetActionSpeed());
+		this, TEXT("Skill"), Montage, FMath::Max(Rate, 0.01f) * GetAttackSpeed());
 	Task->OnCompleted.AddDynamic(this, &ThisClass::OnSkillMontageFinished);
 	Task->OnBlendOut.AddDynamic(this, &ThisClass::OnSkillMontageFinished);
 	Task->OnInterrupted.AddDynamic(this, &ThisClass::OnSkillMontageFinished);
