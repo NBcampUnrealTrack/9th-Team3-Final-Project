@@ -59,6 +59,13 @@ void UknightAbilitySystemComponent::InitAbilityActorInfo(AActor* InOwnerActor, A
 	}
 	StartPoiseRecovery();
 	StartBoostRecovery();
+
+	// (2026-10-14) 공격 후딜 길이를 재려고 캔슬 창이 열린 시각을 기록한다(IsAttackRecoveryDashOnly).
+	if (!CancelWindowHandle.IsValid())
+	{
+		CancelWindowHandle = RegisterGameplayTagEvent(knightGameplayTags::Window_Cancel, EGameplayTagEventType::AnyCountChange)
+			.AddUObject(this, &ThisClass::HandleCancelWindowChanged);
+	}
 }
 
 void UknightAbilitySystemComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -68,7 +75,23 @@ void UknightAbilitySystemComponent::EndPlay(const EEndPlayReason::Type EndPlayRe
 		World->GetTimerManager().ClearTimer(PoiseRecoveryTimer);
 		World->GetTimerManager().ClearTimer(BoostRecoveryTimer);
 	}
+	if (CancelWindowHandle.IsValid())
+	{
+		UnregisterGameplayTagEvent(CancelWindowHandle, knightGameplayTags::Window_Cancel, EGameplayTagEventType::AnyCountChange);
+		CancelWindowHandle.Reset();
+	}
 	Super::EndPlay(EndPlayReason);
+}
+
+void UknightAbilitySystemComponent::HandleCancelWindowChanged(const FGameplayTag Tag, int32 NewCount)
+{
+	// 수가 늘면 새 창이 열린 것. 콤보로 이어질 때 앞 창이 닫히기 전에 다음 창이 열려도 새로 센다.
+	if (NewCount > CancelWindowCount)
+	{
+		const UWorld* const World = GetWorld();
+		CancelWindowOpenedTime = World ? World->GetTimeSeconds() : 0.0;
+	}
+	CancelWindowCount = NewCount;
 }
 
 void UknightAbilitySystemComponent::StartBoostRecovery()
@@ -357,7 +380,13 @@ bool UknightAbilitySystemComponent::IsActivationGroupBlocked(EknightAbilityActiv
 		{
 			return true;
 		}
-		if (ReplaceableCount == 0 || HasMatchingGameplayTag(knightGameplayTags::Window_Cancel))
+		if (ReplaceableCount == 0)
+		{
+			return false;
+		}
+		// (2026-10-14) 공격 후딜은 퀵스텝만 끊는다. 콤보 창이 같이 열려 있으면 아래 규칙으로 다음 공격은 이어진다.
+		if (HasMatchingGameplayTag(knightGameplayTags::Window_Cancel)
+			&& (!IsAttackRecoveryDashOnly() || AbilityTags.HasTag(knightGameplayTags::Ability_Boost_Dash)))
 		{
 			return false;
 		}
@@ -367,6 +396,39 @@ bool UknightAbilitySystemComponent::IsActivationGroupBlocked(EknightAbilityActiv
 		checkf(false, TEXT("Invalid activation group %d"), static_cast<int32>(Group));
 		return true;
 	}
+}
+
+bool UknightAbilitySystemComponent::IsAttackRecoveryDashOnly() const
+{
+	if (!bOnlyDashCancelsAttackRecovery || !HasMatchingGameplayTag(knightGameplayTags::Window_Cancel))
+	{
+		return false;
+	}
+	// 후딜 길이가 지났으면(검을 들어 올리는 꼬리 동작) 예전처럼 무엇이든 끊는다.
+	const UWorld* const World = GetWorld();
+	if (!World || World->GetTimeSeconds() - CancelWindowOpenedTime >= AttackRecoveryDashOnlyTime)
+	{
+		return false;
+	}
+	// 캔슬 창을 연 게 공격인지 본다. 가드·퀵스텝 경직도 캔슬 창을 열지만 그건 지금처럼 무엇이든 끊을 수 있다.
+	for (const FGameplayAbilitySpec& Spec : ActivatableAbilities.Items)
+	{
+		if (!Spec.IsActive())
+		{
+			continue;
+		}
+		for (const UGameplayAbility* const Instance : Spec.GetAbilityInstances())
+		{
+			const UknightGameplayAbility* const KnightAbility = Cast<UknightGameplayAbility>(Instance);
+			if (KnightAbility && KnightAbility->IsActive()
+				&& KnightAbility->GetActivationGroup() == EknightAbilityActivationGroup::Exclusive_Replaceable
+				&& KnightAbility->GetAssetTags().HasTag(knightGameplayTags::Ability_Attack))
+			{
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 void UknightAbilitySystemComponent::CancelActivationGroupAbilities(EknightAbilityActivationGroup Group, const UknightGameplayAbility* IgnoreAbility)

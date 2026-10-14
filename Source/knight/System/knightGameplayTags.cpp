@@ -84,6 +84,8 @@ namespace knightGameplayTags
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(GameplayCue_Hit_Melee, "GameplayCue.Hit.Melee", "Melee hit feedback.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(GameplayCue_Hit_Weakpoint, "GameplayCue.Hit.Weakpoint", "Weak point hit feedback.");
+UE_DEFINE_GAMEPLAY_TAG_COMMENT(GameplayCue_Hit_Groggy, "GameplayCue.Hit.Groggy", "(2026-10-14) Big feedback when the player breaks a target's poise (groggy), parry groggy included.");
+UE_DEFINE_GAMEPLAY_TAG_COMMENT(GameplayCue_Hit_Groggy_Release, "GameplayCue.Hit.Groggy.Release", "(2026-10-14) Burst when the groggy freeze releases (shockwave, sparks, strong shake).");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(GameplayCue_Guard, "GameplayCue.Guard", "Guard feedback.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(GameplayCue_Parry, "GameplayCue.Parry", "Parry feedback.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(GameplayCue_PartBreak, "GameplayCue.PartBreak", "Monster part break feedback.");

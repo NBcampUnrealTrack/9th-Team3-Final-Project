@@ -7,7 +7,9 @@
 #include "knightPartsComponent.generated.h"
 
 class UGameplayEffect;
+class UMechBodyRegionSet;
 class UMeshComponent;
+class USkeletalMeshComponent;
 class UknightPartItemDefinition;
 struct FknightPartStatModifier;
 
@@ -63,6 +65,9 @@ struct FknightEquippedPart
  * 파츠 능력치 (2026-10-07): 파츠 정의의 StatModifiers로 무한 지속 GE를 메모리에서 만들어(파츠마다 한 번, 재사용)
  * 장착할 때 적용하고 해제할 때 회수한다. 그래서 능력치만 있는 파츠는 파츠 정의 파일 하나면 된다.
  * AbilitySet은 스킬·특수 효과가 있는 파츠만 쓰고, 둘 다 있으면 둘 다 적용된다.
+ *
+ * 원본 부위 교체 (2026-10-13): BodyRegions(원본을 부위별 메시로 나눈 세트)를 넣으면 나이트 본체 대신 부위 메시가 그려지고,
+ * 파츠 Attachment의 Replace Regions에 든 부위는 그 파츠를 끼는 동안 숨는다. 본체는 뼈 계산·충돌·피격 판정만 한다.
  */
 UCLASS(ClassGroup=(Knight), meta=(BlueprintSpawnableComponent))
 class KNIGHT_API UknightPartsComponent : public UActorComponent
@@ -99,7 +104,10 @@ public:
 	const TArray<FGameplayTag>& GetLoadoutSlots() const { return LoadoutSlots; }
 	const TArray<TObjectPtr<const UknightPartItemDefinition>>& GetDefaultLoadout() const { return DefaultLoadout; }
 
-	/** Meshes of every equipped part (for damage visuals, dissolves, outlines). 스켈레탈·스태틱 메시 컴포넌트가 섞여 있다. */
+	/**
+	 * Meshes of every equipped part (for damage visuals, dissolves, outlines). 스켈레탈·스태틱 메시 컴포넌트가 섞여 있다.
+	 * (2026-10-13) 원본 부위 메시(BodyRegions)도 넣는다. 본체 대신 그려지는 메시라 본체와 같은 효과를 받아야 한다.
+	 */
 	void GetPartMeshes(TArray<UMeshComponent*>& OutMeshes) const;
 
 	UPROPERTY(BlueprintAssignable, Category="Knight|Parts")
@@ -119,7 +127,21 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Parts", meta=(Categories="Equipment.Slot"))
 	TArray<FGameplayTag> LoadoutSlots;
 
+	/**
+	 * (2026-10-13) 원본 메카를 부위별 메시로 나눈 세트. Mech Parts Workbench 목록 우클릭 '원본을 부위별로 나누기'로 만든다.
+	 * 넣으면 본체 대신 부위 메시가 보이고, 파츠 Attachment의 Replace Regions에 든 부위는 그 파츠를 끼는 동안 숨는다.
+	 * 비우면 예전처럼 본체가 그대로 보이고 Replace Regions는 무시된다. 세트의 Source Mesh가 본체 메시와 다르면 쓰지 않는다(경고).
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Parts")
+	TObjectPtr<const UMechBodyRegionSet> BodyRegions;
+
 private:
+	/** (2026-10-13) BodyRegions의 부위 메시를 한 번 만들어 본체에 붙이고 본체는 숨긴다. ApplyLoadout이 부른다. */
+	void CreateBodyRegionMeshes();
+
+	/** (2026-10-13) 장착한 파츠들의 Replace Regions를 합쳐 부위 메시를 켜고 끈다. 장착·해제 때마다 부른다. */
+	void RefreshBodyRegionVisibility();
+
 	/** 적재 한도 확인 없이 장착한다. EquipPart(확인 후)와 ApplyLoadout(확인 안 함)이 쓴다. */
 	bool EquipPartUnchecked(const UknightPartItemDefinition* Part, int32 UpgradeLevel);
 
@@ -143,4 +165,9 @@ private:
 	UPROPERTY(Transient)
 	TMap<FString, TObjectPtr<UGameplayEffect>> SetStatEffects;
 	TArray<FActiveGameplayEffectHandle> ActiveSetHandles;
+
+	/** (2026-10-13) 원본 부위 메시 컴포넌트와, 같은 순서의 부위 비트(EMechBodyRegion). */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<USkeletalMeshComponent>> BodyRegionMeshes;
+	TArray<int32> BodyRegionFlags;
 };

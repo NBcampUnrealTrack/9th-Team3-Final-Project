@@ -67,6 +67,12 @@ float UknightGameplayAbility::GetActionSpeed() const
 	return ASC && ASC->HasAttributeSetForAttribute(Attribute) ? ASC->GetNumericAttribute(Attribute) : 1.f;
 }
 
+float UknightGameplayAbility::GetAttackSpeed() const
+{
+	const UknightAbilitySystemComponent* const ASC = GetKnightAbilitySystemComponentFromActorInfo();
+	return GetActionSpeed() * (ASC ? ASC->GetAttackAnimationSpeed() : 1.f);
+}
+
 bool UknightGameplayAbility::FaceMoveInputDirection() const
 {
 	ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());

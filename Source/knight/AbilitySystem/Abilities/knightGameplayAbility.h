@@ -102,6 +102,13 @@ protected:
 	float GetActionSpeed() const;
 
 	/**
+	 * (2026-10-14) 공격 몽타주용 재생 속도 배율 = 행동 속도 x ASC의 공격 배속(AttackAnimationSpeed, 기본 0.7).
+	 * 공격 어빌리티(일반·달리기·반격·강공격 탭·차지, 록온 돌진, 내려찍기, 스킬)가 공격 몽타주에 쓴다. 발도·가드는 GetActionSpeed 그대로.
+	 * 시험: PIE 콘솔 knight.Player.AttackSpeed 0.9
+	 */
+	float GetAttackSpeed() const;
+
+	/**
 	 * 락온 중이 아니고 이동 입력이 있으면 아바타를 그 방향으로 즉시 돌린다. 돌렸으면 true. (2026-10-08)
 	 * 퀵스텝과 같은 규칙으로, 방향키를 누른 채 공격·가드를 시작하면 그 방향을 보고 나가게 한다.
 	 */

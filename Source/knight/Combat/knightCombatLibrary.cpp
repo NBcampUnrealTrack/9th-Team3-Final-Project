@@ -5,6 +5,7 @@
 #include "Abilities/GameplayAbility.h"
 #include "Animation/AnimMontage.h"
 #include "AnimNotifyState_MotionWarping.h"
+#include "Engine/OverlapResult.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -13,6 +14,7 @@
 #include "Combat/knightTargetLockComponent.h"
 #include "GameplayEffect.h"
 #include "GameFramework/Pawn.h"
+#include "GenericTeamAgentInterface.h"
 #include "Interfaces/CombatInterface.h"
 #include "Interfaces/TargetableInterface.h"
 #include "MotionWarpingComponent.h"
@@ -148,6 +150,57 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 	// 전투는 소리가 난다. 아직 전투를 알아채지 못한 몬스터도 이 소리를 들을 수 있다.
 	UAISense_Hearing::ReportNoiseEvent(Attacker, Hit.ImpactPoint, 1.f, Attacker, 0.f, TEXT("Hit"));
 	return EknightHitOutcome::Hit;
+}
+
+int32 UknightCombatLibrary::ApplyAreaMeleeHits(AActor* Attacker, const FVector& Center, const FCollisionShape& Shape, const FknightMeleeHitParams& Params,
+	TSet<TWeakObjectPtr<AActor>>& HitActors, TFunctionRef<bool(const AActor&)> Filter, TFunctionRef<void(AActor&, EknightHitOutcome)> OnHit,
+	const FVector& FixedNormal)
+{
+	UWorld* const World = Attacker ? Attacker->GetWorld() : nullptr;
+	if (!World)
+	{
+		return 0;
+	}
+
+	FCollisionObjectQueryParams ObjectParams;
+	ObjectParams.AddObjectTypesToQuery(ECC_Pawn);
+	ObjectParams.AddObjectTypesToQuery(ECC_PhysicsBody);
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(knightAreaMeleeHits), false, Attacker);
+	TArray<FOverlapResult> Overlaps;
+	World->OverlapMultiByObjectType(Overlaps, Center, FQuat::Identity, ObjectParams, Shape, QueryParams);
+
+	int32 NewHits = 0;
+	for (const FOverlapResult& Overlap : Overlaps)
+	{
+		AActor* const Target = Overlap.GetActor();
+		UPrimitiveComponent* const Component = Overlap.GetComponent();
+		if (!Target || !Component || HitActors.Contains(Target)
+			|| !Target->GetClass()->ImplementsInterface(UCombatInterface::StaticClass())
+			|| !ICombatInterface::Execute_CanReceiveHitBP(Target, Attacker)
+			|| FGenericTeamId::GetAttitude(Attacker, Target) != ETeamAttitude::Hostile
+			|| !Filter(*Target))
+		{
+			continue;
+		}
+		HitActors.Add(Target);
+		++NewHits;
+
+		// 피해 컨텍스트, 큐, 부위 조회는 히트 결과를 필요로 하므로 가장 가까운 표면 지점으로 하나 만든다.
+		FVector ImpactPoint = Component->GetComponentLocation();
+		FVector ClosestPoint;
+		if (Component->GetClosestPointOnCollision(Center, ClosestPoint) >= 0.f)
+		{
+			ImpactPoint = ClosestPoint;
+		}
+		FHitResult Hit(Target, Component, ImpactPoint, FixedNormal.IsZero() ? (Center - ImpactPoint).GetSafeNormal() : FixedNormal);
+		Hit.bBlockingHit = true;
+		Hit.TraceStart = Center;
+		Hit.TraceEnd = ImpactPoint;
+		const EknightHitOutcome Outcome = ApplyMeleeHit(Attacker, Hit, Params);
+		UE_LOG(LogknightAI, Verbose, TEXT("%s: area hit %s (outcome %d)."), *GetNameSafe(Attacker), *GetNameSafe(Target), static_cast<int32>(Outcome));
+		OnHit(*Target, Outcome);
+	}
+	return NewHits;
 }
 
 void UknightCombatLibrary::SelectBestHitPerActor(TArrayView<const FHitResult> Hits, TArray<FHitResult>& OutHits)
