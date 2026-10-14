@@ -210,6 +210,7 @@ bool UKnightMainMenuWidget::HandleBackRequested()
 {
 	if (CurrentPage == EKnightMainMenuPage::Settings && SettingsWidget) { SettingsWidget->RequestClose(); return true; }
 	if (CurrentPage == EKnightMainMenuPage::Codex) { HandleCodexClosed(); return true; }
+	if (CurrentPage == EKnightMainMenuPage::Maintenance && MaintenanceWidget && MaintenanceWidget->HandleBack()) return true;
 	// First Esc clears the selected region, the next one leaves the globe.
 	if (CurrentPage == EKnightMainMenuPage::Stage && !SelectedStageId.IsNone())
 	{
@@ -223,14 +224,14 @@ FReply UKnightMainMenuWidget::NativeOnPreviewKeyDown(const FGeometry& InGeometry
 	if (CurrentPage == EKnightMainMenuPage::Maintenance && MaintenanceWidget && !IsTravelPending())
 	{
 		const FKey Key = InKeyEvent.GetKey();
-		if (Key == EKeys::Left || Key == EKeys::Right)
+		// 방향키는 포커스 이동. Q/E 정보 탭, 목록 줄에서 Enter 실행.
+		if (Key == EKeys::Q || Key == EKeys::E || Key == EKeys::Gamepad_LeftShoulder || Key == EKeys::Gamepad_RightShoulder)
 		{
-			MaintenanceWidget->CyclePage(Key == EKeys::Left ? -1 : 1);
+			MaintenanceWidget->CycleInfoTab(Key == EKeys::Q || Key == EKeys::Gamepad_LeftShoulder ? -1 : 1);
 			return FReply::Handled();
 		}
-		if (Key == EKeys::N)
+		if ((Key == EKeys::Enter || Key == EKeys::Gamepad_FaceButton_Bottom) && !InKeyEvent.IsRepeat() && MaintenanceWidget->HandleConfirmKey())
 		{
-			MaintenanceWidget->TogglePreview();
 			return FReply::Handled();
 		}
 	}
@@ -296,6 +297,10 @@ void UKnightMainMenuWidget::EnsureMaintenanceWidget()
 	UPanelSlot* AddedSlot = Panel_Maintenance->AddChild(MaintenanceWidget);
 	if (UVerticalBoxSlot* MaintenanceSlot = Cast<UVerticalBoxSlot>(AddedSlot))
 		MaintenanceSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+	MaintenanceWidget->OnSlotFocused.BindWeakLambda(this, [this](FGameplayTag FocusedSlot)
+	{
+		if (MaintenanceCameraRig.IsValid()) MaintenanceCameraRig->FocusSlot(FocusedSlot);
+	});
 }
 
 void UKnightMainMenuWidget::HandleCodexClosed()

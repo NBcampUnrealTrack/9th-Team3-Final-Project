@@ -1395,119 +1395,223 @@ bool UknightUIEditorLibrary::BuildMainMenu(UWidgetBlueprint* WidgetBlueprint, TS
 	return true;
 }
 
-bool UknightUIEditorLibrary::BuildMaintenanceEntry(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> BodyStyle)
+bool UknightUIEditorLibrary::BuildMaintenanceEntry(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> BodyStyle, TSubclassOf<UCommonTextStyle> CaptionStyle)
 {
 	if (!BeginBuild(WidgetBlueprint, TEXT("BuildMaintenanceEntry"))) return false;
-	UHorizontalBox* Root = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("Row_Entry"));
+	UHorizontalBox* const Root = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("Row_Entry"));
 	WidgetBlueprint->WidgetTree->RootWidget = Root;
-	UImage* Icon = NewWidget<UImage>(WidgetBlueprint, TEXT("Img_Icon"), true);
-	AddToRow(Root, NewSizeBox(WidgetBlueprint, TEXT("IconFrame"), 44.f, 44.f), false, HAlign_Left, FMargin(0, 0, 12, 0));
-	Cast<USizeBox>(Root->GetChildAt(0))->AddChild(Icon);
-	UVerticalBox* Labels = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("Labels"));
-	AddToRow(Root, Labels, true, HAlign_Fill);
-	AddToColumn(Labels, NewText(WidgetBlueprint, TEXT("Txt_Name"), BodyStyle, INVTEXT("장비"), true), HAlign_Left);
-	AddToColumn(Labels, NewText(WidgetBlueprint, TEXT("Txt_State"), BodyStyle, INVTEXT("보유"), true), HAlign_Left);
+
+	// 아이콘 1px 틀. 아이콘이 없어도 틀은 유지.
+	USizeBox* const IconBox = NewSizeBox(WidgetBlueprint, TEXT("IconFrame"), 44.f, 44.f);
+	UBorder* const IconFrame = NewWidget<UBorder>(WidgetBlueprint, TEXT("Border_Icon"));
+	IconFrame->SetBrush(FrameBrush(0.6f));
+	IconFrame->SetPadding(FMargin(2.f));
+	IconBox->AddChild(IconFrame);
+	IconFrame->SetContent(NewWidget<UImage>(WidgetBlueprint, TEXT("Img_Icon"), true));
+	AddCentered(Root, IconBox, false, VAlign_Center, FMargin(8.f, 0.f, 0.f, 0.f));
+
+	AddCentered(Root, NewText(WidgetBlueprint, TEXT("Txt_Name"), BodyStyle, NSLOCTEXT("knightUI", "MaintenanceEntryName", "장비 이름"), true), true, VAlign_Center, FMargin(14.f, 0.f, 8.f, 0.f));
+
+	// 상태 배지: 1px 테두리, 색은 C++에서.
+	UBorder* const Badge = NewWidget<UBorder>(WidgetBlueprint, TEXT("Border_Badge"), true);
+	Badge->SetBrush(FrameBrush(0.f));
+	Badge->SetPadding(FMargin(8.f, 2.f));
+	Badge->SetHorizontalAlignment(HAlign_Center);
+	Badge->SetVerticalAlignment(VAlign_Center);
+	Badge->SetContent(NewText(WidgetBlueprint, TEXT("Txt_State"), CaptionStyle, NSLOCTEXT("knightUI", "MaintenanceEntryState", "보유 1"), true));
+	AddCentered(Root, Badge, false, VAlign_Center, FMargin(0.f, 0.f, 8.f, 0.f));
 	EndBuild(WidgetBlueprint);
 	return true;
 }
 
 bool UknightUIEditorLibrary::BuildMaintenanceScreen(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> ButtonClass,
-	TSubclassOf<UCommonTextStyle> TitleStyle, TSubclassOf<UCommonTextStyle> BodyStyle)
+	TSubclassOf<UCommonButtonStyle> TabStyle, TSubclassOf<UCommonButtonStyle> CompactTabStyle, TSubclassOf<UCommonButtonStyle> SecondaryButtonStyle,
+	TSubclassOf<UCommonTextStyle> TitleStyle, TSubclassOf<UCommonTextStyle> SubheadStyle, TSubclassOf<UCommonTextStyle> BodyStyle,
+	TSubclassOf<UCommonTextStyle> BodyDimStyle, TSubclassOf<UCommonTextStyle> CaptionStyle)
 {
 	if (!ButtonClass || !ButtonClass->IsChildOf<UknightButtonBase>() || !BeginBuild(WidgetBlueprint, TEXT("BuildMaintenanceScreen"))) return false;
-	UCanvasPanel* Root = NewWidget<UCanvasPanel>(WidgetBlueprint, TEXT("Canvas_Root"));
+	UCanvasPanel* const Root = NewWidget<UCanvasPanel>(WidgetBlueprint, TEXT("Canvas_Root"));
 	WidgetBlueprint->WidgetTree->RootWidget = Root;
-	UCommonTextBlock* Header = NewText(WidgetBlueprint, TEXT("Txt_Header"), TitleStyle, INVTEXT("정비"), false);
-	UCanvasPanelSlot* HeaderSlot = Root->AddChildToCanvas(Header);
-	HeaderSlot->SetAnchors(FAnchors(0.5f, 0.f));
-	HeaderSlot->SetAlignment(FVector2D(0.5f, 0.f));
-	HeaderSlot->SetPosition(FVector2D(0.f, 35.f));
-	HeaderSlot->SetAutoSize(true);
-	UHorizontalBox* Body = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("HorizontalBox_Body"));
-	UCanvasPanelSlot* BodySlot = Root->AddChildToCanvas(Body);
-	BodySlot->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f));
-	BodySlot->SetOffsets(FMargin(45.f, 126.f, 45.f, 120.f));
 
-	auto MakeButton = [&](const TCHAR* Name, const FText& Label) -> UknightButtonBase*
+	auto MakeButton = [&](const TCHAR* Name, const FText& Label, TSubclassOf<UCommonButtonStyle> Style) -> UknightButtonBase*
 	{
-		UknightButtonBase* Button = NewWidget<UknightButtonBase>(WidgetBlueprint, TSubclassOf<UknightButtonBase>(ButtonClass), Name, true);
+		UknightButtonBase* const Button = NewWidget<UknightButtonBase>(WidgetBlueprint, TSubclassOf<UknightButtonBase>(ButtonClass), Name, true);
 		Button->SetButtonText(Label);
+		if (Style) Button->SetStyle(Style);
 		return Button;
 	};
-	auto MakePanel = [&](const TCHAR* Name, float Fraction) -> UVerticalBox*
+	auto MakeScroll = [&](const TCHAR* Name, bool bVariable) -> UScrollBox*
 	{
-		UBorder* Frame = NewWidget<UBorder>(WidgetBlueprint, *FString::Printf(TEXT("Frame_%s"), Name));
-		Frame->SetBrush(FrameBrush(0.82f));
-		UHorizontalBoxSlot* FrameSlot = Body->AddChildToHorizontalBox(Frame);
-		FSlateChildSize Size(ESlateSizeRule::Fill);
-		Size.Value = Fraction;
-		FrameSlot->SetSize(Size);
-		FrameSlot->SetPadding(FMargin(8.f, 0.f));
-		UVerticalBox* Panel = NewWidget<UVerticalBox>(WidgetBlueprint, Name);
-		Frame->AddChild(Panel);
+		// 얇은 스크롤바 (설정 화면과 동일).
+		UScrollBox* const Scroll = NewWidget<UScrollBox>(WidgetBlueprint, Name, bVariable);
+		FScrollBarStyle BarStyle;
+		BarStyle.SetVerticalBackgroundImage(SolidBrush(FLinearColor(FrostDim.R, FrostDim.G, FrostDim.B, 0.25f), FVector2D(3.f, 3.f)));
+		BarStyle.SetNormalThumbImage(SolidBrush(FrostDim, FVector2D(3.f, 3.f)));
+		BarStyle.SetHoveredThumbImage(SolidBrush(Frost, FVector2D(3.f, 3.f)));
+		BarStyle.SetDraggedThumbImage(SolidBrush(Frost, FVector2D(3.f, 3.f)));
+		FSlateBrush SlotBrush = NoBrush();
+		SlotBrush.ImageSize = FVector2D(3.f, 3.f);
+		BarStyle.SetVerticalTopSlotImage(SlotBrush);
+		BarStyle.SetVerticalBottomSlotImage(SlotBrush);
+		BarStyle.SetThickness(3.f);
+		Scroll->SetWidgetBarStyle(BarStyle);
+		Scroll->SetScrollbarThickness(FVector2D(3.f, 3.f));
+		Scroll->SetScrollbarPadding(FMargin(0.f));
+		Scroll->SetNavigationDestination(EDescendantScrollDestination::IntoView);
+		return Scroll;
+	};
+	auto MakePanel = [&](const TCHAR* Name, bool bRight) -> UVerticalBox*
+	{
+		UBorder* const Frame = NewWidget<UBorder>(WidgetBlueprint, *FString::Printf(TEXT("Frame_%s"), Name));
+		Frame->SetBrush(FrameBrush(0.88f));
+		Frame->SetPadding(FMargin(22.f, 22.f, 22.f, 20.f));
+		// 머리~바닥 전체 높이. 가운데는 메카용으로 비움.
+		if (bRight) AddToCanvas(Root, Frame, FAnchors(1.f, 0.f, 1.f, 1.f), FVector2D(1.f, 0.f), FMargin(-HUDMargin.X, 196.f, 520.f, 156.f));
+		else AddToCanvas(Root, Frame, FAnchors(0.f, 0.f, 0.f, 1.f), FVector2D(0.f, 0.f), FMargin(HUDMargin.X, 196.f, 500.f, 156.f));
+		UVerticalBox* const Panel = NewWidget<UVerticalBox>(WidgetBlueprint, Name);
+		Frame->SetContent(Panel);
 		return Panel;
 	};
-	UVerticalBox* Left = MakePanel(TEXT("Panel_Left"), 0.29f);
-	UHorizontalBox* Categories = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("Row_Categories"));
-	AddToColumn(Left, Categories, HAlign_Fill, FMargin(10.f, 12.f));
-	AddToRow(Categories, MakeButton(TEXT("Btn_Craft"), INVTEXT("제작")), true, HAlign_Fill);
-	AddToRow(Categories, MakeButton(TEXT("Btn_Weapon"), INVTEXT("무기")), true, HAlign_Fill);
-	AddToRow(Categories, MakeButton(TEXT("Btn_Armor"), INVTEXT("방어구")), true, HAlign_Fill);
-	UHorizontalBox* Slots = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("Row_Slots"));
-	AddToColumn(Left, Slots, HAlign_Fill, FMargin(10.f, 0.f, 10.f, 12.f));
-	AddToRow(Slots, MakeButton(TEXT("Btn_Head"), INVTEXT("머리")), true, HAlign_Fill);
-	AddToRow(Slots, MakeButton(TEXT("Btn_Torso"), INVTEXT("몸통")), true, HAlign_Fill);
-	AddToRow(Slots, MakeButton(TEXT("Btn_Legs"), INVTEXT("다리")), true, HAlign_Fill);
-	AddToRow(Slots, MakeButton(TEXT("Btn_Arms"), INVTEXT("팔")), true, HAlign_Fill);
-	AddToRow(Slots, MakeButton(TEXT("Btn_SlotWeapon"), INVTEXT("무기")), true, HAlign_Fill);
-	UScrollBox* List = NewWidget<UScrollBox>(WidgetBlueprint, TEXT("List_Items"), true);
-	UVerticalBoxSlot* ListSlot = Left->AddChildToVerticalBox(List);
-	ListSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-	ListSlot->SetPadding(FMargin(12.f, 0.f, 12.f, 12.f));
-	AddToColumn(Left, NewText(WidgetBlueprint, TEXT("Txt_Status"), BodyStyle, INVTEXT("장비를 선택하세요."), true), HAlign_Left, FMargin(12.f, 0.f, 12.f, 14.f));
+	auto MakeKeyCap = [&](const TCHAR* Name, const FText& Key) -> USizeBox*
+	{
+		USizeBox* const Cap = NewSizeBox(WidgetBlueprint, Name, 0.f, 24.f);
+		Cap->SetMinDesiredWidth(24.f);
+		UBorder* const Frame = NewWidget<UBorder>(WidgetBlueprint, *FString::Printf(TEXT("%s_Frame"), Name));
+		Frame->SetBrush(FrameBrush(0.f));
+		Frame->SetPadding(FMargin(6.f, 0.f));
+		Frame->SetHorizontalAlignment(HAlign_Center);
+		Frame->SetVerticalAlignment(VAlign_Center);
+		Frame->SetContent(NewText(WidgetBlueprint, *FString::Printf(TEXT("%s_Text"), Name), CaptionStyle, Key, false));
+		Cap->AddChild(Frame);
+		return Cap;
+	};
+	auto AddFillToColumn = [](UVerticalBox* Column, UWidget* Widget, const FMargin& Padding)
+	{
+		UVerticalBoxSlot* const Slot = Column->AddChildToVerticalBox(Widget);
+		Slot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+		Slot->SetPadding(Padding);
+	};
+	auto MakeWrapText = [&](const TCHAR* Name, TSubclassOf<UCommonTextStyle> Style, const FText& Text) -> UCommonTextBlock*
+	{
+		UCommonTextBlock* const Label = NewText(WidgetBlueprint, Name, Style, Text, true);
+		Label->SetAutoWrapText(true);
+		return Label;
+	};
 
-	USpacer* Center = NewWidget<USpacer>(WidgetBlueprint, TEXT("ClearRobotView"));
-	UHorizontalBoxSlot* CenterSlot = Body->AddChildToHorizontalBox(Center);
-	FSlateChildSize CenterSize(ESlateSizeRule::Fill);
-	CenterSize.Value = 0.36f;
-	CenterSlot->SetSize(CenterSize);
+	// 제목: 스테이지 선택과 같은 위치·형태.
+	UVerticalBox* const Header = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("VerticalBox_Header"));
+	AddToColumn(Header, NewText(WidgetBlueprint, TEXT("Txt_HeaderCaption"), CaptionStyle, INVTEXT("MAINTENANCE"), false), HAlign_Left);
+	AddToColumn(Header, NewHUDImage(WidgetBlueprint, TEXT("Img_HeaderAccent"), Frost, FVector2D(32.f, 2.f)), HAlign_Left, FMargin(0.f, 10.f, 0.f, 12.f));
+	AddToColumn(Header, NewText(WidgetBlueprint, TEXT("Txt_Header"), TitleStyle, NSLOCTEXT("knightUI", "MaintenanceTitle", "정비"), true), HAlign_Left);
+	AddToCanvas(Root, Header, FAnchors(0.f, 0.f), FVector2D::ZeroVector, FMargin(HUDMargin.X, HUDMargin.Y, 0.f, 0.f), true);
 
-	UVerticalBox* Right = MakePanel(TEXT("Panel_Right"), 0.35f);
-	AddToColumn(Right, NewText(WidgetBlueprint, TEXT("Txt_RightTitle"), TitleStyle, INVTEXT("스펙"), false), HAlign_Left, FMargin(20.f, 20.f, 12.f, 12.f));
-	UWidgetSwitcher* Switcher = NewWidget<UWidgetSwitcher>(WidgetBlueprint, TEXT("Switcher_Info"), true);
-	UVerticalBoxSlot* SwitcherSlot = Right->AddChildToVerticalBox(Switcher);
-	SwitcherSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-	SwitcherSlot->SetPadding(FMargin(20.f, 0.f, 20.f, 0.f));
-	UScrollBox* StatsScroll = NewWidget<UScrollBox>(WidgetBlueprint, TEXT("Scroll_Stats"));
+	// 왼쪽: 분류 탭, 부위 탭, 목록.
+	UVerticalBox* const Left = MakePanel(TEXT("Panel_Left"), false);
+	UHorizontalBox* const Categories = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("Row_Categories"));
+	AddToColumn(Left, Categories, HAlign_Fill);
+	AddCentered(Categories, MakeButton(TEXT("Btn_Craft"), NSLOCTEXT("knightUI", "MaintenanceCraft", "제작"), TabStyle), true);
+	AddCentered(Categories, MakeButton(TEXT("Btn_Weapon"), NSLOCTEXT("knightUI", "MaintenanceWeapon", "무기"), TabStyle), true, VAlign_Center, FMargin(6.f, 0.f, 0.f, 0.f));
+	AddCentered(Categories, MakeButton(TEXT("Btn_Armor"), NSLOCTEXT("knightUI", "MaintenanceArmor", "방어구"), TabStyle), true, VAlign_Center, FMargin(6.f, 0.f, 0.f, 0.f));
+	UHorizontalBox* const Slots = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("Row_Slots"));
+	AddToColumn(Left, Slots, HAlign_Fill, FMargin(0.f, 10.f, 0.f, 0.f));
+	struct FSlotButton { const TCHAR* Name; FText Label; };
+	int32 SlotIndex = 0;
+	for (const FSlotButton& SlotButton : {
+		FSlotButton{ TEXT("Btn_Head"), NSLOCTEXT("knightUI", "MaintenanceHead", "머리") },
+		FSlotButton{ TEXT("Btn_Torso"), NSLOCTEXT("knightUI", "MaintenanceTorso", "몸통") },
+		FSlotButton{ TEXT("Btn_Arms"), NSLOCTEXT("knightUI", "MaintenanceArms", "팔") },
+		FSlotButton{ TEXT("Btn_Legs"), NSLOCTEXT("knightUI", "MaintenanceLegs", "다리") },
+		FSlotButton{ TEXT("Btn_SlotWeapon"), NSLOCTEXT("knightUI", "MaintenanceSlotWeapon", "무기") } })
+	{
+		AddCentered(Slots, MakeButton(SlotButton.Name, SlotButton.Label, CompactTabStyle), true, VAlign_Center, FMargin(SlotIndex++ > 0 ? 4.f : 0.f, 0.f, 0.f, 0.f));
+	}
+	AddToColumn(Left, NewLine(WidgetBlueprint, TEXT("Img_ListLine"), false), HAlign_Fill, FMargin(0.f, 14.f, 0.f, 0.f));
+	AddFillToColumn(Left, MakeScroll(TEXT("List_Items"), true), FMargin(0.f, 12.f, 0.f, 0.f));
+	UCommonTextBlock* const Status = MakeWrapText(TEXT("Txt_Status"), BodyDimStyle, FText::GetEmpty());
+	AddToColumn(Left, Status, HAlign_Fill, FMargin(0.f, 10.f, 0.f, 0.f));
+
+	// 오른쪽: 선택 장비, 정보 탭, 실행 버튼.
+	UVerticalBox* const Right = MakePanel(TEXT("Panel_Right"), true);
+	UHorizontalBox* const Detail = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("Row_Detail"));
+	AddToColumn(Right, Detail, HAlign_Fill);
+	USizeBox* const IconBox = NewSizeBox(WidgetBlueprint, TEXT("SelectedImageFrame"), 72.f, 72.f);
+	UBorder* const IconFrame = NewWidget<UBorder>(WidgetBlueprint, TEXT("Border_SelectedImage"));
+	IconFrame->SetBrush(FrameBrush(0.6f));
+	IconFrame->SetPadding(FMargin(3.f));
+	IconBox->AddChild(IconFrame);
+	IconFrame->SetContent(NewWidget<UImage>(WidgetBlueprint, TEXT("Img_Selected"), true));
+	AddCentered(Detail, IconBox, false, VAlign_Top);
+	UVerticalBox* const DetailText = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("VerticalBox_DetailText"));
+	AddToColumn(DetailText, NewText(WidgetBlueprint, TEXT("Txt_PartName"), SubheadStyle, NSLOCTEXT("knightUI", "MaintenancePartName", "장비 이름"), true), HAlign_Left);
+	AddToColumn(DetailText, NewText(WidgetBlueprint, TEXT("Txt_PartState"), CaptionStyle, NSLOCTEXT("knightUI", "MaintenancePartState", "장착 중"), true), HAlign_Left, FMargin(0.f, 2.f, 0.f, 0.f));
+	AddToColumn(DetailText, MakeWrapText(TEXT("Txt_PartDesc"), BodyDimStyle, NSLOCTEXT("knightUI", "MaintenancePartDesc", "장비 설명")), HAlign_Fill, FMargin(0.f, 6.f, 0.f, 0.f));
+	AddCentered(Detail, DetailText, true, VAlign_Top, FMargin(16.f, 0.f, 0.f, 0.f));
+	UCommonTextBlock* const Bonus = MakeWrapText(TEXT("Txt_Bonus"), BodyStyle, NSLOCTEXT("knightUI", "MaintenanceBonus", "공격력 +8"));
+	Bonus->SetColorAndOpacity(Frost);
+	AddToColumn(Right, Bonus, HAlign_Fill, FMargin(0.f, 14.f, 0.f, 0.f));
+
+	UHorizontalBox* const InfoTabs = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("Row_InfoTabs"));
+	AddToColumn(Right, InfoTabs, HAlign_Fill, FMargin(0.f, 20.f, 0.f, 0.f));
+	AddCentered(InfoTabs, MakeKeyCap(TEXT("Key_InfoPrev"), INVTEXT("Q")), false, VAlign_Center, FMargin(0.f, 0.f, 8.f, 0.f));
+	AddCentered(InfoTabs, MakeButton(TEXT("Btn_InfoSpec"), NSLOCTEXT("knightUI", "MaintenanceInfoSpec", "스펙"), CompactTabStyle), true);
+	AddCentered(InfoTabs, MakeButton(TEXT("Btn_InfoSet"), NSLOCTEXT("knightUI", "MaintenanceInfoSet", "세트"), CompactTabStyle), true, VAlign_Center, FMargin(4.f, 0.f, 0.f, 0.f));
+	AddCentered(InfoTabs, MakeButton(TEXT("Btn_InfoMaterial"), NSLOCTEXT("knightUI", "MaintenanceInfoMaterial", "재료"), CompactTabStyle), true, VAlign_Center, FMargin(4.f, 0.f, 0.f, 0.f));
+	AddCentered(InfoTabs, MakeKeyCap(TEXT("Key_InfoNext"), INVTEXT("E")), false, VAlign_Center, FMargin(8.f, 0.f, 0.f, 0.f));
+	AddToColumn(Right, NewLine(WidgetBlueprint, TEXT("Img_InfoLine"), false), HAlign_Fill, FMargin(0.f, 10.f, 0.f, 0.f));
+
+	UWidgetSwitcher* const Switcher = NewWidget<UWidgetSwitcher>(WidgetBlueprint, TEXT("Switcher_Info"), true);
+	AddFillToColumn(Right, Switcher, FMargin(0.f, 12.f, 0.f, 0.f));
+	UScrollBox* const StatsScroll = MakeScroll(TEXT("Scroll_Stats"), false);
 	Switcher->AddChild(StatsScroll);
-	UVerticalBox* Stats = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("Stats_Content"));
-	StatsScroll->AddChild(Stats);
-	UCommonTextBlock* Current = NewText(WidgetBlueprint, TEXT("Txt_CurrentStats"), BodyStyle, INVTEXT("현재 스탯"), true);
-	Current->SetAutoWrapText(true);
-	AddToColumn(Stats, Current, HAlign_Fill);
-	UCommonTextBlock* Hint = NewText(WidgetBlueprint, TEXT("Txt_PreviewHint"), BodyStyle, INVTEXT("N · 스탯 미리보기"), true);
-	AddToColumn(Stats, Hint, HAlign_Fill, FMargin(0.f, 15.f));
-	UCommonTextBlock* Preview = NewText(WidgetBlueprint, TEXT("Txt_PreviewStats"), BodyStyle, INVTEXT("교체 예상"), true);
-	Preview->SetAutoWrapText(true);
-	AddToColumn(Stats, Preview, HAlign_Fill);
-	UScrollBox* DetailScroll = NewWidget<UScrollBox>(WidgetBlueprint, TEXT("Scroll_Detail"));
-	Switcher->AddChild(DetailScroll);
-	UCommonTextBlock* Detail = NewText(WidgetBlueprint, TEXT("Txt_Detail"), BodyStyle, INVTEXT("장비를 선택하세요."), true);
-	Detail->SetAutoWrapText(true);
-	DetailScroll->AddChild(Detail);
-	UImage* SelectedImage = NewWidget<UImage>(WidgetBlueprint, TEXT("Img_Selected"), true);
-	AddToColumn(Right, NewSizeBox(WidgetBlueprint, TEXT("SelectedImageFrame"), 64.f, 64.f), HAlign_Left, FMargin(20.f, 8.f));
-	Cast<USizeBox>(Right->GetChildAt(Right->GetChildrenCount() - 1))->AddChild(SelectedImage);
-	UHorizontalBox* Pages = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("Row_Pages"));
-	AddToColumn(Right, Pages, HAlign_Fill, FMargin(20.f, 8.f));
-	AddToRow(Pages, MakeButton(TEXT("Btn_PageLeft"), INVTEXT("←")), true, HAlign_Fill);
-	AddToRow(Pages, NewText(WidgetBlueprint, TEXT("Txt_Page"), BodyStyle, INVTEXT("1/2"), true), false, HAlign_Center, FMargin(12.f));
-	AddToRow(Pages, MakeButton(TEXT("Btn_PageRight"), INVTEXT("→")), true, HAlign_Fill);
-	UHorizontalBox* Actions = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("Row_Actions"));
-	AddToColumn(Right, Actions, HAlign_Fill, FMargin(12.f, 6.f, 12.f, 16.f));
-	AddToRow(Actions, MakeButton(TEXT("Btn_Execute"), INVTEXT("제작 / 장착")), true, HAlign_Fill);
-	AddToRow(Actions, MakeButton(TEXT("Btn_Unequip"), INVTEXT("해제")), true, HAlign_Fill);
-	AddToRow(Actions, MakeButton(TEXT("Btn_Preview"), INVTEXT("미리보기 N")), true, HAlign_Fill);
+	StatsScroll->AddChild(NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("Stats_Rows"), true));
+	UScrollBox* const SetScroll = MakeScroll(TEXT("Scroll_Sets"), false);
+	Switcher->AddChild(SetScroll);
+	UVerticalBox* const SetColumn = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("VerticalBox_Sets"));
+	SetScroll->AddChild(SetColumn);
+	AddToColumn(SetColumn, NewText(WidgetBlueprint, TEXT("Txt_SetCaption"), CaptionStyle, INVTEXT("SELECTED SET"), false), HAlign_Left);
+	AddToColumn(SetColumn, MakeWrapText(TEXT("Txt_SetInfo"), BodyStyle, NSLOCTEXT("knightUI", "MaintenanceSetInfo", "세트 정보")), HAlign_Fill, FMargin(0.f, 6.f, 0.f, 0.f));
+	AddToColumn(SetColumn, NewText(WidgetBlueprint, TEXT("Txt_ActiveCaption"), CaptionStyle, INVTEXT("ACTIVE SETS"), false), HAlign_Left, FMargin(0.f, 20.f, 0.f, 0.f));
+	AddToColumn(SetColumn, MakeWrapText(TEXT("Txt_ActiveSets"), BodyDimStyle, NSLOCTEXT("knightUI", "MaintenanceActiveSets", "활성 세트 없음")), HAlign_Fill, FMargin(0.f, 6.f, 0.f, 0.f));
+	UScrollBox* const MaterialScroll = MakeScroll(TEXT("Scroll_Materials"), false);
+	Switcher->AddChild(MaterialScroll);
+	UVerticalBox* const MaterialColumn = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("VerticalBox_Materials"));
+	MaterialScroll->AddChild(MaterialColumn);
+	AddToColumn(MaterialColumn, NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("Box_Materials"), true), HAlign_Fill);
+	AddToColumn(MaterialColumn, MakeWrapText(TEXT("Txt_StageReq"), BodyStyle, NSLOCTEXT("knightUI", "MaintenanceStageReq", "필요 스테이지")), HAlign_Fill, FMargin(0.f, 12.f, 0.f, 0.f));
+
+	UHorizontalBox* const Actions = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("Row_Actions"));
+	AddToColumn(Right, Actions, HAlign_Fill, FMargin(0.f, 16.f, 0.f, 0.f));
+	AddCentered(Actions, MakeButton(TEXT("Btn_Execute"), NSLOCTEXT("knightUI", "MaintenanceExecute", "제작"), nullptr), true);
+	AddCentered(Actions, MakeButton(TEXT("Btn_Unequip"), NSLOCTEXT("knightUI", "MaintenanceUnequip", "해제"), SecondaryButtonStyle), true, VAlign_Center, FMargin(8.f, 0.f, 0.f, 0.f));
+
+	AddToCanvas(Root, NewKeyHints(WidgetBlueprint, TEXT("Panel_Hints"), CaptionStyle, {
+		{ { INVTEXT("←"), INVTEXT("→") }, NSLOCTEXT("knightUI", "HintMaintenanceTabs", "탭·부위") },
+		{ { INVTEXT("↑"), INVTEXT("↓") }, NSLOCTEXT("knightUI", "HintMaintenanceList", "목록") },
+		{ { INVTEXT("Q"), INVTEXT("E") }, NSLOCTEXT("knightUI", "HintMaintenanceInfo", "정보") },
+		{ { INVTEXT("Enter") }, NSLOCTEXT("knightUI", "HintMaintenanceRun", "실행") } }),
+		FAnchors(0.f, 1.f), FVector2D(0.f, 1.f), FMargin(HUDMargin.X, -112.f, 0.f, 0.f), true);
+
+	// 제작 확인 창. 시작 시 C++가 숨김.
+	UOverlay* const Confirm = NewWidget<UOverlay>(WidgetBlueprint, TEXT("Panel_Confirm"), true);
+	AddFill(Root, Confirm);
+	UImage* const Dim = NewWidget<UImage>(WidgetBlueprint, TEXT("Img_ConfirmDim"));
+	Dim->SetBrush(SolidBrush(FLinearColor::White));
+	Dim->SetColorAndOpacity(FLinearColor(Navy900.R * 0.5f, Navy900.G * 0.5f, Navy900.B * 0.5f, 0.7f));
+	AddToOverlay(Confirm, Dim, HAlign_Fill, VAlign_Fill);
+	USizeBox* const ConfirmWidth = NewSizeBox(WidgetBlueprint, TEXT("SizeBox_Confirm"), 560.f, 0.f);
+	AddToOverlay(Confirm, ConfirmWidth, HAlign_Center, VAlign_Center);
+	UBorder* const ConfirmFrame = NewWidget<UBorder>(WidgetBlueprint, TEXT("Border_Confirm"));
+	ConfirmFrame->SetBrush(FrameBrush(0.96f));
+	ConfirmFrame->SetPadding(FMargin(32.f, 28.f));
+	ConfirmWidth->AddChild(ConfirmFrame);
+	UVerticalBox* const ConfirmColumn = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("VerticalBox_Confirm"));
+	ConfirmFrame->SetContent(ConfirmColumn);
+	AddToColumn(ConfirmColumn, NewText(WidgetBlueprint, TEXT("Txt_ConfirmTitle"), SubheadStyle, NSLOCTEXT("knightUI", "MaintenanceConfirmTitle", "제작"), true), HAlign_Left);
+	AddToColumn(ConfirmColumn, MakeWrapText(TEXT("Txt_ConfirmBody"), BodyDimStyle, NSLOCTEXT("knightUI", "MaintenanceConfirmBody", "재료를 사용해 제작합니다.")), HAlign_Fill, FMargin(0.f, 12.f, 0.f, 0.f));
+	UHorizontalBox* const ConfirmButtons = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("Row_ConfirmButtons"));
+	AddToColumn(ConfirmColumn, ConfirmButtons, HAlign_Right, FMargin(0.f, 28.f, 0.f, 0.f));
+	AddCentered(ConfirmButtons, MakeButton(TEXT("Btn_ConfirmCancel"), NSLOCTEXT("knightUI", "MaintenanceConfirmCancel", "취소"), SecondaryButtonStyle), false);
+	AddCentered(ConfirmButtons, MakeButton(TEXT("Btn_ConfirmOk"), NSLOCTEXT("knightUI", "MaintenanceConfirmOk", "제작"), nullptr), false, VAlign_Center, FMargin(8.f, 0.f, 0.f, 0.f));
 	EndBuild(WidgetBlueprint);
 	return true;
 }

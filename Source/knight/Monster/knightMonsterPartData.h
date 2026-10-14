@@ -92,6 +92,20 @@ struct KNIGHT_API FknightMonsterPartDefinition
 	TSubclassOf<AknightMonsterBreakPiece> BreakPieceClass;
 };
 
+/** 여러 부위가 모두 부서졌을 때만 붙는 태그(두 앞발이 다 부서져야 봉인되는 공격 등). */
+USTRUCT(BlueprintType)
+struct KNIGHT_API FknightMonsterPartBreakCombo
+{
+	GENERATED_BODY()
+
+	/** 이 태그가 몬스터에 모두 있으면(보통 각 부위의 GrantedTagsOnBreak) GrantedTags를 붙인다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Break", meta=(Categories="Monster.State.Broken"))
+	FGameplayTagContainer RequiredTags;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Break", meta=(Categories="Monster.State.Broken"))
+	FGameplayTagContainer GrantedTags;
+};
+
 /** Every part of one monster species. Shared by all instances of that monster. */
 UCLASS(BlueprintType, Const)
 class KNIGHT_API UknightMonsterPartData : public UPrimaryDataAsset
@@ -101,6 +115,10 @@ class KNIGHT_API UknightMonsterPartData : public UPrimaryDataAsset
 public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Parts", meta=(TitleProperty="PartTag"))
 	TArray<FknightMonsterPartDefinition> Parts;
+
+	/** 부위가 부서질 때마다 확인한다. 부위 하나의 봉인은 GrantedTagsOnBreak로 충분하다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Parts")
+	TArray<FknightMonsterPartBreakCombo> BreakCombos;
 
 #if WITH_EDITOR
 	virtual EDataValidationResult IsDataValid(class FDataValidationContext& Context) const override;
