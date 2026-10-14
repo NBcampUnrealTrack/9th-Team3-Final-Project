@@ -183,9 +183,15 @@ void UknightGameplayAbility_MeleeAttack::StartAttack()
 	MontageTask->OnCancelled.AddDynamic(this, &ThisClass::OnMontageFinished);
 	MontageTask->ReadyForActivation();
 
-	if (bLunge)
+	// (2026-10-14) 루트 모션 공격은 애니 + 모션 워핑이 이동을 맡는다. 코드 돌진은 제자리 애니일 때만.
+	if (bLunge && bLungeWithCode)
 	{
 		UknightCombatLibrary::StartAttackLunge(this, AttackMontage, Rate, WarpLocation, WarpTravel, MaxLungeTime);
+	}
+	if (ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
+	{
+		Character->SetAnimRootMotionTranslationScale(RootMotionTranslationScale);
+		bRootMotionScaleApplied = true;
 	}
 
 	if (bCancelRecoveryOnMove)
@@ -261,6 +267,14 @@ void UknightGameplayAbility_MeleeAttack::EndAbility(const FGameplayAbilitySpecHa
 	{
 		World->GetTimerManager().ClearTimer(MoveCancelTimer);
 		World->GetTimerManager().ClearTimer(DrawTimer);
+	}
+	if (bRootMotionScaleApplied)
+	{
+		bRootMotionScaleApplied = false;
+		if (ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
+		{
+			Character->SetAnimRootMotionTranslationScale(1.f);
+		}
 	}
 	// 다음 단계로 교체되거나 피격 등으로 캔슬된 경우가 아니라, 정상적으로 끝난 공격만 콤보 유예를 준다.
 	if (!bWasCancelled && IsActive())
