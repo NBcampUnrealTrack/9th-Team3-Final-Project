@@ -49,6 +49,10 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category="Knight|Locomotion")
 	bool bHasAcceleration = false;
 
+	/** (2026-10-15) 양손 스탠스인지 (State.Stance.TwoHanded). false면 한손. 애님 블루프린트가 대기·이동 자세를 고를 때 쓴다. */
+	UPROPERTY(BlueprintReadOnly, Category="Knight|Combat")
+	bool bTwoHandedStance = false;
+
 	/**
 	 * 공중에서 하체(골반·다리)를 몽타주 대신 기본 공중 자세로 덮는 정도 (0~1). (2026-10-12)
 	 * 공중이고, 몽타주가 없거나 AirLegLockMontages 중 하나가 재생 중일 때 1.
@@ -72,4 +76,5 @@ private:
 	bool bCachedIsFalling = false;
 	bool bCachedHasAcceleration = false;
 	bool bAbilitySystemBound = false;
+	TWeakObjectPtr<UAbilitySystemComponent> BoundASC;
 };

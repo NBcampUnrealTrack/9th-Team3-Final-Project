@@ -62,11 +62,19 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Combat Stance")
 	TObjectPtr<UAnimMontage> SheatheMontage;
 
+	/** (2026-10-15) 한손 스탠스일 때의 납도 몽타주. 비우면 SheatheMontage를 쓴다. SheatheMontage는 양손일 때 쓴다. */
+	UPROPERTY(EditDefaultsOnly, Category="Combat Stance")
+	TObjectPtr<UAnimMontage> OneHandedSheatheMontage;
+
 	/** Above this speed the sword is put away instantly instead of playing the full-body montage. */
 	UPROPERTY(EditDefaultsOnly, Category="Combat Stance", meta=(ClampMin=0, Units="cm/s"))
 	float MaxSpeedForSheatheMontage = 30.f;
 
-	/** Keep the sword drawn while moving; sheathe only after standing still for StillTimeBeforeSheathe. */
+	/**
+	 * Keep the sword drawn while moving; sheathe only after standing still for StillTimeBeforeSheathe.
+	 * (2026-10-15) 켜면 전투 대기 자세(Alert)를 납도할 때까지 유지하고, AlertDuration·SheatheDelay는 쓰지 않는다.
+	 * 멈춘 뒤 StillTimeBeforeSheathe초가 지나면 바로 넣는다.
+	 */
 	UPROPERTY(EditDefaultsOnly, Category="Combat Stance")
 	bool bKeepDrawnWhileMoving = true;
 

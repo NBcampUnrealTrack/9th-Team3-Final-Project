@@ -1,4 +1,5 @@
 #include "AbilitySystem/Abilities/knightGameplayAbility_CombatStance.h"
+#include "AbilitySystem/Abilities/knightGameplayAbility_StanceSwitch.h"
 
 #include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
@@ -90,6 +91,13 @@ void UknightGameplayAbility_CombatStance::RefreshCombatState()
 		}
 		SetAlert(true);
 	}
+	else if (bInCombat && !bSheathing && !Timers.IsTimerActive(SheatheTimer) && bKeepDrawnWhileMoving)
+	{
+		// (2026-10-15 사용자 결정) 전투 대기 자세(Alert)를 유지한 채, 멈춘 뒤 StillTimeBeforeSheathe초가 지나면 바로 넣는다.
+		// 이동 중에는 넣지 않는다. 이 모드에서는 AlertDuration·SheatheDelay를 쓰지 않는다.
+		StillSince = -1.0;
+		Timers.SetTimer(SheatheTimer, this, &ThisClass::StartSheathe, 0.1f, false);
+	}
 	else if (bInCombat && !bSheathing && !Timers.IsTimerActive(SheatheTimer))
 	{
 		// Alert phase, then hold phase, then sheathe.
@@ -168,7 +176,10 @@ void UknightGameplayAbility_CombatStance::StartSheathe()
 		}
 		StillSince = -1.0;
 	}
-	if (!SheatheMontage || !bStandingStill)
+	// (2026-10-15) 한손 스탠스면 한손 납도 몽타주.
+	UAnimMontage* const Montage = (OneHandedSheatheMontage && !UknightGameplayAbility_StanceSwitch::IsTwoHanded(GetAbilitySystemComponentFromActorInfo()))
+		? OneHandedSheatheMontage.Get() : SheatheMontage.Get();
+	if (!Montage || !bStandingStill)
 	{
 		AttachWeaponToBack();
 		ExitCombat();
@@ -177,7 +188,7 @@ void UknightGameplayAbility_CombatStance::StartSheathe()
 
 	bSheathing = true;
 	UAbilityTask_PlayMontageAndWait* const Task = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
-		this, TEXT("Sheathe"), SheatheMontage, 1.f, NAME_None, false, 0.f);
+		this, TEXT("Sheathe"), Montage, 1.f, NAME_None, false, 0.f);
 	Task->OnCompleted.AddDynamic(this, &ThisClass::OnSheatheMontageFinished);
 	Task->OnBlendOut.AddDynamic(this, &ThisClass::OnSheatheMontageFinished);
 	Task->OnInterrupted.AddDynamic(this, &ThisClass::OnSheatheMontageInterrupted);
@@ -214,6 +225,8 @@ void UknightGameplayAbility_CombatStance::ExitCombat()
 	if (UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo())
 	{
 		ASC->RemoveLooseGameplayTag(CombatStateTag);
+		// (2026-10-15) 검을 넣으면 한손 스탠스로 되돌린다. 다시 뽑으면 항상 한손으로 시작한다(사용자 결정).
+		UknightGameplayAbility_StanceSwitch::ResetToOneHanded(ASC);
 	}
 }
 

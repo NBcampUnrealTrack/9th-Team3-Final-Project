@@ -4,6 +4,7 @@
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystem/knightAbilitySystemComponent.h"
+#include "AbilitySystem/Abilities/knightGameplayAbility_StanceSwitch.h"
 #include "Combat/knightCombatLibrary.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
@@ -65,6 +66,8 @@ void UknightGameplayAbility_MeleeAttack::ActivateAbility(const FGameplayAbilityS
 	bAttackStarted = false;
 	if (DrawMontage && !IsWeaponInHand())
 	{
+		// (2026-10-15) 뽑을 때는 항상 한손 스탠스로 시작한다.
+		UknightGameplayAbility_StanceSwitch::ResetToOneHanded(GetAbilitySystemComponentFromActorInfo());
 		// 발도도 행동 속도를 따른다. 공격으로 넘어가는 시점(DrawAttackStartTime)도 같은 배속으로 맞춘다. (2026-10-08)
 		const float DrawRate = DrawPlayRate * GetActionSpeed();
 		UAbilityTask_PlayMontageAndWait* const DrawTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
@@ -176,7 +179,8 @@ void UknightGameplayAbility_MeleeAttack::StartAttack()
 	// 실제 재생 속도 = PlayRate x 행동 속도. 돌진도 같은 배속을 넘겨야 모션과 같이 끝난다. (2026-10-08)
 	// (2026-10-14) x 공격 배속(ASC AttackAnimationSpeed, 시험 치트 knight.Player.AttackSpeed).
 	const float Rate = PlayRate * GetAttackSpeed();
-	UAbilityTask_PlayMontageAndWait* const MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, AttackMontage, Rate, StartSection);
+	UAnimMontage* const Montage = GetStanceAttackMontage();
+	UAbilityTask_PlayMontageAndWait* const MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, Montage, Rate, StartSection);
 	MontageTask->OnCompleted.AddDynamic(this, &ThisClass::OnMontageFinished);
 	MontageTask->OnBlendOut.AddDynamic(this, &ThisClass::OnMontageFinished);
 	MontageTask->OnInterrupted.AddDynamic(this, &ThisClass::OnMontageFinished);
@@ -186,7 +190,7 @@ void UknightGameplayAbility_MeleeAttack::StartAttack()
 	// (2026-10-14) 루트 모션 공격은 애니 + 모션 워핑이 이동을 맡는다. 코드 돌진은 제자리 애니일 때만.
 	if (bLunge && bLungeWithCode)
 	{
-		UknightCombatLibrary::StartAttackLunge(this, AttackMontage, Rate, WarpLocation, WarpTravel, MaxLungeTime);
+		UknightCombatLibrary::StartAttackLunge(this, Montage, Rate, WarpLocation, WarpTravel, MaxLungeTime);
 	}
 	if (ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
 	{
@@ -206,6 +210,16 @@ void UknightGameplayAbility_MeleeAttack::StartAttack()
 			World->GetTimerManager().SetTimer(MoveCancelTimer, this, &ThisClass::CheckMoveCancel, MoveCancelCheckInterval, true);
 		}
 	}
+}
+
+UAnimMontage* UknightGameplayAbility_MeleeAttack::GetStanceAttackMontage() const
+{
+	// (2026-10-15) 한손 스탠스면 한손 몽타주. 비어 있으면 양손 몽타주를 그대로 쓴다.
+	if (OneHandedAttackMontage && !UknightGameplayAbility_StanceSwitch::IsTwoHanded(GetAbilitySystemComponentFromActorInfo()))
+	{
+		return OneHandedAttackMontage;
+	}
+	return AttackMontage;
 }
 
 void UknightGameplayAbility_MeleeAttack::CheckMoveCancel()
