@@ -35,6 +35,8 @@ namespace knightGameplayTags
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_LockOn_SwitchRight);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Interact);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Item_Use);
+	// (2026-10-15) Q: 한손 ↔ 양손 스탠스 전환
+	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_StanceSwitch);
 
 	// 어빌리티 식별자
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack);
@@ -82,6 +84,9 @@ namespace knightGameplayTags
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_PartBroken_Torso);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_PartBroken_Arms);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_PartBroken_Legs);
+	// (2026-10-15) 무기 스탠스. 이 태그가 없으면 한손, 있으면 양손. 검을 넣으면 빠진다(뽑으면 항상 한손).
+	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Stance_TwoHanded);
+	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Stance_Switching);
 
 	// 애니메이션 구간
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Window_Combo);

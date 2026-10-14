@@ -17,6 +17,7 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_LockOn_SwitchRight, "InputTag.LockOn.SwitchRight", "Switch to the target point on the right.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_Interact, "InputTag.Interact", "Interact with gathering points and raid exits.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_Item_Use, "InputTag.Item.Use", "Use the selected consumable.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_StanceSwitch, "InputTag.StanceSwitch", "(2026-10-15) Switch between one-handed and two-handed stance (Q).");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Attack, "Ability.Attack", "Any attack ability.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Attack_Charge, "Ability.Attack.Charge", "Charged greatsword attack.");
@@ -61,6 +62,8 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_PartBroken_Torso, "State.PartBroken.Torso", "Torso broken: lower MaxPoise.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_PartBroken_Arms, "State.PartBroken.Arms", "Arms broken: lower AttackPower.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_PartBroken_Legs, "State.PartBroken.Legs", "Legs broken: lower walk and run speed.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Stance_TwoHanded, "State.Stance.TwoHanded", "(2026-10-15) Two-handed weapon stance. Without it the Knight is one-handed. Removed when the sword is sheathed.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Stance_Switching, "State.Stance.Switching", "(2026-10-15) Stance switch montage is playing (keeps the combat stance awake).");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Window_Combo, "Window.Combo", "Buffered attack input may chain into the next attack.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Window_Cancel, "Window.Cancel", "Buffered evasive input may cancel the current action.");

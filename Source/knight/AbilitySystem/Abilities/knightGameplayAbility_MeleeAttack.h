@@ -62,8 +62,13 @@ protected:
 	/** Called after each resolved hit. Override for on-hit effects (gauge gain, combo counters). */
 	virtual void OnHitResolved(const FHitResult& Hit, EknightHitOutcome Outcome) {}
 
+	/** 양손 스탠스(State.Stance.TwoHanded)의 공격 몽타주. OneHandedAttackMontage가 비어 있으면 한손에서도 이것을 쓴다. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack")
 	TObjectPtr<UAnimMontage> AttackMontage;
+
+	/** (2026-10-15) 한손 스탠스의 공격 몽타주. 검을 뽑으면 한손이고, Q(스탠스 전환)로 양손과 바꾼다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack")
+	TObjectPtr<UAnimMontage> OneHandedAttackMontage;
 
 	UPROPERTY(EditDefaultsOnly, Category="Attack", meta=(ClampMin=0.01))
 	float PlayRate = 1.f;
@@ -179,6 +184,8 @@ private:
 	void OnDrawInterrupted();
 
 	void StartAttack();
+	/** 지금 스탠스에 맞는 공격 몽타주. */
+	UAnimMontage* GetStanceAttackMontage() const;
 	void CheckDrawMoveCancel();
 	bool IsWeaponInHand() const;
 	void CheckMoveCancel();

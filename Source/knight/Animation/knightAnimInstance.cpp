@@ -5,6 +5,7 @@
 #include "Animation/AnimMontage.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "System/knightGameplayTags.h"
 
 #if WITH_EDITOR
 #include "Misc/DataValidation.h"
@@ -16,6 +17,7 @@ void UknightAnimInstance::InitializeWithAbilitySystem(UAbilitySystemComponent* A
 	{
 		GameplayTagPropertyMap.Initialize(this, ASC);
 		bAbilitySystemBound = true;
+		BoundASC = ASC;
 	}
 }
 
@@ -37,6 +39,8 @@ void UknightAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	{
 		InitializeWithAbilitySystem(UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwningActor()));
 	}
+
+	bTwoHandedStance = BoundASC.IsValid() && BoundASC->HasMatchingGameplayTag(knightGameplayTags::State_Stance_TwoHanded);
 
 	const ACharacter* const Character = Cast<ACharacter>(GetOwningActor());
 	const UCharacterMovementComponent* const Movement = Character ? Character->GetCharacterMovement() : nullptr;
