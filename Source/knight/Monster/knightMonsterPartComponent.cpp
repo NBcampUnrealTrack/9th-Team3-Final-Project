@@ -282,6 +282,16 @@ void UknightMonsterPartComponent::BreakPart(int32 PartIndex, AActor* BreakInstig
 		{
 			ASC->AddLooseGameplayTags(Definition->GrantedTagsOnBreak);
 		}
+		if (PartData)
+		{
+			for (const FknightMonsterPartBreakCombo& Combo : PartData->BreakCombos)
+			{
+				if (!Combo.RequiredTags.IsEmpty() && ASC->HasAllMatchingGameplayTags(Combo.RequiredTags) && !ASC->HasAllMatchingGameplayTags(Combo.GrantedTags))
+				{
+					ASC->AddLooseGameplayTags(Combo.GrantedTags);
+				}
+			}
+		}
 
 		FGameplayCueParameters CueParams;
 		CueParams.Location = BreakLocation;
