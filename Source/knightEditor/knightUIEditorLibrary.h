@@ -114,14 +114,19 @@ public:
 		TSubclassOf<UCommonTextStyle> TitleStyle, TSubclassOf<UCommonTextStyle> BodyStyle, TSubclassOf<UCommonTextStyle> BodyDimStyle,
 		TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> WarningStyle, TSubclassOf<UCommonTextStyle> NumberStyle);
 
-	/** Designer-editable maintenance screen: inventory/craft left, clear camera view center, two stat pages right. */
+	/**
+	 * WBP_KnightMaintenance: 제목 왼쪽 위, 왼쪽 패널(분류 탭, 부위 탭, 목록), 가운데는 메카가 보이게 비우고,
+	 * 오른쪽 패널 한 장(선택 장비 상세, Q/E 정보 탭 [스펙|세트|재료], 실행 버튼). 제작 확인 창이 위에 겹친다.
+	 */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
 	static bool BuildMaintenanceScreen(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> ButtonClass,
-		TSubclassOf<UCommonTextStyle> TitleStyle, TSubclassOf<UCommonTextStyle> BodyStyle);
+		TSubclassOf<UCommonButtonStyle> TabStyle, TSubclassOf<UCommonButtonStyle> CompactTabStyle, TSubclassOf<UCommonButtonStyle> SecondaryButtonStyle,
+		TSubclassOf<UCommonTextStyle> TitleStyle, TSubclassOf<UCommonTextStyle> SubheadStyle, TSubclassOf<UCommonTextStyle> BodyStyle,
+		TSubclassOf<UCommonTextStyle> BodyDimStyle, TSubclassOf<UCommonTextStyle> CaptionStyle);
 
-	/** One selectable equipment or recipe row, with icon/name/equipped state. */
+	/** 정비 목록 한 줄: 아이콘 틀, 이름, 오른쪽 상태 배지(1px 틀). 선택 표시는 버튼 스타일이 맡는다. */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
-	static bool BuildMaintenanceEntry(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> BodyStyle);
+	static bool BuildMaintenanceEntry(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> BodyStyle, TSubclassOf<UCommonTextStyle> CaptionStyle);
 
 	/** WBP_KnightLoadingScreen: 검은 배경, 가운데 마크와 팁 한 줄, 오른쪽 아래 점 세 개. */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
