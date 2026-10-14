@@ -9,9 +9,10 @@ void FMechPartAttachment::Apply(UMeshComponent* PartMesh, USkeletalMeshComponent
 		return;
 	}
 	USkeletalMeshComponent* const SkeletalPart = Cast<USkeletalMeshComponent>(PartMesh);
+	// 붙일 때 메카의 크기(액터 배율)를 이어받는다. 메카를 키우면 파츠도 같이 커진다.
 	if (AttachMode == EMechPartAttachMode::LeaderPose && SkeletalPart)
 	{
-		PartMesh->AttachToComponent(MechMesh, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+		PartMesh->AttachToComponent(MechMesh, FAttachmentTransformRules::SnapToTargetIncludingScale);
 		SkeletalPart->SetLeaderPoseComponent(MechMesh);
 		return;
 	}
@@ -21,6 +22,6 @@ void FMechPartAttachment::Apply(UMeshComponent* PartMesh, USkeletalMeshComponent
 	{
 		SkeletalPart->SetLeaderPoseComponent(nullptr);
 	}
-	PartMesh->AttachToComponent(MechMesh, FAttachmentTransformRules::SnapToTargetNotIncludingScale, AttachSocket);
+	PartMesh->AttachToComponent(MechMesh, FAttachmentTransformRules::SnapToTargetIncludingScale, AttachSocket);
 	PartMesh->SetRelativeTransform(RelativeTransform);
 }
