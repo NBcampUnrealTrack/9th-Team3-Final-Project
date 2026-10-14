@@ -103,9 +103,24 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Motion Warping", meta=(ClampMin=0, Units="cm"))
 	float MaxWarpDistance = 300.f;
 
+	/**
+	 * (2026-10-14) 코드 돌진(StartAttackLunge)을 쓸지. 공격 애니에 앞으로 가는 루트 모션이 있으면 끈다.
+	 * 루트 모션 + 모션 워핑 위에 코드 돌진까지 겹치면 이동이 두 번 들어가 순간 이동처럼 미끄러진다.
+	 * 제자리 공격 애니(루트 모션 없음)일 때만 켠다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Motion Warping")
+	bool bLungeWithCode = false;
+
 	/** The lunge toward the warp location takes at most this long and ends with the warp window (the first trace). */
-	UPROPERTY(EditDefaultsOnly, Category="Attack|Motion Warping", meta=(ClampMin=0.05, Units="s"))
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Motion Warping", meta=(ClampMin=0.05, Units="s", EditCondition="bLungeWithCode"))
 	float MaxLungeTime = 0.35f;
+
+	/**
+	 * (2026-10-14) 공격 중 애니 루트 모션 이동 거리 배율(ACharacter::AnimRootMotionTranslationScale).
+	 * 1 = 애니 그대로, 0.5 = 절반만 나아간다. 공격이 끝나면 1로 되돌린다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Motion Warping", meta=(ClampMin=0, ClampMax=2))
+	float RootMotionTranslationScale = 1.f;
 
 	/** The warp stops this far in front of the target's surface (or part point), so the blade lands instead of the body. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Motion Warping", meta=(ClampMin=0, Units="cm"))
@@ -171,6 +186,9 @@ private:
 	FTimerHandle MoveCancelTimer;
 	FTimerHandle DrawTimer;
 	bool bAttackStarted = false;
+
+	/** 이 공격이 루트 모션 배율을 바꿨는지. 끝날 때 1로 되돌린다. */
+	bool bRootMotionScaleApplied = false;
 
 	/** 이번 발동이 검을 뽑기만 하는지(공격 없음). 비용을 내기 전에 정한다. */
 	bool bDrawOnlyActivation = false;
