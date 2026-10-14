@@ -9,10 +9,10 @@
 namespace
 {
 	// 스타일 가이드 색 (sRGB → 선형).
-	const FLinearColor Frost(FColor(0xA8, 0xC8, 0xF0));
+	const FLinearColor GlobeFrost(FColor(0xA8, 0xC8, 0xF0));
 	const FLinearColor FrostDim(FColor(0x5F, 0x7F, 0xA8));
-	const FLinearColor White(FColor(0xF4, 0xF8, 0xFC));
-	const FLinearColor Ember(FColor(0xFF, 0x7A, 0x1A));
+	const FLinearColor GlobeWhite(FColor(0xF4, 0xF8, 0xFC));
+	const FLinearColor GlobeEmber(FColor(0xFF, 0x7A, 0x1A));
 
 	/** Clicks that move less than this are clicks, not drags. Slate units. */
 	constexpr float ClickSlop = 4.f;
@@ -302,7 +302,7 @@ int32 UKnightStageGlobeWidget::NativePaint(const FPaintArgs& Args, const FGeomet
 	}
 
 	FSlateFontInfo Font;
-	FLinearColor LabelColor = Frost;
+	FLinearColor LabelColor = GlobeFrost;
 	if (const UCommonTextStyle* const Style = LabelTextStyle ? LabelTextStyle->GetDefaultObject<UCommonTextStyle>() : nullptr)
 	{
 		Style->GetFont(Font);
@@ -344,7 +344,7 @@ int32 UKnightStageGlobeWidget::NativePaint(const FPaintArgs& Args, const FGeomet
 			SelectedPosition = Projected.Position;
 			bSelectedVisible = Projected.Depth > 0.1f;
 		}
-		const FLinearColor Color = Marker.bLocked ? FrostDim : (bSelected ? Ember : (bHovered ? White : Frost));
+		const FLinearColor Color = Marker.bLocked ? FrostDim : (bSelected ? GlobeEmber : (bHovered ? GlobeWhite : GlobeFrost));
 		const float HalfSize = bSelected || bHovered ? 9.f : 7.f;
 
 		AddDiamond(Points, Projected.Position, HalfSize);
@@ -364,7 +364,7 @@ int32 UKnightStageGlobeWidget::NativePaint(const FPaintArgs& Args, const FGeomet
 				Ring.Add(FVector2f(Projected.Position) + FVector2f(FMath::Cos(Angle), FMath::Sin(Angle)) * RingRadius);
 			}
 			FSlateDrawElement::MakeLines(OutDrawElements, LayerId, AllottedGeometry.ToPaintGeometry(), Ring, ESlateDrawEffect::None,
-				WithAlpha(Ember, Fade * (1.f - Phase)), true, 1.5f);
+				WithAlpha(GlobeEmber, Fade * (1.f - Phase)), true, 1.5f);
 		}
 
 		if (!Marker.Label.IsEmpty() && Font.FontObject)
@@ -372,7 +372,7 @@ int32 UKnightStageGlobeWidget::NativePaint(const FPaintArgs& Args, const FGeomet
 			const FVector2D TextSize = Measure->Measure(Marker.Label, Font);
 			const bool bLabelLeft = bSelected && bHasTarget && TopLeft.X > Projected.Position.X;
 			const FVector2f TextPosition(Projected.Position + FVector2D(bLabelLeft ? -16.f - TextSize.X : 16.f, -TextSize.Y * 0.5f));
-			const FLinearColor TextColor = bSelected ? Ember : (bHovered ? White : LabelColor);
+			const FLinearColor TextColor = bSelected ? GlobeEmber : (bHovered ? GlobeWhite : LabelColor);
 			FSlateDrawElement::MakeText(OutDrawElements, LayerId, AllottedGeometry.ToPaintGeometry(FVector2f(TextSize), FSlateLayoutTransform(TextPosition)),
 				Marker.Label, Font, ESlateDrawEffect::None, WithAlpha(TextColor, Fade * (bSelected || bHovered ? 1.f : 0.75f)));
 		}
@@ -389,7 +389,7 @@ int32 UKnightStageGlobeWidget::NativePaint(const FPaintArgs& Args, const FGeomet
 		const FVector2f Start(SelectedPosition);
 		const FVector2f Direction = (Elbow - Start).GetSafeNormal();
 		Points = { Start + Direction * 12.f, Elbow, Anchor };
-		FSlateDrawElement::MakeLines(OutDrawElements, LayerId, AllottedGeometry.ToPaintGeometry(), Points, ESlateDrawEffect::None, WithAlpha(Ember, 0.9f * Opacity), true, 1.5f);
+		FSlateDrawElement::MakeLines(OutDrawElements, LayerId, AllottedGeometry.ToPaintGeometry(), Points, ESlateDrawEffect::None, WithAlpha(GlobeEmber, 0.9f * Opacity), true, 1.5f);
 	}
 	return LayerId;
 }
