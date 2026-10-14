@@ -169,4 +169,5 @@ private:
 	/** 이번 돌진 방향(수평 단위 벡터). */
 	FVector LungeDirection = FVector::ZeroVector;
 	bool bStrikeStarted = false;
+
 };
