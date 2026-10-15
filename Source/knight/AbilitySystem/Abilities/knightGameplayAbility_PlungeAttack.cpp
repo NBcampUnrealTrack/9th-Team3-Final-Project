@@ -3,6 +3,7 @@
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "AbilitySystemComponent.h"
+#include "AbilitySystem/Abilities/knightGameplayAbility_StanceSwitch.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
 #include "Camera/CameraShakeBase.h"
@@ -41,6 +42,8 @@ UknightGameplayAbility_PlungeAttack::UknightGameplayAbility_PlungeAttack(const F
 	CancelAbilitiesWithTag.AddTag(knightGameplayTags::Ability_Boost_Flight);
 	StaminaCost = 20.f;
 	ThrusterSockets = { TEXT("thruster_l"), TEXT("thruster_r") };
+	// (2026-10-15) 추진기를 쓰는 동안 State.Boosting → 전투 자세(CombatStance 트리거)로 들어간다.
+	ActivationOwnedTags.AddTag(knightGameplayTags::State_Boosting);
 }
 
 void UknightGameplayAbility_PlungeAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
@@ -63,10 +66,28 @@ void UknightGameplayAbility_PlungeAttack::ActivateAbility(const FGameplayAbility
 
 	FaceMoveInputDirection();
 
-	// 낙하 모드는 그대로 두고 중력·공중 조작을 끈다(애님은 공중 자세 유지). 속도는 Tick이 정한다.
+	// (2026-10-15) 한손 스탠스면 한손 몽타주 (비어 있는 것은 양손용).
+	const bool bOneHanded = !UknightGameplayAbility_StanceSwitch::IsTwoHanded(GetAbilitySystemComponentFromActorInfo());
+	ActiveStartMontage = bOneHanded && OneHandedStartMontage ? OneHandedStartMontage.Get() : StartMontage.Get();
+	ActiveLoopMontage = bOneHanded && OneHandedLoopMontage ? OneHandedLoopMontage.Get() : LoopMontage.Get();
+	ActiveEndMontage = bOneHanded && OneHandedEndMontage ? OneHandedEndMontage.Get() : EndMontage.Get();
+	ActiveLeapPoseMontage = bOneHanded && OneHandedLeapPoseMontage ? OneHandedLeapPoseMontage.Get() : LeapPoseMontage.Get();
+
 	SavedGravityScale = Movement->GravityScale;
 	SavedAirControl = Movement->AirControl;
 	bMovementSaved = true;
+	if (bLeapToTarget)
+	{
+		// (2026-10-15) 점프 베기: 중력은 두고 대상 앞 땅으로 뛰어간다.
+		Movement->AirControl = 0.f;
+		UAbilityTask_WaitGameplayEvent* const LeapHitTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, knightGameplayTags::Event_Melee_Hit, nullptr, false, true);
+		LeapHitTask->EventReceived.AddDynamic(this, &ThisClass::OnMeleeHitEvent);
+		LeapHitTask->ReadyForActivation();
+		StartLeap();
+		return;
+	}
+
+	// 낙하 모드는 그대로 두고 중력·공중 조작을 끈다(애님은 공중 자세 유지). 속도는 Tick이 정한다.
 	Movement->GravityScale = 0.f;
 	Movement->AirControl = 0.f;
 	Movement->Velocity = FVector(Movement->Velocity.X * 0.3f, Movement->Velocity.Y * 0.3f, BoostUpSpeed);
@@ -78,7 +99,7 @@ void UknightGameplayAbility_PlungeAttack::ActivateAbility(const FGameplayAbility
 	// 반동: 발 추진기가 아래로 짧게 터지며 살짝 떠오른다.
 	Phase = EPhase::Boost;
 	PhaseStartTime = World->GetTimeSeconds();
-	PlayMontage(StartMontage, false);
+	PlayMontage(ActiveStartMontage, false);
 	bThrustersReversed = false;
 	SpawnThrusters(BoostThrusterScale);
 	if (BoostSound)
@@ -216,13 +237,80 @@ void UknightGameplayAbility_PlungeAttack::StartDive()
 	// 역분사: 추진기를 위로 뒤집어 뿜으며 아래로 가속한다.
 	Phase = EPhase::Dive;
 	PhaseStartTime = World->GetTimeSeconds();
-	PlayMontage(LoopMontage, false);
+	PlayMontage(ActiveLoopMontage, false);
 	bThrustersReversed = true;
 	SpawnThrusters(DiveThrusterScale);
 	if (DiveSound)
 	{
 		UGameplayStatics::PlaySoundAtLocation(Character, DiveSound, Character->GetActorLocation());
 	}
+}
+
+void UknightGameplayAbility_PlungeAttack::StartLeap()
+{
+	ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	UCharacterMovementComponent* const Movement = Character ? Character->GetCharacterMovement() : nullptr;
+	UWorld* const World = GetWorld();
+	if (!Character || !Movement || !World)
+	{
+		return;
+	}
+	const FVector Start = Character->GetActorLocation();
+	FVector Destination;
+	FRotator AimRotation;
+	float Travel = 0.f;
+	if (MaxAimDistance > 0.f && UknightCombatLibrary::ComputeAttackWarp(Character, MaxAimDistance, AimStopDistance, true, SoftTargetRange,
+		SoftTargetAngle, Destination, AimRotation, Travel))
+	{
+		Character->SetActorRotation(FRotator(0.f, AimRotation.Yaw, 0.f));
+	}
+	else
+	{
+		Destination = Start + Character->GetActorForwardVector().GetSafeNormal2D() * LeapNoTargetDistance;
+	}
+
+	// 도착 높이: 도착 지점 아래 땅 + 캡슐 반 높이. 땅을 못 찾으면 지금 높이에서 내려간다고 본다.
+	const float HalfHeight = Character->GetCapsuleComponent() ? Character->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() : 90.f;
+	FHitResult Ground;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(knightLeapGround), false, Character);
+	const FVector Probe(Destination.X, Destination.Y, FMath::Max(Start.Z, Destination.Z) + 300.f);
+	// 지형·정적 메시만 본다(큰 몬스터 몸 위를 땅으로 잡지 않게).
+	const double TargetZ = World->LineTraceSingleByObjectType(Ground, Probe, Probe - FVector(0.f, 0.f, 20000.f),
+		FCollisionObjectQueryParams(ECC_WorldStatic), Params) ? Ground.ImpactPoint.Z + HalfHeight : Start.Z - 200.0;
+
+	FVector Horizontal = Destination - Start;
+	Horizontal.Z = 0.f;
+	const float Distance = Horizontal.Size();
+	const float Time = FMath::Clamp(Distance / FMath::Max(LeapSpeed, 1.f), MinLeapTime, MaxLeapTime);
+	const float Gravity = -Movement->GetGravityZ();
+	// 포물선: Time 뒤에 TargetZ에 닿는 수직 출발 속도.
+	const float VerticalSpeed = static_cast<float>((TargetZ - Start.Z) + 0.5 * Gravity * Time * Time) / Time;
+	LeapHorizontalVelocity = Horizontal / Time;
+	Movement->Velocity = LeapHorizontalVelocity + FVector(0.f, 0.f, VerticalSpeed);
+
+	Phase = EPhase::Leap;
+	PhaseStartTime = World->GetTimeSeconds();
+	LeapDuration = Time;
+	LeapDestination = FVector(Destination.X, Destination.Y, TargetZ);
+	// 뛰어가는 동안은 점프 자세, 도착 지점에서 LeapSwingDistance 안으로 들어오면 휘두른다.
+	bLeapSwingStarted = !ActiveLeapPoseMontage || GetLeapRemainingDistance() <= LeapSwingDistance;
+	PlayMontage(bLeapSwingStarted ? ActiveStartMontage.Get() : ActiveLeapPoseMontage.Get(), false);
+	if (ThrusterEffect)
+	{
+		bThrustersReversed = false;
+		SpawnThrusters(BoostThrusterScale);
+	}
+	if (BoostSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(Character, BoostSound, Start);
+	}
+	World->GetTimerManager().SetTimer(TickTimer, this, &ThisClass::TickPlunge, PlungeTickInterval, true);
+}
+
+float UknightGameplayAbility_PlungeAttack::GetLeapRemainingDistance() const
+{
+	const AActor* const Avatar = GetAvatarActorFromActorInfo();
+	return Avatar ? static_cast<float>(FVector::Dist(Avatar->GetActorLocation(), LeapDestination)) : 0.f;
 }
 
 void UknightGameplayAbility_PlungeAttack::TickPlunge()
@@ -273,9 +361,48 @@ void UknightGameplayAbility_PlungeAttack::TickPlunge()
 		// 낙하 동작은 짧은 루프라, 끝나면 다시 튼다.
 		if (UAnimInstance* const Anim = Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr)
 		{
-			if (!Anim->Montage_IsPlaying(LoopMontage))
+			if (!Anim->Montage_IsPlaying(ActiveLoopMontage))
 			{
-				Anim->Montage_Play(LoopMontage, PlayRate * GetAttackSpeed());
+				Anim->Montage_Play(ActiveLoopMontage, PlayRate * GetAttackSpeed());
+			}
+		}
+		break;
+	}
+	case EPhase::Leap:
+	{
+		// 출발 후 잠깐은 아직 땅에 붙어 있을 수 있어 착지 검사를 미룬다.
+		if (Elapsed > 0.1f && !Movement->IsFalling())
+		{
+			StartLand();
+			break;
+		}
+		if (Elapsed > MaxDiveTime)
+		{
+			EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, true);
+			break;
+		}
+		// 수평 속도는 고정(도착 지점에 맞게), 수직은 중력이 맡는다.
+		Movement->Velocity.X = LeapHorizontalVelocity.X;
+		Movement->Velocity.Y = LeapHorizontalVelocity.Y;
+		if (UAnimInstance* const Anim = Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr)
+		{
+			if (!bLeapSwingStarted)
+			{
+				if (GetLeapRemainingDistance() <= LeapSwingDistance)
+				{
+					// 대상 가까이: 휘두르기.
+					bLeapSwingStarted = true;
+					PlayMontage(ActiveStartMontage, false);
+				}
+				else if (!Anim->Montage_IsPlaying(ActiveLeapPoseMontage))
+				{
+					Anim->Montage_Play(ActiveLeapPoseMontage, 1.f);
+				}
+			}
+			// 휘두르기가 끝나면 착지할 때까지 낙하 자세를 반복한다.
+			else if (!Anim->Montage_IsPlaying(ActiveStartMontage) && !Anim->Montage_IsPlaying(ActiveLoopMontage))
+			{
+				Anim->Montage_Play(ActiveLoopMontage, PlayRate * GetAttackSpeed());
 			}
 		}
 		break;
@@ -339,7 +466,7 @@ void UknightGameplayAbility_PlungeAttack::StartLand()
 	ResetLean();
 	RestoreMovement();
 	// 착지 흔들림·착지 경직은 무브먼트 컴포넌트가 떨어진 속도로 이미 처리했다. 여기서는 내려찍는 동작과 타격.
-	PlayMontage(EndMontage, true);
+	PlayMontage(ActiveEndMontage, true);
 	if (World)
 	{
 		const float Rate = FMath::Max(PlayRate * GetAttackSpeed(), 0.01f);
@@ -449,8 +576,12 @@ void UknightGameplayAbility_PlungeAttack::EndAbility(const FGameplayAbilitySpecH
 		const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
 		if (UAnimInstance* const Anim = Character && Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr)
 		{
-			Anim->Montage_Stop(0.2f, StartMontage);
-			Anim->Montage_Stop(0.2f, LoopMontage);
+			Anim->Montage_Stop(0.2f, ActiveStartMontage);
+			Anim->Montage_Stop(0.2f, ActiveLoopMontage);
+			if (ActiveLeapPoseMontage)
+			{
+				Anim->Montage_Stop(0.2f, ActiveLeapPoseMontage);
+			}
 		}
 	}
 	Phase = EPhase::None;

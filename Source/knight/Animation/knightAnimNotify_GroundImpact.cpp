@@ -3,6 +3,7 @@
 #include "Camera/knightPlayerCameraManager.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
+#include "Environment/knightWaterRippleSubsystem.h"
 #include "GameFramework/PlayerController.h"
 #include "NiagaraFunctionLibrary.h"
 
@@ -23,7 +24,23 @@ void UknightAnimNotify_GroundImpact::Notify(USkeletalMeshComponent* MeshComp, UA
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(knightGroundImpact), false, MeshComp->GetOwner());
 	const bool bGround = World->LineTraceSingleByObjectType(Hit, Source + FVector(0.f, 0.f, 300.f), Source - FVector(0.f, 0.f, MaxGroundDistance),
 		FCollisionObjectQueryParams(ECC_WorldStatic), Params);
-	if (bGround)
+
+	// 얕은 물 아래 바닥을 찍었으면 수면에서 터뜨리고 물결을 낸다.
+	float SurfaceZ = 0.f;
+	if (UknightWaterRippleSubsystem::FindWaterSurface(World, Source, SurfaceZ) && Source.Z - SurfaceZ <= MaxGroundDistance
+		&& (!bGround || Hit.ImpactPoint.Z <= SurfaceZ + 1.f))
+	{
+		Epicenter = FVector(Source.X, Source.Y, SurfaceZ);
+		if (UNiagaraSystem* const Splash = WaterSplash ? WaterSplash.Get() : Dust.Get())
+		{
+			UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, Splash, Epicenter, FRotator::ZeroRotator, FVector(WaterSplash ? WaterSplashScale : DustScale), true, true, ENCPoolMethod::AutoRelease);
+		}
+		if (UknightWaterRippleSubsystem* const Ripples = World->GetSubsystem<UknightWaterRippleSubsystem>())
+		{
+			Ripples->AddImpulse(Epicenter, RippleRadius, RippleDepth);
+		}
+	}
+	else if (bGround)
 	{
 		Epicenter = Hit.ImpactPoint;
 		if (Dust)

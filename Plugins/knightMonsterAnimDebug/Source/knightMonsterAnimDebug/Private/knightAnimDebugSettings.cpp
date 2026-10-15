@@ -1,6 +1,7 @@
 #include "knightAnimDebugSettings.h"
 
 #include "Abilities/GameplayAbility.h"
+#include "Animation/AnimNotifies/AnimNotifyState.h"
 #include "GameFramework/Pawn.h"
 
 UknightAnimDebugSettings::UknightAnimDebugSettings()
@@ -52,4 +53,7 @@ UknightAnimDebugSettings::UknightAnimDebugSettings()
 	TraceStartSocketProperty = TEXT("StartSocket");
 	TraceEndSocketProperty = TEXT("EndSocket");
 	TraceRadiusProperty = TEXT("Radius");
+	PlayRateNotifyClass = TSoftClassPtr<UAnimNotifyState>(FSoftObjectPath(TEXT("/Script/knight.knightAnimNotifyState_PlayRate")));
+	PlayRateProperty = TEXT("PlayRate");
+	HitMarkerNotifyKeywords = { TEXT("GroundImpact") };
 }

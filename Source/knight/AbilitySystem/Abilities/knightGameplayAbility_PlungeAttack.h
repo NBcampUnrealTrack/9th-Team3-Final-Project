@@ -53,6 +53,16 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Plunge|Montage")
 	TObjectPtr<UAnimMontage> EndMontage;
 
+	/** (2026-10-15) 한손 스탠스용. 비어 있는 것은 양손용(위)을 쓴다. 스탠스는 발동할 때 한 번 정한다. */
+	UPROPERTY(EditDefaultsOnly, Category="Plunge|Montage")
+	TObjectPtr<UAnimMontage> OneHandedStartMontage;
+
+	UPROPERTY(EditDefaultsOnly, Category="Plunge|Montage")
+	TObjectPtr<UAnimMontage> OneHandedLoopMontage;
+
+	UPROPERTY(EditDefaultsOnly, Category="Plunge|Montage")
+	TObjectPtr<UAnimMontage> OneHandedEndMontage;
+
 	UPROPERTY(EditDefaultsOnly, Category="Plunge|Montage", meta=(ClampMin=0.01))
 	float PlayRate = 1.f;
 
@@ -100,6 +110,42 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category="Plunge|Motion", meta=(ClampMin=0.1))
 	float LeanSpeed = 14.f;
+
+	/**
+	 * (2026-10-15) 점프 베기 모드 (GA_Knight_JumpAttack). 켜면 반동·역분사 대신, 대상(락온) 앞 땅으로 포물선을 그리며 뛰어간다.
+	 * 뛰는 동안 StartMontage(휘두르기) → LoopMontage, 착지하면 EndMontage. 중력은 그대로 두고 출발 속도만 정한다.
+	 * 거리는 MaxAimDistance까지, 도착은 대상 표면에서 AimStopDistance 앞.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Plunge|Leap")
+	bool bLeapToTarget = false;
+
+	/** 뛰어가는 수평 속도. 비행 시간 = 거리 / LeapSpeed (MinLeapTime~MaxLeapTime). */
+	UPROPERTY(EditDefaultsOnly, Category="Plunge|Leap", meta=(ClampMin=100, Units="CentimetersPerSecond", EditCondition="bLeapToTarget"))
+	float LeapSpeed = 1600.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Plunge|Leap", meta=(ClampMin=0.1, Units="s", EditCondition="bLeapToTarget"))
+	float MinLeapTime = 0.5f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Plunge|Leap", meta=(ClampMin=0.1, Units="s", EditCondition="bLeapToTarget"))
+	float MaxLeapTime = 1.1f;
+
+	/** 뛰어가는 동안의 자세 (칼을 든 점프 루프). 도착 지점까지 LeapSwingDistance 안으로 들어오면 StartMontage(휘두르기)로 바꾼다. 비우면 출발하며 바로 휘두른다. */
+	UPROPERTY(EditDefaultsOnly, Category="Plunge|Leap", meta=(EditCondition="bLeapToTarget"))
+	TObjectPtr<UAnimMontage> LeapPoseMontage;
+
+	UPROPERTY(EditDefaultsOnly, Category="Plunge|Leap", meta=(EditCondition="bLeapToTarget"))
+	TObjectPtr<UAnimMontage> OneHandedLeapPoseMontage;
+
+	/**
+	 * 도착 지점(대상 표면에서 AimStopDistance 앞)까지 남은 거리가 이만큼 이하가 되면 휘두른다.
+	 * 거리 기준이라 멀리서 뛰든 가까이서 뛰든 대상 앞 같은 곳에서 휘두른다. 출발할 때 이미 안이면 바로 휘두른다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Plunge|Leap", meta=(ClampMin=0, Units="cm", EditCondition="bLeapToTarget"))
+	float LeapSwingDistance = 300.f;
+
+	/** 대상이 없을 때 앞으로 뛰는 거리. */
+	UPROPERTY(EditDefaultsOnly, Category="Plunge|Leap", meta=(ClampMin=0, Units="cm", EditCondition="bLeapToTarget"))
+	float LeapNoTargetDistance = 300.f;
 
 	/** 이 거리 안의 대상(락온, 없으면 앞쪽 가까운 적) 근처로 떨어진다. 0이면 노리지 않는다. */
 	UPROPERTY(EditDefaultsOnly, Category="Plunge|Aim", meta=(ClampMin=0, Units="cm"))
@@ -158,9 +204,19 @@ protected:
 	FknightMeleeHitParams HitParams;
 
 private:
-	enum class EPhase : uint8 { None, Boost, Dive, Land };
+	enum class EPhase : uint8 { None, Boost, Dive, Leap, Land };
 
 	void StartDive();
+	/** 점프 베기: 대상 앞 땅으로 포물선 도약. */
+	void StartLeap();
+	FVector LeapHorizontalVelocity = FVector::ZeroVector;
+	float LeapDuration = 0.f;
+	FVector LeapDestination = FVector::ZeroVector;
+	/** 도착 지점까지 남은 거리(3D). */
+	float GetLeapRemainingDistance() const;
+	bool bLeapSwingStarted = false;
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimMontage> ActiveLeapPoseMontage;
 	void TickPlunge();
 	void StartLand();
 	void OnImpact();
@@ -184,6 +240,16 @@ private:
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UNiagaraComponent>> ThrusterComponents;
+
+	// 이번 발동에서 쓰는 몽타주 (발동할 때 스탠스로 고른다).
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimMontage> ActiveStartMontage;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimMontage> ActiveLoopMontage;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimMontage> ActiveEndMontage;
 
 	FTimerHandle PhaseTimer;
 	FTimerHandle TickTimer;

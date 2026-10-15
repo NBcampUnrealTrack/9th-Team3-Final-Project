@@ -57,6 +57,16 @@ bool UknightGameplayAbility_BoostDash::CanActivateAbility(const FGameplayAbility
 	{
 		return false;
 	}
+	// (2026-10-15) 방향키 없이 누르면 나가지 않는다(백스텝 없음).
+	if (bRequireMoveInput)
+	{
+		const ACharacter* const Character = ActorInfo ? Cast<ACharacter>(ActorInfo->AvatarActor.Get()) : nullptr;
+		const UCharacterMovementComponent* const Movement = Character ? Character->GetCharacterMovement() : nullptr;
+		if (!Movement || Movement->GetLastInputVector().IsNearlyZero())
+		{
+			return false;
+		}
+	}
 	// 이미 대시 중이면 경직 중일 때만 다시 발동(새 대시로 다시 시작)을 허용한다. 이동 도중에는 끊지 않는다.
 	if (IsActive() && !bInRecovery)
 	{
