@@ -27,16 +27,16 @@ namespace knightAnimCoverage
 		return Names.IsEmpty() ? FString(TEXT("없음")) : FString::Join(Names, TEXT(", "));
 	}
 
-	/** 주 몽타주의 길이·판정 정렬 검사. 시간은 모두 어빌리티 시간(몽타주 시간 ÷ RateScale)으로 비교한다. */
+	/** 주 몽타주의 길이·판정 정렬 검사. 시간은 모두 어빌리티 시간(RateScale과 구간 속도를 반영한 실제 초)으로 비교한다. */
 	static void CheckPrimaryMontage(const FknightAbilityAnimInfo& Ability, const UAnimMontage& Montage, FknightAnimCoverageRow& Row)
 	{
 		const UknightAnimDebugSettings* const Settings = GetDefault<UknightAnimDebugSettings>();
-		const float Rate = GetMontageRate(&Montage);
-		const float Length = Montage.GetPlayLength() / Rate;
+		const FknightMontageTimeMap TimeMap = MakeTimeMap(&Montage);
+		const float Length = TimeMap.GetRealLength();
 
 		TArray<FknightHitWindow> Windows;
 		GetHitWindows(&Montage, Windows);
-		const float FirstHitStart = Windows.IsEmpty() ? -1.f : Windows[0].Start / Rate;
+		const float FirstHitStart = Windows.IsEmpty() ? -1.f : TimeMap.ToReal(Windows[0].Start);
 
 		// 반응의 유지 몽타주는 루프하거나 마지막 포즈로 버티는 게 정상이라 길이 검사는 공격에만 한다.
 		if (Ability.bIsAttack && Ability.PhaseTotal > 0.f && Length + 0.05f < Ability.PhaseTotal)
