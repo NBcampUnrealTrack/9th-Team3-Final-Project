@@ -46,6 +46,17 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Demo")
 	TArray<TObjectPtr<UAnimMontage>> MontagesWithoutTwoHandIK;
 
+	/**
+	 * (2026-10-15) 칼을 등에 멘 비전투 이동(BS_Knight_Locomotion)의 속도 입력. 공중(점프·체공)에서는 0으로 가서
+	 * 체공 중 수평으로 떠돌아도 걷는 동작이 나오지 않는다(예전 ABP처럼 선 자세).
+	 */
+	UPROPERTY(BlueprintReadOnly, Category="Knight|Demo")
+	float RelaxedLocomotionSpeed = 0.f;
+
+	/** RelaxedLocomotionSpeed 보간 속도. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Demo")
+	float RelaxedSpeedInterpSpeed = 8.f;
+
 private:
 	void SetBoolVar(FName Name, bool bValue);
 	void SetFloatVar(FName Name, double Value);

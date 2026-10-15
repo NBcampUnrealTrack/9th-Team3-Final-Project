@@ -80,6 +80,9 @@ void UknightDemoAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	const double SpeedLength = FMath::FInterpTo(GetFloatVar(TEXT("Speed(Length)")), Vel.Size(), DeltaSeconds, SpeedLengthInterpSpeed);
 
 	SetBoolVar(TEXT("IsInAir"), Movement->IsFalling());
+	// 비전투 이동 속도: 공중에서는 0 (체공 중 걷지 않게).
+	RelaxedLocomotionSpeed = FMath::FInterpTo(RelaxedLocomotionSpeed, Movement->IsFalling() ? 0.f : static_cast<float>(Vel.Size2D()),
+		DeltaSeconds, RelaxedSpeedInterpSpeed);
 	SetBoolVar(TEXT("isAccelerating"), bAccelerating);
 	SetFloatVar(TEXT("Speed_X"), SpeedX);
 	SetFloatVar(TEXT("Speed_Y"), SpeedY);

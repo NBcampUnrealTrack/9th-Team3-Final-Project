@@ -4,6 +4,7 @@
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "AbilitySystemComponent.h"
+#include "AbilitySystem/Abilities/knightGameplayAbility_StanceSwitch.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
 #include "Camera/CameraShakeBase.h"
@@ -39,6 +40,14 @@ UknightGameplayAbility_BoostLunge::UknightGameplayAbility_BoostLunge(const FObje
 	FootThrusterSockets = { TEXT("thruster_l"), TEXT("thruster_r") };
 	// 공중 돌진이면 체공을 끝내고 날아간다(내려찍기와 같은 규칙). 땅에서는 체공이 없어 아무 일도 없다.
 	CancelAbilitiesWithTag.AddTag(knightGameplayTags::Ability_Boost_Flight);
+	// (2026-10-15) 부스터를 쓰는 동안 State.Boosting → 전투 자세(CombatStance 트리거)로 들어간다.
+	// 없으면 몽타주의 Attach Weapon으로 칼만 손에 들리고 비전투 자세가 되어, 칼이 뜨고 넣지도 않았다.
+	ActivationOwnedTags.AddTag(knightGameplayTags::State_Boosting);
+}
+
+UAnimMontage* UknightGameplayAbility_BoostLunge::PickStanceMontage(UAnimMontage* const TwoHanded, UAnimMontage* const OneHanded) const
+{
+	return OneHanded && !UknightGameplayAbility_StanceSwitch::IsTwoHanded(GetAbilitySystemComponentFromActorInfo()) ? OneHanded : TwoHanded;
 }
 
 void UknightGameplayAbility_BoostLunge::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
@@ -94,17 +103,18 @@ void UknightGameplayAbility_BoostLunge::ActivateAbility(const FGameplayAbilitySp
 		return;
 	}
 
-	if (DashMontage)
+	ActiveDashMontage = PickStanceMontage(DashMontage, OneHandedDashMontage);
+	if (UAnimMontage* const Dash = ActiveDashMontage)
 	{
 		if (UAnimInstance* const Anim = Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr)
 		{
-			Anim->Montage_Play(DashMontage, DashPlayRate * GetAttackSpeed());
+			Anim->Montage_Play(Dash, DashPlayRate * GetAttackSpeed());
 			// 돌진 자세는 베기가 시작될 때까지 반복한다. 공중 돌진 자세(Plunge_Hold)는 0.33초짜리라
 			// 돌진(최대 0.6초)보다 먼저 끝나서 중간에 기본 공중 자세로 끊겼다. (2026-10-13)
-			const FName DashSection = DashMontage->GetSectionName(0);
+			const FName DashSection = Dash->GetSectionName(0);
 			if (DashSection != NAME_None)
 			{
-				Anim->Montage_SetNextSection(DashSection, DashSection, DashMontage);
+				Anim->Montage_SetNextSection(DashSection, DashSection, Dash);
 			}
 		}
 	}
@@ -173,7 +183,7 @@ void UknightGameplayAbility_BoostLunge::OnLungeFinished()
 	UknightCombatLibrary::SetAttackWarpTarget(GetAvatarActorFromActorInfo(), WarpTargetName, StopDistance, StopDistance, false, 0.f, 0.f);
 
 	UAbilityTask_PlayMontageAndWait* const StrikeTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
-		this, TEXT("LungeStrike"), StrikeMontage, StrikePlayRate * GetAttackSpeed());
+		this, TEXT("LungeStrike"), PickStanceMontage(StrikeMontage, OneHandedStrikeMontage), StrikePlayRate * GetAttackSpeed());
 	StrikeTask->OnCompleted.AddDynamic(this, &ThisClass::OnStrikeFinished);
 	StrikeTask->OnBlendOut.AddDynamic(this, &ThisClass::OnStrikeFinished);
 	StrikeTask->OnInterrupted.AddDynamic(this, &ThisClass::OnStrikeFinished);
@@ -343,15 +353,16 @@ void UknightGameplayAbility_BoostLunge::EndAbility(const FGameplayAbilitySpecHan
 	StopBackThrusters();
 	StopFootThrusters();
 	RestoreGravity();
-	if (IsActive() && DashMontage && !bStrikeStarted)
+	if (IsActive() && ActiveDashMontage && !bStrikeStarted)
 	{
 		// 돌진 도중 끊기면(피격 등) 돌진 자세도 내린다.
 		const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
 		if (UAnimInstance* const Anim = Character && Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr)
 		{
-			Anim->Montage_Stop(0.2f, DashMontage);
+			Anim->Montage_Stop(0.2f, ActiveDashMontage);
 		}
 	}
+	ActiveDashMontage = nullptr;
 	bStrikeStarted = false;
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
