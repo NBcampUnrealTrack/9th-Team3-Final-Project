@@ -31,7 +31,7 @@ namespace knightWaterRipple
 	constexpr double CharacterRefreshInterval = 1.0;
 
 	static TAutoConsoleVariable<int32> CVarDebug(TEXT("knight.WaterRipple.Debug"), 0,
-		TEXT("1: 물결 계산 범위, 캐릭터별 물 판정, 누른 자리를 그린다. 2: 같은 내용을 1초마다 로그로도 남긴다. 3: 결과 텍스처와 MPC 값도 읽어 남긴다(느림)."));
+		TEXT("1: 물결 계산 범위, 캐릭터별 물 판정, 누른 자리를 그린다. 2: 같은 내용을 1초마다 로그로도 남긴다."));
 	static TAutoConsoleVariable<float> CVarTestPulse(TEXT("knight.WaterRipple.TestPulse"), 0.f,
 		TEXT("0보다 크면 이 간격(초)마다 플레이어 앞 6m를 반지름 2m, 높이 10cm로 솟게 한다(읽기 확인이 쉽게 양수)."));
 	static TAutoConsoleVariable<int32> CVarForceMaterial(TEXT("knight.WaterRipple.ForceMaterial"), 0,
@@ -39,6 +39,14 @@ namespace knightWaterRipple
 
 	static TAutoConsoleVariable<int32> CVarPause(TEXT("knight.WaterRipple.Pause"), 0,
 		TEXT("1: 계산을 멈추고 결과를 비운다. 물결 없는 화면과 비교할 때 쓴다."));
+
+	/** 바디 경계 상자와 크기(짧은 쪽 반폭). 비스듬히 누운 캡슐은 긴 쪽이 길이까지 포함해 부풀기 때문에 짧은 쪽을 쓴다. */
+	static FBox CalcBodyBox(const USkeletalMeshComponent& Mesh, const USkeletalBodySetup& Setup, int32 BoneIndex, float& OutHalfWidth)
+	{
+		const FBox Box = Setup.AggGeom.CalcAABB(Mesh.GetBoneTransform(BoneIndex));
+		OutHalfWidth = static_cast<float>(FMath::Min(Box.GetExtent().X, Box.GetExtent().Y));
+		return Box;
+	}
 
 	static const FName NormalAndHeightName(TEXT("NormalAndHeight"));
 	static const TCHAR* WaterCollectionPath = TEXT("/Water/Materials/MPC/MPC_Water.MPC_Water");
@@ -235,19 +243,6 @@ void UknightWaterRippleSubsystem::Tick(float DeltaTime)
 			Tracked.MaxDownSpeed = 0.f;
 		}
 		UE_LOG(Logknight, Log, TEXT("Water ripple: center (%.0f, %.0f) pending %d"), Center.X, Center.Y, PendingImpulses.Num());
-		if (DebugMode >= 3)
-		{
-			// 읽기는 0~1로 잘리므로 노멀 X/Y는 양수 쪽만, 높이(B)는 1cm 이상이면 1로 보인다.
-			const FVector2D PulseUV = (FVector2D(Pawn->GetActorLocation() + Pawn->GetActorForwardVector() * 600.f) - Center) / Settings->SimulationSize + FVector2D(0.5, 0.5);
-			for (const FVector2D& UV : { FVector2D(0.5, 0.5), PulseUV, PulseUV - FVector2D(0.02, 0.0), PulseUV + FVector2D(0.02, 0.0), PulseUV - FVector2D(0.0, 0.02) })
-			{
-				const FLinearColor Value = UKismetRenderingLibrary::ReadRenderTargetRawUV(World, OutputTarget, UV.X, UV.Y);
-				UE_LOG(Logknight, Log, TEXT("Water ripple: output at (%.3f, %.3f) = %s"), UV.X, UV.Y, *Value.ToString());
-			}
-			const FLinearColor SimLocation = UKismetMaterialLibrary::GetVectorParameterValue(World, WaterCollection, TEXT("SimLocation"));
-			const float SimSize = UKismetMaterialLibrary::GetScalarParameterValue(World, WaterCollection, TEXT("FluidSimSize"));
-			UE_LOG(Logknight, Log, TEXT("Water ripple: MPC SimLocation %s FluidSimSize %.0f"), *SimLocation.ToString(), SimSize);
-		}
 	}
 
 	for (int32 Step = 0; Step < Steps; ++Step)
@@ -327,6 +322,12 @@ bool UknightWaterRippleSubsystem::TryActivate()
 	SplashSystem = Settings->SplashSystem.LoadSynchronous();
 	SplashHeavySystem = Settings->SplashHeavySystem.LoadSynchronous();
 	SplashSound = Settings->SplashSound.LoadSynchronous();
+	// 비워 둔 건 첨벙을 끈 것이고, 경로가 있는데 못 읽으면 에셋이 옮겨졌거나 지워진 것이다.
+	if ((!Settings->SplashSystem.IsNull() && !SplashSystem) || (!Settings->SplashHeavySystem.IsNull() && !SplashHeavySystem))
+	{
+		UE_LOG(Logknight, Warning, TEXT("Water ripple: splash system missing (%s, %s). Check Project Settings > Knight Water Ripple."),
+			*Settings->SplashSystem.ToString(), *Settings->SplashHeavySystem.ToString());
+	}
 	StepMID = UMaterialInstanceDynamic::Create(StepMaterial, this);
 	NormalMID = UMaterialInstanceDynamic::Create(NormalMaterial, this);
 
@@ -452,10 +453,9 @@ void UknightWaterRippleSubsystem::UpdateContact(FTrackedCharacter& Tracked, FBod
 	const UknightWaterRippleSettings* const Settings = GetDefault<UknightWaterRippleSettings>();
 
 	// 뼈는 몸 한가운데를 지나므로 몸이 바닥에 닿아도 몸 두께만큼 떠 있다. 바디 경계 상자의 가장 낮은 면으로 본다.
-	// 크기는 상자의 짧은 쪽 반폭이다. 비스듬히 누운 캡슐은 긴 쪽이 길이까지 포함해 부풀기 때문이다.
-	const FBox Box = Setup->AggGeom.CalcAABB(Mesh.GetBoneTransform(Contact.BoneIndex));
+	float HalfWidth = 0.f;
+	const FBox Box = knightWaterRipple::CalcBodyBox(Mesh, *Setup, Contact.BoneIndex, HalfWidth);
 	const FVector Lowest(Box.GetCenter().X, Box.GetCenter().Y, Box.Min.Z);
-	const float HalfWidth = static_cast<float>(FMath::Min(Box.GetExtent().X, Box.GetExtent().Y));
 	const FVector Prev = Contact.PrevLowest;
 	Contact.PrevLowest = Lowest;
 	if (!Tracked.bHasPrev)
@@ -584,8 +584,9 @@ float UknightWaterRippleSubsystem::GetBodyHalfWidth(const USkeletalMeshComponent
 	{
 		return 0.f;
 	}
-	const FBox Box = PhysicsAsset->SkeletalBodySetups[BodyIndex]->AggGeom.CalcAABB(Mesh->GetBoneTransform(BoneIndex));
-	return static_cast<float>(FMath::Min(Box.GetExtent().X, Box.GetExtent().Y));
+	float HalfWidth = 0.f;
+	knightWaterRipple::CalcBodyBox(*Mesh, *PhysicsAsset->SkeletalBodySetups[BodyIndex], BoneIndex, HalfWidth);
+	return HalfWidth;
 }
 
 bool UknightWaterRippleSubsystem::IsInsideSimulation(const FVector2D& Location, float Radius) const

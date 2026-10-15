@@ -44,8 +44,6 @@ public:
 	/** Location 주변 Radius 안을 Depth(cm)만큼 한 번 누른다. 계산 범위 밖이거나 꺼져 있으면 무시한다. */
 	void AddImpulse(const FVector& Location, float Radius, float Depth);
 
-	bool IsSimulating() const { return bActive; }
-
 	/** Bone에 붙은 피직스 바디의 가로 반폭(cm). 바디가 없으면 0. */
 	static float GetBodyHalfWidth(const USkeletalMeshComponent* Mesh, FName Bone);
 
