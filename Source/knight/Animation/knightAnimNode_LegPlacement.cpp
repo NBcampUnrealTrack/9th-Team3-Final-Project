@@ -9,6 +9,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "HAL/IConsoleManager.h"
 #include "TwoBoneIK.h"
+#include "WaterBodyActor.h"
 
 namespace knightLegPlacement
 {
@@ -73,7 +74,7 @@ void FAnimNode_knightLegPlacement::PreUpdate(const UAnimInstance* InAnimInstance
 	const float BaseZ = Mesh->GetComponentLocation().Z;
 	// 폰(플레이어)이나 자기 피직스 바디가 아니라 지형·정적 메시만 밟는다.
 	const FCollisionObjectQueryParams ObjectParams(ECC_WorldStatic);
-	const FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(knightLegPlacement), false, Mesh->GetOwner());
+	const FCollisionQueryParams BaseQueryParams(SCENE_QUERY_STAT(knightLegPlacement), false, Mesh->GetOwner());
 
 	for (FknightLegPlacementLeg& Leg : Legs)
 	{
@@ -86,8 +87,25 @@ void FAnimNode_knightLegPlacement::PreUpdate(const UAnimInstance* InAnimInstance
 			const FVector Start(Foot.X, Foot.Y, BaseZ + MaxStepUp + TraceRadius);
 			const FVector End(Foot.X, Foot.Y, BaseZ - MaxStepDown);
 			FHitResult Hit;
-			const bool bHit = World->SweepSingleByObjectType(Hit, Start, End, FQuat::Identity, ObjectParams,
-				FCollisionShape::MakeSphere(TraceRadius), QueryParams);
+			FCollisionQueryParams QueryParams(BaseQueryParams);
+			bool bHit = false;
+			// WaterBody collision is WorldStatic in this map, so the first sweep hits the lake surface.
+			// Ignore only water actors and continue to the actual walkable ground below them.
+			for (int32 Attempt = 0; Attempt < 16; ++Attempt)
+			{
+				bHit = World->SweepSingleByObjectType(Hit, Start, End, FQuat::Identity, ObjectParams,
+					FCollisionShape::MakeSphere(TraceRadius), QueryParams);
+				if (!bHit || !Cast<AWaterBody>(Hit.GetActor()))
+				{
+					break;
+				}
+				if (Attempt == 15)
+				{
+					bHit = false;
+					break;
+				}
+				QueryParams.AddIgnoredActor(Hit.GetActor());
+			}
 			if (bHit)
 			{
 				Target = FMath::Clamp(static_cast<float>(Hit.ImpactPoint.Z - BaseZ), -MaxStepDown, MaxStepUp);
