@@ -2,7 +2,6 @@
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
-#include "AbilitySystem/knightAbilitySystemComponent.h"
 #include "AbilitySystem/Attributes/knightAttributeSet.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
 #include "AbilitySystem/Effects/knightGameplayEffect_Damage.h"
@@ -70,16 +69,9 @@ void UknightGameplayAbility_Guard::ActivateAbility(const FGameplayAbilitySpecHan
 	EnterGuardStance();
 
 	// 퍼펙트 가드 판정 시간은 누를 때 한 번 읽는다. 가드 도중 스탯이 바뀌면 다음 가드부터 반영된다. (2026-10-08)
-	// (2026-10-15) 판정 시간은 키를 누른 순간부터 센다. 후딜 중 미리 누르고 있다가 나간 가드나 입력 버퍼로 늦게 나간 가드는
-	// 기다린 만큼 줄어서(지나면 0), 미리 눌러 두기로 퍼펙트 가드를 얻지 못한다. 누르자마자 나간 가드는 예전과 같다.
-	float PerfectGuardWindow = GetPerfectGuardWindow();
-	const UknightAbilitySystemComponent* const KnightASC = GetKnightAbilitySystemComponentFromActorInfo();
-	const UWorld* const World = GetWorld();
-	const double PressTime = KnightASC ? KnightASC->GetLastInputPressTime(Handle) : -1.0;
-	if (World && PressTime >= 0.0)
-	{
-		PerfectGuardWindow = FMath::Max(0.f, PerfectGuardWindow - static_cast<float>(World->GetTimeSeconds() - PressTime));
-	}
+	// (2026-10-15 사용자 결정) 후딜 중 미리 눌러 두었다가 나중에 올라간 가드도 올라간 순간부터 판정 시간 전부를 준다.
+	// 가드를 올린 순간 맞았는데 퍼펙트가 안 되면 불쾌하기 때문(누른 순간부터 세는 방식은 버림).
+	const float PerfectGuardWindow = GetPerfectGuardWindow();
 
 	if (PerfectGuardWindow > 0.f && ParrySucceededEventTag.IsValid())
 	{

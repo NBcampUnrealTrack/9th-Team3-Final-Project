@@ -42,8 +42,8 @@ class UGameplayEffect;
  *     (자동으로 올라가면 키를 새로 누르지 않아도 퍼펙트 가드 판정 시간이 다시 생기므로).
  *
  * (2026-10-15 사용자 결정) 누른 순간 막혀 있던 가드(공격 후딜 등)는 키를 누르고 있는 동안 가드할 수 있게 되는 순간 올린다
- *   (bRetryPressWhileHeld, 한 번 올라가면 그 누름은 끝이라 위 규칙은 그대로). 퍼펙트 가드 판정 시간은 키를 누른 순간부터 세서,
- *   미리 눌러 두고 기다린 만큼 줄어든다(입력 버퍼로 늦게 나간 가드도 같음).
+ *   (bRetryPressWhileHeld, 한 번 올라가면 그 누름은 끝이라 위 규칙은 그대로). 퍼펙트 가드 판정 시간은 가드가 올라간 순간부터
+ *   전부 준다(미리 눌러 둔 가드도 같음. 올린 순간 맞았는데 퍼펙트가 안 되면 불쾌하다는 사용자 판단).
  */
 UCLASS()
 class KNIGHT_API UknightGameplayAbility_Guard : public UknightGameplayAbility

@@ -82,12 +82,6 @@ public:
 	/** 마지막 ProcessAbilityInput 이후 InputTag에 연결된 어빌리티가 발동했으면 true. 입력 버퍼가 읽는다. */
 	bool WasInputTagActivatedThisFrame(const FGameplayTag& InputTag) const { return RecentlyActivatedInputTags.HasTagExact(InputTag); }
 
-	/**
-	 * (2026-10-15) 이 어빌리티의 입력 키를 마지막으로 누른 시각(월드 시간). 누른 적 없으면 음수.
-	 * 가드가 퍼펙트 가드 판정 시간을 누른 순간부터 세는 데 쓴다(누르고 기다리다 나간 가드는 그만큼 줄어든다).
-	 */
-	double GetLastInputPressTime(FGameplayAbilitySpecHandle Handle) const;
-
 	// 활성화 그룹
 	/**
 	 * Exclusive_Blocking 어빌리티는 다른 모든 배타 어빌리티를 막는다.
@@ -214,9 +208,6 @@ protected:
 	 * 발동하거나(NotifyAbilityActivated) 키를 떼면 빠진다.
 	 */
 	TArray<FGameplayAbilitySpecHandle> PendingHeldPressHandles;
-
-	/** 어빌리티별 마지막으로 입력 키를 누른 시각(월드 시간). GetLastInputPressTime. */
-	TMap<FGameplayAbilitySpecHandle, double> LastInputPressTimes;
 
 	/** ProcessAbilityInput이 마지막으로 실행된 뒤 발동한 어빌리티들의 입력 태그. */
 	FGameplayTagContainer RecentlyActivatedInputTags;

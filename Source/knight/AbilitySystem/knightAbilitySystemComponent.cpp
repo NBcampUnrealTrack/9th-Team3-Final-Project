@@ -182,17 +182,12 @@ void UknightAbilitySystemComponent::AbilityInputTagPressed(const FGameplayTag& I
 	{
 		return;
 	}
-	const UWorld* const World = GetWorld();
 	for (const FGameplayAbilitySpec& Spec : ActivatableAbilities.Items)
 	{
 		if (Spec.Ability && Spec.GetDynamicSpecSourceTags().HasTagExact(InputTag))
 		{
 			InputPressedSpecHandles.AddUnique(Spec.Handle);
 			InputHeldSpecHandles.AddUnique(Spec.Handle);
-			if (World)
-			{
-				LastInputPressTimes.Add(Spec.Handle, World->GetTimeSeconds());
-			}
 			// 누른 순간 막혀 있으면 누르고 있는 동안 다시 시도한다(가드). 발동하면 NotifyAbilityActivated에서 빠진다. (2026-10-15)
 			const UknightGameplayAbility* const AbilityCDO = Cast<UknightGameplayAbility>(Spec.Ability);
 			if (AbilityCDO && AbilityCDO->ShouldRetryPressWhileHeld() && !Spec.IsActive())
@@ -201,12 +196,6 @@ void UknightAbilitySystemComponent::AbilityInputTagPressed(const FGameplayTag& I
 			}
 		}
 	}
-}
-
-double UknightAbilitySystemComponent::GetLastInputPressTime(FGameplayAbilitySpecHandle Handle) const
-{
-	const double* const Time = LastInputPressTimes.Find(Handle);
-	return Time ? *Time : -1.0;
 }
 
 void UknightAbilitySystemComponent::AbilityInputTagReleased(const FGameplayTag& InputTag)
