@@ -57,7 +57,7 @@ public:
 
 	/** 물 머티리얼로 보내는 노멀 기울기 배율. */
 	UPROPERTY(EditAnywhere, Config, Category="Simulation", meta=(ClampMin=0))
-	float NormalScale = 3.f;
+	float NormalScale = 1.5f;
 
 	/** 물 머티리얼로 보내는 높이(수면 출렁임) 배율. 0이면 노멀만 흔든다. 얕은 물에서 크면 수면이 바닥 아래로 꺼진다. */
 	UPROPERTY(EditAnywhere, Config, Category="Simulation", meta=(ClampMin=0))
@@ -96,7 +96,7 @@ public:
 	float ReferenceSpeed = 500.f;
 
 	UPROPERTY(EditAnywhere, Config, Category="Sources", meta=(ClampMin=0, Units="cm"))
-	float StrengthPerSecond = 40.f;
+	float StrengthPerSecond = 25.f;
 
 	/** 물 밖이거나 계산 범위 밖인 캐릭터가 수면을 다시 찾는 간격. */
 	UPROPERTY(EditAnywhere, Config, Category="Performance", meta=(ClampMin=0.02, Units="s"))
