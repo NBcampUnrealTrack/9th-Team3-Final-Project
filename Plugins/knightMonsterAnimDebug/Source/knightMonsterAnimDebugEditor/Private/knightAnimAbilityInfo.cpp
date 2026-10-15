@@ -217,6 +217,7 @@ namespace knightAnimAbilityInfo
 					{
 						Info.HitTime = Info.PhaseTotal;
 						Info.HitEndTime = Info.PhaseTotal;
+						Info.HitPhaseProperty = Property;
 					}
 					else if (PhaseProperty.bHitWindow && Info.HitTime >= 0.f)
 					{
@@ -302,6 +303,65 @@ namespace knightAnimAbilityInfo
 		return Montage && Montage->RateScale > UE_KINDA_SMALL_NUMBER ? Montage->RateScale : 1.f;
 	}
 
+	bool GetPlayRateNotify(UClass*& OutClass, const FFloatProperty*& OutRateProperty)
+	{
+		const UknightAnimDebugSettings* const Settings = GetDefault<UknightAnimDebugSettings>();
+		OutClass = Settings->PlayRateNotifyClass.LoadSynchronous();
+		OutRateProperty = OutClass ? FindFProperty<FFloatProperty>(OutClass, Settings->PlayRateProperty) : nullptr;
+		return OutRateProperty != nullptr;
+	}
+
+	void GetRateWindows(const UAnimMontage* Montage, TArray<FknightRateWindow>& OutWindows)
+	{
+		UClass* RateClass = nullptr;
+		const FFloatProperty* RateProperty = nullptr;
+		if (!Montage || !GetPlayRateNotify(RateClass, RateProperty))
+		{
+			return;
+		}
+		for (const FAnimNotifyEvent& Notify : Montage->Notifies)
+		{
+			if (Notify.NotifyStateClass && Notify.NotifyStateClass->IsA(RateClass))
+			{
+				FknightRateWindow& Window = OutWindows.AddDefaulted_GetRef();
+				Window.Guid = Notify.Guid;
+				Window.Start = Notify.GetTriggerTime();
+				Window.End = Window.Start + Notify.GetDuration();
+				Window.Rate = RateProperty->GetPropertyValue_InContainer(Notify.NotifyStateClass);
+			}
+		}
+		OutWindows.Sort([](const FknightRateWindow& A, const FknightRateWindow& B) { return A.Start < B.Start; });
+	}
+
+	float GetFirstHitMarkerTime(const UAnimMontage* Montage)
+	{
+		const UknightAnimDebugSettings* const Settings = GetDefault<UknightAnimDebugSettings>();
+		float First = -1.f;
+		if (!Montage)
+		{
+			return First;
+		}
+		for (const FAnimNotifyEvent& Notify : Montage->Notifies)
+		{
+			const FString ClassName = Notify.Notify ? Notify.Notify->GetClass()->GetName() : FString();
+			const bool bMarker = !ClassName.IsEmpty() && Settings->HitMarkerNotifyKeywords.ContainsByPredicate([&ClassName](const FString& Keyword) { return ClassName.Contains(Keyword); });
+			if (bMarker && (First < 0.f || Notify.GetTriggerTime() < First))
+			{
+				First = Notify.GetTriggerTime();
+			}
+		}
+		return First;
+	}
+
+	FknightMontageTimeMap MakeTimeMap(const UAnimMontage* Montage)
+	{
+		TArray<FknightRateWindow> Windows;
+		GetRateWindows(Montage, Windows);
+		FknightMontageTimeMap Map;
+		Map.Build(Montage, Windows);
+		return Map;
+	}
+
 	void GetAnimBlueprintSlots(const UClass* AnimClass, TSet<FName>& OutSlots)
 	{
 		const UObject* const AnimCDO = AnimClass ? AnimClass->GetDefaultObject() : nullptr;
@@ -364,4 +424,81 @@ FString FknightAbilityAnimInfo::GetTimingText() const
 		Text += FString::Printf(TEXT("%s%s %.2f"), Text.IsEmpty() ? TEXT("") : TEXT(" / "), *Phase.Label, Phase.Duration);
 	}
 	return Text;
+}
+
+void FknightMontageTimeMap::Build(const UAnimMontage* Montage, const TArray<FknightRateWindow>& RateWindows)
+{
+	Segments.Reset();
+	RealLength = 0.f;
+	const float BaseRate = knightAnimAbilityInfo::GetMontageRate(Montage);
+	const float MontageLength = Montage ? Montage->GetPlayLength() : 0.f;
+
+	// 구간 경계마다 끊어, 각 조각 가운데를 덮는 구간 배율을 모두 곱한다.
+	TArray<float> Bounds = { 0.f, MontageLength };
+	for (const FknightRateWindow& Window : RateWindows)
+	{
+		Bounds.Add(FMath::Clamp(Window.Start, 0.f, MontageLength));
+		Bounds.Add(FMath::Clamp(Window.End, 0.f, MontageLength));
+	}
+	Bounds.Sort();
+	for (int32 Index = 0; Index + 1 < Bounds.Num(); ++Index)
+	{
+		const float Start = Bounds[Index];
+		const float End = Bounds[Index + 1];
+		if (End - Start <= UE_KINDA_SMALL_NUMBER)
+		{
+			continue;
+		}
+		const float Middle = (Start + End) * 0.5f;
+		float Rate = BaseRate;
+		for (const FknightRateWindow& Window : RateWindows)
+		{
+			if (Window.Start <= Middle && Middle < Window.End && Window.Rate > UE_KINDA_SMALL_NUMBER)
+			{
+				Rate *= Window.Rate;
+			}
+		}
+		Segments.Add({ Start, RealLength, Rate });
+		RealLength += (End - Start) / Rate;
+	}
+	if (Segments.IsEmpty())
+	{
+		Segments.Add({ 0.f, 0.f, BaseRate });
+	}
+}
+
+float FknightMontageTimeMap::ToReal(float MontageTime) const
+{
+	if (Segments.IsEmpty())
+	{
+		return MontageTime;
+	}
+	const FSegment* Segment = &Segments[0];
+	for (const FSegment& Candidate : Segments)
+	{
+		if (Candidate.MontageStart > MontageTime)
+		{
+			break;
+		}
+		Segment = &Candidate;
+	}
+	return Segment->RealStart + (MontageTime - Segment->MontageStart) / Segment->Rate;
+}
+
+float FknightMontageTimeMap::ToMontage(float RealTime) const
+{
+	if (Segments.IsEmpty())
+	{
+		return RealTime;
+	}
+	const FSegment* Segment = &Segments[0];
+	for (const FSegment& Candidate : Segments)
+	{
+		if (Candidate.RealStart > RealTime)
+		{
+			break;
+		}
+		Segment = &Candidate;
+	}
+	return Segment->MontageStart + (RealTime - Segment->RealStart) * Segment->Rate;
 }

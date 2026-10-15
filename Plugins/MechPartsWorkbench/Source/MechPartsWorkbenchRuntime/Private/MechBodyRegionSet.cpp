@@ -10,7 +10,8 @@ void UMechBodyRegionSet::SetupRegionComponent(USkeletalMeshComponent* RegionComp
 	}
 	RegionComponent->SetSkeletalMeshAsset(Mesh);
 	RegionComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	RegionComponent->AttachToComponent(Mech, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+	// 메카의 크기(액터 배율)를 이어받아 부위 메시가 원본과 같은 크기로 보이게 한다.
+	RegionComponent->AttachToComponent(Mech, FAttachmentTransformRules::SnapToTargetIncludingScale);
 	RegionComponent->SetLeaderPoseComponent(Mech);
 }
 
