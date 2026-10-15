@@ -72,6 +72,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Lunge|Montage", meta=(ClampMin=0.01))
 	float StrikePlayRate = 1.f;
 
+	/** (2026-10-15) 한손 스탠스일 때의 돌진 자세. 비어 있으면 DashMontage를 쓴다. */
+	UPROPERTY(EditDefaultsOnly, Category="Lunge|Montage")
+	TObjectPtr<UAnimMontage> OneHandedDashMontage;
+
+	/** (2026-10-15) 한손 스탠스일 때의 베기. 비어 있으면 StrikeMontage를 쓴다. */
+	UPROPERTY(EditDefaultsOnly, Category="Lunge|Montage")
+	TObjectPtr<UAnimMontage> OneHandedStrikeMontage;
+
 	UPROPERTY(EditDefaultsOnly, Category="Lunge|Montage")
 	FName WarpTargetName = TEXT("AttackTarget");
 
@@ -152,6 +160,13 @@ private:
 	void StartFootThrusters(const ACharacter& Character);
 	void StopFootThrusters();
 	void RestoreGravity();
+
+	/** 지금 스탠스(한손/양손)에 맞는 몽타주. 한손용이 비어 있으면 양손용. */
+	UAnimMontage* PickStanceMontage(UAnimMontage* TwoHanded, UAnimMontage* OneHanded) const;
+
+	/** 이번 발동에서 재생한 돌진 몽타주 (끊길 때 멈추려고). */
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimMontage> ActiveDashMontage;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UNiagaraComponent>> BackThrusters;
