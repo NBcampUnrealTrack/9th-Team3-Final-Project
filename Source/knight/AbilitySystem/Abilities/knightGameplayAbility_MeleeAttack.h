@@ -167,6 +167,25 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Combo", meta=(ClampMin=0, Units="s"))
 	float ComboGraceTime = 0.05f;
 
+	/**
+	 * (2026-10-15) 콤보 이어받기: 다른 공격 뒤에 이 공격이 이어지게 한다. 이 태그 중 하나가 있으면(앞 공격의 콤보 단계 태그)
+	 * ActivationBlockedTags 대신 ComboLinkBlockedTags로 막힘을 본다. 필요한 태그·다른 어빌리티가 막는 태그는 그대로 본다.
+	 * 예: 1타(GA_Knight_Attack_1) = Combo.Greatsword.Run(대쉬공격), Combo.Greatsword.4(4타).
+	 *     1타는 평소 Combo.Greatsword 계열과 달리기 중(State.Sprinting)에 막혀서, 이것 없이는 대쉬공격 직후 Shift를 누른 채로는 이어지지 않는다.
+	 * 비우면 지금과 같다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Combo")
+	FGameplayTagContainer ComboLinkFromTags;
+
+	/** 콤보 이어받기 중에 대신 보는 막는 태그. 예: 1타 = 원래 목록에서 콤보 계열·달리기·먼 락온만 뺀 것(사망·피격·공중·반격 대기). */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Combo")
+	FGameplayTagContainer ComboLinkBlockedTags;
+
+	/** 콤보 이어받기(ComboLinkFromTags)가 걸려 있으면 막는 태그를 ComboLinkBlockedTags로 바꿔 본다. 아니면 기본 검사. */
+	virtual bool DoesAbilitySatisfyTagRequirements(const UAbilitySystemComponent& AbilitySystemComponent,
+		const FGameplayTagContainer* SourceTags = nullptr, const FGameplayTagContainer* TargetTags = nullptr,
+		FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
+
 private:
 	/** ComboGraceTime 동안 콤보 단계 태그를 루즈 태그로 남긴다. */
 	void KeepComboStepTags();

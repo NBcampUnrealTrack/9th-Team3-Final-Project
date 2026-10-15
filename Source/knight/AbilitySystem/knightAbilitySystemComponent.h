@@ -102,7 +102,7 @@ public:
 
 	/**
 	 * (2026-10-14) 공격 몽타주 재생 속도 배율. 공격 어빌리티가 PlayRate x 행동 속도에 곱한다(발도·가드 몽타주는 제외).
-	 * 기본 1.0(10-14 새 애니로 바꾼 뒤. 1이면 몽타주 원래 속도). PIE에서 knight.Player.AttackSpeed로 바꿔 시험한다(새로 시작하는 공격부터 적용).
+	 * 기본 0.75(10-15. 1이면 몽타주 원래 속도). PIE에서 knight.Player.AttackSpeed로 바꿔 시험한다(새로 시작하는 공격부터 적용).
 	 */
 	float GetAttackAnimationSpeed() const { return AttackAnimationSpeed; }
 	void SetAttackAnimationSpeed(float NewSpeed) { AttackAnimationSpeed = FMath::Max(0.1f, NewSpeed); }
@@ -192,9 +192,10 @@ protected:
 	 * (2026-10-14) 공격 몽타주 재생 속도 배율(GetAttackAnimationSpeed). 바뀔 수 있는 값. 시험은 knight.Player.AttackSpeed.
 	 * 1.0 → 0.7: '게임이 너무 스피디하다'는 의견으로 사용자 플레이 테스트 후 결정(10-14). 후딜 0.5초와 함께 정함.
 	 * 0.7 → 1.0: EssentialAnimation 애니로 바꾼 뒤 사용자 요청(10-14). 새 애니는 원래 속도로 재생한다.
+	 * 1.0 → 0.75: 새 애니 기준으로 다시 조금 느리게(10-15 사용자 요청).
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack", meta=(ClampMin=0.1))
-	float AttackAnimationSpeed = 1.0f;
+	float AttackAnimationSpeed = 0.75f;
 
 	FTimerHandle BoostRecoveryTimer;
 
