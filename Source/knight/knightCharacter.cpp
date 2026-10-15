@@ -222,7 +222,8 @@ void AknightCharacter::Input_LockOn()
 {
 	if (!IsDead())
 	{
-		TargetLock->ToggleLockOn();
+		// (2026-10-15) 락온 중에 누르면 가장 가까운 부위로 다시 잡고, 같은 부위·두 번 누르기면 푼다.
+		TargetLock->PressLockOn();
 	}
 }
 

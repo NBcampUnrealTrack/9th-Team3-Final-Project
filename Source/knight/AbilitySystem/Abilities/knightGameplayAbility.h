@@ -94,6 +94,9 @@ protected:
 		const FGameplayTagContainer* SourceTags = nullptr, const FGameplayTagContainer* TargetTags = nullptr,
 		FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
 
+	/** (2026-10-15) 위 검사 중 태그 관계 매핑 부분만. 엔진 검사를 따로 하는 하위 클래스(공격의 콤보 이어받기)가 쓴다. */
+	bool SatisfiesTagRelationshipRequirements(const UAbilitySystemComponent& AbilitySystemComponent, FGameplayTagContainer* OptionalRelevantTags) const;
+
 	/**
 	 * 행동 속도 배율(메카 속성 ActionSpeed, 기본 1.0, 하한 0.1). (2026-10-08)
 	 * 공격·가드 몽타주의 재생 속도에 곱한다. 몽타주를 시작할 때 읽으므로, 재생 도중 값이 바뀌면 다음 동작부터 반영된다.
@@ -102,7 +105,7 @@ protected:
 	float GetActionSpeed() const;
 
 	/**
-	 * (2026-10-14) 공격 몽타주용 재생 속도 배율 = 행동 속도 x ASC의 공격 배속(AttackAnimationSpeed, 기본 0.7).
+	 * (2026-10-14) 공격 몽타주용 재생 속도 배율 = 행동 속도 x ASC의 공격 배속(AttackAnimationSpeed, 기본 0.75).
 	 * 공격 어빌리티(일반·달리기·반격·강공격 탭·차지, 록온 돌진, 내려찍기, 스킬)가 공격 몽타주에 쓴다. 발도·가드는 GetActionSpeed 그대로.
 	 * 시험: PIE 콘솔 knight.Player.AttackSpeed 0.9
 	 */

@@ -25,6 +25,13 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FknightLockOnTargetChanged, AActor*
  *   AddSwitchLookInput으로 넘어온다. 휠 전환(SwitchTarget)은 그대로. 조절 값은 Knight|LockOn|Switch.
  * - 잠근 지점이 대상의 락온 지점 목록에서 빠지면(잘려 나간 꼬리 등) 같은 대상의 가장 가까운 지점으로 옮긴다. 남은 지점이 없으면 푼다.
  * - 확인: 출력 로그 LogknightCombat의 "lock-on switch" / "lock-on point ... is gone" 줄.
+ *
+ * (2026-10-15 사용자 결정) 락온 키(PressLockOn, Tab):
+ * - 락온이 아닐 때: 지금처럼 보고 있는 쪽 대상을 잡는다(TryLockOn).
+ * - 락온 중: 카메라 앞쪽(MaxLockAngle 안)에서 플레이어와 가장 가까운 부위로 다시 잡는다. 그게 지금 잡은 부위면 푼다.
+ * - LockOnDoublePressTime 안에 두 번 누르면 푼다.
+ * - 마우스 이동 전환은 '불편하다'는 의견으로 기본 끔(bSwitchByMouseMove). 패드 스틱 전환·휠 전환은 그대로.
+ * - 확인: 출력 로그 LogknightCombat의 "lock-on press" 줄.
  */
 UCLASS(ClassGroup=(Knight), meta=(BlueprintSpawnableComponent))
 class KNIGHT_API UknightTargetLockComponent : public UActorComponent
@@ -37,6 +44,13 @@ public:
 	/** Locks the best target in view, or releases the current lock. Returns true if now locked. */
 	UFUNCTION(BlueprintCallable, Category="Knight|LockOn")
 	bool ToggleLockOn();
+
+	/**
+	 * (2026-10-15) 락온 키를 한 번 눌렀을 때. 락온이 아니면 TryLockOn, 락온 중이면 플레이어와 가장 가까운 부위로 다시 잡고
+	 * (같은 부위면 해제), LockOnDoublePressTime 안에 두 번 누르면 해제. 지금 락온 중이면 true.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|LockOn")
+	bool PressLockOn();
 
 	UFUNCTION(BlueprintCallable, Category="Knight|LockOn")
 	bool TryLockOn();
@@ -103,6 +117,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|LockOn", meta=(ClampMin=1, ClampMax=180, Units="deg"))
 	float MaxLockAngle = 60.f;
 
+	/** (2026-10-15) 락온 키를 이 시간(초, 실제 시간) 안에 두 번 누르면 락온을 푼다. 바뀔 수 있는 값. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|LockOn", meta=(ClampMin=0, Units="s"))
+	float LockOnDoublePressTime = 0.3f;
+
 	UPROPERTY(EditDefaultsOnly, Category="Knight|LockOn")
 	bool bRequireLineOfSight = true;
 
@@ -145,6 +163,13 @@ protected:
 	bool bSwitchByLookInput = true;
 
 	/**
+	 * 마우스 이동으로도 바꿀지. (2026-10-15) '마우스 이동에 락온이 바뀌는 게 너무 불편하다'는 의견으로 기본 끔.
+	 * 끄면 마우스는 휠·락온 키(가장 가까운 부위)로만 바꾸고, 패드 스틱 전환은 bSwitchByLookInput을 따른다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|LockOn|Switch", meta=(EditCondition="bSwitchByLookInput"))
+	bool bSwitchByMouseMove = false;
+
+	/**
 	 * 마우스 전환 문턱: SwitchMouseWindow 안에 모인 시점 입력의 크기. 바뀔 수 있는 값(시험 후 조절).
 	 * 감도 1에서 입력 1 ≈ 마우스 14픽셀(DefaultInput.ini Mouse 감도 0.07)이라 기본 5 ≈ 0.15초 안에 70픽셀.
 	 * 작을수록 살짝만 움직여도 바뀌고, 클수록 크게 휙 움직여야 바뀐다.
@@ -182,6 +207,8 @@ private:
 	void GatherCandidates(TArray<FCandidate>& OutCandidates) const;
 	bool GetViewPoint(FVector& OutLocation, FRotator& OutRotation) const;
 	bool HasLineOfSight(const FVector& ViewLocation, const FVector& PointLocation, const AActor* Target) const;
+	/** 카메라 앞쪽(MaxLockAngle 안)·시야가 트인 지점 중 플레이어와 가장 가까운 지점. 없으면 false. */
+	bool FindNearestPointInView(FCandidate& OutCandidate) const;
 	void SetLock(const FCandidate& Candidate);
 	/**
 	 * 잠근 지점이 아직 대상의 락온 지점 목록에 있는지 본다. 빠졌으면(잘려 나간 꼬리 등) InOutLocation(잃은 지점 위치)에서
@@ -207,4 +234,8 @@ private:
 	double SwitchMouseCooldownEndTime = 0.0;
 	bool bSwitchStickArmed = true;
 	uint64 LastSwitchStickFrame = 0;
+
+	// 락온 키 두 번 누르기 판정 (실제 시간 기준).
+	double LastLockOnPressTime = -1.0;
+	bool bLastLockOnPressReleased = false;
 };

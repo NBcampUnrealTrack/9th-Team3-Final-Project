@@ -3,6 +3,7 @@
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "AbilitySystemComponent.h"
+#include "AbilitySystemGlobals.h"
 #include "AbilitySystem/knightAbilitySystemComponent.h"
 #include "AbilitySystem/Abilities/knightGameplayAbility_StanceSwitch.h"
 #include "Combat/knightCombatLibrary.h"
@@ -40,6 +41,36 @@ void UknightGameplayAbility_MeleeAttack::ApplyCost(const FGameplayAbilitySpecHan
 	{
 		Super::ApplyCost(Handle, ActorInfo, ActivationInfo);
 	}
+}
+
+bool UknightGameplayAbility_MeleeAttack::DoesAbilitySatisfyTagRequirements(const UAbilitySystemComponent& AbilitySystemComponent,
+	const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
+{
+	const FGameplayTagContainer& OwnedTags = AbilitySystemComponent.GetOwnedGameplayTags();
+	if (ComboLinkFromTags.IsEmpty() || !OwnedTags.HasAny(ComboLinkFromTags))
+	{
+		return Super::DoesAbilitySatisfyTagRequirements(AbilitySystemComponent, SourceTags, TargetTags, OptionalRelevantTags);
+	}
+
+	// 콤보 이어받기: 엔진 검사(UGameplayAbility::DoesAbilitySatisfyTagRequirements)와 같되 ActivationBlockedTags 자리에 ComboLinkBlockedTags. (2026-10-15)
+	const bool bBlocked = OwnedTags.HasAny(ComboLinkBlockedTags)
+		|| GetAssetTags().HasAny(AbilitySystemComponent.GetBlockedAbilityTags())
+		|| (SourceTags && SourceTags->HasAny(SourceBlockedTags))
+		|| (TargetTags && TargetTags->HasAny(TargetBlockedTags))
+		|| AbilitySystemComponent.AreAbilityTagsBlocked(GetAssetTags());
+	const bool bMissing = !OwnedTags.HasAll(ActivationRequiredTags)
+		|| (SourceTags && !SourceTags->HasAll(SourceRequiredTags))
+		|| (TargetTags && !TargetTags->HasAll(TargetRequiredTags));
+	if (bBlocked || bMissing)
+	{
+		if (OptionalRelevantTags)
+		{
+			const UAbilitySystemGlobals& Globals = UAbilitySystemGlobals::Get();
+			OptionalRelevantTags->AddTag(bBlocked ? Globals.ActivateFailTagsBlockedTag : Globals.ActivateFailTagsMissingTag);
+		}
+		return false;
+	}
+	return SatisfiesTagRelationshipRequirements(AbilitySystemComponent, OptionalRelevantTags);
 }
 
 void UknightGameplayAbility_MeleeAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,

@@ -50,6 +50,46 @@ bool UknightTargetLockComponent::ToggleLockOn()
 	return TryLockOn();
 }
 
+bool UknightTargetLockComponent::PressLockOn()
+{
+	const UWorld* const World = GetWorld();
+	const double Now = World ? World->GetRealTimeSeconds() : 0.0;
+	const bool bDoublePress = LastLockOnPressTime >= 0.0 && Now - LastLockOnPressTime <= LockOnDoublePressTime;
+	LastLockOnPressTime = Now;
+
+	if (!IsLockedOn())
+	{
+		// 같은 부위를 눌러 풀자마자 한 번 더 누른 것은 두 번 누르기(해제)의 두 번째라 다시 잡지 않는다.
+		if (bDoublePress && bLastLockOnPressReleased)
+		{
+			bLastLockOnPressReleased = false;
+			return false;
+		}
+		bLastLockOnPressReleased = false;
+		const bool bLocked = TryLockOn();
+		UE_LOG(LogknightCombat, Log, TEXT("%s: lock-on press -> %s %s."), *GetNameSafe(GetOwner()),
+			bLocked ? *GetNameSafe(LockedActor.Get()) : TEXT("no target in view"), bLocked ? *LockedPartTag.ToString() : TEXT(""));
+		return bLocked;
+	}
+
+	// 락온 중: 두 번 누르기면 해제, 아니면 플레이어와 가장 가까운 부위로. 그게 지금 부위면(또는 앞쪽에 아무것도 없으면) 해제.
+	FCandidate Nearest;
+	const bool bFoundNearest = !bDoublePress && FindNearestPointInView(Nearest);
+	const bool bSamePoint = bFoundNearest && Nearest.Point.Component == LockedComponent.Get() && Nearest.Point.SocketName == LockedSocket;
+	if (!bFoundNearest || bSamePoint)
+	{
+		UE_LOG(LogknightCombat, Log, TEXT("%s: lock-on press -> released (%s)."), *GetNameSafe(GetOwner()),
+			bDoublePress ? TEXT("double press") : (bSamePoint ? TEXT("same part is nearest") : TEXT("nothing in view")));
+		ClearLockOn();
+		bLastLockOnPressReleased = true;
+		return false;
+	}
+	SetLock(Nearest);
+	bLastLockOnPressReleased = false;
+	UE_LOG(LogknightCombat, Log, TEXT("%s: lock-on press -> nearest %s %s."), *GetNameSafe(GetOwner()), *GetNameSafe(LockedActor.Get()), *LockedPartTag.ToString());
+	return true;
+}
+
 bool UknightTargetLockComponent::TryLockOn()
 {
 	FVector ViewLocation;
@@ -262,6 +302,12 @@ void UknightTargetLockComponent::AddSwitchLookInput(const FVector2D& LookInput, 
 			UE_LOG(LogknightCombat, Log, TEXT("%s: lock-on switch by stick (%.2f, %.2f) -> %s %s."), *GetNameSafe(GetOwner()), LookInput.X, LookInput.Y,
 				bSwitched ? *GetNameSafe(LockedActor.Get()) : TEXT("no target in that direction"), bSwitched ? *LockedPartTag.ToString() : TEXT(""));
 		}
+		return;
+	}
+
+	// (2026-10-15) 마우스 이동 전환은 기본 끔(bSwitchByMouseMove).
+	if (!bSwitchByMouseMove)
+	{
 		return;
 	}
 
@@ -517,6 +563,51 @@ bool UknightTargetLockComponent::HasLineOfSight(const FVector& ViewLocation, con
 	Params.AddIgnoredActor(Target);
 	FHitResult Hit;
 	return !GetWorld()->LineTraceSingleByChannel(Hit, ViewLocation, PointLocation, ECC_Visibility, Params);
+}
+
+bool UknightTargetLockComponent::FindNearestPointInView(FCandidate& OutCandidate) const
+{
+	const AActor* const Owner = GetOwner();
+	FVector ViewLocation;
+	FRotator ViewRotation;
+	if (!Owner || !GetViewPoint(ViewLocation, ViewRotation))
+	{
+		return false;
+	}
+	const FVector ViewDirection = ViewRotation.Vector();
+	const float CosMaxAngle = FMath::Cos(FMath::DegreesToRadians(MaxLockAngle));
+	const FVector OwnerLocation = Owner->GetActorLocation();
+
+	TArray<FCandidate> Candidates;
+	GatherCandidates(Candidates);
+
+	const FCandidate* Best = nullptr;
+	float BestDistSq = TNumericLimits<float>::Max();
+	for (const FCandidate& Candidate : Candidates)
+	{
+		const FVector PointLocation = Candidate.Point.GetLocation();
+		const FVector ToPoint = PointLocation - ViewLocation;
+		const float ViewDistance = ToPoint.Size();
+		const float CosAngle = ViewDistance > KINDA_SMALL_NUMBER ? FVector::DotProduct(ToPoint / ViewDistance, ViewDirection) : 1.f;
+		if (CosAngle < CosMaxAngle)
+		{
+			continue;
+		}
+		// 거리는 카메라가 아니라 플레이어 기준. 시야 검사(트레이스)는 더 가까운 후보일 때만 한다.
+		const float DistSq = FVector::DistSquared(OwnerLocation, PointLocation);
+		if (DistSq >= BestDistSq || !HasLineOfSight(ViewLocation, PointLocation, Candidate.Actor.Get()))
+		{
+			continue;
+		}
+		BestDistSq = DistSq;
+		Best = &Candidate;
+	}
+	if (!Best)
+	{
+		return false;
+	}
+	OutCandidate = *Best;
+	return true;
 }
 
 void UknightTargetLockComponent::SetLock(const FCandidate& Candidate)

@@ -137,11 +137,13 @@ void UknightGameplayAbility::OnGiveAbility(const FGameplayAbilityActorInfo* Acto
 bool UknightGameplayAbility::DoesAbilitySatisfyTagRequirements(const UAbilitySystemComponent& AbilitySystemComponent,
 	const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
 {
-	if (!Super::DoesAbilitySatisfyTagRequirements(AbilitySystemComponent, SourceTags, TargetTags, OptionalRelevantTags))
-	{
-		return false;
-	}
+	return Super::DoesAbilitySatisfyTagRequirements(AbilitySystemComponent, SourceTags, TargetTags, OptionalRelevantTags)
+		&& SatisfiesTagRelationshipRequirements(AbilitySystemComponent, OptionalRelevantTags);
+}
 
+bool UknightGameplayAbility::SatisfiesTagRelationshipRequirements(const UAbilitySystemComponent& AbilitySystemComponent,
+	FGameplayTagContainer* OptionalRelevantTags) const
+{
 	const UknightAbilitySystemComponent* const ASC = Cast<UknightAbilitySystemComponent>(&AbilitySystemComponent);
 	if (!ASC)
 	{
