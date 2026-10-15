@@ -49,6 +49,38 @@ int32 UknightAnimCoverageCommandlet::Main(const FString& Params)
 		}
 	}
 
+	// -RateEditCheck: 구간 속도를 추가·수정·삭제해 보며 시간축이 따라 바뀌는지 점검한다. 에셋은 저장하지 않는다.
+	if (FParse::Param(*Params, TEXT("RateEditCheck")))
+	{
+		FknightAttackPreviewModel Model(MakeShared<FPreviewScene>(FPreviewScene::ConstructionValues().SetCreatePhysicsScene(false)));
+		for (int32 MonsterIndex = 0; MonsterIndex < Model.GetNumMonsters(); ++MonsterIndex)
+		{
+			Model.SelectMonster(MonsterIndex);
+			for (int32 AbilityIndex = 0; AbilityIndex < Model.GetAbilities().Num(); ++AbilityIndex)
+			{
+				Model.SelectAbility(AbilityIndex);
+				if (!Model.GetMontage() || Model.GetRateWindows().IsEmpty())
+				{
+					continue;
+				}
+				auto Log = [&Model](const TCHAR* Step)
+				{
+					UE_LOG(LogknightAnimCoverage, Display, TEXT("RATE %s %s: windows=%d duration=%.3f hit=%.3f canAlign=%d"), *Model.GetAbility()->Name, Step,
+						Model.GetRateWindows().Num(), Model.GetDuration(), Model.GetMontageHitTime(), Model.CanAlignHitPhase() ? 1 : 0);
+				};
+				Log(TEXT("before"));
+				const FGuid Added = Model.AddRateWindow(0.1f, 0.5f, 2.f);
+				Log(TEXT("added 0.1-0.5 x2"));
+				Model.SetRateWindowRate(Added, 0.5f);
+				Log(TEXT("rate x0.5"));
+				Model.SetRateWindowRange(Added, 0.2f, 0.4f);
+				Log(TEXT("range 0.2-0.4"));
+				Model.RemoveRateWindow(Added);
+				Log(TEXT("removed"));
+			}
+		}
+	}
+
 	const FknightAnimCoverageResult Result = knightAnimCoverage::Gather();
 
 	FString OutPath;

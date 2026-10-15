@@ -5,6 +5,7 @@
 #include "knightAnimDebugSettings.generated.h"
 
 class APawn;
+class UAnimNotifyState;
 class UGameplayAbility;
 
 /** 어빌리티의 float 프로퍼티 하나를 타임라인 구간 하나로 그린다. 어빌리티에 없는 프로퍼티는 건너뛴다. */
@@ -132,6 +133,24 @@ public:
 
 	UPROPERTY(Config, EditAnywhere, Category="Preview")
 	FName TraceRadiusProperty;
+
+	/**
+	 * 공격 미리보기: 몽타주의 한 구간만 재생 속도를 바꾸는 노티파이 스테이트. 미리보기는 노티파이를 실행하지 않으므로
+	 * 이 클래스의 구간을 읽어 게임과 같은 실제 시간축을 만들고, 타임라인에서 구간을 고칠 때도 이 클래스로 만든다.
+	 */
+	UPROPERTY(Config, EditAnywhere, Category="Preview")
+	TSoftClassPtr<UAnimNotifyState> PlayRateNotifyClass;
+
+	/** PlayRateNotifyClass의 배율 float 프로퍼티 이름. 구간 안에서 몽타주 재생 속도에 곱해진다. */
+	UPROPERTY(Config, EditAnywhere, Category="Preview")
+	FName PlayRateProperty;
+
+	/**
+	 * 공격 미리보기: 판정 노티파이(HitWindowNotifyKeywords)가 없는 몽타주에서 판정 시점으로 볼 노티파이 클래스 이름 키워드.
+	 * 내려찍기 같은 범위 공격은 몽타주 대신 어빌리티가 판정하므로, 착지 노티파이를 기준으로 어빌리티 판정 시각을 맞춘다.
+	 */
+	UPROPERTY(Config, EditAnywhere, Category="Preview")
+	TArray<FString> HitMarkerNotifyKeywords;
 
 	/** 미리보기의 플레이어 더미 캡슐 기본 크기(cm). */
 	UPROPERTY(Config, EditAnywhere, Category="Preview", meta=(ClampMin=1, Units="cm"))

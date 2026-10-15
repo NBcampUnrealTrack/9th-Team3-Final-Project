@@ -70,6 +70,35 @@ namespace knightAttackPreviewWidget
 	{
 		return Toggle(Label, [Flag]() { return *Flag; }, [Flag](bool bValue) { *Flag = bValue; });
 	}
+
+	/**
+	 * 고른 구간 속도의 값 한 줄. 슬라이더를 끄는 동안의 변경은 되돌리기 한 번으로 묶는다.
+	 * 고른 구간이 없으면 꺼진다.
+	 */
+	static TSharedRef<SWidget> RateRow(const TCHAR* Label, FknightAttackPreviewModel* M, TFunction<float(const FknightRateWindow&)> Get,
+		TFunction<void(const FknightRateWindow&, float)> Set, float Min, float Max, float Delta)
+	{
+		return SNew(SHorizontalBox)
+			.IsEnabled_Lambda([M]() { return M->GetSelectedRateWindow() != nullptr; })
+			+ SHorizontalBox::Slot()
+			.FillWidth(0.45f)
+			.VAlign(VAlign_Center)
+			[
+				SNew(STextBlock).Text(Str(Label))
+			]
+			+ SHorizontalBox::Slot()
+			.FillWidth(0.55f)
+			[
+				SNew(SSpinBox<float>)
+				.MinValue(Min)
+				.MaxValue(Max)
+				.Delta(Delta)
+				.Value_Lambda([M, Get]() { const FknightRateWindow* const Window = M->GetSelectedRateWindow(); return Window ? Get(*Window) : 0.f; })
+				.OnValueChanged_Lambda([M, Set](float Value) { if (const FknightRateWindow* const Window = M->GetSelectedRateWindow()) { Set(FknightRateWindow(*Window), Value); } })
+				.OnBeginSliderMovement_Lambda([M]() { M->BeginRateDrag(FText::FromString(TEXT("구간 속도 편집"))); })
+				.OnEndSliderMovement_Lambda([M](float) { M->EndRateDrag(); })
+			];
+	}
 }
 
 void SknightAttackPreview::Construct(const FArguments& InArgs)
@@ -147,6 +176,19 @@ TSharedRef<SWidget> SknightAttackPreview::MakeSidePanel()
 			const FknightAbilityAnimInfo* const Ability = Model->GetAbility();
 			return FText::FromString(Ability ? Ability->Name : TEXT("어빌리티 없음"));
 		});
+	};
+
+	// 누르면 그 시점으로 다시 잡는다. 지금 시점인 버튼은 글자를 진하게 한다.
+	auto CameraButton = [this](const TCHAR* Label, const TCHAR* Tip, EknightPreviewCamera Preset) -> TSharedRef<SWidget>
+	{
+		return SNew(SButton)
+			.ToolTipText(Str(Tip))
+			.OnClicked_Lambda([this, Preset]() { Viewport->SetCameraPreset(Preset); return FReply::Handled(); })
+			[
+				SNew(STextBlock)
+				.Text(Str(Label))
+				.Font_Lambda([this, Preset]() { return FCoreStyle::GetDefaultFontStyle(Viewport.IsValid() && Viewport->GetCameraPreset() == Preset ? TEXT("Bold") : TEXT("Regular"), 9); })
+			];
 	};
 
 	return SNew(SBorder)
@@ -264,6 +306,12 @@ TSharedRef<SWidget> SknightAttackPreview::MakeSidePanel()
 			]
 
 			+ SScrollBox::Slot()
+			.Padding(0.f, 0.f, 0.f, 10.f)
+			[
+				MakeRateSection()
+			]
+
+			+ SScrollBox::Slot()
 			.Padding(0.f, 0.f, 0.f, 4.f)
 			[
 				Heading(TEXT("플레이어 더미"))
@@ -305,11 +353,26 @@ TSharedRef<SWidget> SknightAttackPreview::MakeSidePanel()
 			+ SScrollBox::Slot().Padding(0.f, 1.f) [ Toggle(TEXT("플레이어 더미"), &M->bShowDummy) ]
 			+ SScrollBox::Slot().Padding(0.f, 1.f) [ Toggle(TEXT("선택 범위(사거리·각도)"), &M->bShowSelectionShape) ]
 			+ SScrollBox::Slot()
+			.Padding(0.f, 6.f, 0.f, 2.f)
+			[
+				SNew(STextBlock).Text(Str(TEXT("카메라 (몬스터 크기에 맞춤)")))
+			]
+			+ SScrollBox::Slot()
 			.Padding(0.f, 2.f, 0.f, 10.f)
 			[
-				SNew(SButton)
-				.Text(Str(TEXT("카메라 초기화")))
-				.OnClicked_Lambda([this]() { Viewport->ResetCamera(); return FReply::Handled(); })
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 2.f, 0.f)
+				[
+					CameraButton(TEXT("전체"), TEXT("왼쪽 뒤에서 앞쪽 공격 범위를 내려다본다"), EknightPreviewCamera::Overview)
+				]
+				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 2.f, 0.f)
+				[
+					CameraButton(TEXT("위"), TEXT("바로 위에서 사거리·각도를 본다(화면 위쪽이 정면)"), EknightPreviewCamera::Top)
+				]
+				+ SHorizontalBox::Slot().AutoWidth()
+				[
+					CameraButton(TEXT("옆"), TEXT("왼쪽 옆에서 높이와 내려찍는 타이밍을 본다"), EknightPreviewCamera::Side)
+				]
 			]
 
 			+ SScrollBox::Slot()
@@ -322,6 +385,135 @@ TSharedRef<SWidget> SknightAttackPreview::MakeSidePanel()
 				SNew(STextBlock)
 				.AutoWrapText(true)
 				.Text(this, &SknightAttackPreview::GetInfoText)
+			]
+		];
+}
+
+TSharedRef<SWidget> SknightAttackPreview::MakeRateSection()
+{
+	using namespace knightAttackPreviewWidget;
+	FknightAttackPreviewModel* const M = Model.Get();
+
+	return SNew(SVerticalBox)
+		+ SVerticalBox::Slot()
+		.AutoHeight()
+		.Padding(0.f, 0.f, 0.f, 4.f)
+		[
+			Heading(TEXT("구간 속도"))
+		]
+		+ SVerticalBox::Slot()
+		.AutoHeight()
+		[
+			SNew(STextBlock)
+			.AutoWrapText(true)
+			.ColorAndOpacity(FSlateColor::UseSubduedForeground())
+			.Text(Str(TEXT("타임라인 '구간 속도' 줄: 빈 곳을 끌어 추가, 구간을 끌어 이동, 끝을 끌어 길이 조절, 휠로 배율(Shift: 크게), 우클릭으로 메뉴. Ctrl+Z로 되돌린다.")))
+		]
+		+ SVerticalBox::Slot()
+		.AutoHeight()
+		.Padding(0.f, 4.f, 0.f, 2.f)
+		[
+			SNew(STextBlock)
+			.Text_Lambda([M]()
+			{
+				const FknightRateWindow* const Window = M->GetSelectedRateWindow();
+				return FText::FromString(Window ? FString::Printf(TEXT("고른 구간: 실제 %.2f~%.2fs"), M->GetTimeMap().ToReal(Window->Start), M->GetTimeMap().ToReal(Window->End))
+					: FString(TEXT("고른 구간 없음 (타임라인에서 클릭)")));
+			})
+		]
+		+ SVerticalBox::Slot()
+		.AutoHeight()
+		.Padding(0.f, 2.f)
+		[
+			RateRow(TEXT("시작(몽타주 초)"), M, [](const FknightRateWindow& Window) { return Window.Start; },
+				[M](const FknightRateWindow& Window, float Value) { M->SetRateWindowRange(Window.Guid, Value, Window.End); }, 0.f, 30.f, 0.01f)
+		]
+		+ SVerticalBox::Slot()
+		.AutoHeight()
+		.Padding(0.f, 2.f)
+		[
+			RateRow(TEXT("끝(몽타주 초)"), M, [](const FknightRateWindow& Window) { return Window.End; },
+				[M](const FknightRateWindow& Window, float Value) { M->SetRateWindowRange(Window.Guid, Window.Start, Value); }, 0.f, 30.f, 0.01f)
+		]
+		+ SVerticalBox::Slot()
+		.AutoHeight()
+		.Padding(0.f, 2.f)
+		[
+			RateRow(TEXT("배율"), M, [](const FknightRateWindow& Window) { return Window.Rate; },
+				[M](const FknightRateWindow& Window, float Value) { M->SetRateWindowRate(Window.Guid, Value); }, 0.1f, 10.f, 0.05f)
+		]
+		+ SVerticalBox::Slot()
+		.AutoHeight()
+		.Padding(0.f, 2.f)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)
+			[
+				SNew(SButton)
+				.Text(Str(TEXT("구간 삭제")))
+				.IsEnabled_Lambda([M]() { return M->GetSelectedRateWindow() != nullptr; })
+				.OnClicked_Lambda([M]() { M->RemoveRateWindow(M->SelectedRateWindow); return FReply::Handled(); })
+			]
+			+ SHorizontalBox::Slot().AutoWidth()
+			[
+				SNew(SButton)
+				.Text(Str(TEXT("몽타주 저장")))
+				.ToolTipText(Str(TEXT("고친 구간 속도를 몽타주 에셋에 저장한다.")))
+				.IsEnabled_Lambda([M]() { return M->IsMontageDirty(); })
+				.OnClicked_Lambda([M]() { M->SaveMontage(); return FReply::Handled(); })
+			]
+		]
+
+		// 판정 시각 맞추기: 몽타주 완급을 바꾸면 실제 초로 잰 어빌리티 값(예고 시간)은 따로 맞춰야 한다.
+		+ SVerticalBox::Slot()
+		.AutoHeight()
+		.Padding(0.f, 8.f, 0.f, 2.f)
+		[
+			SNew(STextBlock)
+			.AutoWrapText(true)
+			.Text_Lambda([M]()
+			{
+				const FknightAbilityAnimInfo* const Ability = M->GetAbility();
+				const float MontageHit = M->GetMontageHitTime();
+				if (!Ability || Ability->HitTime < 0.f || MontageHit < 0.f)
+				{
+					return Str(TEXT("판정 시각: 비교할 값 없음 (어빌리티 판정 시각과 몽타주의 판정·착지 노티파이가 둘 다 있어야 한다)"));
+				}
+				return FText::FromString(FString::Printf(TEXT("판정 시각: 어빌리티 %.2fs / 몽타주 %.2fs%s"), Ability->HitTime, MontageHit,
+					M->CanAlignHitPhase() ? *FString::Printf(TEXT("  (몽타주가 %+.2fs)"), MontageHit - Ability->HitTime) : TEXT("  (한 프레임 안, 일치)")));
+			})
+			.ColorAndOpacity_Lambda([M]() { return M->CanAlignHitPhase() ? FSlateColor(FLinearColor(1.f, 0.75f, 0.2f)) : FSlateColor::UseForeground(); })
+		]
+		+ SVerticalBox::Slot()
+		.AutoHeight()
+		.Padding(0.f, 2.f)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 4.f, 0.f)
+			[
+				SNew(SButton)
+				.Text(Str(TEXT("어빌리티를 몽타주에 맞춤")))
+				.ToolTipText(Str(TEXT("판정 직전 구간(예고 시간 등)을 늘리거나 줄여 어빌리티 판정 시각을 몽타주 첫 판정 노티파이(없으면 첫 착지 노티파이)에 맞춘다.")))
+				.IsEnabled_Lambda([M]() { return M->CanAlignHitPhase(); })
+				.OnClicked_Lambda([M]() { M->AlignHitPhase(); return FReply::Handled(); })
+			]
+			+ SHorizontalBox::Slot().AutoWidth()
+			[
+				SNew(SButton)
+				.Text(Str(TEXT("어빌리티 저장")))
+				.IsEnabled_Lambda([M]()
+				{
+					const FknightAbilityAnimInfo* const Ability = M->GetAbility();
+					return Ability && Ability->AbilityCDO && Ability->AbilityCDO->GetOutermost()->IsDirty();
+				})
+				.OnClicked_Lambda([M]()
+				{
+					if (const FknightAbilityAnimInfo* const Ability = M->GetAbility(); Ability && Ability->AbilityCDO)
+					{
+						UEditorLoadingAndSavingUtils::SavePackages({ Ability->AbilityCDO->GetOutermost() }, true);
+					}
+					return FReply::Handled();
+				})
 			]
 		];
 }

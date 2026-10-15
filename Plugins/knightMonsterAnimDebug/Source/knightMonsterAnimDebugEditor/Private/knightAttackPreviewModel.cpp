@@ -1,12 +1,18 @@
 #include "knightAttackPreviewModel.h"
 
+#include "Abilities/GameplayAbility.h"
 #include "Animation/AnimMontage.h"
+#include "Animation/AnimNotifies/AnimNotifyState.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
+#include "FileHelpers.h"
 #include "PreviewScene.h"
 #include "PrimitiveDrawingUtils.h"
+#include "ScopedTransaction.h"
 #include "SceneManagement.h"
 #include "knightAnimDebugSettings.h"
+
+#define LOCTEXT_NAMESPACE "knightAttackPreviewModel"
 
 namespace knightAttackPreview
 {
@@ -16,6 +22,24 @@ namespace knightAttackPreview
 	constexpr int32 HitSubSteps = 4;
 	constexpr float StepFrameSeconds = 1.f / 30.f;
 	constexpr float AreaFlashSeconds = 0.15f;
+	/** 구간 속도 노티파이의 최소 길이(몽타주 시간). 너무 짧으면 게임에서 한 프레임 안에 켜졌다 꺼진다. */
+	constexpr float MinRateWindowLength = 1.f / 30.f;
+	constexpr float MinRate = 0.1f;
+	/** 판정 시각이 이만큼(60fps 한 프레임) 안에서 같으면 맞는 것으로 본다. 게임도 프레임 단위로 판정한다. */
+	constexpr float HitAlignFrame = 1.f / 60.f;
+	constexpr float MaxRate = 10.f;
+	/** 새 구간 속도 노티파이를 둘 트랙 이름(같은 클래스 노티파이가 이미 있으면 그 트랙에 둔다). */
+	const FName RateTrackName(TEXT("Speed"));
+
+	/** 노티파이 스테이트의 시작·끝을 몽타주 시간으로 옮긴다. 몽타주 에디터가 노티파이를 옮길 때와 같은 순서다. */
+	static void SetNotifyRange(UAnimMontage& Montage, FAnimNotifyEvent& Notify, float Start, float End)
+	{
+		Notify.Link(&Montage, Start);
+		Notify.TriggerTimeOffset = GetTriggerTimeOffsetForType(Montage.CalculateOffsetForNotify(Start));
+		Notify.SetDuration(End - Start);
+		Notify.EndLink.Link(&Montage, End);
+		Notify.EndTriggerTimeOffset = GetTriggerTimeOffsetForType(Montage.CalculateOffsetForNotify(End));
+	}
 }
 
 FknightAttackPreviewModel::FknightAttackPreviewModel(const TSharedRef<FPreviewScene>& InScene)
@@ -24,11 +48,14 @@ FknightAttackPreviewModel::FknightAttackPreviewModel(const TSharedRef<FPreviewSc
 	const UknightAnimDebugSettings* const Settings = GetDefault<UknightAnimDebugSettings>();
 	DummyRadius = Settings->DummyRadius;
 	DummyHalfHeight = Settings->DummyHalfHeight;
+	PropertyChangedHandle = FCoreUObjectDelegates::OnObjectPropertyChanged.AddRaw(this, &FknightAttackPreviewModel::OnObjectPropertyChanged);
 	RefreshMonsters();
 }
 
 FknightAttackPreviewModel::~FknightAttackPreviewModel()
 {
+	FCoreUObjectDelegates::OnObjectPropertyChanged.Remove(PropertyChangedHandle);
+	DragTransaction.Reset();
 	if (MeshComponent)
 	{
 		Scene->RemoveComponent(MeshComponent);
@@ -110,9 +137,6 @@ void FknightAttackPreviewModel::Rebuild()
 {
 	const FknightAbilityAnimInfo* const Ability = GetAbility();
 	Montage = Ability ? Ability->GetPrimaryMontage() : nullptr;
-	MontageRate = knightAnimAbilityInfo::GetMontageRate(Montage);
-	Windows.Reset();
-	knightAnimAbilityInfo::GetHitWindows(Montage, Windows);
 	Time = 0.f;
 	bPlaying = false;
 
@@ -130,6 +154,7 @@ void FknightAttackPreviewModel::Rebuild()
 		MeshComponent->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 		MeshComponent->SetAnimationMode(EAnimationMode::AnimationSingleNode);
 		Scene->AddComponent(MeshComponent, MeshInfo.MeshRelativeTransform * GetActorTransform());
+		++MeshRevision;
 	}
 	if (MeshComponent)
 	{
@@ -137,9 +162,275 @@ void FknightAttackPreviewModel::Rebuild()
 		MeshComponent->Stop();
 	}
 
-	BuildTrail();
+	RebuildTiming();
+}
+
+void FknightAttackPreviewModel::RebuildTiming(bool bWithTrail)
+{
+	bTimingDirty = false;
+	RateWindows.Reset();
+	knightAnimAbilityInfo::GetRateWindows(Montage, RateWindows);
+	TimeMap.Build(Montage, RateWindows);
+	Windows.Reset();
+	knightAnimAbilityInfo::GetHitWindows(Montage, Windows);
+	if (bWithTrail)
+	{
+		BuildTrail();
+	}
+	Time = FMath::Clamp(Time, 0.f, GetDuration());
 	ApplyPose(Time);
 	RecomputeHits();
+}
+
+void FknightAttackPreviewModel::RefreshAbilityInfo()
+{
+	// 어빌리티 값(예고 시간 등)은 고른 순간 복사해 두므로, 바뀌면 같은 순서로 다시 읽는다.
+	if (MonsterClasses.IsValidIndex(MonsterIndex))
+	{
+		Abilities.Reset();
+		AbilityClassRefs.Reset();
+		knightAnimAbilityInfo::FindPlayableAbilities(MonsterClasses[MonsterIndex], Abilities);
+		for (const FknightAbilityAnimInfo& Ability : Abilities)
+		{
+			AbilityClassRefs.Add(Ability.AbilityClass);
+		}
+		AbilityIndex = Abilities.IsValidIndex(AbilityIndex) ? AbilityIndex : INDEX_NONE;
+	}
+	RebuildTiming();
+}
+
+void FknightAttackPreviewModel::PostUndo(bool bSuccess)
+{
+	if (!bRateDragging)
+	{
+		RefreshAbilityInfo();
+	}
+}
+
+void FknightAttackPreviewModel::OnObjectPropertyChanged(UObject* Object, FPropertyChangedEvent& Event)
+{
+	if (!Object || bRateDragging)
+	{
+		return;
+	}
+	// 몽타주 자체, 몽타주의 노티파이 객체, 고른 어빌리티의 기본 객체가 바뀌면 다음 Tick에 다시 읽는다.
+	const FknightAbilityAnimInfo* const Ability = GetAbility();
+	if ((Montage && (Object == Montage || Object->GetOuter() == Montage)) || (Ability && Object == Ability->AbilityCDO))
+	{
+		bTimingDirty = true;
+	}
+}
+
+bool FknightAttackPreviewModel::CanEditRate() const
+{
+	UClass* RateClass = nullptr;
+	const FFloatProperty* RateProperty = nullptr;
+	return Montage && knightAnimAbilityInfo::GetPlayRateNotify(RateClass, RateProperty);
+}
+
+FAnimNotifyEvent* FknightAttackPreviewModel::FindRateNotify(const FGuid& Guid) const
+{
+	return Montage && Guid.IsValid() ? Montage->Notifies.FindByPredicate([&Guid](const FAnimNotifyEvent& Notify) { return Notify.Guid == Guid; }) : nullptr;
+}
+
+FGuid FknightAttackPreviewModel::AddRateWindow(float Start, float End, float Rate)
+{
+	using namespace knightAttackPreview;
+	UClass* RateClass = nullptr;
+	const FFloatProperty* RateProperty = nullptr;
+	if (!Montage || !knightAnimAbilityInfo::GetPlayRateNotify(RateClass, RateProperty))
+	{
+		return FGuid();
+	}
+	const float Length = Montage->GetPlayLength();
+	Start = FMath::Clamp(Start, 0.f, FMath::Max(0.f, Length - MinRateWindowLength));
+	End = FMath::Clamp(End, Start + MinRateWindowLength, Length);
+
+	const FScopedTransaction Transaction(LOCTEXT("AddRateWindow", "구간 속도 추가"));
+	Montage->Modify();
+
+	// 같은 클래스 노티파이가 있는 트랙에 두고, 없으면 Speed 트랙(없으면 새로 만든다)에 둔다.
+	int32 TrackIndex = INDEX_NONE;
+	if (const FAnimNotifyEvent* const Existing = Montage->Notifies.FindByPredicate([RateClass](const FAnimNotifyEvent& Notify) { return Notify.NotifyStateClass && Notify.NotifyStateClass->IsA(RateClass); }))
+	{
+		TrackIndex = Existing->TrackIndex;
+	}
+	if (!Montage->AnimNotifyTracks.IsValidIndex(TrackIndex))
+	{
+		TrackIndex = Montage->AnimNotifyTracks.IndexOfByPredicate([](const FAnimNotifyTrack& Track) { return Track.TrackName == RateTrackName; });
+	}
+	if (TrackIndex == INDEX_NONE)
+	{
+		TrackIndex = Montage->AnimNotifyTracks.Add(FAnimNotifyTrack(RateTrackName, FLinearColor::White));
+	}
+
+	FAnimNotifyEvent& Notify = Montage->Notifies.AddDefaulted_GetRef();
+	Notify.Guid = FGuid::NewGuid();
+	Notify.TrackIndex = TrackIndex;
+	Notify.NotifyStateClass = NewObject<UAnimNotifyState>(Montage, RateClass, NAME_None, RF_Transactional);
+	RateProperty->SetPropertyValue_InContainer(Notify.NotifyStateClass, FMath::Clamp(Rate, MinRate, MaxRate));
+	SetNotifyRange(*Montage, Notify, Start, End);
+	const FGuid Guid = Notify.Guid;
+	// 정렬과 트랙 캐시 갱신. 이 뒤로 Notify 참조는 다른 노티파이를 가리킬 수 있다.
+	Montage->RefreshCacheData();
+	OnRateEdited();
+	return Guid;
+}
+
+void FknightAttackPreviewModel::SetRateWindowRange(const FGuid& Guid, float Start, float End)
+{
+	using namespace knightAttackPreview;
+	FAnimNotifyEvent* const Notify = FindRateNotify(Guid);
+	if (!Notify)
+	{
+		return;
+	}
+	const float Length = Montage->GetPlayLength();
+	Start = FMath::Clamp(Start, 0.f, FMath::Max(0.f, Length - MinRateWindowLength));
+	End = FMath::Clamp(End, Start + MinRateWindowLength, Length);
+
+	const FScopedTransaction Transaction(LOCTEXT("MoveRateWindow", "구간 속도 이동"));
+	Montage->Modify();
+	SetNotifyRange(*Montage, *Notify, Start, End);
+	Montage->RefreshCacheData();
+	OnRateEdited();
+}
+
+void FknightAttackPreviewModel::SetRateWindowRate(const FGuid& Guid, float Rate)
+{
+	using namespace knightAttackPreview;
+	UClass* RateClass = nullptr;
+	const FFloatProperty* RateProperty = nullptr;
+	FAnimNotifyEvent* const Notify = FindRateNotify(Guid);
+	if (!Notify || !Notify->NotifyStateClass || !knightAnimAbilityInfo::GetPlayRateNotify(RateClass, RateProperty))
+	{
+		return;
+	}
+	const FScopedTransaction Transaction(LOCTEXT("SetRate", "구간 속도 배율"));
+	Notify->NotifyStateClass->Modify();
+	RateProperty->SetPropertyValue_InContainer(Notify->NotifyStateClass, FMath::Clamp(Rate, MinRate, MaxRate));
+	OnRateEdited();
+}
+
+void FknightAttackPreviewModel::RemoveRateWindow(const FGuid& Guid)
+{
+	if (!FindRateNotify(Guid))
+	{
+		return;
+	}
+	const FScopedTransaction Transaction(LOCTEXT("RemoveRateWindow", "구간 속도 삭제"));
+	Montage->Modify();
+	Montage->Notifies.RemoveAll([&Guid](const FAnimNotifyEvent& Notify) { return Notify.Guid == Guid; });
+	Montage->RefreshCacheData();
+	OnRateEdited();
+}
+
+void FknightAttackPreviewModel::BeginRateDrag(const FText& Description)
+{
+	if (!bRateDragging)
+	{
+		DragTransaction = MakeUnique<FScopedTransaction>(Description);
+		bRateDragging = true;
+	}
+}
+
+void FknightAttackPreviewModel::EndRateDrag()
+{
+	if (bRateDragging)
+	{
+		bRateDragging = false;
+		DragTransaction.Reset();
+		OnRateEdited();
+	}
+}
+
+void FknightAttackPreviewModel::OnRateEdited()
+{
+	// 끌기 중에는 시간 변환만 다시 만든다(궤적은 포즈를 수십 번 다시 잡아 무겁다). 끝나면 몽타주 에디터에도 알린다.
+	if (bRateDragging)
+	{
+		RebuildTiming(false);
+		return;
+	}
+	if (Montage)
+	{
+		Montage->PostEditChange();
+	}
+	RebuildTiming();
+}
+
+bool FknightAttackPreviewModel::IsMontageDirty() const
+{
+	return Montage && Montage->GetOutermost()->IsDirty();
+}
+
+void FknightAttackPreviewModel::SaveMontage()
+{
+	if (Montage)
+	{
+		UEditorLoadingAndSavingUtils::SavePackages({ Montage->GetOutermost() }, true);
+	}
+}
+
+float FknightAttackPreviewModel::GetMontageHitTime() const
+{
+	if (!Windows.IsEmpty())
+	{
+		return TimeMap.ToReal(Windows[0].Start);
+	}
+	const float MarkerTime = knightAnimAbilityInfo::GetFirstHitMarkerTime(Montage);
+	return MarkerTime >= 0.f ? TimeMap.ToReal(MarkerTime) : -1.f;
+}
+
+bool FknightAttackPreviewModel::CanAlignHitPhase() const
+{
+	const FknightAbilityAnimInfo* const Ability = GetAbility();
+	const float MontageHit = GetMontageHitTime();
+	return Ability && Ability->AbilityCDO && Ability->HitPhaseProperty && Ability->HitTime >= 0.f && MontageHit >= 0.f
+		&& !FMath::IsNearlyEqual(Ability->HitTime, MontageHit, knightAttackPreview::HitAlignFrame);
+}
+
+void FknightAttackPreviewModel::AlignHitPhase()
+{
+	if (!CanAlignHitPhase())
+	{
+		return;
+	}
+	const FknightAbilityAnimInfo* const Ability = GetAbility();
+	UGameplayAbility* const AbilityCDO = const_cast<UGameplayAbility*>(Ability->AbilityCDO);
+	const FFloatProperty* const Property = Ability->HitPhaseProperty;
+	const float Delta = GetMontageHitTime() - Ability->HitTime;
+
+	const FScopedTransaction Transaction(LOCTEXT("AlignHitPhase", "판정 시각을 몽타주에 맞춤"));
+	AbilityCDO->Modify();
+	const float OldValue = Property->GetPropertyValue_InContainer(AbilityCDO);
+	Property->SetPropertyValue_InContainer(AbilityCDO, FMath::Max(0.f, OldValue + Delta));
+	RefreshAbilityInfo();
+}
+
+FBoxSphereBounds FknightAttackPreviewModel::GetFocusBounds() const
+{
+	if (MeshComponent)
+	{
+		return MeshComponent->Bounds;
+	}
+	return FBoxSphereBounds(FVector(0.f, 0.f, 90.f), FVector(60.f, 60.f, 90.f), 120.f);
+}
+
+float FknightAttackPreviewModel::GetMaxReach() const
+{
+	float Reach = EngageDistance;
+	const TSharedPtr<IknightAttackSelectionSimulator> Simulator = knightAnimDebugEditor::GetAttackSelectionSimulator();
+	const FknightAbilityAnimInfo* const Ability = GetAbility();
+	if (Simulator.IsValid() && Ability && Ability->AbilityCDO && Simulator->Supports(Ability->AbilityClass))
+	{
+		Reach = FMath::Max(Reach, Simulator->GetShape(*Ability->AbilityCDO).MaxRange);
+	}
+	if (Ability && Ability->bHasArea)
+	{
+		Reach = FMath::Max(Reach, Ability->AreaOffset.Size2D() + Ability->AreaRadius);
+	}
+	return Reach;
 }
 
 FknightSelectionQuery FknightAttackPreviewModel::MakeQuery(float Distance, float Angle) const
@@ -279,7 +570,7 @@ float FknightAttackPreviewModel::GetDuration() const
 {
 	const FknightAbilityAnimInfo* const Ability = GetAbility();
 	const float AbilityLength = Ability ? Ability->PhaseTotal : 0.f;
-	const float MontageLength = Montage ? Montage->GetPlayLength() / MontageRate : 0.f;
+	const float MontageLength = Montage ? TimeMap.GetRealLength() : 0.f;
 	const float Duration = FMath::Max(AbilityLength, MontageLength);
 	return Duration > 0.f ? Duration : 1.f;
 }
@@ -298,6 +589,10 @@ void FknightAttackPreviewModel::StepFrame(int32 Direction)
 
 void FknightAttackPreviewModel::Tick(float DeltaSeconds)
 {
+	if (bTimingDirty)
+	{
+		RefreshAbilityInfo();
+	}
 	if (!bPlaying)
 	{
 		return;
@@ -326,7 +621,7 @@ void FknightAttackPreviewModel::ApplyPose(float AbilityTime)
 		return;
 	}
 	// 틱 함수 없이 RefreshBoneTransforms를 부르면 병렬 평가 없이 바로 포즈를 계산한다. 궤적 표본이 이 동작에 기댄다.
-	MeshComponent->SetPosition(FMath::Clamp(AbilityTime * MontageRate, 0.f, Montage->GetPlayLength()), false);
+	MeshComponent->SetPosition(FMath::Clamp(TimeMap.ToMontage(AbilityTime), 0.f, Montage->GetPlayLength()), false);
 	MeshComponent->TickAnimation(0.f, false);
 	MeshComponent->RefreshBoneTransforms();
 }
@@ -350,8 +645,8 @@ void FknightAttackPreviewModel::BuildTrail()
 			Notice = FString::Printf(TEXT("%s의 소켓 %s/%s가 메시에 없어 궤적을 그리지 못했다."), *Window.Name, *Window.StartSocket.ToString(), *Window.EndSocket.ToString());
 			continue;
 		}
-		const float StartTime = Window.Start / MontageRate;
-		const float EndTime = Window.End / MontageRate;
+		const float StartTime = TimeMap.ToReal(Window.Start);
+		const float EndTime = TimeMap.ToReal(Window.End);
 		for (float SampleTime = StartTime; ; SampleTime += knightAttackPreview::TrailSampleInterval)
 		{
 			const float Clamped = FMath::Min(SampleTime, EndTime);
@@ -467,7 +762,15 @@ FString FknightAttackPreviewModel::DescribeForLog() const
 	const FknightAbilityAnimInfo* const Ability = GetAbility();
 	FString Text = FString::Printf(TEXT("%s / %s: mesh=%s montage=%s rate=%.2f duration=%.2f windows=%d trail=%d"),
 		*GetMonsterName(MonsterIndex), Ability ? *Ability->Name : TEXT("-"), MeshComponent ? *GetNameSafe(MeshComponent->GetSkeletalMeshAsset()) : TEXT("-"),
-		*GetNameSafe(Montage), MontageRate, GetDuration(), Windows.Num(), Trail.Num());
+		*GetNameSafe(Montage), knightAnimAbilityInfo::GetMontageRate(Montage), GetDuration(), Windows.Num(), Trail.Num());
+	for (const FknightRateWindow& Window : RateWindows)
+	{
+		Text += FString::Printf(TEXT(" ratewin(%.3f-%.3f x%.2f real %.3f-%.3f)"), Window.Start, Window.End, Window.Rate, TimeMap.ToReal(Window.Start), TimeMap.ToReal(Window.End));
+	}
+	if (Ability)
+	{
+		Text += FString::Printf(TEXT(" hit(ability=%.3f montage=%.3f)"), Ability->HitTime, GetMontageHitTime());
+	}
 	if (!Trail.IsEmpty())
 	{
 		Text += FString::Printf(TEXT(" first(t=%.3f %s→%s) last(t=%.3f %s→%s)"), Trail[0].Time, *Trail[0].Start.ToCompactString(), *Trail[0].End.ToCompactString(),
@@ -491,7 +794,8 @@ void FknightAttackPreviewModel::Draw(FPrimitiveDrawInterface* PDI) const
 	const uint8 Depth = SDPG_Foreground;
 
 	// 몬스터 정면 표시.
-	PDI->DrawLine(FVector(0.f, 0.f, 2.f), FVector(150.f, 0.f, 2.f), FLinearColor(0.2f, 0.6f, 1.f), Depth, 2.f);
+	const float FrontLength = FMath::Max(150.f, GetFocusBounds().BoxExtent.X * 1.3f);
+	PDI->DrawLine(FVector(0.f, 0.f, 2.f), FVector(FrontLength, 0.f, 2.f), FLinearColor(0.2f, 0.6f, 1.f), Depth, 2.f);
 
 	if (bShowDummy)
 	{
@@ -620,3 +924,5 @@ void FknightAttackPreviewModel::Draw(FPrimitiveDrawInterface* PDI) const
 		DrawCircle(PDI, FVector(Center.X, Center.Y, 1.f), FVector::ForwardVector, FVector::RightVector, Color, Ability->AreaRadius, 32, Depth, Thickness);
 	}
 }
+
+#undef LOCTEXT_NAMESPACE
