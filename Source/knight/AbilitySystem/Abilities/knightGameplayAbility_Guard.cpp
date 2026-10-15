@@ -2,6 +2,7 @@
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
+#include "AbilitySystem/knightAbilitySystemComponent.h"
 #include "AbilitySystem/Attributes/knightAttributeSet.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
 #include "AbilitySystem/Effects/knightGameplayEffect_Damage.h"
@@ -39,6 +40,8 @@ UknightGameplayAbility_Guard::UknightGameplayAbility_Guard(const FObjectInitiali
 	ActivationBlockedTags.AddTag(knightGameplayTags::State_HitReact);
 	PerfectGuardDamageEffect = UknightGameplayEffect_Damage::StaticClass();
 	// 가드는 행동 에너지를 쓰지 않는다(StaminaCost 0, 2026-10-09 사용자 결정). 막은 피격은 가드 효율에 따라 체력·그로기가 줄어든다(피해 실행).
+	// (2026-10-15 사용자 결정) 공격 후딜 등으로 누른 순간 막혀 있었으면, 키를 누르고 있는 동안 가드할 수 있게 되는 순간 바로 올린다.
+	bRetryPressWhileHeld = true;
 }
 
 float UknightGameplayAbility_Guard::GetPerfectGuardWindow() const
@@ -67,7 +70,16 @@ void UknightGameplayAbility_Guard::ActivateAbility(const FGameplayAbilitySpecHan
 	EnterGuardStance();
 
 	// 퍼펙트 가드 판정 시간은 누를 때 한 번 읽는다. 가드 도중 스탯이 바뀌면 다음 가드부터 반영된다. (2026-10-08)
-	const float PerfectGuardWindow = GetPerfectGuardWindow();
+	// (2026-10-15) 판정 시간은 키를 누른 순간부터 센다. 후딜 중 미리 누르고 있다가 나간 가드나 입력 버퍼로 늦게 나간 가드는
+	// 기다린 만큼 줄어서(지나면 0), 미리 눌러 두기로 퍼펙트 가드를 얻지 못한다. 누르자마자 나간 가드는 예전과 같다.
+	float PerfectGuardWindow = GetPerfectGuardWindow();
+	const UknightAbilitySystemComponent* const KnightASC = GetKnightAbilitySystemComponentFromActorInfo();
+	const UWorld* const World = GetWorld();
+	const double PressTime = KnightASC ? KnightASC->GetLastInputPressTime(Handle) : -1.0;
+	if (World && PressTime >= 0.0)
+	{
+		PerfectGuardWindow = FMath::Max(0.f, PerfectGuardWindow - static_cast<float>(World->GetTimeSeconds() - PressTime));
+	}
 
 	if (PerfectGuardWindow > 0.f && ParrySucceededEventTag.IsValid())
 	{

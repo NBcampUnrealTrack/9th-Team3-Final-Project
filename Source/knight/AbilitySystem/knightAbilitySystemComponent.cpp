@@ -182,14 +182,31 @@ void UknightAbilitySystemComponent::AbilityInputTagPressed(const FGameplayTag& I
 	{
 		return;
 	}
+	const UWorld* const World = GetWorld();
 	for (const FGameplayAbilitySpec& Spec : ActivatableAbilities.Items)
 	{
 		if (Spec.Ability && Spec.GetDynamicSpecSourceTags().HasTagExact(InputTag))
 		{
 			InputPressedSpecHandles.AddUnique(Spec.Handle);
 			InputHeldSpecHandles.AddUnique(Spec.Handle);
+			if (World)
+			{
+				LastInputPressTimes.Add(Spec.Handle, World->GetTimeSeconds());
+			}
+			// 누른 순간 막혀 있으면 누르고 있는 동안 다시 시도한다(가드). 발동하면 NotifyAbilityActivated에서 빠진다. (2026-10-15)
+			const UknightGameplayAbility* const AbilityCDO = Cast<UknightGameplayAbility>(Spec.Ability);
+			if (AbilityCDO && AbilityCDO->ShouldRetryPressWhileHeld() && !Spec.IsActive())
+			{
+				PendingHeldPressHandles.AddUnique(Spec.Handle);
+			}
 		}
 	}
+}
+
+double UknightAbilitySystemComponent::GetLastInputPressTime(FGameplayAbilitySpecHandle Handle) const
+{
+	const double* const Time = LastInputPressTimes.Find(Handle);
+	return Time ? *Time : -1.0;
 }
 
 void UknightAbilitySystemComponent::AbilityInputTagReleased(const FGameplayTag& InputTag)
@@ -204,6 +221,7 @@ void UknightAbilitySystemComponent::AbilityInputTagReleased(const FGameplayTag& 
 		{
 			InputReleasedSpecHandles.AddUnique(Spec.Handle);
 			InputHeldSpecHandles.Remove(Spec.Handle);
+			PendingHeldPressHandles.Remove(Spec.Handle);
 		}
 	}
 }
@@ -226,7 +244,9 @@ void UknightAbilitySystemComponent::ProcessAbilityInput(float DeltaTime, bool bG
 		if (Spec && Spec->Ability && !Spec->IsActive())
 		{
 			const UknightGameplayAbility* const AbilityCDO = Cast<UknightGameplayAbility>(Spec->Ability);
-			if (AbilityCDO && AbilityCDO->GetActivationPolicy() == EknightAbilityActivationPolicy::WhileInputActive)
+			// (2026-10-15) 누른 순간 막혔던 bRetryPressWhileHeld 어빌리티(가드)도 누르고 있는 동안 다시 시도한다.
+			if (AbilityCDO && (AbilityCDO->GetActivationPolicy() == EknightAbilityActivationPolicy::WhileInputActive
+				|| PendingHeldPressHandles.Contains(Handle)))
 			{
 				AbilitiesToActivate.AddUnique(Spec->Handle);
 			}
@@ -307,6 +327,7 @@ void UknightAbilitySystemComponent::ClearAbilityInput()
 	InputPressedSpecHandles.Reset();
 	InputReleasedSpecHandles.Reset();
 	InputHeldSpecHandles.Reset();
+	PendingHeldPressHandles.Reset();
 }
 
 bool UknightAbilitySystemComponent::TryActivateAbilityByInputTag(const FGameplayTag& InputTag)
@@ -455,6 +476,9 @@ void UknightAbilitySystemComponent::CancelActivationGroupAbilities(EknightAbilit
 void UknightAbilitySystemComponent::NotifyAbilityActivated(const FGameplayAbilitySpecHandle Handle, UGameplayAbility* Ability)
 {
 	Super::NotifyAbilityActivated(Handle, Ability);
+
+	// 그 누름으로 발동했으니 더 다시 시도하지 않는다(다른 행동 뒤 자동으로 다시 나가지 않게). (2026-10-15)
+	PendingHeldPressHandles.Remove(Handle);
 
 	const UknightGameplayAbility* const KnightAbility = Cast<UknightGameplayAbility>(Ability);
 	if (!KnightAbility)
