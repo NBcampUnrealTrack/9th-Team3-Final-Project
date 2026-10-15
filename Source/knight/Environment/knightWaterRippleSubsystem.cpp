@@ -15,6 +15,11 @@
 #include "Kismet/KismetRenderingLibrary.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialParameterCollection.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
+#include "PhysicsEngine/PhysicsAsset.h"
+#include "PhysicsEngine/SkeletalBodySetup.h"
+#include "Sound/SoundBase.h"
 #include "WaterBodyComponent.h"
 #include "WaterBodyManager.h"
 
@@ -222,8 +227,12 @@ void UknightWaterRippleSubsystem::Tick(float DeltaTime)
 		NextDebugLog = Now + 1.0;
 		for (const FTrackedCharacter& Tracked : Characters)
 		{
-			UE_LOG(Logknight, Log, TEXT("Water ripple: %s found=%d in=%d surface=%.0f bottom=%.0f bones=%d"), *GetNameSafe(Tracked.Character.Get()),
-				Tracked.bWaterFound, Tracked.bInWater, Tracked.SurfaceZ, Tracked.BottomZ, Tracked.Bones.Num());
+			UE_LOG(Logknight, Log, TEXT("Water ripple: %s found=%d in=%d surface=%.0f bottom=%.0f bodies=%d maxdown=%.0f"), *GetNameSafe(Tracked.Character.Get()),
+				Tracked.bWaterFound, Tracked.bInWater, Tracked.SurfaceZ, Tracked.BottomZ, Tracked.Contacts.Num(), Tracked.MaxDownSpeed);
+		}
+		for (FTrackedCharacter& Tracked : Characters)
+		{
+			Tracked.MaxDownSpeed = 0.f;
 		}
 		UE_LOG(Logknight, Log, TEXT("Water ripple: center (%.0f, %.0f) pending %d"), Center.X, Center.Y, PendingImpulses.Num());
 		if (DebugMode >= 3)
@@ -315,6 +324,9 @@ bool UknightWaterRippleSubsystem::TryActivate()
 		State->AddressY = TA_Clamp;
 		State->UpdateResourceImmediate(true);
 	}
+	SplashSystem = Settings->SplashSystem.LoadSynchronous();
+	SplashHeavySystem = Settings->SplashHeavySystem.LoadSynchronous();
+	SplashSound = Settings->SplashSound.LoadSynchronous();
 	StepMID = UMaterialInstanceDynamic::Create(StepMaterial, this);
 	NormalMID = UMaterialInstanceDynamic::Create(NormalMaterial, this);
 
@@ -331,33 +343,46 @@ void UknightWaterRippleSubsystem::RefreshCharacters()
 {
 	Characters.RemoveAll([](const FTrackedCharacter& Tracked) { return !Tracked.Character.IsValid(); });
 
-	const UknightWaterRippleSettings* const Settings = GetDefault<UknightWaterRippleSettings>();
+	const double Now = GetWorld()->GetTimeSeconds();
 	for (TActorIterator<ACharacter> It(GetWorld()); It; ++It)
 	{
 		ACharacter* const Character = *It;
-		if (Characters.ContainsByPredicate([Character](const FTrackedCharacter& Tracked) { return Tracked.Character.Get() == Character; }))
+		FTrackedCharacter* Tracked = Characters.FindByPredicate([Character](const FTrackedCharacter& Each) { return Each.Character.Get() == Character; });
+		const USkeletalMeshComponent* const Mesh = Character->GetMesh();
+		UPhysicsAsset* const PhysicsAsset = Mesh ? Mesh->GetPhysicsAsset() : nullptr;
+		if (Tracked && Tracked->PhysicsAsset.Get() == PhysicsAsset)
 		{
 			continue;
 		}
-
-		FTrackedCharacter& Tracked = Characters.AddDefaulted_GetRef();
-		Tracked.Character = Character;
-		// 키워드 순서대로 고른다(발 > 앞발 > 손).
-		if (const USkeletalMeshComponent* const Mesh = Character->GetMesh())
+		if (!Tracked)
 		{
-			for (const FString& Keyword : Settings->BoneKeywords)
-			{
-				for (int32 Index = 0; Index < Mesh->GetNumBones() && Tracked.Bones.Num() < Settings->MaxBonesPerCharacter; ++Index)
-				{
-					const FName Bone = Mesh->GetBoneName(Index);
-					if (Bone.ToString().Contains(Keyword, ESearchCase::IgnoreCase))
-					{
-						Tracked.Bones.AddUnique(Bone);
-					}
-				}
-			}
+			Tracked = &Characters.AddDefaulted_GetRef();
+			Tracked->Character = Character;
 		}
-		Tracked.PrevLocations.SetNumZeroed(Tracked.Bones.Num() + 1);
+
+		// 메시나 피직스 에셋이 바뀌면 바디 목록을 다시 만든다.
+		Tracked->PhysicsAsset = PhysicsAsset;
+		Tracked->Contacts.Reset();
+		Tracked->bHasPrev = false;
+		if (!PhysicsAsset)
+		{
+			continue;
+		}
+		for (int32 Index = 0; Index < PhysicsAsset->SkeletalBodySetups.Num(); ++Index)
+		{
+			const USkeletalBodySetup* const Setup = PhysicsAsset->SkeletalBodySetups[Index];
+			const int32 BoneIndex = Setup ? Mesh->GetBoneIndex(Setup->BoneName) : INDEX_NONE;
+			if (BoneIndex == INDEX_NONE || Setup->AggGeom.GetElementCount() == 0)
+			{
+				continue;
+			}
+			FBodyContact& Contact = Tracked->Contacts.AddDefaulted_GetRef();
+			Contact.BodySetupIndex = Index;
+			Contact.BoneIndex = BoneIndex;
+			// 막 생긴 캐릭터는 바닥에 내려앉는 움직임이 부딪힘으로 잡히므로 잠깐 첨벙을 쉰다.
+			Contact.NextSplashTime = Now + 0.5;
+			Contact.NextWakeTime = Now + 0.5;
+		}
 	}
 }
 
@@ -365,7 +390,8 @@ void UknightWaterRippleSubsystem::UpdateCharacter(FTrackedCharacter& Tracked, do
 {
 	const ACharacter* const Character = Tracked.Character.Get();
 	const UCapsuleComponent* const Capsule = Character ? Character->GetCapsuleComponent() : nullptr;
-	if (!Capsule)
+	const USkeletalMeshComponent* const Mesh = Character ? Character->GetMesh() : nullptr;
+	if (!Capsule || !Mesh)
 	{
 		Tracked.bHasPrev = false;
 		return;
@@ -400,18 +426,70 @@ void UknightWaterRippleSubsystem::UpdateCharacter(FTrackedCharacter& Tracked, do
 		return;
 	}
 
-	const USkeletalMeshComponent* const Mesh = Character->GetMesh();
-	for (int32 Index = 0; Index < Tracked.PrevLocations.Num(); ++Index)
+	// 캡슐은 캐릭터 전체가 물을 밀어내는 큰 물결만 만든다. 첨벙은 바디가 맡는다.
+	if (Tracked.bHasPrev)
 	{
-		const bool bBody = Index == 0;
-		const FVector Current = bBody ? Bottom : Mesh->GetSocketLocation(Tracked.Bones[Index - 1]);
-		if (Tracked.bHasPrev)
-		{
-			AddMovementImpulse(Current, Tracked.PrevLocations[Index], Tracked.SurfaceZ, Margin, FMath::Max(bBody ? Radius : Radius * Settings->BoneRadiusScale, MinRadius), MinSpeed, Elapsed);
-		}
-		Tracked.PrevLocations[Index] = Current;
+		AddMovementImpulse(Bottom, Tracked.PrevBottom, Tracked.SurfaceZ, Margin, FMath::Max(Radius, MinRadius), MinSpeed, Elapsed);
+	}
+	Tracked.PrevBottom = Bottom;
+	Tracked.CapsuleRadius = Radius;
+
+	for (FBodyContact& Contact : Tracked.Contacts)
+	{
+		UpdateContact(Tracked, Contact, *Mesh, MinRadius, MinSpeed, Now, Elapsed);
 	}
 	Tracked.bHasPrev = true;
+}
+
+void UknightWaterRippleSubsystem::UpdateContact(FTrackedCharacter& Tracked, FBodyContact& Contact, const USkeletalMeshComponent& Mesh, float MinRadius, float MinSpeed, double Now, float Elapsed)
+{
+	const UPhysicsAsset* const PhysicsAsset = Tracked.PhysicsAsset.Get();
+	const USkeletalBodySetup* const Setup = PhysicsAsset && PhysicsAsset->SkeletalBodySetups.IsValidIndex(Contact.BodySetupIndex) ? PhysicsAsset->SkeletalBodySetups[Contact.BodySetupIndex].Get() : nullptr;
+	if (!Setup)
+	{
+		return;
+	}
+	const UknightWaterRippleSettings* const Settings = GetDefault<UknightWaterRippleSettings>();
+
+	// 뼈는 몸 한가운데를 지나므로 몸이 바닥에 닿아도 몸 두께만큼 떠 있다. 바디 경계 상자의 가장 낮은 면으로 본다.
+	// 크기는 상자의 짧은 쪽 반폭이다. 비스듬히 누운 캡슐은 긴 쪽이 길이까지 포함해 부풀기 때문이다.
+	const FBox Box = Setup->AggGeom.CalcAABB(Mesh.GetBoneTransform(Contact.BoneIndex));
+	const FVector Lowest(Box.GetCenter().X, Box.GetCenter().Y, Box.Min.Z);
+	const float HalfWidth = static_cast<float>(FMath::Min(Box.GetExtent().X, Box.GetExtent().Y));
+	const FVector Prev = Contact.PrevLowest;
+	Contact.PrevLowest = Lowest;
+	if (!Tracked.bHasPrev)
+	{
+		Contact.PeakDownSpeed = 0.f;
+		return;
+	}
+
+	const float SurfaceZ = Tracked.SurfaceZ;
+	const bool bSubmerged = Lowest.Z <= SurfaceZ;
+	AddMovementImpulse(Lowest, Prev, SurfaceZ, 0.f, FMath::Max(HalfWidth * Settings->BodyRadiusScale, MinRadius), MinSpeed, Elapsed);
+
+	const float SizeRatio = HalfWidth / Settings->SplashReferenceBodySize;
+	const float MergeRadius = HalfWidth * 3.f;
+	const FVector Surface(Lowest.X, Lowest.Y, SurfaceZ);
+	const float DownSpeed = static_cast<float>(Prev.Z - Lowest.Z) / Elapsed;
+	Tracked.MaxDownSpeed = FMath::Max(Tracked.MaxDownSpeed, DownSpeed);
+	const float StrikeSpeed = DetectStrike(Contact, DownSpeed, Now);
+	if (StrikeSpeed > 0.f && bSubmerged && ClaimSplash(Tracked, Surface, MergeRadius, Now))
+	{
+		const float SpeedScale = FMath::Clamp(StrikeSpeed / Settings->SplashReferenceDownSpeed, Settings->SplashSpeedScaleRange.X, Settings->SplashSpeedScaleRange.Y);
+		SpawnSplash(Surface, SizeRatio * SpeedScale);
+		return;
+	}
+
+	// 물에 잠긴 채 옆으로 쓸고 지나가는 바디는 물을 튀기며 지나간다.
+	const float SideSpeed = static_cast<float>(FVector2D::Distance(FVector2D(Lowest), FVector2D(Prev))) / Elapsed;
+	const float WakeSpeed = Settings->SplashWakeSpeed + Tracked.CapsuleRadius * Settings->SplashWakeSpeedPerRadius;
+	if (bSubmerged && SideSpeed >= WakeSpeed && Now >= Contact.NextWakeTime && ClaimSplash(Tracked, Surface, MergeRadius, Now))
+	{
+		Contact.NextWakeTime = Now + Settings->SplashWakeInterval;
+		const float SpeedScale = FMath::Clamp(SideSpeed / (WakeSpeed * 2.f), Settings->SplashSpeedScaleRange.X, Settings->SplashSpeedScaleRange.Y);
+		SpawnSplash(Surface, SizeRatio * SpeedScale);
+	}
 }
 
 void UknightWaterRippleSubsystem::AddMovementImpulse(const FVector& Location, const FVector& Prev, float SurfaceZ, float Margin, float Radius, float MinSpeed, float Elapsed)
@@ -429,6 +507,85 @@ void UknightWaterRippleSubsystem::AddMovementImpulse(const FVector& Location, co
 	}
 	const float SpeedRatio = FMath::Min(Speed / FMath::Max(Settings->ReferenceSpeed, 1.f), 2.f);
 	AddImpulse(Location, Radius, Settings->StrengthPerSecond * SpeedRatio * Elapsed);
+}
+
+float UknightWaterRippleSubsystem::DetectStrike(FBodyContact& Contact, float DownSpeed, double Now) const
+{
+	// 발이나 몸은 빠르게 내려오다 바닥에 닿는 순간 거의 멈춘다. 내려오던 바디의 속도가 문턱의 1/4 아래로 떨어진 프레임을 부딪힌 순간으로 본다.
+	const UknightWaterRippleSettings* const Settings = GetDefault<UknightWaterRippleSettings>();
+	const float Threshold = Settings->SplashMinDownSpeed;
+	if (DownSpeed >= Threshold)
+	{
+		Contact.PeakDownSpeed = FMath::Max(Contact.PeakDownSpeed, DownSpeed);
+		return 0.f;
+	}
+	if (Contact.PeakDownSpeed <= 0.f || DownSpeed > Threshold * 0.25f)
+	{
+		return 0.f;
+	}
+	const float StrikeSpeed = Contact.PeakDownSpeed;
+	Contact.PeakDownSpeed = 0.f;
+	if (Now < Contact.NextSplashTime)
+	{
+		return 0.f;
+	}
+	Contact.NextSplashTime = Now + Settings->SplashCooldown;
+	return StrikeSpeed;
+}
+
+void UknightWaterRippleSubsystem::SpawnSplash(const FVector& Location, float SizeScale) const
+{
+	UWorld* const World = GetWorld();
+	const UknightWaterRippleSettings* const Settings = GetDefault<UknightWaterRippleSettings>();
+	UNiagaraSystem* const System = SizeScale >= Settings->SplashHeavyScale && SplashHeavySystem ? SplashHeavySystem.Get() : SplashSystem.Get();
+	if (System)
+	{
+		const float Scale = Settings->SplashScale * FMath::Min(SizeScale, Settings->SplashMaxScale);
+		UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, System, Location, FRotator::ZeroRotator, FVector(Scale), true, true, ENCPoolMethod::AutoRelease);
+	}
+	if (SplashSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(World, SplashSound, Location, Settings->SplashVolume);
+	}
+	const int32 DebugMode = knightWaterRipple::CVarDebug.GetValueOnGameThread();
+	if (DebugMode != 0)
+	{
+		DrawDebugSphere(World, Location, 20.f, 8, System == SplashHeavySystem ? FColor::Purple : FColor::Blue, false, 0.5f);
+	}
+	if (DebugMode >= 2)
+	{
+		UE_LOG(Logknight, Log, TEXT("Water splash at (%.0f, %.0f, %.0f) scale %.2f"), Location.X, Location.Y, Location.Z, SizeScale);
+	}
+}
+
+bool UknightWaterRippleSubsystem::ClaimSplash(FTrackedCharacter& Tracked, const FVector& Location, float Radius, double Now) const
+{
+	const double MergeTime = GetDefault<UknightWaterRippleSettings>()->SplashMergeTime;
+	Tracked.RecentSplashes.RemoveAll([Now, MergeTime](const FRecentSplash& Recent) { return Now - Recent.Time > MergeTime; });
+	const FVector2D Location2D(Location);
+	const bool bNear = Tracked.RecentSplashes.ContainsByPredicate([&Location2D, Radius](const FRecentSplash& Recent)
+	{
+		return FVector2D::DistSquared(Recent.Location, Location2D) < FMath::Square(FMath::Max(Recent.Radius, Radius));
+	});
+	if (bNear)
+	{
+		return false;
+	}
+	Tracked.RecentSplashes.Add({ Location2D, Radius, Now });
+	return true;
+}
+
+float UknightWaterRippleSubsystem::GetBodyHalfWidth(const USkeletalMeshComponent* Mesh, FName Bone)
+{
+	const UPhysicsAsset* const PhysicsAsset = Mesh ? Mesh->GetPhysicsAsset() : nullptr;
+	const int32 BodyIndex = PhysicsAsset && !Bone.IsNone() ? PhysicsAsset->FindBodyIndex(Bone) : INDEX_NONE;
+	const int32 BoneIndex = BodyIndex != INDEX_NONE ? Mesh->GetBoneIndex(Bone) : INDEX_NONE;
+	if (BoneIndex == INDEX_NONE)
+	{
+		return 0.f;
+	}
+	const FBox Box = PhysicsAsset->SkeletalBodySetups[BodyIndex]->AggGeom.CalcAABB(Mesh->GetBoneTransform(BoneIndex));
+	return static_cast<float>(FMath::Min(Box.GetExtent().X, Box.GetExtent().Y));
 }
 
 bool UknightWaterRippleSubsystem::IsInsideSimulation(const FVector2D& Location, float Radius) const
@@ -486,7 +643,7 @@ void UknightWaterRippleSubsystem::DrawDebug(const APawn& Pawn) const
 			continue;
 		}
 		const TCHAR* const State = Tracked.bInWater ? TEXT("IN WATER") : Tracked.bWaterFound ? TEXT("ABOVE WATER") : TEXT("NO WATER");
-		const FString Text = FString::Printf(TEXT("%s  surface %.0f  bottom %.0f  bones %d"), State, Tracked.SurfaceZ, Tracked.BottomZ, Tracked.Bones.Num());
+		const FString Text = FString::Printf(TEXT("%s  surface %.0f  bottom %.0f  bodies %d"), State, Tracked.SurfaceZ, Tracked.BottomZ, Tracked.Contacts.Num());
 		DrawDebugString(World, Character->GetActorLocation() + FVector(0.f, 0.f, 120.f), Text, nullptr, Tracked.bInWater ? FColor::Green : FColor::Red, Life, true);
 	}
 
