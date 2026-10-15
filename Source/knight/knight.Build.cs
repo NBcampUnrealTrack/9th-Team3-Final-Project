@@ -41,6 +41,9 @@ public class knight : ModuleRules
 		// 2본 IK 풀이(AnimationCore::SolveTwoBoneIK).
 		PrivateDependencyModuleNames.Add("AnimationCore");
 
+		// 얕은 물 파동: 수면 높이 질의(UWaterBodyComponent, FWaterBodyManager).
+		PrivateDependencyModuleNames.Add("Water");
+
 		// Defines WITH_GAMEPLAY_DEBUGGER and adds the debugger modules in builds that include it.
 		SetupGameplayDebuggerSupport(Target);
 
