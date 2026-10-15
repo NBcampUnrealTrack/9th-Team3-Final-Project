@@ -108,6 +108,12 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Dash|Directional")
 	TObjectPtr<UAnimMontage> DashMontageRight;
 
+	/**
+	 * (2026-10-15 사용자 결정) 방향키를 누르고 있을 때만 퀵스텝이 나간다. 끄면 예전처럼 입력 없이 누르면 뒤로(백스텝) 나간다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Dash")
+	bool bRequireMoveInput = true;
+
 	/** 락온이 아니면 시작할 때 나이트를 대시 방향으로 돌려서 정면 자세와 맞춘다. */
 	UPROPERTY(EditDefaultsOnly, Category="Dash|Directional")
 	bool bFaceDashDirectionWhenFree = true;
