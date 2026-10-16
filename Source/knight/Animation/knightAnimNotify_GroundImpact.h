@@ -50,10 +50,11 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Ground Impact|Dust", meta=(ClampMin=0, Units="cm"))
 	float MaxGroundDistance = 1500.f;
 
-	/** 물 위를 내려찍으면 Dust 대신 수면에 터뜨린다. 비어 있으면 Dust를 수면에 터뜨린다. */
+	/** 물 위를 내려찍으면 Dust 대신 수면에 터뜨린다. 비어 있으면 Knight Water Ripple 설정의 SplashHeavySystem을 몸 크기에 맞춰 쓴다. */
 	UPROPERTY(EditAnywhere, Category="Ground Impact|Water")
 	TObjectPtr<UNiagaraSystem> WaterSplash;
 
+	/** WaterSplash 배율. 비어 있을 때는 SplashHeavySystem 배율에 곱한다. */
 	UPROPERTY(EditAnywhere, Category="Ground Impact|Water", meta=(ClampMin=0))
 	float WaterSplashScale = 1.f;
 

@@ -1,9 +1,12 @@
 #include "Animation/knightAnimNotify_GroundImpact.h"
 
 #include "Camera/knightPlayerCameraManager.h"
+#include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
+#include "Environment/knightWaterRippleSettings.h"
 #include "Environment/knightWaterRippleSubsystem.h"
+#include "GameFramework/Character.h"
 #include "GameFramework/PlayerController.h"
 #include "NiagaraFunctionLibrary.h"
 
@@ -31,9 +34,28 @@ void UknightAnimNotify_GroundImpact::Notify(USkeletalMeshComponent* MeshComp, UA
 		&& (!bGround || Hit.ImpactPoint.Z <= SurfaceZ + 1.f))
 	{
 		Epicenter = FVector(Source.X, Source.Y, SurfaceZ);
-		if (UNiagaraSystem* const Splash = WaterSplash ? WaterSplash.Get() : Dust.Get())
+		if (WaterSplash)
 		{
-			UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, Splash, Epicenter, FRotator::ZeroRotator, FVector(WaterSplash ? WaterSplashScale : DustScale), true, true, ENCPoolMethod::AutoRelease);
+			UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, WaterSplash, Epicenter, FRotator::ZeroRotator, FVector(WaterSplashScale), true, true, ENCPoolMethod::AutoRelease);
+		}
+		else if (UNiagaraSystem* const Heavy = GetDefault<UknightWaterRippleSettings>()->SplashHeavySystem.LoadSynchronous())
+		{
+			// 발 첨벙과 같은 이펙트를 찍은 부위 크기에 맞춰, 가장 세게 부딪힌 배율에 WaterSplashScale을 곱해 쓴다.
+			// 내려찍기는 큰 동작이라 움직임 첨벙을 줄이는 SplashScale은 곱하지 않는다.
+			// 부위에 바디가 없으면 캡슐 반지름의 1/3 정도를 부위 크기로 본다.
+			const UknightWaterRippleSettings* const Settings = GetDefault<UknightWaterRippleSettings>();
+			float Size = UknightWaterRippleSubsystem::GetBodyHalfWidth(MeshComp, Bone);
+			if (Size <= 0.f)
+			{
+				const ACharacter* const Character = Cast<ACharacter>(MeshComp->GetOwner());
+				Size = Character ? Character->GetCapsuleComponent()->GetScaledCapsuleRadius() * 0.35f : Settings->SplashReferenceBodySize;
+			}
+			const float Scale = FMath::Min(Size / Settings->SplashReferenceBodySize * Settings->SplashSpeedScaleRange.Y, Settings->SplashMaxScale) * WaterSplashScale;
+			UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, Heavy, Epicenter, FRotator::ZeroRotator, FVector(Scale), true, true, ENCPoolMethod::AutoRelease);
+		}
+		else if (Dust)
+		{
+			UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, Dust, Epicenter, FRotator::ZeroRotator, FVector(DustScale), true, true, ENCPoolMethod::AutoRelease);
 		}
 		if (UknightWaterRippleSubsystem* const Ripples = World->GetSubsystem<UknightWaterRippleSubsystem>())
 		{
