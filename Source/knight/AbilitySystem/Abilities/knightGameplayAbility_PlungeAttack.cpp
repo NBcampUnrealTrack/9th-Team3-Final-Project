@@ -27,6 +27,19 @@
 namespace
 {
 	constexpr float PlungeTickInterval = 1.f / 60.f;
+
+	// 락온 상태가 아닐 때 공격하면 화면 중앙(카메라/컨트롤러 수평 방향)을 바라보게 한다.
+	void FaceScreenCenterForPlungeAttack(ACharacter* Character, const UAbilitySystemComponent* ASC)
+	{
+		if (!Character || (ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_LockedOn)))
+		{
+			return;
+		}
+		if (const AController* const Controller = Character->GetController())
+		{
+			Character->SetActorRotation(FRotator(0.f, Controller->GetControlRotation().Yaw, 0.f));
+		}
+	}
 }
 
 UknightGameplayAbility_PlungeAttack::UknightGameplayAbility_PlungeAttack(const FObjectInitializer& ObjectInitializer)
@@ -64,7 +77,7 @@ void UknightGameplayAbility_PlungeAttack::ActivateAbility(const FGameplayAbility
 		return;
 	}
 
-	FaceMoveInputDirection();
+	FaceScreenCenterForPlungeAttack(Character, GetAbilitySystemComponentFromActorInfo());
 
 	// (2026-10-15) 한손 스탠스면 한손 몽타주 (비어 있는 것은 양손용).
 	const bool bOneHanded = !UknightGameplayAbility_StanceSwitch::IsTwoHanded(GetAbilitySystemComponentFromActorInfo());
@@ -214,6 +227,8 @@ void UknightGameplayAbility_PlungeAttack::StartDive()
 		return;
 	}
 
+	FaceScreenCenterForPlungeAttack(Character, GetAbilitySystemComponentFromActorInfo());
+
 	// 수평 이동: 노릴 대상이 있으면 그 근처에 떨어지도록, 땅까지 걸릴 시간으로 나눠 속도를 정한다.
 	DiveHorizontalVelocity = Character->GetActorForwardVector().GetSafeNormal2D() * DiveForwardSpeed;
 	FVector AimLocation;
@@ -255,6 +270,7 @@ void UknightGameplayAbility_PlungeAttack::StartLeap()
 	{
 		return;
 	}
+	FaceScreenCenterForPlungeAttack(Character, GetAbilitySystemComponentFromActorInfo());
 	const FVector Start = Character->GetActorLocation();
 	FVector Destination;
 	FRotator AimRotation;

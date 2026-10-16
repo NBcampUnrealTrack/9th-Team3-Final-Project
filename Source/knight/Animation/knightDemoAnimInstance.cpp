@@ -72,17 +72,25 @@ void UknightDemoAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		}
 	}
 
-	// --- 데모 이벤트 그래프의 속도 계산 그대로 ---
+	// --- 데모 이벤트 그래프의 속도 계산 (중량 계수 보정 및 걷기/달리기 구간 분리) ---
 	const FVector Vel = Movement->Velocity;
-	const double SpeedX = FVector::DotProduct(Vel, Character->GetActorForwardVector());
-	const double SpeedY = FVector::DotProduct(Vel, Character->GetActorRightVector());
+	const UknightMovementComponent* const KnightMovement = Cast<UknightMovementComponent>(Movement);
+	const bool bRunning = KnightMovement ? KnightMovement->IsRunning() : false;
+	const float WeightFactor = KnightMovement ? FMath::Max(KnightMovement->GetWeightSpeedFactor(), 0.1f) : 1.f;
+	const double UnweightedSpeed2D = Vel.Size2D() / WeightFactor;
+
+	const double SpeedX = FVector::DotProduct(Vel, Character->GetActorForwardVector()) / WeightFactor;
+	const double SpeedY = FVector::DotProduct(Vel, Character->GetActorRightVector()) / WeightFactor;
 	const bool bAccelerating = !Movement->GetCurrentAcceleration().IsNearlyZero();
-	const double SpeedLength = FMath::FInterpTo(GetFloatVar(TEXT("Speed(Length)")), Vel.Size(), DeltaSeconds, SpeedLengthInterpSpeed);
+	const double TargetBattleSpeed = bRunning ? FMath::Min(UnweightedSpeed2D, 800.0) : FMath::Min(UnweightedSpeed2D, 500.0);
+	const double SpeedLength = FMath::FInterpTo(GetFloatVar(TEXT("Speed(Length)")), TargetBattleSpeed, DeltaSeconds, SpeedLengthInterpSpeed);
 
 	SetBoolVar(TEXT("IsInAir"), Movement->IsFalling());
-	// 비전투 이동 속도: 공중에서는 0 (체공 중 걷지 않게).
-	RelaxedLocomotionSpeed = FMath::FInterpTo(RelaxedLocomotionSpeed, Movement->IsFalling() ? 0.f : static_cast<float>(Vel.Size2D()),
-		DeltaSeconds, RelaxedSpeedInterpSpeed);
+	// 비전투 이동 속도: 공중에서는 0, 평상시 이동은 540(걷기 모션), Shift 달리기는 810(달리기 모션).
+	const float TargetRelaxedSpeed = Movement->IsFalling()
+		? 0.f
+		: static_cast<float>(bRunning ? FMath::Min(UnweightedSpeed2D, 810.0) : FMath::Min(UnweightedSpeed2D, 540.0));
+	RelaxedLocomotionSpeed = FMath::FInterpTo(RelaxedLocomotionSpeed, TargetRelaxedSpeed, DeltaSeconds, RelaxedSpeedInterpSpeed);
 	SetBoolVar(TEXT("isAccelerating"), bAccelerating);
 	SetFloatVar(TEXT("Speed_X"), SpeedX);
 	SetFloatVar(TEXT("Speed_Y"), SpeedY);
@@ -107,12 +115,11 @@ void UknightDemoAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		? 180.0 : FMath::RadiansToDegrees(FMath::Atan2(InputX, InputY)));
 
 	// --- 상태 ---
-	const UknightMovementComponent* const KnightMovement = Cast<UknightMovementComponent>(Movement);
-	const bool bRunning = KnightMovement ? KnightMovement->IsRunning() : false;
 	SetBoolVar(TEXT("isRun"), bRunning);
 	SetBoolVar(TEXT("isWalk"), false);
 	SetBoolVar(TEXT("isOneHanded"), !HasTag(knightGameplayTags::State_Stance_TwoHanded));
-	SetBoolVar(TEXT("isBattleState"), HasTag(TAG_State_Combat_Demo));
+	// 락온 중에도 몸이 대상을 바라보며 좌우·후방 스텝(Speed_X/Y/Degree 블렌드 스페이스)으로 이동하도록 전투 이동 자세를 쓴다.
+	SetBoolVar(TEXT("isBattleState"), HasTag(TAG_State_Combat_Demo) || HasTag(knightGameplayTags::State_LockedOn));
 	SetBoolVar(TEXT("isLocomotion"), !Movement->IsFalling() && !IsAnyMontagePlaying());
 	SetFloatVar(TEXT("BattleStanceTimer"), 0.0);
 

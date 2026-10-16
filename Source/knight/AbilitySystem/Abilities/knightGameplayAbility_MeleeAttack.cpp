@@ -10,6 +10,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
+#include "GameFramework/Controller.h"
 #include "Input/knightInputBufferComponent.h"
 #include "TimerManager.h"
 #include "System/knightGameplayTags.h"
@@ -19,6 +20,19 @@ namespace
 {
 	// 이동 캔슬 검사 간격. 짧게 뗐다 누르는 입력도 놓치지 않게 짧게 둔다. (2026-10-07 0.05 → 0.02)
 	constexpr float MoveCancelCheckInterval = 0.02f;
+
+	// 락온 상태가 아닐 때 공격하면 화면 중앙(카메라/컨트롤러 수평 방향)을 바라보게 한다.
+	void FaceScreenCenterIfUnlocked(ACharacter* Character, const UAbilitySystemComponent* ASC)
+	{
+		if (!Character || (ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_LockedOn)))
+		{
+			return;
+		}
+		if (const AController* const Controller = Character->GetController())
+		{
+			Character->SetActorRotation(FRotator(0.f, Controller->GetControlRotation().Yaw, 0.f));
+		}
+	}
 }
 
 UknightGameplayAbility_MeleeAttack::UknightGameplayAbility_MeleeAttack(const FObjectInitializer& ObjectInitializer)
@@ -91,8 +105,8 @@ void UknightGameplayAbility_MeleeAttack::ActivateAbility(const FGameplayAbilityS
 		return;
 	}
 
-	// 방향키를 누른 채 공격하면 그 방향을 바로 보고 공격한다(락온 중 제외). 자동 조준(소프트 타깃)은 원래 같은 입력 방향으로 적을 찾는다. (2026-10-08)
-	FaceMoveInputDirection();
+	// 락온 중이 아니면 화면 중앙(카메라 방향)을 바로 보고 공격한다.
+	FaceScreenCenterIfUnlocked(Cast<ACharacter>(GetAvatarActorFromActorInfo()), GetAbilitySystemComponentFromActorInfo());
 
 	bAttackStarted = false;
 	if (DrawMontage && !IsWeaponInHand())
@@ -195,6 +209,7 @@ void UknightGameplayAbility_MeleeAttack::StartAttack()
 	{
 		World->GetTimerManager().ClearTimer(DrawTimer);
 	}
+	FaceScreenCenterIfUnlocked(Cast<ACharacter>(GetAvatarActorFromActorInfo()), GetAbilitySystemComponentFromActorInfo());
 	const bool bWarp = UknightCombatLibrary::SetAttackWarpTarget(GetAvatarActorFromActorInfo(), WarpTargetName, MaxWarpDistance,
 		WarpStopDistance, bUseSoftTarget, SoftTargetRange, SoftTargetAngle);
 	FVector WarpLocation;

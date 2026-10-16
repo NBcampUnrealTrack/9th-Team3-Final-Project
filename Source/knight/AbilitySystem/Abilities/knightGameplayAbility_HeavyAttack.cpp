@@ -9,9 +9,27 @@
 #include "Animation/AnimMontage.h"
 #include "Combat/knightCombatLibrary.h"
 #include "Engine/World.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/Controller.h"
 #include "TimerManager.h"
 #include "System/knightGameplayTags.h"
 #include "knight.h"
+
+namespace
+{
+	// 락온 상태가 아닐 때 공격하면 화면 중앙(카메라/컨트롤러 수평 방향)을 바라보게 한다.
+	void FaceScreenCenterForHeavyAttack(ACharacter* Character, const UAbilitySystemComponent* ASC)
+	{
+		if (!Character || (ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_LockedOn)))
+		{
+			return;
+		}
+		if (const AController* const Controller = Character->GetController())
+		{
+			Character->SetActorRotation(FRotator(0.f, Controller->GetControlRotation().Yaw, 0.f));
+		}
+	}
+}
 
 UknightGameplayAbility_HeavyAttack::UknightGameplayAbility_HeavyAttack(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -70,6 +88,7 @@ void UknightGameplayAbility_HeavyAttack::OnReleased(float TimeHeld)
 		UE_LOG(LogknightAbility, Log, TEXT("%s: released after %.2fs charge, x%.2f (MV %.0f)"), *GetName(), Held, Scale, ActiveHitParams.MotionValue);
 		if (ChargeReleaseMontage)
 		{
+			FaceScreenCenterForHeavyAttack(Cast<ACharacter>(GetAvatarActorFromActorInfo()), GetAbilitySystemComponentFromActorInfo());
 			FVector WarpLocation;
 			FRotator WarpRotation;
 			float WarpTravel = 0.f;
@@ -173,8 +192,8 @@ void UknightGameplayAbility_HeavyAttack::StartCharge()
 		return;
 	}
 	Phase = EPhase::Charging;
-	// 방향키를 누른 채 차지를 시작하면 그 방향을 바로 본다(락온 중 제외). 탭 콤보는 일반 공격 어빌리티가 같은 처리를 한다. (2026-10-08)
-	FaceMoveInputDirection();
+	// 락온 중이 아니면 화면 중앙(카메라 방향)을 바로 본다. 탭 콤보는 일반 공격 어빌리티가 같은 처리를 한다.
+	FaceScreenCenterForHeavyAttack(Cast<ACharacter>(GetAvatarActorFromActorInfo()), ASC);
 	const UWorld* const World = GetWorld();
 	ChargeStartTime = World ? World->GetTimeSeconds() : 0.0;
 	ActiveHitParams = LoopHitParams;
