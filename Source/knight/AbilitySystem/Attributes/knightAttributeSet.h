@@ -59,6 +59,11 @@ public:
 	// 보조
 	KNIGHT_ATTRIBUTE_ACCESSORS(UknightAttributeSet, RepairEfficiency);
 	KNIGHT_ATTRIBUTE_ACCESSORS(UknightAttributeSet, RepairKitCount);
+	KNIGHT_ATTRIBUTE_ACCESSORS(UknightAttributeSet, MaxRepairKitCount);
+	KNIGHT_ATTRIBUTE_ACCESSORS(UknightAttributeSet, RepairKitGauge);
+
+	/** 수리 키트 게이지가 이만큼 차면 키트가 1개 생긴다. (2026-10-16) */
+	static constexpr float RepairKitGaugeFull = 100.f;
 
 	/** BoostGauge가 0이 됐을 때. 부스트 어빌리티가 이를 받아 State.Overheated를 건다. */
 	mutable FknightAttributeEvent OnBoostDepleted;
@@ -193,6 +198,21 @@ private:
 	 */
 	UPROPERTY(BlueprintReadOnly, Category="Knight|Mech", meta=(AllowPrivateAccess=true))
 	FGameplayAttributeData RepairKitCount;
+
+	/**
+	 * (2026-10-16) 수리 키트 최대 개수. 기본 3 = 출격 시작 개수. 이보다 적을 때만 퍼펙트 가드로 수리 키트 게이지가 찬다.
+	 * 바뀔 수 있는 값(파츠·업그레이드로 늘릴 수 있게 스탯으로 둠).
+	 */
+	UPROPERTY(BlueprintReadOnly, Category="Knight|Mech", meta=(AllowPrivateAccess=true))
+	FGameplayAttributeData MaxRepairKitCount;
+
+	/**
+	 * (2026-10-16 사용자 결정) 수리 키트 게이지(0 ~ RepairKitGaugeFull 100). 키트가 최대 개수보다 적을 때 퍼펙트 가드에 성공하면
+	 * 차고(AknightCharacter::RepairKitGaugePerPerfectGuard, 기본 20 = 퍼펙트 가드 5번), 꽉 차면 키트 +1에 0으로 돌아간다.
+	 * 출격할 때마다 0에서 시작한다. HUD는 RepairKitCount처럼 어트리뷰트 변경 알림으로 읽는다.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category="Knight|Mech", meta=(AllowPrivateAccess=true))
+	FGameplayAttributeData RepairKitGauge;
 
 	bool bBoostDepleted = false;
 

@@ -75,6 +75,8 @@ namespace knightGameplayTags
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_HitReact_Flinch);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_HitReact_Stagger);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_HitReact_Knockdown);
+	// (2026-10-16) 플레이어 그로기(기절). 그로기가 0이 되면 기절 시작 → 반복 → 끝.
+	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_HitReact_Groggy);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Monster_Enraged);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Monster_Exhausted);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Monster_Reacting);

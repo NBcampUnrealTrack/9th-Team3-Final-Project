@@ -148,6 +148,36 @@ void AknightCharacter::InitializeAbilitySystem()
 	// 속성 세트의 규칙(전투 중 파츠 교체로 회복 방지)이라 그대로 두고, 출격 시점에만 채운다.
 	AbilitySystemComponent->SetNumericAttributeBase(UknightCoreAttributeSet::GetHealthAttribute(), CoreAttributeSet->GetMaxHealth());
 	AbilitySystemComponent->SetNumericAttributeBase(UknightCoreAttributeSet::GetPoiseAttribute(), CoreAttributeSet->GetMaxPoise());
+
+	// 수리 키트 게이지: 퍼펙트 가드 성공 이벤트(knightCombatLibrary::ApplyMeleeHit이 막은 쪽에 보냄)를 받는다. (2026-10-16)
+	static const FGameplayTag ParrySucceededTag = FGameplayTag::RequestGameplayTag(TEXT("Event.ParrySucceeded"), false);
+	if (ParrySucceededTag.IsValid())
+	{
+		AbilitySystemComponent->GenericGameplayEventCallbacks.FindOrAdd(ParrySucceededTag).AddUObject(this, &ThisClass::HandlePerfectGuard);
+	}
+}
+
+void AknightCharacter::HandlePerfectGuard(const FGameplayEventData* Payload)
+{
+	const float KitCount = MechAttributeSet->GetRepairKitCount();
+	const float MaxKitCount = MechAttributeSet->GetMaxRepairKitCount();
+	// 키트가 가득이면 게이지가 오르지 않는다(사용자 결정).
+	if (IsDead() || RepairKitGaugePerPerfectGuard <= 0.f || KitCount >= MaxKitCount)
+	{
+		return;
+	}
+	float Gauge = MechAttributeSet->GetRepairKitGauge() + RepairKitGaugePerPerfectGuard;
+	float NewKitCount = KitCount;
+	if (Gauge >= UknightAttributeSet::RepairKitGaugeFull)
+	{
+		// 꽉 차면 키트 +1, 넘친 만큼은 다음 게이지로. 그래서 최대 개수가 되면 0부터.
+		NewKitCount = FMath::Min(KitCount + 1.f, MaxKitCount);
+		Gauge = NewKitCount >= MaxKitCount ? 0.f : Gauge - UknightAttributeSet::RepairKitGaugeFull;
+		AbilitySystemComponent->SetNumericAttributeBase(UknightAttributeSet::GetRepairKitCountAttribute(), NewKitCount);
+	}
+	AbilitySystemComponent->SetNumericAttributeBase(UknightAttributeSet::GetRepairKitGaugeAttribute(), Gauge);
+	UE_LOG(Logknight, Log, TEXT("%s: perfect guard -> repair kit gauge %.0f / %.0f, kits %.0f / %.0f."), *GetNameSafe(this),
+		Gauge, UknightAttributeSet::RepairKitGaugeFull, NewKitCount, MaxKitCount);
 }
 
 FGameplayTag AknightCharacter::ResolveHitPart(const FHitResult& Hit) const

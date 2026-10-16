@@ -13,7 +13,9 @@ enum class EknightHitReactType : uint8
 {
 	Flinch,
 	Stagger,
-	Knockdown
+	Knockdown,
+	/** (2026-10-16) 플레이어 그로기(기절): 시작 → 반복(GroggyDuration) → 끝. */
+	Groggy
 };
 
 /** One reaction animated per hit direction. Missing directions fall back to Front. */
@@ -75,6 +77,12 @@ struct FknightHitImpactFeel
  *
  * Independent group with retrigger, so a stagger can interrupt a flinch. Attacks, guard and boost are
  * cancelled on activation and blocked while it runs.
+ *
+ * (2026-10-16 사용자 결정) 그로기(기절): GroggyLoopMontage가 있으면 Event.PoiseBroken은 휘청·다운 대신 기절이 된다.
+ *   흐름: GroggyStartMontage → GroggyLoopMontage 반복 GroggyDuration초(기본 2.5) → GroggyEndMontage(한손 스탠스면 GroggyEndMontageOneHanded).
+ *   그 동안 이동 입력이 잠기고(무브먼트 SetMoveInputLocked) 공격·가드·퀵스텝이 막힌다(State.HitReact).
+ *   맞아도 피해만 받고 다른 피격 반응 없이 기절이 이어진다(State.HitReact.Groggy 동안 반응 이벤트 무시). 끝나면 PoiseRecoveryEffect로 그로기를 채운다.
+ *   맞는 맛(넉백·흔들림·슬로)은 StaggerImpact를 쓴다. GroggyLoopMontage를 비우면 예전처럼 휘청·다운.
  */
 UCLASS()
 class KNIGHT_API UknightGameplayAbility_HitReact : public UknightGameplayAbility
@@ -122,7 +130,46 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Hit React|Impact")
 	FknightHitImpactFeel KnockdownImpact;
 
+	/** 그로기 시작(무너지는 동작). 비어 있으면 바로 반복으로 간다. */
+	UPROPERTY(EditDefaultsOnly, Category="Hit React|Groggy")
+	TObjectPtr<UAnimMontage> GroggyStartMontage;
+
+	/** 그로기 반복(비틀거림). 비어 있으면 그로기 없이 예전처럼 휘청·다운. 몽타주가 끝나도 GroggyDuration 동안 다시 재생한다. */
+	UPROPERTY(EditDefaultsOnly, Category="Hit React|Groggy")
+	TObjectPtr<UAnimMontage> GroggyLoopMontage;
+
+	/** 그로기 끝(정신 차리는 동작), 양손 스탠스. 비어 있으면 반복이 끝나는 순간 끝난다. */
+	UPROPERTY(EditDefaultsOnly, Category="Hit React|Groggy")
+	TObjectPtr<UAnimMontage> GroggyEndMontage;
+
+	/** 그로기 끝, 한손 스탠스. 비어 있으면 GroggyEndMontage. */
+	UPROPERTY(EditDefaultsOnly, Category="Hit React|Groggy")
+	TObjectPtr<UAnimMontage> GroggyEndMontageOneHanded;
+
+	/** 그로기 반복 시간(초, 시작·끝 동작 제외). 바뀔 수 있는 값. (2026-10-16 사용자 결정 2.5초) */
+	UPROPERTY(EditDefaultsOnly, Category="Hit React|Groggy", meta=(ClampMin=0, Units="s"))
+	float GroggyDuration = 2.5f;
+
 private:
+	/** 그로기 단계: 시작 → 반복 → 끝. 몽타주가 끝날 때(블렌드 아웃) 다음 단계로 넘어간다. */
+	enum class EGroggyPhase : uint8 { None, Start, Loop, End };
+
+	void StartGroggy();
+	void EnterGroggyLoop();
+	/** 지금 그로기 몽타주 태스크를 끝내고(콜백 끊기) 새 몽타주를 재생한다. */
+	void PlayGroggyMontage(UAnimMontage* Montage);
+
+	UFUNCTION()
+	void OnGroggyMontageDone();
+
+	UFUNCTION()
+	void OnGroggyTimeUp();
+
+	EGroggyPhase GroggyPhase = EGroggyPhase::None;
+	double GroggyLoopStartTime = 0.0;
+	TWeakObjectPtr<class UAbilityTask_PlayMontageAndWait> GroggyMontageTask;
+	bool bGroggyMoveLockApplied = false;
+
 	void ApplyImpactFeel(AActor& Avatar, const AActor* EventInstigator);
 	const FknightHitImpactFeel& GetImpactFeel(EknightHitReactType Type) const;
 

@@ -32,6 +32,7 @@ class UknightDamageVisualComponent;
 class UknightPartsComponent;
 class UknightPartHealthComponent;
 struct FGameplayEffectSpec;
+struct FGameplayEventData;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -115,6 +116,13 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Abilities")
 	TObjectPtr<UknightAbilityTagRelationshipMapping> TagRelationshipMapping;
+
+	/**
+	 * (2026-10-16 사용자 결정) 퍼펙트 가드 1번에 차는 수리 키트 게이지(메카 속성 RepairKitGauge, 100이면 키트 +1).
+	 * 기본 20 = 퍼펙트 가드 5번에 키트 1개. 키트가 최대 개수(MaxRepairKitCount)면 차지 않는다. 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|RepairKit", meta=(ClampMin=0))
+	float RepairKitGaugePerPerfectGuard = 20.f;
 
 	/** 템플릿 입력. InputConfig가 비어 있을 때만 쓴다. */
 	UPROPERTY(EditAnywhere, Category="Input")
@@ -204,6 +212,9 @@ protected:
 	/** Poise 붕괴와 일반 피격은 UknightHitReactionComponent가 반응 이벤트로 바꾼다. */
 	void HandleOutOfHealth(AActor* DamageInstigator, AActor* DamageCauser, const FGameplayEffectSpec* DamageEffectSpec,
 		float DamageMagnitude, float OldValue, float NewValue);
+
+	/** 퍼펙트 가드 성공(Event.ParrySucceeded): 키트가 최대보다 적으면 수리 키트 게이지를 채우고, 꽉 차면 키트 +1. (2026-10-16) */
+	void HandlePerfectGuard(const FGameplayEventData* Payload);
 
 public:
 

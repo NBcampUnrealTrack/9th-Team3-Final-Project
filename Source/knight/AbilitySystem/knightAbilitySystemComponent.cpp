@@ -117,7 +117,10 @@ void UknightAbilitySystemComponent::TickBoostRecovery()
 
 	const FGameplayAttribute GaugeAttribute = UknightAttributeSet::GetBoostGaugeAttribute();
 	const float CurrentGauge = GetNumericAttributeBase(GaugeAttribute);
-	const bool bPaused = bPauseBoostRecoveryWhileRunning && IsAvatarRunning();
+	// 달리는 중이거나 공격이 아직 끝나지 않았으면(콤보 창·후딜) 멈춘다. 멈춘 동안에도 대기 시간은 흘러서,
+	// 대기 시간이 이미 지났으면 행동이 끝나는 순간 바로 차기 시작한다. (2026-10-16)
+	const bool bPaused = (bPauseBoostRecoveryWhileRunning && IsAvatarRunning())
+		|| (bHoldBoostRecoveryDuringAction && IsActionHoldingBoostRecovery());
 	const float NewGauge = knightBoostRecovery::Step(CurrentGauge, MechSet->GetMaxBoostGauge(), MechSet->GetBoostRecoveryRate(),
 		BoostRecoveryInterval, World->GetTimeSeconds() - MechSet->GetLastBoostSpendTime(), MechSet->GetBoostRecoveryDelay(), bPaused);
 	if (NewGauge != CurrentGauge)
@@ -421,6 +424,11 @@ bool UknightAbilitySystemComponent::IsAttackRecoveryDashOnly() const
 		return false;
 	}
 	// 캔슬 창을 연 게 공격인지 본다. 가드·퀵스텝 경직도 캔슬 창을 열지만 그건 지금처럼 무엇이든 끊을 수 있다.
+	return IsExclusiveAttackActive();
+}
+
+bool UknightAbilitySystemComponent::IsExclusiveAttackActive() const
+{
 	for (const FGameplayAbilitySpec& Spec : ActivatableAbilities.Items)
 	{
 		if (!Spec.IsActive())
@@ -439,6 +447,17 @@ bool UknightAbilitySystemComponent::IsAttackRecoveryDashOnly() const
 		}
 	}
 	return false;
+}
+
+bool UknightAbilitySystemComponent::IsActionHoldingBoostRecovery() const
+{
+	// 다음 콤보를 이어 갈 수 있는 동안(콤보 창)과 후딜(퀵스텝만 되는 시간)에는 회복을 미룬다. (2026-10-16)
+	if (HasMatchingGameplayTag(knightGameplayTags::Window_Combo) || IsAttackRecoveryDashOnly())
+	{
+		return true;
+	}
+	// 캔슬 창이 열리기 전 = 아직 휘두르는 중. 캔슬 창이 열려 있으면(후딜 뒤 꼬리 동작) 이동으로 끊을 수 있으니 회복한다.
+	return !HasMatchingGameplayTag(knightGameplayTags::Window_Cancel) && IsExclusiveAttackActive();
 }
 
 void UknightAbilitySystemComponent::CancelActivationGroupAbilities(EknightAbilityActivationGroup Group, const UknightGameplayAbility* IgnoreAbility)
