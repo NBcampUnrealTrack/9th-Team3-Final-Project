@@ -34,7 +34,7 @@ namespace
 	const FLinearColor Ember(FColor(0xFF, 0x7A, 0x1A));
 	const FLinearColor Frost(FColor(0xA8, 0xC8, 0xF0));
 	const FLinearColor Mist(FColor(0x8F, 0xA3, 0xBF));
-	const FLinearColor Dim(FColor(0x4A, 0x5B, 0x75));
+	const FLinearColor DimColor(FColor(0x4A, 0x5B, 0x75));
 	const FLinearColor White(FColor(0xF4, 0xF8, 0xFC));
 	const FLinearColor Increase(FColor(0x4B, 0xE8, 0x80));
 	const FLinearColor Alert(FColor(0xE5, 0x48, 0x4D));
@@ -614,7 +614,7 @@ void UKnightMaintenanceWidget::EnsureStatRows()
 		UCommonTextBlock* CurrentText = NewRowText(WidgetTree, TextStyle, ETextJustify::Right);
 		UCommonTextBlock* ArrowText = NewRowText(WidgetTree, TextStyle, ETextJustify::Center);
 		ArrowText->SetText(LOCTEXT("StatArrow", "→"));
-		ArrowText->SetColorAndOpacity(FSlateColor(Dim));
+		ArrowText->SetColorAndOpacity(FSlateColor(DimColor));
 		UCommonTextBlock* AfterText = NewRowText(WidgetTree, TextStyle, ETextJustify::Right);
 		UCommonTextBlock* DeltaText = NewRowText(WidgetTree, TextStyle, ETextJustify::Right);
 		AddFixed(Row, WidgetTree, CurrentText, 76.f);
@@ -712,7 +712,7 @@ void UKnightMaintenanceWidget::RefreshDetails()
 		{
 			const bool bCan = Progression && Progression->CanCraftPart(SelectedRecipe);
 			State = bCan ? LOCTEXT("StateCraftable", "제작 가능") : LOCTEXT("StateMissing", "재료 부족");
-			Color = bCan ? Frost : Dim;
+			Color = bCan ? Frost : DimColor;
 		}
 		else if (Shown) State = FText::Format(LOCTEXT("StateOwned", "보유 {0}"), Progression ? Progression->GetItemCount(Shown) : 0);
 		Txt_PartState->SetText(State);
