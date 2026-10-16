@@ -203,6 +203,12 @@ protected:
 	TArray<FGameplayAbilitySpecHandle> InputReleasedSpecHandles;
 	TArray<FGameplayAbilitySpecHandle> InputHeldSpecHandles;
 
+	/**
+	 * (2026-10-15) 누른 뒤 아직 발동하지 못한 bRetryPressWhileHeld 어빌리티(가드). 키를 누르고 있는 동안 매 프레임 다시 시도한다.
+	 * 발동하거나(NotifyAbilityActivated) 키를 떼면 빠진다.
+	 */
+	TArray<FGameplayAbilitySpecHandle> PendingHeldPressHandles;
+
 	/** ProcessAbilityInput이 마지막으로 실행된 뒤 발동한 어빌리티들의 입력 태그. */
 	FGameplayTagContainer RecentlyActivatedInputTags;
 

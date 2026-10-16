@@ -54,6 +54,9 @@ public:
 	 */
 	bool CanRetriggerWhileActive() const { return bRetriggerInstancedAbility; }
 
+	/** (2026-10-15) 누른 순간 막혀 있었으면 키를 누르고 있는 동안 다시 시도하는지(bRetryPressWhileHeld). 입력 처리가 읽는다. */
+	bool ShouldRetryPressWhileHeld() const { return bRetryPressWhileHeld; }
+
 	UFUNCTION(BlueprintCallable, Category="Knight|Ability")
 	UknightAbilitySystemComponent* GetKnightAbilitySystemComponentFromActorInfo() const;
 
@@ -122,4 +125,11 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Knight|Ability Activation")
 	EknightAbilityActivationGroup ActivationGroup = EknightAbilityActivationGroup::Independent;
+
+	/**
+	 * (2026-10-15 사용자 결정) OnInputTriggered인데 누른 순간 막혀 있었으면(공격 후딜 등) 키를 누르고 있는 동안 매 프레임 다시 시도한다.
+	 * 그 누름으로 한 번 발동하면 끝이다(다른 행동 뒤 자동으로 다시 나가지 않음). 키를 떼면 그만 시도한다. 가드가 켠다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Knight|Ability Activation")
+	bool bRetryPressWhileHeld = false;
 };
