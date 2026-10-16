@@ -57,6 +57,7 @@ namespace knightBoostRecovery
  * 행동 에너지(스테미너) 자연 회복 (2026-10-09):
  *   마지막으로 쓴 뒤 BoostRecoveryDelay초(메카 속성, 기본 1.2)가 지나면 초당 BoostRecoveryRate(메카 속성, 기본 25)만큼 찬다.
  *   (2026-10-13) 달리는 동안에는 회복이 멈춘다(bPauseBoostRecoveryWhileRunning). 달리기는 쓰는 게 아니라서 대기 시간을 다시 세지 않는다.
+ *   (2026-10-16) 대기 시간이 지나도 공격이 끝나기 전(휘두르는 중·후딜·콤보 창)에는 회복을 미룬다(bHoldBoostRecoveryDuringAction).
  *   메카 속성 세트가 있는 나이트만 해당된다.
  */
 UCLASS()
@@ -165,6 +166,19 @@ protected:
 
 	/** 아바타의 나이트 무브먼트가 지금 달리는 중인지. */
 	bool IsAvatarRunning() const;
+
+	/**
+	 * (2026-10-16 사용자 결정) 켜면 BoostRecoveryDelay가 지나도 공격이 끝날 때까지 행동 에너지 회복을 미룬다.
+	 * 끝 = 콤보 창(Window.Combo)과 후딜(AttackRecoveryDashOnlyTime)이 모두 끝나 이동으로 끊을 수 있는 때. 끄면 대기 시간만 본다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Boost")
+	bool bHoldBoostRecoveryDuringAction = true;
+
+	/** 공격이 아직 끝나지 않았는지: 휘두르는 중(캔슬 창 전), 후딜, 콤보 창. */
+	bool IsActionHoldingBoostRecovery() const;
+
+	/** 교체 가능 배타 그룹의 공격(Ability.Attack) 어빌리티가 실행 중인지. */
+	bool IsExclusiveAttackActive() const;
 
 	/**
 	 * (2026-10-14 사용자 결정, 시험 중) 공격 후딜은 퀵스텝만 끊을 수 있다. '게임이 너무 스피디하다'는 의견으로 시험.
