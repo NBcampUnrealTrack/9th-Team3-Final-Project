@@ -5,6 +5,8 @@
 #include "knightWaterRippleSettings.generated.h"
 
 class UMaterialInterface;
+class UNiagaraSystem;
+class USoundBase;
 class UTextureRenderTarget2D;
 
 /**
@@ -67,19 +69,11 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category="Simulation", meta=(ClampMin=1, Units="cm"))
 	float MaxHeight = 15.f;
 
-	/** 이 이름이 들어간 뼈가 물속에서 움직이면 물결을 만든다(대소문자 무시). */
-	UPROPERTY(EditAnywhere, Config, Category="Sources")
-	TArray<FString> BoneKeywords;
-
-	/** 캐릭터마다 쓰는 뼈 수 상한. */
-	UPROPERTY(EditAnywhere, Config, Category="Sources", meta=(ClampMin=0, ClampMax=8))
-	int32 MaxBonesPerCharacter = 4;
-
-	/** 뼈 물결 반지름 = 캡슐 반지름 x 이 값. 몸통 물결은 캡슐 반지름 그대로다. */
+	/** 바디 물결 반지름 = 피직스 바디 가로 반폭 x 이 값. 캡슐 물결은 캡슐 반지름 그대로다. */
 	UPROPERTY(EditAnywhere, Config, Category="Sources", meta=(ClampMin=0.05))
-	float BoneRadiusScale = 0.35f;
+	float BodyRadiusScale = 1.f;
 
-	/** 수면보다 이만큼(캡슐 반지름 비율) 위에 있는 뼈까지 물에 닿은 것으로 본다. 큰 몬스터는 발목 뼈가 바닥보다 높다. */
+	/** 캡슐 바닥이 수면보다 이만큼(캡슐 반지름 비율) 위까지는 물에 있는 것으로 보고 바디를 검사한다. 점프 중 착지 첨벙을 놓치지 않게 여유를 둔다. */
 	UPROPERTY(EditAnywhere, Config, Category="Sources", meta=(ClampMin=0))
 	float SurfaceMarginScale = 0.5f;
 
@@ -97,6 +91,69 @@ public:
 
 	UPROPERTY(EditAnywhere, Config, Category="Sources", meta=(ClampMin=0, Units="cm"))
 	float StrengthPerSecond = 25.f;
+
+	/** 피직스 바디(발, 몸통 등)가 물에 부딪히거나 쓸고 지나갈 때 수면에 터뜨리는 이펙트. 비우면 첨벙을 끈다. */
+	UPROPERTY(EditAnywhere, Config, Category="Splash")
+	TSoftObjectPtr<UNiagaraSystem> SplashSystem;
+
+	/** 최종 배율이 SplashHeavyScale 이상일 때(세게 디딤, 큰 몬스터) SplashSystem 대신 쓰는 이펙트. 내려찍기 노티파이의 WaterSplash가 비어 있을 때도 쓴다. */
+	UPROPERTY(EditAnywhere, Config, Category="Splash")
+	TSoftObjectPtr<UNiagaraSystem> SplashHeavySystem;
+
+	UPROPERTY(EditAnywhere, Config, Category="Splash", meta=(ClampMin=0))
+	float SplashHeavyScale = 1.5f;
+
+	/** 첨벙 소리. 비우면 소리 없이 이펙트만 낸다. */
+	UPROPERTY(EditAnywhere, Config, Category="Splash")
+	TSoftObjectPtr<USoundBase> SplashSound;
+
+	/** 바디가 이보다 빠르게 내려오다 멈추면 물에 부딪힌 것으로 본다(디딤, 착지, 구르기, 쓰러짐). 제자리 대기 동작의 작은 흔들림을 거른다. */
+	UPROPERTY(EditAnywhere, Config, Category="Splash", meta=(ClampMin=0, Units="cm/s"))
+	float SplashMinDownSpeed = 100.f;
+
+	/** 같은 바디가 다시 첨벙하기까지 최소 간격. */
+	UPROPERTY(EditAnywhere, Config, Category="Splash", meta=(ClampMin=0, Units="s"))
+	float SplashCooldown = 0.25f;
+
+	/** 반폭이 SplashReferenceBodySize인 바디가 SplashReferenceDownSpeed로 부딪혔을 때의 이펙트 배율. 큰 바디(몬스터 발, 몸통)는 크기에 비례해 커진다. */
+	UPROPERTY(EditAnywhere, Config, Category="Splash", meta=(ClampMin=0))
+	float SplashScale = 0.6f;
+
+	/** 이 속도로 내려와 디디면 SplashScale 그대로. 더 세게 디디면(뛰기, 착지) 그만큼 커진다. 기사가 뛸 때 약 300. */
+	UPROPERTY(EditAnywhere, Config, Category="Splash", meta=(ClampMin=1, Units="cm/s"))
+	float SplashReferenceDownSpeed = 300.f;
+
+	/** 디딘 세기에 따른 배율 범위(최소, 최대). */
+	UPROPERTY(EditAnywhere, Config, Category="Splash")
+	FVector2D SplashSpeedScaleRange = FVector2D(0.5, 2.5);
+
+	/** 기준 바디 가로 반폭(기사 발 바디). */
+	UPROPERTY(EditAnywhere, Config, Category="Splash", meta=(ClampMin=1, Units="cm"))
+	float SplashReferenceBodySize = 12.f;
+
+	/** 물에 잠긴 바디가 이보다 빠르게 옆으로 움직이면 물보라를 남긴다(꼬리 휘두르기, 돌진, 구르기). 실제 문턱 = SplashWakeSpeed + 캡슐 반지름 x SplashWakeSpeedPerRadius. */
+	UPROPERTY(EditAnywhere, Config, Category="Splash", meta=(ClampMin=0, Units="cm/s"))
+	float SplashWakeSpeed = 600.f;
+
+	/** 큰 몬스터는 팔다리가 원래 빠르게 움직이므로 몸 크기에 비례해 물보라 문턱을 올린다(1/초). */
+	UPROPERTY(EditAnywhere, Config, Category="Splash", meta=(ClampMin=0))
+	float SplashWakeSpeedPerRadius = 2.f;
+
+	/** 같은 바디가 물보라를 남기는 간격. */
+	UPROPERTY(EditAnywhere, Config, Category="Splash", meta=(ClampMin=0.02, Units="s"))
+	float SplashWakeInterval = 0.25f;
+
+	/** 같은 캐릭터의 다른 바디가 이 시간 안에 가까이서(바디 반폭 x 3) 첨벙했으면 하나로 본다. 발과 종아리가 같이 디딜 때 겹치지 않게 한다. */
+	UPROPERTY(EditAnywhere, Config, Category="Splash", meta=(ClampMin=0, Units="s"))
+	float SplashMergeTime = 0.2f;
+
+	/** 바디 크기와 세기를 곱한 배율의 상한. */
+	UPROPERTY(EditAnywhere, Config, Category="Splash", meta=(ClampMin=0.1))
+	float SplashMaxScale = 12.f;
+
+	/** 첨벙 소리 크기. 큰 캐릭터도 같은 값을 쓴다. */
+	UPROPERTY(EditAnywhere, Config, Category="Splash", meta=(ClampMin=0))
+	float SplashVolume = 1.f;
 
 	/** 물 밖이거나 계산 범위 밖인 캐릭터가 수면을 다시 찾는 간격. */
 	UPROPERTY(EditAnywhere, Config, Category="Performance", meta=(ClampMin=0.02, Units="s"))
