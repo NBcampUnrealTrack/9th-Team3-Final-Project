@@ -40,8 +40,10 @@ UknightAttributeSet::UknightAttributeSet()
 
 	InitRepairEfficiency(1.f);
 
-	// 수리 키트 출격당 3개 (기획 문서).
+	// 수리 키트 출격당 3개 (기획 문서). 최대 개수도 3개, 게이지는 0에서 시작 (2026-10-16).
 	InitRepairKitCount(3.f);
+	InitMaxRepairKitCount(3.f);
+	InitRepairKitGauge(0.f);
 }
 
 void UknightAttributeSet::PreAttributeBaseChange(const FGameplayAttribute& Attribute, float& NewValue) const
@@ -99,11 +101,15 @@ void UknightAttributeSet::ClampAttribute(const FGameplayAttribute& Attribute, fl
 	{
 		NewValue = FMath::Max(NewValue, 0.1f);
 	}
+	else if (Attribute == GetRepairKitGaugeAttribute())
+	{
+		NewValue = FMath::Clamp(NewValue, 0.f, RepairKitGaugeFull);
+	}
 	// 나머지는 음수만 막는다.
 	else if (Attribute == GetWeightAttribute() || Attribute == GetWalkSpeedAttribute()
 		|| Attribute == GetRunSpeedAttribute() || Attribute == GetJumpSpeedAttribute()
 		|| Attribute == GetDodgeCooldownAttribute() || Attribute == GetPerfectGuardWindowAttribute() || Attribute == GetRepairEfficiencyAttribute()
-		|| Attribute == GetRepairKitCountAttribute())
+		|| Attribute == GetRepairKitCountAttribute() || Attribute == GetMaxRepairKitCountAttribute())
 	{
 		NewValue = FMath::Max(NewValue, 0.f);
 	}
