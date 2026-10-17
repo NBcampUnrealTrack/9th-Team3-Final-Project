@@ -8,6 +8,7 @@
 #include "Abilities/Tasks/AbilityTask_WaitInputRelease.h"
 #include "Animation/AnimMontage.h"
 #include "Combat/knightCombatLibrary.h"
+#include "Combat/knightGroggyFeedbackComponent.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
 #include "System/knightGameplayTags.h"
@@ -233,6 +234,13 @@ void UknightGameplayAbility_HeavyAttack::PlayMontage(UAnimMontage* Montage, FNam
 		Task->OnBlendOut.AddDynamic(this, &ThisClass::OnChargeStartFinished);
 	}
 	Task->ReadyForActivation();
+	if (AActor* const Avatar = GetAvatarActorFromActorInfo())
+	{
+		if (UknightGroggyFeedbackComponent* const Feedback = Avatar->FindComponentByClass<UknightGroggyFeedbackComponent>())
+		{
+			Feedback->WatchAttack(this, Montage, ActiveHitParams);
+		}
+	}
 }
 
 void UknightGameplayAbility_HeavyAttack::OnChargeStartFinished()
@@ -255,7 +263,7 @@ void UknightGameplayAbility_HeavyAttack::OnMeleeHitEvent(FGameplayEventData Payl
 	const FHitResult* const Hit = Payload.TargetData.Num() > 0 && Payload.TargetData.Get(0) ? Payload.TargetData.Get(0)->GetHitResult() : nullptr;
 	if (Hit && (Phase == EPhase::Charging || Phase == EPhase::Releasing))
 	{
-		UknightCombatLibrary::ApplyMeleeHit(GetAvatarActorFromActorInfo(), *Hit, ActiveHitParams);
+		UknightCombatLibrary::ApplyMeleeHit(GetAvatarActorFromActorInfo(), *Hit, ActiveHitParams, this);
 	}
 }
 
@@ -270,6 +278,13 @@ void UknightGameplayAbility_HeavyAttack::Finish(bool bWasCancelled)
 void UknightGameplayAbility_HeavyAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
+	if (AActor* const Avatar = GetAvatarActorFromActorInfo())
+	{
+		if (UknightGroggyFeedbackComponent* const Feedback = Avatar->FindComponentByClass<UknightGroggyFeedbackComponent>())
+		{
+			Feedback->EndPredictionForAttack(this);
+		}
+	}
 	if (UWorld* const World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(TapTimer);

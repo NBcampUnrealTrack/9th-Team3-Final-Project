@@ -38,6 +38,12 @@ public:
 	/** Stops sending new ripple rings for Source. */
 	void StopRoarShockwave(const USceneComponent* Source);
 
+	/** Additive pre-hit zoom; holds at full weight until ReturnKnockdownZoom is called. */
+	void StartKnockdownZoom(AActor* InViewTarget, float Degrees, float EnterSeconds, double StartRealTime);
+	/** Ease out from the exact zoom weight reached at the hit or cancellation. */
+	void ReturnKnockdownZoom(float ReturnSeconds);
+	void CancelKnockdownZoom();
+
 	/** The player's CameraShakeScale setting. Screen effects that move or distort the view scale with it too. */
 	float GetShakeScale() const;
 
@@ -51,4 +57,16 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Camera")
 	TSubclassOf<UknightCameraModifier_RoarShockwave> RoarShockwaveClass;
+
+private:
+	TWeakObjectPtr<AActor> KnockdownViewTarget;
+	double KnockdownZoomStartTime = 0.0;
+	double KnockdownZoomReturnStartTime = 0.0;
+	float KnockdownZoomDegrees = 0.f;
+	float KnockdownZoomEnter = 0.f;
+	float KnockdownZoomReturn = 0.f;
+	float KnockdownZoomReturnStartWeight = 0.f;
+	bool bKnockdownZoomActive = false;
+	bool bKnockdownZoomReturning = false;
+	float GetKnockdownZoomWeight(double Now) const;
 };

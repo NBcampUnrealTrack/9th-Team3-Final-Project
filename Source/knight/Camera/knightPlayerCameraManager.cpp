@@ -3,6 +3,7 @@
 #include "Camera/CameraModifier_CameraShake.h"
 #include "Camera/CameraShakeBase.h"
 #include "Engine/Scene.h"
+#include "HAL/PlatformTime.h"
 #include "Camera/knightCameraModifier_RoarShockwave.h"
 #include "Engine/LocalPlayer.h"
 #include "GameFramework/PlayerController.h"
@@ -21,14 +22,81 @@ void AknightPlayerCameraManager::UpdateViewTarget(FTViewTarget& OutVT, float Del
 	Super::UpdateViewTarget(OutVT, DeltaTime);
 	const ULocalPlayer* const LocalPlayer = PCOwner ? PCOwner->GetLocalPlayer() : nullptr;
 	UknightSettingsSubsystem* const Settings = LocalPlayer ? LocalPlayer->GetSubsystem<UknightSettingsSubsystem>() : nullptr;
-	if (!Settings) return;
-	float Offset, Brightness, Gamma;
-	Settings->GetEffectiveDisplaySettings(Offset, Brightness, Gamma);
-	if (!FMath::IsNearlyZero(Offset))
+	if (Settings)
 	{
-		// Apply after the active camera mode or menu camera has produced its designed FOV.
-		OutVT.POV.FOV = FMath::Clamp(OutVT.POV.FOV + Offset, 60.f, 110.f);
+		float Offset, Brightness, Gamma;
+		Settings->GetEffectiveDisplaySettings(Offset, Brightness, Gamma);
+		if (!FMath::IsNearlyZero(Offset))
+		{
+			// Apply after the active camera mode or menu camera has produced its designed FOV.
+			OutVT.POV.FOV = FMath::Clamp(OutVT.POV.FOV + Offset, 60.f, 110.f);
+		}
 	}
+
+	if (bKnockdownZoomActive)
+	{
+		if (!KnockdownViewTarget.IsValid() || OutVT.Target != KnockdownViewTarget.Get())
+		{
+			CancelKnockdownZoom();
+			return;
+		}
+		const double Now = FPlatformTime::Seconds();
+		if (bKnockdownZoomReturning && Now - KnockdownZoomReturnStartTime >= KnockdownZoomReturn)
+		{
+			CancelKnockdownZoom();
+			return;
+		}
+		// OutVT contains this frame's camera mode and user FOV; never subtract from last frame's zoomed FOV.
+		const float BaseFOV = OutVT.POV.FOV;
+		OutVT.POV.FOV = FMath::Max(BaseFOV - KnockdownZoomDegrees * GetKnockdownZoomWeight(Now), FMath::Min(BaseFOV, 50.f));
+	}
+}
+
+float AknightPlayerCameraManager::GetKnockdownZoomWeight(double Now) const
+{
+	if (bKnockdownZoomReturning)
+	{
+		const float Alpha = KnockdownZoomReturn > 0.f
+			? FMath::Clamp(static_cast<float>((Now - KnockdownZoomReturnStartTime) / KnockdownZoomReturn), 0.f, 1.f) : 1.f;
+		return KnockdownZoomReturnStartWeight * (1.f - Alpha * Alpha * (3.f - 2.f * Alpha));
+	}
+	const float Alpha = KnockdownZoomEnter > 0.f
+		? FMath::Clamp(static_cast<float>((Now - KnockdownZoomStartTime) / KnockdownZoomEnter), 0.f, 1.f) : 1.f;
+	return Alpha * Alpha * (3.f - 2.f * Alpha);
+}
+
+void AknightPlayerCameraManager::StartKnockdownZoom(AActor* InViewTarget, float Degrees, float EnterSeconds, double StartRealTime)
+{
+	CancelKnockdownZoom();
+	if (!InViewTarget || Degrees <= 0.f)
+	{
+		return;
+	}
+	KnockdownViewTarget = InViewTarget;
+	KnockdownZoomDegrees = Degrees;
+	KnockdownZoomEnter = FMath::Max(EnterSeconds, 0.f);
+	KnockdownZoomStartTime = StartRealTime;
+	bKnockdownZoomActive = true;
+}
+
+void AknightPlayerCameraManager::ReturnKnockdownZoom(float ReturnSeconds)
+{
+	if (!bKnockdownZoomActive || bKnockdownZoomReturning)
+	{
+		return;
+	}
+	const double Now = FPlatformTime::Seconds();
+	KnockdownZoomReturnStartWeight = GetKnockdownZoomWeight(Now);
+	KnockdownZoomReturnStartTime = Now;
+	KnockdownZoomReturn = FMath::Max(ReturnSeconds, 0.f);
+	bKnockdownZoomReturning = true;
+}
+
+void AknightPlayerCameraManager::CancelKnockdownZoom()
+{
+	bKnockdownZoomActive = false;
+	bKnockdownZoomReturning = false;
+	KnockdownViewTarget.Reset();
 }
 
 void AknightPlayerCameraManager::UpdateCamera(float DeltaTime)

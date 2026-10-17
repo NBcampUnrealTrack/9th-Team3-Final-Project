@@ -25,6 +25,9 @@ public:
 	UFUNCTION(BlueprintPure, Category="Knight|Combat")
 	bool IsInHitStop() const { return bActive; }
 
+	/** Replace only a restoration value owned by a finishing slow-motion effect. */
+	void ReplaceRestoreTimeDilation(float ExpectedValue, float NewValue);
+
 protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 

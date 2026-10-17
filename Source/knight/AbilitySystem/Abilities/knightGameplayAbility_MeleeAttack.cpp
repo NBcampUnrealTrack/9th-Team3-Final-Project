@@ -7,6 +7,7 @@
 #include "AbilitySystem/knightAbilitySystemComponent.h"
 #include "AbilitySystem/Abilities/knightGameplayAbility_StanceSwitch.h"
 #include "Combat/knightCombatLibrary.h"
+#include "Combat/knightGroggyFeedbackComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
@@ -217,6 +218,13 @@ void UknightGameplayAbility_MeleeAttack::StartAttack()
 	MontageTask->OnInterrupted.AddDynamic(this, &ThisClass::OnMontageFinished);
 	MontageTask->OnCancelled.AddDynamic(this, &ThisClass::OnMontageFinished);
 	MontageTask->ReadyForActivation();
+	if (AActor* const Avatar = GetAvatarActorFromActorInfo())
+	{
+		if (UknightGroggyFeedbackComponent* const Feedback = Avatar->FindComponentByClass<UknightGroggyFeedbackComponent>())
+		{
+			Feedback->WatchAttack(this, Montage, HitParams);
+		}
+	}
 
 	// (2026-10-14) 루트 모션 공격은 애니 + 모션 워핑이 이동을 맡는다. 코드 돌진은 제자리 애니일 때만.
 	if (bLunge && bLungeWithCode)
@@ -308,6 +316,13 @@ void UknightGameplayAbility_MeleeAttack::CheckMoveCancel()
 void UknightGameplayAbility_MeleeAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
+	if (AActor* const Avatar = GetAvatarActorFromActorInfo())
+	{
+		if (UknightGroggyFeedbackComponent* const Feedback = Avatar->FindComponentByClass<UknightGroggyFeedbackComponent>())
+		{
+			Feedback->EndPredictionForAttack(this);
+		}
+	}
 	if (UWorld* const World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(MoveCancelTimer);
@@ -360,6 +375,6 @@ void UknightGameplayAbility_MeleeAttack::OnMeleeHitEvent(FGameplayEventData Payl
 	{
 		return;
 	}
-	const EknightHitOutcome Outcome = UknightCombatLibrary::ApplyMeleeHit(GetAvatarActorFromActorInfo(), *Hit, HitParams);
+	const EknightHitOutcome Outcome = UknightCombatLibrary::ApplyMeleeHit(GetAvatarActorFromActorInfo(), *Hit, HitParams, this);
 	OnHitResolved(*Hit, Outcome);
 }
