@@ -20,6 +20,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|Codex Editor") static bool MoveCodexCloseButton(UWidgetBlueprint* Blueprint);
 	/** Read back a Designer hierarchy link after saving the Widget Blueprint. */
 	UFUNCTION(BlueprintPure, Category="Knight|Codex Editor") static FName GetWidgetParentName(UWidgetBlueprint* Blueprint, FName WidgetName);
+	/** Inspect the saved Designer tree from editor scripting tools. */
+	UFUNCTION(BlueprintPure, Category="Knight|Codex Editor") static FString DescribeTree(UWidgetBlueprint* Blueprint);
+	/** Restyle the existing editable Designer hierarchy without replacing its bound widgets. */
+	UFUNCTION(BlueprintCallable, Category="Knight|Codex Editor") static bool StyleCodex(UWidgetBlueprint* Blueprint);
+	UFUNCTION(BlueprintCallable, Category="Knight|Codex Editor") static bool StyleBossEntry(UWidgetBlueprint* Blueprint);
+	UFUNCTION(BlueprintCallable, Category="Knight|Codex Editor") static bool StyleDropEntry(UWidgetBlueprint* Blueprint);
 	/** PIE inspection of a named scroll box in the compiled Designer tree. */
 	UFUNCTION(BlueprintPure, Category="Knight|Codex Editor") static UScrollBox* FindScrollBox(UUserWidget* Widget, FName WidgetName);
 };

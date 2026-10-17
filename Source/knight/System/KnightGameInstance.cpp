@@ -7,6 +7,8 @@
 #include "Settings/knightGameUserSettings.h"
 #include "knight.h"
 #include "CoreGlobals.h"
+#include "HAL/IConsoleManager.h"
+#include "UnrealEngine.h"
 
 void UKnightGameInstance::Init()
 {
@@ -28,4 +30,20 @@ void UKnightGameInstance::Init()
 	GetSubsystem<UknightRaidSubsystem>();
 	GetSubsystem<UknightProgressionSubsystem>();
 	GetSubsystem<UKnightGameFlowSubsystem>();
+}
+
+void UKnightGameInstance::OnStart()
+{
+	Super::OnStart();
+	// Init can restore a missing monitor before the game viewport exists. OnStart runs
+	// after the first world and viewport have been created, so the window can move now.
+	if (!GIsEditor)
+	{
+		if (UknightGameUserSettings* const Graphics = UknightGameUserSettings::Get();
+			Graphics && Graphics->ConsumeStartupDisplayRefresh())
+		{
+			GSystemResolution.ForceRefresh();
+			IConsoleManager::Get().CallAllConsoleVariableSinks();
+		}
+	}
 }

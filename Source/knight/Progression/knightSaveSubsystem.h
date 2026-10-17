@@ -10,6 +10,7 @@ class USaveGame;
 class UknightSaveGame;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FknightSaveFinished, bool, bSuccess);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FknightActiveSlotChanged, const FString&, SlotId);
 
 /**
  * Loads the progress slot at startup and saves it asynchronously. Saves requested while one is in flight are
@@ -55,6 +56,9 @@ public:
 	FString GetActiveSlotId() const { return ActiveSlotId; }
 
 	UFUNCTION(BlueprintPure, Category="Knight|Save")
+	bool HasSelectedSlot() const { return bSlotSelected && !bLoadFailed && SaveGame != nullptr; }
+
+	UFUNCTION(BlueprintPure, Category="Knight|Save")
 	bool DidLoadFail() const { return bLoadFailed; }
 
 	UFUNCTION(BlueprintCallable, Category="Knight|Save")
@@ -66,6 +70,10 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category="Knight|Save")
 	FknightSaveFinished OnSaveFinished;
+
+	/** Fired after a slot selection attempt, including an unreadable slot, so views can clear stale progress. */
+	UPROPERTY(BlueprintAssignable, Category="Knight|Save")
+	FknightActiveSlotChanged OnActiveSlotChanged;
 
 	static const FString SlotName;
 	static constexpr int32 UserIndex = 0;

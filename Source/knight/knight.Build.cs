@@ -12,6 +12,7 @@ public class knight : ModuleRules
 			"Core",
 			"CoreUObject",
 			"Engine",
+			"ApplicationCore",
 			"InputCore",
 			"EnhancedInput",
 			"AIModule",

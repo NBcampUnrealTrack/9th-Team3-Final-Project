@@ -1,12 +1,14 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Codex/KnightCodexData.h"
 #include "Blueprint/UserWidget.h"
 #include "KnightCodexWidget.generated.h"
 
 class UButton;
 class UImage;
 class UTextBlock;
+class UWidget;
 class UVerticalBox;
 class UWidgetSwitcher;
 class UTexture2D;
@@ -23,7 +25,7 @@ class KNIGHT_API UKnightCodexBossEntryWidget : public UUserWidget
 	GENERATED_BODY()
 public:
 	UPROPERTY(BlueprintAssignable, Category="Knight|Codex") FKnightCodexBossSelected OnSelected;
-	void Configure(FName InId, const FText& Name, UTexture2D* Icon);
+	void Configure(FName InId, const FText& Name, UTexture2D* Icon, bool bUnlocked);
 	void SetSelected(bool bSelected);
 	FName GetBossId() const { return BossId; }
 protected:
@@ -31,6 +33,8 @@ protected:
 	UPROPERTY(meta=(BindWidget)) TObjectPtr<UButton> Button_Select;
 	UPROPERTY(meta=(BindWidget)) TObjectPtr<UTextBlock> Text_Name;
 	UPROPERTY(meta=(BindWidget)) TObjectPtr<UImage> Image_Icon;
+	UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> Text_LockState;
+	UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UWidget> Row_LockState;
 private:
 	UFUNCTION() void HandleClicked();
 	FName BossId;
@@ -90,7 +94,14 @@ private:
 	UFUNCTION() void HandleMech();
 	UFUNCTION() void HandleMonster();
 	UFUNCTION() void HandleBossSelected(FName BossId);
+	UFUNCTION() void HandleProgressionChanged();
+	UFUNCTION() void HandleActiveSlotChanged(const FString& SlotId);
 	void RebuildBosses();
+	void RefreshUnlockStates();
+	bool IsBossUnlocked(const FKnightCodexBossEntry& Boss) const;
+	void SetBossDetailLocked(bool bLocked);
+	void RebuildTextPage(FName ColumnName, UTextBlock* LegacyBody, const TArray<FKnightCodexTextSection>& Sections);
+	void ResetReadingScroll(FName ScrollName);
 	void RefreshBoss();
 	void ClearBossDetail();
 	const FKnightCodexBossEntry* FindBoss(FName BossId) const;

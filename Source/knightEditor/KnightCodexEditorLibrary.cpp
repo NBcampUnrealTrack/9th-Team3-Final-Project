@@ -24,6 +24,9 @@ namespace
 	const FLinearColor Navy(FColor(0x10, 0x1A, 0x2A));
 	const FLinearColor Blue(FColor(0x1C, 0x30, 0x47));
 	const FLinearColor Frost(FColor(0xA8, 0xC8, 0xF0));
+	const FLinearColor CodexFrame(FColor(0x0D, 0x15, 0x1D));
+	const FLinearColor CodexSidebar(FColor(0x21, 0x2D, 0x36));
+	const FLinearColor CodexReadingPanel(FColor(0x18, 0x25, 0x30));
 	bool Begin(UWidgetBlueprint* BP)
 	{
 		if (!BP || !BP->WidgetTree || BP->WidgetTree->RootWidget) return false;
@@ -90,6 +93,16 @@ namespace
 		Col(Column, Text(BP, *FString::Printf(TEXT("Text_%sTitle"), Prefix), Title, TEXT("TS_Knight_Title"), true), false, FMargin(0,0,0,24));
 		Col(Column, Text(BP, *FString::Printf(TEXT("Text_%sBody"), Prefix), INVTEXT("설명 준비 중"), TEXT("TS_Knight_Body"), true), false);
 		return Column;
+	}
+	void StyleCodexButton(UButton* Widget, const FLinearColor& Color)
+	{
+		if (!Widget) return;
+		Widget->Modify();
+		Widget->SetBackgroundColor(Color);
+		FButtonStyle ButtonStyle = Widget->GetStyle();
+		ButtonStyle.Hovered.TintColor = FSlateColor(FLinearColor(1.15f, 1.15f, 1.15f, 1.f));
+		ButtonStyle.Pressed.TintColor = FSlateColor(FLinearColor(0.9f, 0.77f, 0.56f, 1.f));
+		Widget->SetStyle(ButtonStyle);
 	}
 }
 
@@ -194,6 +207,140 @@ FName UKnightCodexEditorLibrary::GetWidgetParentName(UWidgetBlueprint* BP, FName
 {
 	const UWidget* Widget = BP && BP->WidgetTree ? BP->WidgetTree->FindWidget(WidgetName) : nullptr;
 	return Widget && Widget->GetParent() ? Widget->GetParent()->GetFName() : NAME_None;
+}
+
+FString UKnightCodexEditorLibrary::DescribeTree(UWidgetBlueprint* BP)
+{
+	if (!BP || !BP->WidgetTree) return TEXT("No WidgetTree");
+	TArray<UWidget*> Widgets;
+	BP->WidgetTree->GetAllWidgets(Widgets);
+	FString Result;
+	for (const UWidget* Widget : Widgets)
+	{
+		if (!Widget) continue;
+		Result += FString::Printf(TEXT("%s : %s <- %s\n"), *Widget->GetName(),
+			*Widget->GetClass()->GetName(), Widget->GetParent() ? *Widget->GetParent()->GetName() : TEXT("ROOT"));
+	}
+	return Result;
+}
+
+bool UKnightCodexEditorLibrary::StyleCodex(UWidgetBlueprint* BP)
+{
+	if (!BP || !BP->WidgetTree) return false;
+	UBorder* Frame = Cast<UBorder>(BP->WidgetTree->FindWidget(TEXT("Border_Frame")));
+	UHorizontalBox* Main = Cast<UHorizontalBox>(BP->WidgetTree->FindWidget(TEXT("Row_Main")));
+	USizeBox* SidebarWidth = Cast<USizeBox>(BP->WidgetTree->FindWidget(TEXT("Width_Categories")));
+	UVerticalBox* Sidebar = Cast<UVerticalBox>(BP->WidgetTree->FindWidget(TEXT("Column_Categories")));
+	UVerticalBox* Content = Cast<UVerticalBox>(BP->WidgetTree->FindWidget(TEXT("Column_Content")));
+	if (!Frame || !Main || !SidebarWidth || !Sidebar || !Content) return false;
+	BP->Modify(); BP->WidgetTree->Modify();
+	Frame->Modify(); Frame->SetBrushColor(CodexFrame);
+	SidebarWidth->Modify(); SidebarWidth->SetWidthOverride(194.f);
+	UBorder* SidePanel = Cast<UBorder>(BP->WidgetTree->FindWidget(TEXT("Border_Categories")));
+	if (!SidePanel)
+	{
+		Sidebar->RemoveFromParent();
+		SidePanel = New<UBorder>(BP, TEXT("Border_Categories"));
+		SidebarWidth->AddChild(SidePanel);
+		SidePanel->AddChild(Sidebar);
+	}
+	SidePanel->Modify(); SidePanel->SetBrushColor(CodexSidebar); SidePanel->SetPadding(FMargin(14.f, 18.f));
+	UBorder* ReadingPanel = Cast<UBorder>(BP->WidgetTree->FindWidget(TEXT("Border_ReadingPanel")));
+	if (!ReadingPanel)
+	{
+		Content->RemoveFromParent();
+		ReadingPanel = New<UBorder>(BP, TEXT("Border_ReadingPanel"));
+		Row(Main, ReadingPanel, true, FMargin(0.f, 20.f, 20.f, 20.f));
+		ReadingPanel->AddChild(Content);
+	}
+	ReadingPanel->Modify(); ReadingPanel->SetBrushColor(CodexReadingPanel); ReadingPanel->SetPadding(FMargin(20.f, 12.f));
+	if (UCommonTextBlock* Label = Cast<UCommonTextBlock>(BP->WidgetTree->FindWidget(TEXT("Label_Codex"))))
+	{
+		Label->Modify(); Label->SetText(INVTEXT("작전 기록 / 도감"));
+	}
+	for (const TCHAR* Name : {TEXT("Button_World"), TEXT("Button_Mech"), TEXT("Button_Monster"), TEXT("Button_Close")})
+		StyleCodexButton(Cast<UButton>(BP->WidgetTree->FindWidget(Name)), FLinearColor(FColor(0x32, 0x48, 0x5C)));
+	for (const TCHAR* Name : {TEXT("Scroll_World"), TEXT("Scroll_Mech"), TEXT("Scroll_BossList"), TEXT("Scroll_BossDetail")})
+	{
+		if (UScrollBox* ScrollBox = Cast<UScrollBox>(BP->WidgetTree->FindWidget(Name)))
+		{
+			ScrollBox->Modify();
+			ScrollBox->SetScrollbarThickness(FVector2D(7.f, 7.f));
+			ScrollBox->SetScrollbarPadding(FMargin(5.f, 0.f, 0.f, 0.f));
+		}
+	}
+	if (USizeBox* BossList = Cast<USizeBox>(BP->WidgetTree->FindWidget(TEXT("Width_BossList"))))
+	{
+		BossList->Modify(); BossList->SetWidthOverride(190.f);
+	}
+	if (USizeBox* Portrait = Cast<USizeBox>(BP->WidgetTree->FindWidget(TEXT("Size_Portrait"))))
+	{
+		Portrait->Modify(); Portrait->SetHeightOverride(220.f);
+	}
+	End(BP);
+	return true;
+}
+
+bool UKnightCodexEditorLibrary::StyleBossEntry(UWidgetBlueprint* BP)
+{
+	if (!BP || !BP->WidgetTree) return false;
+	UButton* Button = Cast<UButton>(BP->WidgetTree->FindWidget(TEXT("Button_Select")));
+	UVerticalBox* Column = Cast<UVerticalBox>(BP->WidgetTree->FindWidget(TEXT("Column_Entry")));
+	if (!Button || !Column) return false;
+	BP->Modify(); BP->WidgetTree->Modify();
+	StyleCodexButton(Button, FLinearColor(FColor(0x32, 0x48, 0x5C)));
+	if (!BP->WidgetTree->FindWidget(TEXT("Row_LockState")))
+	{
+		UCommonTextBlock* LockState = Cast<UCommonTextBlock>(BP->WidgetTree->FindWidget(TEXT("Text_LockState")));
+		if (!LockState) LockState = Text(BP, TEXT("Text_LockState"), INVTEXT("미해금"), TEXT("TS_Knight_Caption"), true);
+		LockState->RemoveFromParent();
+		LockState->Modify(); LockState->SetText(INVTEXT("미해금"));
+		UHorizontalBox* LockRow = New<UHorizontalBox>(BP, TEXT("Row_LockState"), true);
+		Col(Column, LockRow, false, FMargin(4.f, 0.f, 4.f, 8.f));
+		UVerticalBox* Glyph = New<UVerticalBox>(BP, TEXT("Column_LockGlyph"));
+		Row(LockRow, Sized(BP, TEXT("Size_LockGlyph"), 22.f, 25.f, Glyph), false, FMargin(0.f, 0.f, 6.f, 0.f));
+		UBorder* Shackle = New<UBorder>(BP, TEXT("Border_LockShackle"));
+		Shackle->SetBrushColor(Frost); Shackle->SetPadding(FMargin(3.f, 3.f, 3.f, 0.f));
+		UBorder* ShackleHole = New<UBorder>(BP, TEXT("Border_LockShackleHole"));
+		ShackleHole->SetBrushColor(CodexReadingPanel);
+		Shackle->AddChild(ShackleHole);
+		Col(Glyph, Sized(BP, TEXT("Size_LockShackle"), 14.f, 11.f, Shackle), false, FMargin(4.f, 0.f, 0.f, 0.f));
+		UBorder* LockBody = New<UBorder>(BP, TEXT("Border_LockBody"));
+		LockBody->SetBrushColor(Frost);
+		Col(Glyph, Sized(BP, TEXT("Size_LockBody"), 22.f, 14.f, LockBody), false);
+		Row(LockRow, LockState, true);
+	}
+	for (const TPair<const TCHAR*, FVector2D>& Size : {
+		TPair<const TCHAR*, FVector2D>(TEXT("Size_LockGlyph"), FVector2D(22.f, 25.f)),
+		TPair<const TCHAR*, FVector2D>(TEXT("Size_LockShackle"), FVector2D(14.f, 11.f)),
+		TPair<const TCHAR*, FVector2D>(TEXT("Size_LockBody"), FVector2D(22.f, 14.f)) })
+	{
+		if (USizeBox* Box = Cast<USizeBox>(BP->WidgetTree->FindWidget(Size.Key)))
+		{
+			Box->Modify(); Box->SetWidthOverride(Size.Value.X); Box->SetHeightOverride(Size.Value.Y);
+		}
+	}
+	if (UBorder* Shackle = Cast<UBorder>(BP->WidgetTree->FindWidget(TEXT("Border_LockShackle"))))
+	{
+		Shackle->Modify(); Shackle->SetPadding(FMargin(3.f, 3.f, 3.f, 0.f));
+	}
+	if (USizeBox* Icon = Cast<USizeBox>(BP->WidgetTree->FindWidget(TEXT("Size_Icon"))))
+	{
+		Icon->Modify(); Icon->SetWidthOverride(72.f); Icon->SetHeightOverride(72.f);
+	}
+	End(BP);
+	return true;
+}
+
+bool UKnightCodexEditorLibrary::StyleDropEntry(UWidgetBlueprint* BP)
+{
+	if (!BP || !BP->WidgetTree) return false;
+	USizeBox* Icon = Cast<USizeBox>(BP->WidgetTree->FindWidget(TEXT("Size_ItemIcon")));
+	if (!Icon) return false;
+	BP->Modify(); BP->WidgetTree->Modify();
+	Icon->Modify(); Icon->SetWidthOverride(44.f); Icon->SetHeightOverride(44.f);
+	End(BP);
+	return true;
 }
 
 UScrollBox* UKnightCodexEditorLibrary::FindScrollBox(UUserWidget* Widget, FName WidgetName)

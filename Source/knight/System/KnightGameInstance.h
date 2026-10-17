@@ -12,4 +12,5 @@ class KNIGHT_API UKnightGameInstance : public UGameInstance
 
 public:
 	virtual void Init() override;
+	virtual void OnStart() override;
 };
