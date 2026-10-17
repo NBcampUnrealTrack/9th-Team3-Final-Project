@@ -8,6 +8,7 @@
 #include "Animation/AnimMontage.h"
 #include "Camera/CameraShakeBase.h"
 #include "Combat/knightCombatLibrary.h"
+#include "Combat/knightGroggyFeedbackComponent.h"
 #include "Combat/knightHitStopComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -119,6 +120,10 @@ void UknightGameplayAbility_PlungeAttack::ActivateAbility(const FGameplayAbility
 
 void UknightGameplayAbility_PlungeAttack::PlayMontage(UAnimMontage* Montage, bool bEndOnFinish)
 {
+	if (!Montage)
+	{
+		return;
+	}
 	const float Rate = PlayRate * GetAttackSpeed();
 	if (bEndOnFinish)
 	{
@@ -129,12 +134,26 @@ void UknightGameplayAbility_PlungeAttack::PlayMontage(UAnimMontage* Montage, boo
 		Task->OnInterrupted.AddDynamic(this, &ThisClass::OnMontageInterrupted);
 		Task->OnCancelled.AddDynamic(this, &ThisClass::OnMontageInterrupted);
 		Task->ReadyForActivation();
+		if (AActor* const Avatar = GetAvatarActorFromActorInfo())
+		{
+			if (UknightGroggyFeedbackComponent* const Feedback = Avatar->FindComponentByClass<UknightGroggyFeedbackComponent>())
+			{
+				Feedback->WatchAttack(this, Montage, HitParams);
+			}
+		}
 		return;
 	}
 	const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
 	if (UAnimInstance* const Anim = Character && Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr)
 	{
 		Anim->Montage_Play(Montage, Rate);
+		if (AActor* const Avatar = GetAvatarActorFromActorInfo())
+		{
+			if (UknightGroggyFeedbackComponent* const Feedback = Avatar->FindComponentByClass<UknightGroggyFeedbackComponent>())
+			{
+				Feedback->WatchAttack(this, Montage, HitParams);
+			}
+		}
 	}
 }
 
@@ -554,13 +573,20 @@ void UknightGameplayAbility_PlungeAttack::OnMeleeHitEvent(FGameplayEventData Pay
 	const FHitResult* const Hit = Payload.TargetData.Num() > 0 && Payload.TargetData.Get(0) ? Payload.TargetData.Get(0)->GetHitResult() : nullptr;
 	if (Hit)
 	{
-		UknightCombatLibrary::ApplyMeleeHit(GetAvatarActorFromActorInfo(), *Hit, HitParams);
+		UknightCombatLibrary::ApplyMeleeHit(GetAvatarActorFromActorInfo(), *Hit, HitParams, this);
 	}
 }
 
 void UknightGameplayAbility_PlungeAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
+	if (AActor* const Avatar = GetAvatarActorFromActorInfo())
+	{
+		if (UknightGroggyFeedbackComponent* const Feedback = Avatar->FindComponentByClass<UknightGroggyFeedbackComponent>())
+		{
+			Feedback->EndPredictionForAttack(this);
+		}
+	}
 	if (UWorld* const World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(PhaseTimer);

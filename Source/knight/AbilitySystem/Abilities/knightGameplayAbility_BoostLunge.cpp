@@ -9,6 +9,7 @@
 #include "Animation/AnimMontage.h"
 #include "Camera/CameraShakeBase.h"
 #include "Combat/knightCombatLibrary.h"
+#include "Combat/knightGroggyFeedbackComponent.h"
 #include "Combat/knightTargetLockComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
@@ -182,13 +183,21 @@ void UknightGameplayAbility_BoostLunge::OnLungeFinished()
 
 	UknightCombatLibrary::SetAttackWarpTarget(GetAvatarActorFromActorInfo(), WarpTargetName, StopDistance, StopDistance, false, 0.f, 0.f);
 
+	UAnimMontage* const Strike = PickStanceMontage(StrikeMontage, OneHandedStrikeMontage);
 	UAbilityTask_PlayMontageAndWait* const StrikeTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
-		this, TEXT("LungeStrike"), PickStanceMontage(StrikeMontage, OneHandedStrikeMontage), StrikePlayRate * GetAttackSpeed());
+		this, TEXT("LungeStrike"), Strike, StrikePlayRate * GetAttackSpeed());
 	StrikeTask->OnCompleted.AddDynamic(this, &ThisClass::OnStrikeFinished);
 	StrikeTask->OnBlendOut.AddDynamic(this, &ThisClass::OnStrikeFinished);
 	StrikeTask->OnInterrupted.AddDynamic(this, &ThisClass::OnStrikeFinished);
 	StrikeTask->OnCancelled.AddDynamic(this, &ThisClass::OnStrikeFinished);
 	StrikeTask->ReadyForActivation();
+	if (AActor* const Avatar = GetAvatarActorFromActorInfo())
+	{
+		if (UknightGroggyFeedbackComponent* const Feedback = Avatar->FindComponentByClass<UknightGroggyFeedbackComponent>())
+		{
+			Feedback->WatchAttack(this, Strike, HitParams);
+		}
+	}
 }
 
 void UknightGameplayAbility_BoostLunge::OnStrikeFinished()
@@ -201,7 +210,7 @@ void UknightGameplayAbility_BoostLunge::OnMeleeHitEvent(FGameplayEventData Paylo
 	const FHitResult* const Hit = Payload.TargetData.Num() > 0 && Payload.TargetData.Get(0) ? Payload.TargetData.Get(0)->GetHitResult() : nullptr;
 	if (Hit)
 	{
-		UknightCombatLibrary::ApplyMeleeHit(GetAvatarActorFromActorInfo(), *Hit, HitParams);
+		UknightCombatLibrary::ApplyMeleeHit(GetAvatarActorFromActorInfo(), *Hit, HitParams, this);
 	}
 }
 
@@ -350,6 +359,13 @@ void UknightGameplayAbility_BoostLunge::StopBackThrusters()
 void UknightGameplayAbility_BoostLunge::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
+	if (AActor* const Avatar = GetAvatarActorFromActorInfo())
+	{
+		if (UknightGroggyFeedbackComponent* const Feedback = Avatar->FindComponentByClass<UknightGroggyFeedbackComponent>())
+		{
+			Feedback->EndPredictionForAttack(this);
+		}
+	}
 	StopBackThrusters();
 	StopFootThrusters();
 	RestoreGravity();

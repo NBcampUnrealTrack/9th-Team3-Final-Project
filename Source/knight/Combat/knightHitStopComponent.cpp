@@ -54,6 +54,14 @@ void UknightHitStopComponent::StopHitStop()
 	}
 }
 
+void UknightHitStopComponent::ReplaceRestoreTimeDilation(float ExpectedValue, float NewValue)
+{
+	if (bActive && FMath::IsNearlyEqual(RestoreTimeDilation, ExpectedValue))
+	{
+		RestoreTimeDilation = NewValue;
+	}
+}
+
 void UknightHitStopComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	StopHitStop();

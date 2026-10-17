@@ -28,6 +28,9 @@ public:
 	/** Closes the raid return overlay and restores gameplay input. */
 	void CloseRaidReturnMenu();
 
+	/** Clear the transient boss-hit camera/slow beat before opening paused UI or changing worlds. */
+	void CancelKnockdownPresentation();
+
 	/**
 	 * Esc handler set by the UI (knightUI's HUD binds its pause menu here). This module cannot see the UI classes,
 	 * so the UI plugs in. When unbound, Esc opens the settings window directly as before.

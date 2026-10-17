@@ -10,7 +10,9 @@
 //   3. 슬로모션 SlowReleaseTime(0.3초): SlowReleaseStartSpeed(0.2배속)에서 점점 빨라져 정상 속도로(처음 천천히, 끝에 빨리).
 //   전체 = 0.5초. 플레이어와 상대만 느려지고 월드(다른 몬스터·UI)는 그대로다.
 //
-// 조절(BP_Knight → GroggyFeedback, 바뀔 수 있는 값): 위 시간·속도·큐 태그.
+// 실제 공격 몽타주의 판정 직전에 보스 다운이 예상되면 국소 슬로우와 FOV 확대를 선행한다.
+// 유효 명중은 ApplyMeleeHit에서 확정하고, 선행 슬로우는 피해·히트스톱 처리 전에 해제한다.
+// 조절(BP_Knight → GroggyFeedback): 위 시간·속도·큐 태그와 Prediction 값.
 // 이펙트·소리·흔들림은 큐 에셋 GCN_Hit_Groggy(타격 순간), GCN_Hit_GroggyRelease(풀리는 순간)에서 바꾼다(/Game/Knight/Abilities/Cues).
 // 확인: 출력 로그 LogknightCombat의 "groggy feedback" 줄.
 
@@ -18,9 +20,17 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Combat/knightCombatTypes.h"
+#include "Containers/Ticker.h"
 #include "GameplayEffectTypes.h"
 #include "GameplayTagContainer.h"
 #include "knightGroggyFeedbackComponent.generated.h"
+
+class AknightCharacter;
+class AknightMonsterCharacterBase;
+class AknightPlayerCameraManager;
+class UGameplayAbility;
+class UAnimMontage;
 
 UCLASS(ClassGroup=(Knight), meta=(BlueprintSpawnableComponent))
 class KNIGHT_API UknightGroggyFeedbackComponent : public UActorComponent
@@ -29,6 +39,15 @@ class KNIGHT_API UknightGroggyFeedbackComponent : public UActorComponent
 
 public:
 	UknightGroggyFeedbackComponent();
+
+	/** Watch an already playing attack montage; the trace notify's lead-in gates prediction. */
+	void WatchAttack(UGameplayAbility* Attack, UAnimMontage* Montage, const FknightMeleeHitParams& HitParams);
+	void EndPredictionForAttack(const UGameplayAbility* Attack);
+	/** Resolve before the damage effect or any hit stop can snapshot our local time dilation. */
+	void ResolvePredictedMeleeContact(AActor* HitTarget, bool bAccepted, const UGameplayAbility* SourceAbility);
+	/** Reports the existing, post-effect Poise/knockdown verdict; never starts a second slow. */
+	void CompletePredictedMeleeHit(AActor* HitTarget, bool bNewKnockdown);
+	void CancelKnockdownPresentation();
 
 protected:
 	virtual void BeginPlay() override;
@@ -58,6 +77,36 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy", meta=(Categories="GameplayCue"))
 	FGameplayTag ReleaseCueTag;
 
+	/** Real-time interval before the next trace notify in which prediction may start. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0, Units="s"))
+	float PredictionLeadTime = 0.50f;
+
+	/** Surface distance from the player to a target point along the current attack direction. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0, Units="cm"))
+	float PredictionRange = 350.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=1, ClampMax=180, Units="deg"))
+	float PredictionAngle = 50.f;
+
+	/** Maximum real-time lead effect; a hit ends it immediately. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0, Units="s"))
+	float PredictionMaxTime = 1.5f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0.02, ClampMax=1))
+	float PredictionSlowSpeed = 0.25f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0, Units="s"))
+	float PredictionSlowEnterTime = 0.15f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0, Units="deg"))
+	float PredictionZoomDegrees = 25.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0, Units="s"))
+	float PredictionZoomEnterTime = 0.45f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0, Units="s"))
+	float PredictionZoomReturnTime = 0.18f;
+
 private:
 	/** 내가 일으킨 그로기면 멈춤과 타격 큐를 내고, FreezeTime 뒤 풀기를 예약한다. 남이 일으켰거나 내가 그로기에 빠진 경우는 무시. */
 	void HandleAnyPoiseBroken(AActor* Victim, AActor* Instigator, const FGameplayEffectContextHandle& Context);
@@ -67,18 +116,52 @@ private:
 
 	/** 슬로모션 한 단계. 다른 히트스탑이 걸려 있는 액터는 그쪽에 맡기고 기다린다. 끝나면 원래 속도로 돌려놓는다. */
 	void TickRelease();
+	bool TickFeedback(float DeltaRealTime);
+	void EnsureFeedbackTicker();
+	void TickWatchedAttack();
+	bool TryStartPredictedKnockdown(UGameplayAbility* Attack, const FknightMeleeHitParams& HitParams);
+	void TickPrediction();
+	void FinishPredictionSlow();
+	void BeginPredictionReturn();
+	void FinishPredictionVisual();
 
-	/** 진행 중인 풀기를 끝내고 두 액터를 원래 속도로 돌려놓는다. */
+	/** 진행 중인 풀기를 끝내고 이 컴포넌트가 적용한 속도만 돌려놓는다. */
 	void FinishRelease();
+
+	UFUNCTION()
+	void HandlePlayerDied(AknightCharacter* DeadCharacter);
+
+	UFUNCTION()
+	void HandleBossDefeated(AknightMonsterCharacterBase* Boss, AActor* Killer);
 
 	FDelegateHandle PoiseBrokenHandle;
 	FTimerHandle ReleaseDelayTimer;
-	FTimerHandle ReleaseTickTimer;
+	FTSTicker::FDelegateHandle FeedbackTicker;
 
 	TWeakObjectPtr<AActor> Victim;
+	TWeakObjectPtr<AknightMonsterCharacterBase> PredictedBoss;
+	TWeakObjectPtr<UGameplayAbility> PredictionAttack;
+	TWeakObjectPtr<UGameplayAbility> WatchedAttack;
+	TWeakObjectPtr<UAnimMontage> WatchedMontage;
+	TSet<TWeakObjectPtr<AActor>> PredictedTargetsThisAttack;
+	UPROPERTY(Transient)
+	FknightMeleeHitParams WatchedHitParams;
+	TWeakObjectPtr<AknightPlayerCameraManager> ZoomCameraManager;
 	FGameplayCueParameters CueParams;
 	double ReleaseStartTime = 0.0;
+	double PredictionStartTime = 0.0;
+	double PresentationEndTime = 0.0;
 	float OwnerBaseSpeed = 1.f;
 	float VictimBaseSpeed = 1.f;
+	float OwnerAppliedSpeed = 1.f;
+	float VictimAppliedSpeed = 1.f;
 	bool bReleasing = false;
+	bool bOwnerSpeedApplied = false;
+	bool bVictimSpeedApplied = false;
+	bool bPredictionActive = false;
+	bool bPredictionHitPending = false;
+	bool bPredictionWasLocked = false;
+	bool bWatchedPredictionAttempted = false;
+	bool bSkipGenericReleaseSlow = false;
+	bool bCameraBeatActive = false;
 };

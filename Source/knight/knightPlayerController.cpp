@@ -23,6 +23,8 @@
 #include "GameFramework/Pawn.h"
 #include "Input/knightInputBufferComponent.h"
 #include "Camera/knightPlayerCameraManager.h"
+#include "Combat/knightGroggyFeedbackComponent.h"
+#include "knightCharacter.h"
 #include "Settings/KnightSettingsWidget.h"
 #include "UserSettings/EnhancedInputUserSettings.h"
 
@@ -63,6 +65,7 @@ void AknightPlayerController::BeginPlay()
 
 void AknightPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	CancelKnockdownPresentation();
 	if (RaidReturnWidget)
 	{
 		RaidReturnWidget->RemoveFromParent();
@@ -75,6 +78,21 @@ void AknightPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		SettingsWidget = nullptr;
 	}
 	Super::EndPlay(EndPlayReason);
+}
+
+void AknightPlayerController::CancelKnockdownPresentation()
+{
+	if (const AknightCharacter* const KnightPawn = Cast<AknightCharacter>(GetPawn()))
+	{
+		if (UknightGroggyFeedbackComponent* const Feedback = KnightPawn->FindComponentByClass<UknightGroggyFeedbackComponent>())
+		{
+			Feedback->CancelKnockdownPresentation();
+		}
+	}
+	if (AknightPlayerCameraManager* const CameraManager = Cast<AknightPlayerCameraManager>(PlayerCameraManager))
+	{
+		CameraManager->CancelKnockdownZoom();
+	}
 }
 
 void AknightPlayerController::SetupInputComponent()
@@ -124,6 +142,7 @@ void AknightPlayerController::SetupInputComponent()
 void AknightPlayerController::ToggleSettings()
 {
 	if (!IsLocalController() || !GetWorld()) return;
+	CancelKnockdownPresentation();
 	if (SettingsWidget && SettingsWidget->IsInViewport())
 	{
 		SettingsWidget->RequestClose();
@@ -147,6 +166,7 @@ void AknightPlayerController::OpenSettingsFromMenu()
 
 void AknightPlayerController::OpenSettings(bool bFromMenu)
 {
+	CancelKnockdownPresentation();
 	if (!SettingsWidget)
 	{
 		SettingsWidget = CreateWidget<UKnightSettingsWidget>(this, UKnightSettingsWidget::GetSharedWidgetClass());
@@ -204,6 +224,7 @@ void AknightPlayerController::ToggleRaidReturnMenu()
 {
 	if (!IsLocalController() || !RaidReturnWidgetClass || !GetWorld()
 		|| !GetWorld()->GetAuthGameMode<AknightRaidGameMode>()) return;
+	CancelKnockdownPresentation();
 	if (RaidReturnWidget && RaidReturnWidget->IsInViewport())
 	{
 		CloseRaidReturnMenu();

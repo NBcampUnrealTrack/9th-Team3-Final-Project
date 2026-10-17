@@ -45,6 +45,10 @@ void UknightPauseMenu::NativeOnActivated()
 	Super::NativeOnActivated();
 
 	APlayerController* const PC = GetOwningPlayer();
+	if (AknightPlayerController* const KnightPC = Cast<AknightPlayerController>(PC))
+	{
+		KnightPC->CancelKnockdownPresentation();
+	}
 	bPausedGame = PC && !UGameplayStatics::IsGamePaused(this) && PC->SetPause(true);
 	RefreshAbandonLock();
 	Btn_Resume->SetFocus();

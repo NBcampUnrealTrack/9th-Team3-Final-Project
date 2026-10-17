@@ -11,9 +11,11 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "TimerManager.h"
 #include "Combat/knightHitStopComponent.h"
+#include "Combat/knightGroggyFeedbackComponent.h"
 #include "Combat/knightTargetLockComponent.h"
 #include "GameplayEffect.h"
 #include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerController.h"
 #include "GenericTeamAgentInterface.h"
 #include "Interfaces/CombatInterface.h"
 #include "Interfaces/TargetableInterface.h"
@@ -21,7 +23,10 @@
 #include "Perception/AISense_Hearing.h"
 #include "System/knightGameplayTags.h"
 #include "AbilitySystem/Executions/knightDamageExecution.h"
+#include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
 #include "knight.h"
+#include "knightCharacter.h"
+#include "Monster/knightMonsterCharacterBase.h"
 
 namespace
 {
@@ -47,12 +52,22 @@ namespace
 
 EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FHitResult& Hit, const FknightMeleeHitParams& Params)
 {
+	return ApplyMeleeHit(Attacker, Hit, Params, nullptr);
+}
+
+EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FHitResult& Hit, const FknightMeleeHitParams& Params,
+	const UGameplayAbility* SourceAbility)
+{
 	AActor* const Target = Hit.GetActor();
+	AknightCharacter* const LocalPlayer = Cast<AknightCharacter>(Attacker);
+	UknightGroggyFeedbackComponent* const Feedback = LocalPlayer
+		? LocalPlayer->FindComponentByClass<UknightGroggyFeedbackComponent>() : nullptr;
 	UAbilitySystemComponent* const SourceASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Attacker);
 	UAbilitySystemComponent* const TargetASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Target);
 	if (!SourceASC || !TargetASC || !Target || !Target->GetClass()->ImplementsInterface(UCombatInterface::StaticClass())
 		|| !ICombatInterface::Execute_CanReceiveHitBP(Target, Attacker))
 	{
+		if (Feedback) Feedback->ResolvePredictedMeleeContact(Target, false, SourceAbility);
 		return EknightHitOutcome::Ignored;
 	}
 
@@ -65,6 +80,7 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 
 	if (TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_Invulnerable))
 	{
+		if (Feedback) Feedback->ResolvePredictedMeleeContact(Target, false, SourceAbility);
 		return EknightHitOutcome::Evaded;
 	}
 
@@ -96,6 +112,7 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 			TargetASC->HandleGameplayEvent(DefenderPayload.EventTag, &DefenderPayload);
 		}
 		TargetASC->ExecuteGameplayCue(knightGameplayTags::GameplayCue_Parry, CueParams);
+		if (Feedback) Feedback->ResolvePredictedMeleeContact(Target, false, SourceAbility);
 		ApplyHitStopPair(Attacker, Target, Params.ParryHitStopDuration);
 		UE_LOG(LogknightCombat, Log, TEXT("%s parried %s."), *GetNameSafe(Target), *GetNameSafe(Attacker));
 		return EknightHitOutcome::Parried;
@@ -103,6 +120,7 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 
 	if (!Params.DamageEffect)
 	{
+		if (Feedback) Feedback->ResolvePredictedMeleeContact(Target, false, SourceAbility);
 		UE_LOG(LogknightCombat, Error, TEXT("%s hit %s with no DamageEffect set."), *GetNameSafe(Attacker), *GetNameSafe(Target));
 		return EknightHitOutcome::Ignored;
 	}
@@ -112,6 +130,7 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 	const FGameplayEffectSpecHandle SpecHandle = SourceASC->MakeOutgoingSpec(Params.DamageEffect, 1.f, Context);
 	if (!SpecHandle.IsValid())
 	{
+		if (Feedback) Feedback->ResolvePredictedMeleeContact(Target, false, SourceAbility);
 		return EknightHitOutcome::Ignored;
 	}
 	SpecHandle.Data->SetSetByCallerMagnitude(knightGameplayTags::SetByCaller_Damage, Params.BaseDamage);
@@ -123,10 +142,16 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 	// 피해 실행도 같은 범위로 가드 감소를 정하므로, 가드 이펙트·히트 스톱과 실제 피해가 어긋나지 않는다.
 	const bool bGuarding = TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_Guarding)
 		&& IsAttackerInGuardArc(Params.DamageEffect, Target, Attacker, Hit);
+	const UknightCoreAttributeSet* const TargetCore = TargetASC->GetSet<UknightCoreAttributeSet>();
+	const float PoiseBeforeHit = TargetCore ? TargetCore->GetPoise() : 0.f;
+	const bool bWasKnockedDown = TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_HitReact_Knockdown);
+	// End the pre-hit local slow before the effect can trigger poise-break hit stop.
+	if (Feedback) Feedback->ResolvePredictedMeleeContact(Target, true, SourceAbility);
 	SourceASC->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data, TargetASC);
 
 	if (bGuarding)
 	{
+		if (Feedback) Feedback->CompletePredictedMeleeHit(Target, false);
 		// 가드 범위 안에서 막은 타격이다. 어떻게 반응할지는 가드 어빌리티가 Event.Guarded를 받아 정한다.
 		FGameplayEventData Payload;
 		Payload.EventTag = knightGameplayTags::Event_Guarded;
@@ -138,6 +163,12 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 		ApplyHitStopPair(Attacker, Target, Params.HitStopDuration * 0.5f);
 		return EknightHitOutcome::Guarded;
 	}
+
+	// Preserve the original post-effect verdict. Prediction never forces the damage or reaction outcome.
+	const bool bNewKnockdown = TargetCore && PoiseBeforeHit > 0.f && TargetCore->GetPoise() <= 0.f
+		&& !bWasKnockedDown && TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_HitReact_Knockdown)
+		&& !TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_Dead);
+	if (Feedback) Feedback->CompletePredictedMeleeHit(Target, bNewKnockdown);
 
 	const float PartMultiplier = ICombatInterface::Execute_GetPartDamageMultiplierBP(
 		Target, ICombatInterface::Execute_ResolveHitPartBP(Target, Hit));

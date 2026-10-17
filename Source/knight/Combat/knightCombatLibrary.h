@@ -29,6 +29,9 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category="Knight|Combat")
 	static EknightHitOutcome ApplyMeleeHit(AActor* Attacker, const FHitResult& Hit, const FknightMeleeHitParams& Params);
+	/** C++ attack path carries its active ability so a pre-hit prediction only resolves for that same attack. */
+	static EknightHitOutcome ApplyMeleeHit(AActor* Attacker, const FHitResult& Hit, const FknightMeleeHitParams& Params,
+		const UGameplayAbility* SourceAbility);
 
 	/**
 	 * Shape(중심 Center) 안의 적대 ICombatInterface 액터마다 ApplyMeleeHit을 한 번씩 적용한다(몬스터 범위·몸통·투사체 판정).
