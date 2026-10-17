@@ -1617,4 +1617,17 @@ UAnimMontage* UknightMonsterRecipeLibrary::BuildSectionMontage(const FString& Pa
 	return Montage;
 }
 
+bool UknightMonsterRecipeLibrary::ResampleBlendSpace(UBlendSpace* BlendSpace)
+{
+	if (!BlendSpace)
+	{
+		return false;
+	}
+	BlendSpace->Modify();
+	BlendSpace->ValidateSampleData();
+	BlendSpace->ResampleData();
+	BlendSpace->MarkPackageDirty();
+	return true;
+}
+
 #undef LOCTEXT_NAMESPACE

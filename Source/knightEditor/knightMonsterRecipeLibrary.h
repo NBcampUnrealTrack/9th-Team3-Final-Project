@@ -8,6 +8,7 @@
 class AknightMonsterCharacterBase;
 class UAnimMontage;
 class UAnimSequence;
+class UBlendSpace;
 class UknightMonsterRecipe;
 
 /**
@@ -56,4 +57,11 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
 	static UAnimMontage* BuildSectionMontage(const FString& PackagePath, const TArray<UAnimSequence*>& Sequences, const TArray<FName>& SectionNames, FName LoopSection);
+
+	/**
+	 * 블렌드스페이스의 샘플 검사와 블렌드 구간 데이터를 다시 만든다. Python에서 샘플이나 축을 바꾸면 이 계산이 돌지 않아
+	 * 런타임이 옛 구간으로 섞으므로, 바꾼 뒤 부른다. 저장은 호출한 쪽.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
+	static bool ResampleBlendSpace(UBlendSpace* BlendSpace);
 };
