@@ -87,7 +87,8 @@ void UKnightCodexDropEntryWidget::Configure(const FknightRaidReward& Reward)
 
 TSubclassOf<UKnightCodexWidget> UKnightCodexWidget::GetSharedWidgetClass()
 {
-	static TSubclassOf<UKnightCodexWidget> Class = LoadClass<UKnightCodexWidget>(nullptr,
+	// Not cached in a static: the class can be unloaded when the menu map is left, leaving a stale pointer.
+	const TSubclassOf<UKnightCodexWidget> Class = LoadClass<UKnightCodexWidget>(nullptr,
 		TEXT("/Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C"));
 	return Class ? Class : TSubclassOf<UKnightCodexWidget>(StaticClass());
 }
