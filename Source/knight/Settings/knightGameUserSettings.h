@@ -4,6 +4,18 @@
 #include "GameFramework/GameUserSettings.h"
 #include "knightGameUserSettings.generated.h"
 
+/** A current physical display. Index is only a UI hint; ID is the persisted identity. */
+struct FKnightDisplayInfo
+{
+	FString ID;
+	FString Label;
+	int32 Index = INDEX_NONE;
+	FIntPoint DesktopResolution = FIntPoint::ZeroValue;
+	FIntPoint WorkAreaSize = FIntPoint::ZeroValue;
+	int32 DPI = 0;
+	bool bPrimary = false;
+};
+
 USTRUCT(BlueprintType)
 struct FKnightGraphicsChoice
 {
@@ -11,6 +23,8 @@ struct FKnightGraphicsChoice
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) TEnumAsByte<EWindowMode::Type> WindowMode = EWindowMode::WindowedFullscreen;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) FIntPoint Resolution = FIntPoint(1920, 1080);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) FString DisplayID;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 DisplayIndex = INDEX_NONE;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 FrameRateLimit = 60;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bVSync = false;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 AntiAliasing = 3;
@@ -71,6 +85,14 @@ public:
 	/** Loose check for restoring earlier values: a real window mode and a size the window can take. */
 	static bool IsRestorableGraphics(const FKnightGraphicsChoice& Choice);
 	static void GetSupportedResolutions(TArray<FIntPoint>& OutResolutions);
+	static void GetSupportedResolutions(const FKnightGraphicsChoice& Choice, TArray<FIntPoint>& OutResolutions);
+	static void GetConnectedDisplays(TArray<FKnightDisplayInfo>& OutDisplays);
+	/** ID wins over the transient enumeration index. A missing saved ID returns the primary display. */
+	static bool ResolveDisplay(const FString& ID, int32 Index, FKnightDisplayInfo& OutDisplay);
+	/** Replaces a disconnected saved display with the primary without resetting other settings. */
+	void RestoreDisconnectedDisplay();
+	/** Startup display correction may precede viewport creation; consume it after OnStart. */
+	bool ConsumeStartupDisplayRefresh();
 
 	UFUNCTION(BlueprintCallable, Category="Knight|Settings")
 	void SetUpscaler(EknightUpscaler NewUpscaler) { Upscaler = NewUpscaler; }
@@ -101,6 +123,7 @@ private:
 	int32 PendingGraphicsSaveSerial = 0;
 
 	bool bGraphicsRevertedNotice = false;
+	bool bNeedsStartupDisplayRefresh = false;
 
 	UPROPERTY(Config)
 	EknightUpscaler Upscaler = EknightUpscaler::TSR;

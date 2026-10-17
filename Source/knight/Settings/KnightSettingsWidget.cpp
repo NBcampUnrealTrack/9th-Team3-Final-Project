@@ -180,6 +180,11 @@ FString UKnightSettingsWidget::GetValue(FName Id, bool bSaved) const
 	const FKnightGraphicsChoice& G = bSaved ? SavedGraphics : DraftGraphics;
 	const UknightSharedSettings* const P = bSaved ? SavedPersonal.Get() : DraftPersonal.Get();
 	if (Id == TEXT("WindowMode")) return WindowModeText(G.WindowMode);
+	if (Id == TEXT("Display"))
+	{
+		FKnightDisplayInfo Display;
+		return UknightGameUserSettings::ResolveDisplay(G.DisplayID, G.DisplayIndex, Display) ? Display.Label : FString();
+	}
 	if (Id == TEXT("Resolution")) return FString::Printf(TEXT("%dx%d"), G.Resolution.X, G.Resolution.Y);
 	if (Id == TEXT("FPS")) return FString::FromInt(G.FrameRateLimit);
 	if (Id == TEXT("VSync")) return OnOff(G.bVSync);
@@ -225,8 +230,15 @@ void UKnightSettingsWidget::GetTabSections(int32 Tab, TArray<FKnightSettingSecti
 		Display.Items.Add(Rotator(TEXT("WindowMode"), LOCTEXT("WindowMode", "화면 모드"),
 			LOCTEXT("WindowModeDesc", "전체 화면: 화면을 독점해 지연이 가장 적습니다.\n창 모드: 다른 창과 함께 씁니다.\n테두리 없는 창: 데스크톱 해상도로 전환이 빠릅니다."),
 			{TEXT("전체 화면"), TEXT("창 모드"), TEXT("테두리 없는 창")}));
+		TArray<FKnightDisplayInfo> Displays;
+		UknightGameUserSettings::GetConnectedDisplays(Displays);
+		TArray<FString> DisplayOptions;
+		for (const FKnightDisplayInfo& Monitor : Displays) DisplayOptions.Add(Monitor.Label);
+		FKnightSettingItem& MonitorRow = Display.Items.Add_GetRef(Rotator(TEXT("Display"), LOCTEXT("Display", "표시 모니터"),
+			LOCTEXT("DisplayDesc", "게임 창을 표시할 모니터입니다. 적용 후 화면이 보이지 않으면 자동으로 이전 모니터로 돌아갑니다."), DisplayOptions));
+		MonitorRow.bEnabled = Displays.Num() > 1;
 		TArray<FIntPoint> Resolutions;
-		UknightGameUserSettings::GetSupportedResolutions(Resolutions);
+		UknightGameUserSettings::GetSupportedResolutions(DraftGraphics, Resolutions);
 		TArray<FString> ResolutionOptions;
 		for (const FIntPoint& Size : Resolutions) ResolutionOptions.Add(FString::Printf(TEXT("%dx%d"), Size.X, Size.Y));
 		FKnightSettingItem& Resolution = Display.Items.Add_GetRef(Rotator(TEXT("Resolution"), LOCTEXT("Resolution", "해상도"),
@@ -245,7 +257,7 @@ void UKnightSettingsWidget::GetTabSections(int32 Tab, TArray<FKnightSettingSecti
 		Quality.Items.Add(Rotator(TEXT("PostProcess"), LOCTEXT("Post", "후처리"), LOCTEXT("PostDesc", "블룸, 피사계 심도 같은 화면 효과의 품질입니다."), QualityOptions()));
 		Quality.Items.Add(Rotator(TEXT("ViewDistance"), LOCTEXT("View", "시야 거리"), LOCTEXT("ViewDesc", "먼 물체를 얼마나 자세히 그릴지 정합니다."), QualityOptions()));
 		Quality.Items.Add(Toggle(TEXT("MotionBlur"), LOCTEXT("Motion", "모션 블러"), LOCTEXT("MotionDesc", "빠르게 움직일 때 화면을 흐리게 합니다.")));
-		Display.Note = FText::Format(LOCTEXT("DisplayNote", "화면 모드와 해상도는 적용 후 {0}초 안에 유지를 고르지 않으면 이전 값으로 돌아갑니다."),
+		Display.Note = FText::Format(LOCTEXT("DisplayNote", "화면 모드·표시 모니터·해상도는 적용 후 {0}초 안에 유지를 고르지 않으면 이전 값으로 돌아갑니다."),
 			FText::AsNumber(FMath::RoundToInt(DisplayConfirmSeconds)));
 	}
 	else if (Tab == 1)
@@ -308,7 +320,7 @@ int32 UKnightSettingsWidget::GetDirtyCount() const
 	// Every id GetValue knows except the preset, which only mirrors the quality rows. Listed rather than built from
 	// GetTabSections, which queries the display modes and runs on every slider step.
 	static const FName Ids[] = {
-		TEXT("WindowMode"), TEXT("Resolution"), TEXT("FPS"), TEXT("VSync"), TEXT("AA"), TEXT("Shadows"), TEXT("Textures"),
+		TEXT("WindowMode"), TEXT("Display"), TEXT("Resolution"), TEXT("FPS"), TEXT("VSync"), TEXT("AA"), TEXT("Shadows"), TEXT("Textures"),
 		TEXT("Effects"), TEXT("PostProcess"), TEXT("ViewDistance"), TEXT("MotionBlur"), TEXT("MouseSensitivity"),
 		TEXT("MouseAcceleration"), TEXT("Master"), TEXT("Music"), TEXT("SFX"), TEXT("Voice"), TEXT("Subtitles"),
 		TEXT("FOV"), TEXT("Gamma"), TEXT("Brightness") };
@@ -404,8 +416,31 @@ void UKnightSettingsWidget::OptionEdited(FName Id, const FString& Value)
 	{
 		DraftGraphics.WindowMode = Value == TEXT("전체 화면") ? EWindowMode::Fullscreen
 			: Value == TEXT("창 모드") ? EWindowMode::Windowed : EWindowMode::WindowedFullscreen;
-		if (DraftGraphics.WindowMode == EWindowMode::WindowedFullscreen)
-			if (const UknightGameUserSettings* const Settings = UknightGameUserSettings::Get()) DraftGraphics.Resolution = Settings->GetDesktopResolution();
+	}
+	else if (Id == TEXT("Display"))
+	{
+		TArray<FKnightDisplayInfo> Displays;
+		UknightGameUserSettings::GetConnectedDisplays(Displays);
+		if (const FKnightDisplayInfo* Selected = Displays.FindByPredicate([&Value](const FKnightDisplayInfo& Display) { return Display.Label == Value; }))
+		{
+			DraftGraphics.DisplayID = Selected->ID;
+			DraftGraphics.DisplayIndex = Selected->Index;
+		}
+	}
+	if (Id == TEXT("WindowMode") || Id == TEXT("Display"))
+	{
+		FKnightDisplayInfo Display;
+		if (UknightGameUserSettings::ResolveDisplay(DraftGraphics.DisplayID, DraftGraphics.DisplayIndex, Display))
+		{
+			if (DraftGraphics.WindowMode == EWindowMode::WindowedFullscreen) DraftGraphics.Resolution = Display.DesktopResolution;
+			else
+			{
+				TArray<FIntPoint> Sizes;
+				UknightGameUserSettings::GetSupportedResolutions(DraftGraphics, Sizes);
+				if (!Sizes.Contains(DraftGraphics.Resolution) && !Sizes.IsEmpty())
+					DraftGraphics.Resolution = Sizes.Contains(Display.DesktopResolution) ? Display.DesktopResolution : Sizes.Last();
+			}
+		}
 	}
 	else if (Id == TEXT("Resolution"))
 	{
@@ -515,7 +550,8 @@ void UKnightSettingsWidget::Apply()
 	if (DraftGraphics != SavedGraphics)
 	{
 		const FKnightGraphicsChoice Previous = SavedGraphics;
-		const bool bDisplayChanged = DraftGraphics.WindowMode != Previous.WindowMode || DraftGraphics.Resolution != Previous.Resolution;
+		const bool bDisplayChanged = DraftGraphics.WindowMode != Previous.WindowMode || DraftGraphics.Resolution != Previous.Resolution
+			|| DraftGraphics.DisplayID != Previous.DisplayID || DraftGraphics.DisplayIndex != Previous.DisplayIndex;
 		if (!Graphics->ApplyGraphicsNow(DraftGraphics, bDisplayChanged ? &Previous : nullptr, Error)) { SetStatus(Error); return; }
 		SavedGraphics = DraftGraphics;
 		if (bDisplayChanged)
@@ -623,7 +659,13 @@ void UKnightSettingsWidget::RestoreDefaults()
 {
 	if (bDisplayConfirmShown) return;
 	DraftGraphics = FKnightGraphicsChoice();
-	if (const UknightGameUserSettings* const Graphics = UknightGameUserSettings::Get()) DraftGraphics.Resolution = Graphics->GetDesktopResolution();
+	FKnightDisplayInfo Primary;
+	if (UknightGameUserSettings::ResolveDisplay(FString(), INDEX_NONE, Primary))
+	{
+		DraftGraphics.DisplayID = Primary.ID;
+		DraftGraphics.DisplayIndex = Primary.Index;
+		DraftGraphics.Resolution = Primary.DesktopResolution;
+	}
 	UknightSharedSettings* const Defaults = NewObject<UknightSharedSettings>(this);
 	CopyPersonal(DraftPersonal, Defaults);
 	DraftKeys = DefaultKeys;

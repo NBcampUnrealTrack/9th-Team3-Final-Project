@@ -60,7 +60,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FKnightSettingsClosed);
 /**
  * Settings model shared by title, lobby and raid: graphics (UknightGameUserSettings), personal settings
  * (UknightSharedSettings) and key bindings (Enhanced Input user settings), each edited as a draft and saved by Apply.
- * Graphics apply at once. A window mode or resolution change then waits DisplayConfirmSeconds for Keep and goes back to
+ * Graphics apply at once. A display, window mode or resolution change then waits DisplayConfirmSeconds for Keep and goes back to
  * the previous values otherwise, so a mode the monitor cannot show recovers by itself.
  *
  * This class has no layout. The screen is a Blueprint of a knightUI subclass (UknightSettingsScreen) found through
@@ -108,10 +108,10 @@ public:
 	void ConfirmContinue();
 
 	static constexpr double DisplayConfirmSeconds = 15.0;
-	/** True while a new window mode or resolution waits for KeepDisplay. Editing is locked meanwhile. */
+	/** True while a new display, window mode or resolution waits for KeepDisplay. Editing is locked meanwhile. */
 	bool IsDisplayConfirmShown() const { return bDisplayConfirmShown; }
 	void KeepDisplay();
-	/** Goes back to the window mode and resolution from before Apply. Also runs when the countdown ends. */
+	/** Goes back to the display, window mode and resolution from before Apply. Also runs when the countdown ends. */
 	void RevertDisplay();
 
 	static const FString OnText;
