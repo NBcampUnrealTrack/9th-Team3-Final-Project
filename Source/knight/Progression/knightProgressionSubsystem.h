@@ -37,6 +37,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|Progression")
 	bool UnlockStage(FName StageId);
 
+	/** Call only after the quest system has confirmed completion. False for empty IDs, no selected save, or duplicates. */
+	UFUNCTION(BlueprintCallable, Category="Knight|Progression|Quest")
+	bool RecordQuestCompleted(FName QuestId);
+
+	UFUNCTION(BlueprintPure, Category="Knight|Progression|Quest")
+	bool IsQuestCompleted(FName QuestId) const;
+
 	/** Zero if never cleared. */
 	UFUNCTION(BlueprintPure, Category="Knight|Progression")
 	float GetBestClearTime(FName StageId) const;

@@ -35,8 +35,9 @@ public:
 	/**
 	 * Bump when the layout changes, and handle the old version in UknightSaveSubsystem::MigrateSave.
 	 * 1: items keyed by FName. 2: primary asset IDs and equipment. 3: explicit unlocks and applied run IDs.
+	 * 5: confirmed quest IDs (older saves default to an empty set).
 	 */
-	static constexpr int32 CurrentVersion = 4;
+	static constexpr int32 CurrentVersion = 5;
 
 	UPROPERTY(SaveGame)
 	int32 SaveVersion = CurrentVersion;
@@ -51,6 +52,10 @@ public:
 	/** Written together with rewards, so a repeated result cannot pay twice after loading. */
 	UPROPERTY(SaveGame)
 	TSet<FGuid> AppliedRaidRuns;
+
+	/** Confirmed quest completions for this save slot. Independent of stage clears and raid results. */
+	UPROPERTY(SaveGame)
+	TSet<FName> CompletedQuestIds;
 
 	/** The item box: owned count per item. */
 	UPROPERTY(SaveGame)

@@ -58,6 +58,23 @@ void UknightProgressionSubsystem::CommitChange()
 	OnProgressionChanged.Broadcast();
 }
 
+bool UknightProgressionSubsystem::RecordQuestCompleted(FName QuestId)
+{
+	const UknightSaveSubsystem* const SaveSubsystem = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	UknightSaveGame* const Save = SaveSubsystem && SaveSubsystem->HasSelectedSlot() ? GetSave() : nullptr;
+	if (!Save || QuestId.IsNone() || Save->CompletedQuestIds.Contains(QuestId)) return false;
+	Save->CompletedQuestIds.Add(QuestId);
+	CommitChange();
+	return true;
+}
+
+bool UknightProgressionSubsystem::IsQuestCompleted(FName QuestId) const
+{
+	const UknightSaveSubsystem* const SaveSubsystem = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	const UknightSaveGame* const Save = SaveSubsystem && SaveSubsystem->HasSelectedSlot() ? GetSave() : nullptr;
+	return Save && !QuestId.IsNone() && Save->CompletedQuestIds.Contains(QuestId);
+}
+
 void UknightProgressionSubsystem::HandleRaidResult(const FknightRaidResult& Result)
 {
 	UknightSaveGame* const Save = GetSave();

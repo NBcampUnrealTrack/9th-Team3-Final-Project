@@ -182,6 +182,7 @@ bool UknightSaveSubsystem::MigrateSave(UknightSaveGame& Save) const
 	{
 		if (!Entry.Key.IsValid() || Entry.Value < 0) return false;
 	}
+	Save.CompletedQuestIds.Remove(NAME_None);
 	if (!FMath::IsFinite(Save.TotalPlayTime) || Save.TotalPlayTime < 0.f) return false;
 	Save.SaveVersion = UknightSaveGame::CurrentVersion;
 	return true;
@@ -223,8 +224,10 @@ bool UknightSaveSubsystem::SelectSlot(const FString& SlotId)
 	if (bSaveInFlight || !MakeSlotName(SlotId, NewSlot)) return false;
 	if (NewSlot == ActiveSlotName)
 	{
+		const bool bWasSelected = bSlotSelected;
 		if (!bSlotSelected || bLoadFailed) LoadSlot(NewSlot);
 		bSlotSelected = !bLoadFailed && SaveGame != nullptr;
+		if (bSlotSelected != bWasSelected) OnActiveSlotChanged.Broadcast(ActiveSlotId);
 		return bSlotSelected;
 	}
 	AccumulatePlayTime();
@@ -235,6 +238,7 @@ bool UknightSaveSubsystem::SelectSlot(const FString& SlotId)
 	bSavePending = false;
 	bSlotSelected = LoadSlot(NewSlot);
 	SecondsSincePeriodicSave = 0.0;
+	OnActiveSlotChanged.Broadcast(ActiveSlotId);
 	return bSlotSelected;
 }
 
@@ -325,5 +329,6 @@ void UknightSaveSubsystem::ResetSave()
 	}
 	bLoadFailed = false;
 	SaveGame = Cast<UknightSaveGame>(UGameplayStatics::CreateSaveGameObject(UknightSaveGame::StaticClass()));
+	OnActiveSlotChanged.Broadcast(ActiveSlotId);
 	RequestSave();
 }
