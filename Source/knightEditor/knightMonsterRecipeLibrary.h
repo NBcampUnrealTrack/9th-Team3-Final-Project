@@ -8,6 +8,7 @@
 class AknightMonsterCharacterBase;
 class UAnimMontage;
 class UAnimSequence;
+class UBlendSpace;
 class UknightMonsterRecipe;
 
 /**
@@ -56,4 +57,19 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
 	static UAnimMontage* BuildSectionMontage(const FString& PackagePath, const TArray<UAnimSequence*>& Sequences, const TArray<FName>& SectionNames, FName LoopSection);
+
+	/**
+	 * 블렌드스페이스의 샘플 검사와 블렌드 구간 데이터를 다시 만든다. Python에서 샘플이나 축을 바꾸면 이 계산이 돌지 않아
+	 * 런타임이 옛 구간으로 섞으므로, 바꾼 뒤 부른다. 저장은 호출한 쪽.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
+	static bool ResampleBlendSpace(UBlendSpace* BlendSpace);
+
+	/**
+	 * 몽타주 첫 슬롯의 SegmentIndex번 구간이 시퀀스의 StartTime~EndTime(초)만 재생하게 자르고, 뒤 구간과 섹션 위치를 다시 맞춘다.
+	 * 애니 앞뒤의 필요 없는 동작을 원본을 고치지 않고 뺄 때 쓴다. 섹션은 BuildSectionMontage처럼 구간마다 하나라고 본다.
+	 * 노티파이 위치는 그대로이므로 자른 뒤 다시 놓는다. 저장은 호출한 쪽.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
+	static bool SetMontageSegmentRange(UAnimMontage* Montage, int32 SegmentIndex, float StartTime, float EndTime);
 };
