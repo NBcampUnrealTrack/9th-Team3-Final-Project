@@ -54,9 +54,9 @@ public:
 		const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
 
 protected:
-	/** 배율·중량 계수가 1일 때의 대시 거리. (2026-10-07 900 → 750, 너무 멀리 가서 줄임) */
+	/** 배율·중량 계수가 1일 때의 대시 거리. (2026-10-07 900 → 750, 2026-10-16 750 → 375 절반으로 조정) */
 	UPROPERTY(EditDefaultsOnly, Category="Dash", meta=(ClampMin=0, Units="cm"))
-	float DashDistance = 750.f;
+	float DashDistance = 375.f;
 
 	UPROPERTY(EditDefaultsOnly, Category="Dash", meta=(ClampMin=0.05, Units="s"))
 	float DashDuration = 0.35f;

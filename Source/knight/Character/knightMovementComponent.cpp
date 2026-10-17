@@ -4,6 +4,7 @@
 #include "AbilitySystemGlobals.h"
 #include "AbilitySystem/Attributes/knightAttributeSet.h"
 #include "Camera/CameraShakeBase.h"
+#include "Combat/knightTargetLockComponent.h"
 #include "Curves/CurveFloat.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
@@ -16,6 +17,21 @@ namespace
 {
 	// 달리기 중. 달리기 공격 조건으로 쓴다(태그는 Config/Tags에 이미 있음).
 	UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_State_Sprinting, "State.Sprinting");
+
+	// 락온 중 뒤로 이동(백스텝)할 때는 Shift를 눌러도 달리지 않고 걷는다.
+	bool IsMovingBackwardWhileLockedOn(const UCharacterMovementComponent& Movement)
+	{
+		const ACharacter* const Character = Movement.GetCharacterOwner();
+		const UAbilitySystemComponent* const ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Character);
+		if (!Character || !ASC || !ASC->HasMatchingGameplayTag(knightGameplayTags::State_LockedOn))
+		{
+			return false;
+		}
+		const FVector Forward = Character->GetActorForwardVector().GetSafeNormal2D();
+		const FVector InputDir = Movement.GetCurrentAcceleration().GetSafeNormal2D();
+		const FVector MoveDir = !InputDir.IsNearlyZero() ? InputDir : Movement.Velocity.GetSafeNormal2D();
+		return !MoveDir.IsNearlyZero() && FVector::DotProduct(MoveDir, Forward) < -0.1f;
+	}
 }
 
 UknightMovementComponent::UknightMovementComponent(const FObjectInitializer& ObjectInitializer)
@@ -110,8 +126,8 @@ float UknightMovementComponent::GetMaxSpeed() const
 		return Super::GetMaxSpeed();
 	}
 
-	// 달리기 잠금(수리 키트 사용 중) 동안은 달리기 키를 누르고 있어도 걷기 기준.
-	const bool bRun = bWantsToRun && RunLockCount == 0;
+	// 달리기 잠금(수리 키트 사용 중) 또는 락온 후진 중에는 달리기 키를 누르고 있어도 걷기 기준.
+	const bool bRun = bWantsToRun && RunLockCount == 0 && !IsMovingBackwardWhileLockedOn(*this);
 	const float BaseSpeed = bRun ? BaseRunSpeed : BaseWalkSpeed;
 	const float SpeedScale = bRun
 		? GetMechAttributeValue(UknightAttributeSet::GetRunSpeedAttribute(), 1.f)
@@ -121,7 +137,8 @@ float UknightMovementComponent::GetMaxSpeed() const
 
 bool UknightMovementComponent::IsRunning() const
 {
-	return bWantsToRun && RunLockCount == 0 && MoveInputLockCount == 0 && IsMovingOnGround() && !GetCurrentAcceleration().IsNearlyZero();
+	return bWantsToRun && RunLockCount == 0 && MoveInputLockCount == 0 && IsMovingOnGround()
+		&& !GetCurrentAcceleration().IsNearlyZero() && !IsMovingBackwardWhileLockedOn(*this);
 }
 
 float UknightMovementComponent::GetMaxAcceleration() const
@@ -225,7 +242,7 @@ void UknightMovementComponent::OnMovementModeChanged(EMovementMode PreviousMovem
 
 bool UknightMovementComponent::ShouldHaveSprintTag() const
 {
-	if (!bWantsToRun || RunLockCount > 0 || !IsMovingOnGround())
+	if (!bWantsToRun || RunLockCount > 0 || !IsMovingOnGround() || IsMovingBackwardWhileLockedOn(*this))
 	{
 		return false;
 	}
@@ -238,10 +255,57 @@ void UknightMovementComponent::OnMovementUpdated(float DeltaSeconds, const FVect
 {
 	Super::OnMovementUpdated(DeltaSeconds, OldLocation, OldVelocity);
 
+	// 락온 중에는 이동 방향(bOrientRotationToMovement)으로 몸을 돌리지 않고, 항상 락온(패링) 대상을 바라보게 고정·회전한다.
+	// 비락온 중 차지 공격(State.Charging) 중에도 이동 키 방향으로 몸이 돌지 않고 화면 중앙(카메라 방향)을 바라본다.
+	FVector TargetLocation = FVector::ZeroVector;
+	const UknightTargetLockComponent* const TargetLock = CharacterOwner ? CharacterOwner->FindComponentByClass<UknightTargetLockComponent>() : nullptr;
+	const bool bLockedOn = TargetLock && TargetLock->GetLockedTargetLocation(TargetLocation);
+	UAbilitySystemComponent* const ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner());
+	const bool bChargingUnlocked = !bLockedOn && ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_Charging);
+	const bool bGuardingUnlocked = !bLockedOn && ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_Guarding);
+	bOrientRotationToMovement = !bLockedOn && !bChargingUnlocked && !bGuardingUnlocked;
+	if ((bLockedOn || bChargingUnlocked) && UpdatedComponent && MoveInputLockCount == 0 && !bLandingRecovery && !HasAnimRootMotion())
+	{
+		const bool bBlocked = ASC && (ASC->HasMatchingGameplayTag(knightGameplayTags::State_Dead)
+			|| ASC->HasMatchingGameplayTag(knightGameplayTags::State_HitReact));
+		if (!bBlocked)
+		{
+			constexpr float LockOnTurnRate = 540.f;
+			float DesiredYaw = UpdatedComponent->GetComponentRotation().Yaw;
+			bool bHasDesiredYaw = false;
+			if (bLockedOn)
+			{
+				const FVector ToTarget = (TargetLocation - CharacterOwner->GetActorLocation()).GetSafeNormal2D();
+				if (!ToTarget.IsNearlyZero())
+				{
+					DesiredYaw = ToTarget.Rotation().Yaw;
+					bHasDesiredYaw = true;
+				}
+			}
+			else if (const AController* const Controller = CharacterOwner ? CharacterOwner->GetController() : nullptr)
+			{
+				DesiredYaw = Controller->GetControlRotation().Yaw;
+				bHasDesiredYaw = true;
+			}
+			if (bHasDesiredYaw)
+			{
+				const FRotator CurrentRotation = UpdatedComponent->GetComponentRotation();
+				FRotator NewRotation = CurrentRotation;
+				NewRotation.Yaw = FMath::FixedTurn(CurrentRotation.Yaw, DesiredYaw, LockOnTurnRate * DeltaSeconds);
+				NewRotation.Pitch = 0.f;
+				NewRotation.Roll = 0.f;
+				if (!NewRotation.Equals(CurrentRotation, 1e-3f))
+				{
+					MoveUpdatedComponent(FVector::ZeroVector, NewRotation, false);
+				}
+			}
+		}
+	}
+
 	const bool bSprint = ShouldHaveSprintTag();
 	if (bSprint != bSprintTagged)
 	{
-		if (UAbilitySystemComponent* const ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner()))
+		if (ASC)
 		{
 			ASC->SetLooseGameplayTagCount(TAG_State_Sprinting, bSprint ? 1 : 0);
 			bSprintTagged = bSprint;

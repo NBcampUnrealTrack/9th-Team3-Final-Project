@@ -180,7 +180,14 @@ bool UknightDamageExecution::IsAttackerInGuardArc(const AActor* Target, const AA
 	{
 		return false;
 	}
-	// 공격이 들어온 지점 (2026-10-12). 타격 결과에 시작점이 없으면 공격자 위치.
+	// 공격이 들어온 지점 (2026-10-12). 대형 몬스터의 큰 궤적(휘두르기 등)으로 타격 시작점이 몸 옆으로 돌아오더라도,
+	// 공격자 본체를 바라보고 있거나 타격 지점을 바라보고 있으면 가드/패링 정면 범위 안으로 인정한다.
+	const FVector TargetLocation = Target->GetActorLocation();
+	const FVector TargetForward = Target->GetActorForwardVector();
+	if (knightDamageMath::IsInGuardArc(TargetLocation, TargetForward, Attacker->GetActorLocation(), GuardArcDegrees))
+	{
+		return true;
+	}
 	const FVector AttackOrigin = Hit && !Hit->TraceStart.IsZero() ? FVector(Hit->TraceStart) : Attacker->GetActorLocation();
-	return knightDamageMath::IsInGuardArc(Target->GetActorLocation(), Target->GetActorForwardVector(), AttackOrigin, GuardArcDegrees);
+	return knightDamageMath::IsInGuardArc(TargetLocation, TargetForward, AttackOrigin, GuardArcDegrees);
 }

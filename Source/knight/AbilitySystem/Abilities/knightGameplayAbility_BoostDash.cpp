@@ -4,6 +4,7 @@
 #include "AbilitySystem/Attributes/knightAttributeSet.h"
 #include "Abilities/Tasks/AbilityTask_ApplyRootMotionConstantForce.h"
 #include "Character/knightMovementComponent.h"
+#include "Combat/knightTargetLockComponent.h"
 #include "Engine/World.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
@@ -103,7 +104,22 @@ void UknightGameplayAbility_BoostDash::StartDash(ACharacter& Character)
 
 	const UAbilitySystemComponent* const OwnerASC = GetAbilitySystemComponentFromActorInfo();
 	const bool bLockedOn = OwnerASC && OwnerASC->HasMatchingGameplayTag(knightGameplayTags::State_LockedOn);
-	if (bFaceDashDirectionWhenFree && bHasInput && !bLockedOn)
+	if (bLockedOn)
+	{
+		if (const UknightTargetLockComponent* const TargetLock = Character.FindComponentByClass<UknightTargetLockComponent>())
+		{
+			FVector TargetLocation;
+			if (TargetLock->GetLockedTargetLocation(TargetLocation))
+			{
+				const FVector ToTarget = (TargetLocation - Character.GetActorLocation()).GetSafeNormal2D();
+				if (!ToTarget.IsNearlyZero())
+				{
+					Character.SetActorRotation(FRotator(0.f, ToTarget.Rotation().Yaw, 0.f));
+				}
+			}
+		}
+	}
+	else if (bFaceDashDirectionWhenFree && bHasInput)
 	{
 		Character.SetActorRotation(FRotator(0.f, Direction.Rotation().Yaw, 0.f));
 	}

@@ -13,6 +13,7 @@
 #include "Combat/knightTargetLockComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
+#include "GameFramework/Controller.h"
 #include "GameFramework/RootMotionSource.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
@@ -60,11 +61,18 @@ void UknightGameplayAbility_Guard::ActivateAbility(const FGameplayAbilitySpecHan
 		return;
 	}
 
-	// 방향키를 누른 채 가드를 올리면 그 방향을 바로 본다(락온 중 제외). 가드 중에는 몸을 돌리지 않는다. (2026-10-08)
-	// 락온 중에는 락온 대상을 바로 본다. 패링은 정면 범위에서만 되므로, 몸이 다른 쪽을 보고 있으면 실패했다. (2026-10-12)
-	if (!FaceMoveInputDirection())
+	UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();
+	const bool bLockedOn = ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_LockedOn);
+	if (bLockedOn)
 	{
 		FaceLockedTarget(-1.f);
+	}
+	else if (ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
+	{
+		if (const AController* const Controller = Character->GetController())
+		{
+			Character->SetActorRotation(FRotator(0.f, Controller->GetControlRotation().Yaw, 0.f));
+		}
 	}
 	EnterGuardStance();
 
@@ -82,7 +90,7 @@ void UknightGameplayAbility_Guard::ActivateAbility(const FGameplayAbilitySpecHan
 
 	if (PerfectGuardWindow > 0.f)
 	{
-		if (UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo())
+		if (ASC)
 		{
 			ASC->AddLooseGameplayTag(knightGameplayTags::State_Parrying);
 			bParryTagApplied = true;
@@ -284,15 +292,26 @@ void UknightGameplayAbility_Guard::ExitGuardStance()
 
 void UknightGameplayAbility_Guard::CheckMoveCancel()
 {
-	const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
 	if (!IsActive() || !Character)
 	{
 		return;
 	}
-	// 락온 중에는 가드하는 동안에도 움직이는 대상을 따라 몸을 돌린다(초당 GuardLockOnTurnRate도). (2026-10-12)
+	// 락온 중에는 가드하는 동안에도 대상을 따라 몸을 돌린다(초당 GuardLockOnTurnRate도). (2026-10-12)
+	// 비락온 중에는 가드하는 동안 카메라 시선(화면 중앙)을 따라 몸을 돌린다.
 	if (GuardLockOnTurnRate > 0.f)
 	{
-		FaceLockedTarget(GuardLockOnTurnRate * GuardMoveCancelCheckInterval);
+		if (!FaceLockedTarget(GuardLockOnTurnRate * GuardMoveCancelCheckInterval))
+		{
+			if (const AController* const Controller = Character->GetController())
+			{
+				const float CurrentYaw = Character->GetActorRotation().Yaw;
+				const float TargetYaw = Controller->GetControlRotation().Yaw;
+				const float TurnDelta = GuardLockOnTurnRate * GuardMoveCancelCheckInterval;
+				const float NewYaw = FMath::FixedTurn(CurrentYaw, TargetYaw, TurnDelta);
+				Character->SetActorRotation(FRotator(0.f, NewYaw, 0.f));
+			}
+		}
 	}
 	MovePress.Update(*Character);
 	if (MovePress.HasFreshPress() && !Character->GetLastMovementInputVector().IsNearlyZero())

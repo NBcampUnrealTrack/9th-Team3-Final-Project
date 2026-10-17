@@ -275,26 +275,13 @@ bool UknightCombatLibrary::ComputeAttackWarp(AActor* Attacker, float MaxDistance
 	}
 
 	FVector TargetLocation = FVector::ZeroVector;
-	AActor* TargetActor = nullptr;
-	FGameplayTag PartTag;
-	bool bFound = false;
-	if (TargetLock->GetLockedTargetLocation(TargetLocation))
+	if (!TargetLock->GetLockedTargetLocation(TargetLocation))
 	{
-		TargetActor = TargetLock->GetLockedTarget();
-		PartTag = TargetLock->GetLockedPartTag();
-		bFound = true;
-	}
-	else if (bUseSoftTarget)
-	{
-		const APawn* const Pawn = Cast<APawn>(Attacker);
-		const FVector Input = Pawn ? Pawn->GetLastMovementInputVector() : FVector::ZeroVector;
-		const FVector Direction = Input.IsNearlyZero() ? Attacker->GetActorForwardVector() : Input;
-		bFound = TargetLock->FindSoftTarget(Direction, SoftTargetRange, SoftTargetAngle, TargetLocation, TargetActor, PartTag);
-	}
-	if (!bFound)
-	{
+		// 락온 상태가 아닐 때는 주변 적(소프트 타깃)이나 이동 키 방향으로 공격이 휘지 않고, 화면 중앙 방향으로 곧장 공격한다.
 		return false;
 	}
+	AActor* const TargetActor = TargetLock->GetLockedTarget();
+	const FGameplayTag PartTag = TargetLock->GetLockedPartTag();
 
 	const FVector AttackerLocation = Attacker->GetActorLocation();
 	FVector ToTarget = TargetLocation - AttackerLocation;
