@@ -64,4 +64,12 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
 	static bool ResampleBlendSpace(UBlendSpace* BlendSpace);
+
+	/**
+	 * 몽타주 첫 슬롯의 SegmentIndex번 구간이 시퀀스의 StartTime~EndTime(초)만 재생하게 자르고, 뒤 구간과 섹션 위치를 다시 맞춘다.
+	 * 애니 앞뒤의 필요 없는 동작을 원본을 고치지 않고 뺄 때 쓴다. 섹션은 BuildSectionMontage처럼 구간마다 하나라고 본다.
+	 * 노티파이 위치는 그대로이므로 자른 뒤 다시 놓는다. 저장은 호출한 쪽.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
+	static bool SetMontageSegmentRange(UAnimMontage* Montage, int32 SegmentIndex, float StartTime, float EndTime);
 };

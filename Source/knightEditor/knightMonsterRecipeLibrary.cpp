@@ -1630,4 +1630,41 @@ bool UknightMonsterRecipeLibrary::ResampleBlendSpace(UBlendSpace* BlendSpace)
 	return true;
 }
 
+bool UknightMonsterRecipeLibrary::SetMontageSegmentRange(UAnimMontage* Montage, int32 SegmentIndex, float StartTime, float EndTime)
+{
+	if (!Montage || Montage->SlotAnimTracks.IsEmpty())
+	{
+		return false;
+	}
+	TArray<FAnimSegment>& Segments = Montage->SlotAnimTracks[0].AnimTrack.AnimSegments;
+	const UAnimSequenceBase* const Sequence = Segments.IsValidIndex(SegmentIndex) ? Segments[SegmentIndex].GetAnimReference().Get() : nullptr;
+	if (!Sequence || StartTime < 0.f || EndTime > Sequence->GetPlayLength() + UE_KINDA_SMALL_NUMBER || StartTime >= EndTime)
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetMontageSegmentRange %s: 구간 %d의 범위 %.3f~%.3f가 잘못됐습니다."), *GetNameSafe(Montage), SegmentIndex, StartTime, EndTime);
+		return false;
+	}
+	Montage->Modify();
+	Segments[SegmentIndex].AnimStartTime = StartTime;
+	Segments[SegmentIndex].AnimEndTime = EndTime;
+
+	float Position = 0.f;
+	for (FAnimSegment& Segment : Segments)
+	{
+		Segment.StartPos = Position;
+		Position += Segment.GetLength();
+	}
+	if (Montage->CompositeSections.Num() == Segments.Num())
+	{
+		for (int32 Index = 0; Index < Segments.Num(); ++Index)
+		{
+			Montage->CompositeSections[Index].Link(Montage, Segments[Index].StartPos);
+		}
+	}
+	Montage->SetCompositeLength(Position);
+	Montage->RefreshCacheData();
+	Montage->PostEditChange();
+	Montage->MarkPackageDirty();
+	return true;
+}
+
 #undef LOCTEXT_NAMESPACE
