@@ -22,7 +22,7 @@ struct KNIGHT_API FknightLegPlacementLeg
 	float Offset = 0.f;
 	bool bChainValid = false;
 
-	/** 접지 커브 이름 "FootLock_<발 뼈>". 값이 0.5를 넘으면 발이 땅에 닿은 것으로 본다. */
+	/** 접지 커브 이름 "FootLock_<발 뼈>". 값이 1(섞인 포즈가 모두 디딤)일 때 발이 땅에 닿은 것으로 본다. */
 	FName LockCurve;
 	/** 고정한 발의 월드 위치(XY만 쓴다)와, 고정한 순간 컴포넌트의 요(도). */
 	FVector LockedLocation = FVector::ZeroVector;
@@ -40,6 +40,9 @@ struct KNIGHT_API FknightLegPlacementLeg
 	FVector StepFrom = FVector::ZeroVector;
 	double StepFromYaw = 0.0;
 	float StepElapsed = 0.f;
+	/** 이번 풀기에 걸리는 시간(멀리 떨어진 발일수록 길다)과, 걷던 중에 풀렸을 때 남은 드는 높이(컴포넌트 공간). */
+	float ReleaseTime = 0.f;
+	double ReleaseLift = 0.0;
 };
 
 /**
@@ -103,9 +106,13 @@ struct KNIGHT_API FAnimNode_knightLegPlacement : public FAnimNode_SkeletalContro
 	UPROPERTY(EditAnywhere, Category="Foot Lock")
 	bool bEnableFootLock = true;
 
-	/** 발을 들 때 고정 위치에서 애니메이션 위치로 돌아가는 시간. */
+	/** 발을 들 때 고정 위치에서 애니메이션 위치로 돌아가는 최소 시간. */
 	UPROPERTY(EditAnywhere, Category="Foot Lock", meta=(ClampMin=0, Units="s"))
 	float FootLockReleaseTime = 0.15f;
+
+	/** 풀릴 때 발이 애니메이션 위치로 돌아가는 최대 속도(초당 다리 길이 배수). 멀리 떨어진 발이 튀지 않게 풀기 시간을 늘린다. */
+	UPROPERTY(EditAnywhere, Category="Foot Lock", meta=(ClampMin=0.1))
+	float FootLockReleaseSpeed = 1.f;
 
 	/** 고정 위치와 애니메이션 발 위치가 다리 길이의 이 비율만큼 벌어지면 다리가 닿지 않는 것으로 보고 푼다. */
 	UPROPERTY(EditAnywhere, Category="Foot Lock", meta=(ClampMin=0))
@@ -149,6 +156,9 @@ struct KNIGHT_API FAnimNode_knightLegPlacement : public FAnimNode_SkeletalContro
 
 private:
 	virtual void InitializeBoneReferences(const FBoneContainer& RequiredBones) override;
+
+	/** 고정을 풀고, 지금 보이는 발 위치에서 애니메이션 위치까지의 거리로 풀기 시간을 정한다. */
+	void BeginFootRelease(FknightLegPlacementLeg& Leg, const FVector& AnimFootWorld, double Lift);
 
 	/** 다리 하나의 고정·풀기·걸음 진행을 갱신한다. 걸음 시작은 여기서 하지 않는다(다리끼리 순서를 정해야 해서). */
 	void UpdateFootLockState(FknightLegPlacementLeg& Leg, bool bPlanted, const FVector& AnimFootWorld, const FTransform& ComponentToWorld);

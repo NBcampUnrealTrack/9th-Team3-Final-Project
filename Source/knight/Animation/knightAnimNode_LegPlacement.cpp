@@ -166,6 +166,15 @@ FVector FAnimNode_knightLegPlacement::PredictFootWorld(const FVector& AnimFootWo
 	return Pivot + Rotated + ComponentVelocity * Time;
 }
 
+void FAnimNode_knightLegPlacement::BeginFootRelease(FknightLegPlacementLeg& Leg, const FVector& AnimFootWorld, double Lift)
+{
+	Leg.bLocked = false;
+	Leg.bStepping = false;
+	Leg.ReleaseLift = Lift;
+	const double Speed = FMath::Max(LegLengthWorld(Leg) * FootLockReleaseSpeed, 1.0);
+	Leg.ReleaseTime = FMath::Max(FootLockReleaseTime, static_cast<float>(FVector::Dist2D(Leg.LockedLocation, AnimFootWorld) / Speed));
+}
+
 void FAnimNode_knightLegPlacement::UpdateFootLockState(FknightLegPlacementLeg& Leg, bool bPlanted, const FVector& AnimFootWorld,
 	const FTransform& ComponentToWorld)
 {
@@ -181,12 +190,12 @@ void FAnimNode_knightLegPlacement::UpdateFootLockState(FknightLegPlacementLeg& L
 		const float Lead = StepLead * StepDuration;
 		if (!bPlanted)
 		{
-			// 애니메이션이 발을 드는 구간에 들어갔으면 지금 위치에서 걸음을 멈추고 애니메이션에 넘긴다.
-			const float StepAlpha = FMath::SmoothStep(0.f, 1.f, FMath::Clamp(Leg.StepElapsed / StepDuration, 0.f, 1.f));
+			// 애니메이션이 발을 들거나 다른 동작으로 넘어가면, 지금 위치와 높이에서 걸음을 멈추고 애니메이션에 넘긴다.
+			const float Progress = FMath::Clamp(Leg.StepElapsed / StepDuration, 0.f, 1.f);
+			const float StepAlpha = FMath::SmoothStep(0.f, 1.f, Progress);
 			Leg.LockedLocation = FMath::Lerp(Leg.StepFrom, PredictFootWorld(AnimFootWorld, ComponentToWorld, FMath::Max(0.f, StepDuration - Leg.StepElapsed) + Lead), static_cast<double>(StepAlpha));
 			Leg.LockedYaw = Leg.StepFromYaw + StepAlpha * FRotator::NormalizeAxis(ComponentYaw + ComponentYawRate * Lead - Leg.StepFromYaw);
-			Leg.bStepping = false;
-			Leg.bLocked = false;
+			BeginFootRelease(Leg, AnimFootWorld, FMath::Sin(Progress * UE_PI) * Leg.LengthCS * StepHeightRatio);
 		}
 		else if (Leg.StepElapsed >= StepDuration)
 		{
@@ -200,12 +209,12 @@ void FAnimNode_knightLegPlacement::UpdateFootLockState(FknightLegPlacementLeg& L
 	{
 		if (!bPlanted)
 		{
-			Leg.bLocked = false;
+			BeginFootRelease(Leg, AnimFootWorld, 0.0);
 		}
 		else if (FVector::Dist2D(Leg.LockedLocation, AnimFootWorld) > LegLengthWorld(Leg) * MaxFootLockStretch)
 		{
 			// 다리가 닿지 않는 거리(걸음을 못 뗀 경우). 붙잡고 있으면 다리가 펴진 채 끌리니 풀고, 다음 디딤까지 기다린다.
-			Leg.bLocked = false;
+			BeginFootRelease(Leg, AnimFootWorld, 0.0);
 			Leg.bWaitForLift = true;
 		}
 	}
@@ -215,12 +224,13 @@ void FAnimNode_knightLegPlacement::UpdateFootLockState(FknightLegPlacementLeg& L
 		Leg.LockedLocation = FMath::Lerp(AnimFootWorld, Leg.LockedLocation, static_cast<double>(Leg.LockAlpha));
 		Leg.LockedYaw = ComponentYaw + Leg.LockAlpha * FRotator::NormalizeAxis(Leg.LockedYaw - ComponentYaw);
 		Leg.LockAlpha = 1.f;
+		Leg.ReleaseLift = 0.0;
 		Leg.bLocked = true;
 	}
 
 	if (!Leg.bLocked)
 	{
-		Leg.LockAlpha = FootLockReleaseTime > 0.f ? FMath::Max(0.f, Leg.LockAlpha - FootLockDeltaTime / FootLockReleaseTime) : 0.f;
+		Leg.LockAlpha = Leg.ReleaseTime > 0.f ? FMath::Max(0.f, Leg.LockAlpha - FootLockDeltaTime / Leg.ReleaseTime) : 0.f;
 	}
 }
 
@@ -234,7 +244,8 @@ void FAnimNode_knightLegPlacement::ApplyFootLock(const FknightLegPlacementLeg& L
 	const double ComponentYaw = ComponentToWorld.Rotator().Yaw;
 	FVector TargetWorld = Leg.LockedLocation;
 	double TargetYaw = Leg.LockedYaw;
-	double Lift = 0.0;
+	// 걷던 중에 풀렸으면 든 높이도 풀기와 함께 내린다.
+	double Lift = Leg.ReleaseLift;
 	if (Leg.bStepping)
 	{
 		// 시작점에서 착지 예상점까지 부드럽게 옮기며 가운데에서 가장 높이 든다. 착지점은 몸을 따라 매 프레임 다시 잡는다.
@@ -251,7 +262,7 @@ void FAnimNode_knightLegPlacement::ApplyFootLock(const FknightLegPlacementLeg& L
 	const FVector TargetCS = ComponentToWorld.InverseTransformPosition(FVector(TargetWorld.X, TargetWorld.Y, AnimFootWorld.Z));
 	InOutEffectorCS.X = FMath::Lerp(InOutEffectorCS.X, TargetCS.X, static_cast<double>(Leg.LockAlpha));
 	InOutEffectorCS.Y = FMath::Lerp(InOutEffectorCS.Y, TargetCS.Y, static_cast<double>(Leg.LockAlpha));
-	InOutEffectorCS.Z += Lift;
+	InOutEffectorCS.Z += Leg.bStepping ? Lift : Lift * Leg.LockAlpha;
 	// 몸이 돈 만큼 발을 반대로 돌려 월드 방향을 유지한다.
 	OutYawCorrection = Leg.LockAlpha * FRotator::NormalizeAxis(TargetYaw - ComponentYaw);
 }
@@ -394,8 +405,9 @@ void FAnimNode_knightLegPlacement::EvaluateSkeletalControl_AnyThread(FComponentS
 		Pose.JointCS = Pose.JointCS * PelvisDelta;
 		Pose.FootCS = Pose.FootCS * PelvisDelta;
 		AnimFeetWorld.Add(ComponentToWorld.TransformPosition(Pose.FootCS.GetLocation()));
-		// 공중이거나 꺼져 있으면 커브를 0으로 봐서 고정을 부드럽게 푼다.
-		const bool bPlanted = bFootLockActive && Output.Curve.Get(Pose.Leg->LockCurve) > 0.5f;
+		// 섞인 모든 포즈가 디딘 상태(커브 ≈ 1)일 때만 고정한다. 몽타주 블렌드가 시작되면 바로 풀기 시작해서
+		// 발 이동이 포즈 블렌드와 함께 일어나고, 블렌드 중간 자세에서 고정하지 않는다. 공중이거나 꺼져 있으면 푼다.
+		const bool bPlanted = bFootLockActive && Output.Curve.Get(Pose.Leg->LockCurve) > 0.99f;
 		UpdateFootLockState(*Pose.Leg, bPlanted, AnimFeetWorld.Last(), ComponentToWorld);
 	}
 
