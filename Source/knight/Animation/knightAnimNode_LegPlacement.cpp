@@ -16,7 +16,14 @@ namespace knightLegPlacement
 	static TAutoConsoleVariable<int32> CVarEnabled(TEXT("knight.Anim.LegPlacement"), 1,
 		TEXT("1 = monster feet follow the ground (knight Leg Placement anim node), 0 = off for A/B comparison."));
 	static TAutoConsoleVariable<int32> CVarDraw(TEXT("knight.Anim.DrawLegPlacement"), 0,
-		TEXT("1 = draw the leg placement ground traces (green hit, red miss)."));
+		TEXT("1 = draw the leg placement ground traces (green hit, red miss) and locked feet (yellow)."));
+	static TAutoConsoleVariable<int32> CVarFootLock(TEXT("knight.Anim.FootLock"), 1,
+		TEXT("1 = planted feet stay in place while the FootLock_<foot bone> curve is on, 0 = off for A/B comparison."));
+}
+
+FName FAnimNode_knightLegPlacement::MakeFootLockCurveName(FName FootBone)
+{
+	return FName(*(TEXT("FootLock_") + FootBone.ToString()));
 }
 
 void FAnimNode_knightLegPlacement::InitializeBoneReferences(const FBoneContainer& RequiredBones)
@@ -27,6 +34,10 @@ void FAnimNode_knightLegPlacement::InitializeBoneReferences(const FBoneContainer
 	{
 		Leg.FootBone.Initialize(RequiredBones);
 		Leg.bChainValid = false;
+		Leg.LockCurve = MakeFootLockCurveName(Leg.FootBone.BoneName);
+		Leg.bLocked = false;
+		Leg.bWaitForLift = false;
+		Leg.LockAlpha = 0.f;
 		// 발 -> 무릎 -> 허벅지 순서로 부모를 따라 올라가 2본 체인을 만든다.
 		const int32 Foot = RefSkeleton.FindBoneIndex(Leg.FootBone.BoneName);
 		const int32 Joint = Foot != INDEX_NONE ? RefSkeleton.GetParentIndex(Foot) : INDEX_NONE;
@@ -69,6 +80,7 @@ void FAnimNode_knightLegPlacement::PreUpdate(const UAnimInstance* InAnimInstance
 	const UCharacterMovementComponent* const Movement = Character ? Character->GetCharacterMovement() : nullptr;
 	const bool bActive = knightLegPlacement::CVarEnabled.GetValueOnGameThread() != 0 && (!Movement || Movement->IsMovingOnGround());
 	const bool bDraw = knightLegPlacement::CVarDraw.GetValueOnGameThread() != 0;
+	bFootLockActive = bActive && bEnableFootLock && knightLegPlacement::CVarFootLock.GetValueOnGameThread() != 0;
 
 	// 메시 원점 = 캡슐 바닥 = 애니메이션이 가정한 평지 높이.
 	const float BaseZ = Mesh->GetComponentLocation().Z;
@@ -125,6 +137,63 @@ void FAnimNode_knightLegPlacement::PreUpdate(const UAnimInstance* InAnimInstance
 	}
 }
 
+void FAnimNode_knightLegPlacement::UpdateInternal(const FAnimationUpdateContext& Context)
+{
+	FAnimNode_SkeletalControlBase::UpdateInternal(Context);
+	FootLockDeltaTime = Context.GetDeltaTime();
+	++UpdatesSinceEvaluate;
+}
+
+void FAnimNode_knightLegPlacement::UpdateFootLock(FknightLegPlacementLeg& Leg, float CurveValue, const FTransform& ComponentToWorld,
+	const FVector& AnimFootCS, FVector& InOutEffectorCS, double& OutYawCorrection)
+{
+	const bool bPlanted = CurveValue > 0.5f;
+	if (!bPlanted)
+	{
+		Leg.bWaitForLift = false;
+	}
+	const FVector AnimFootWorld = ComponentToWorld.TransformPosition(AnimFootCS);
+	const double ComponentYaw = ComponentToWorld.Rotator().Yaw;
+
+	if (Leg.bLocked)
+	{
+		if (!bPlanted)
+		{
+			Leg.bLocked = false;
+		}
+		else if (FVector::Dist2D(Leg.LockedLocation, AnimFootWorld) > MaxFootLockDistance)
+		{
+			// 다리가 닿지 않는 거리. 붙잡고 있으면 다리가 펴진 채 끌리니 풀고, 다음 디딤까지 기다린다.
+			Leg.bLocked = false;
+			Leg.bWaitForLift = true;
+		}
+	}
+	else if (bPlanted && !Leg.bWaitForLift)
+	{
+		// 풀리던 중이면 지금 보이는 위치(고정과 애니메이션 사이)에서 다시 잡아야 발이 튀지 않는다.
+		Leg.LockedLocation = FMath::Lerp(AnimFootWorld, Leg.LockedLocation, static_cast<double>(Leg.LockAlpha));
+		Leg.LockedYaw = ComponentYaw + Leg.LockAlpha * FRotator::NormalizeAxis(Leg.LockedYaw - ComponentYaw);
+		Leg.LockAlpha = 1.f;
+		Leg.bLocked = true;
+	}
+
+	if (!Leg.bLocked)
+	{
+		Leg.LockAlpha = FootLockReleaseTime > 0.f ? FMath::Max(0.f, Leg.LockAlpha - FootLockDeltaTime / FootLockReleaseTime) : 0.f;
+	}
+	if (Leg.LockAlpha <= 0.f)
+	{
+		return;
+	}
+
+	// 높이는 지면 맞추기 몫이라 XY만 붙잡는다. 컴포넌트는 요만 도니 컴포넌트 XY 평면 = 월드 수평면이다.
+	const FVector LockedCS = ComponentToWorld.InverseTransformPosition(FVector(Leg.LockedLocation.X, Leg.LockedLocation.Y, AnimFootWorld.Z));
+	InOutEffectorCS.X = FMath::Lerp(InOutEffectorCS.X, LockedCS.X, static_cast<double>(Leg.LockAlpha));
+	InOutEffectorCS.Y = FMath::Lerp(InOutEffectorCS.Y, LockedCS.Y, static_cast<double>(Leg.LockAlpha));
+	// 몸이 돈 만큼 발을 반대로 돌려 월드 방향을 유지한다.
+	OutYawCorrection = Leg.LockAlpha * FRotator::NormalizeAxis(Leg.LockedYaw - ComponentYaw);
+}
+
 void FAnimNode_knightLegPlacement::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseContext& Output, TArray<FBoneTransform>& OutBoneTransforms)
 {
 	const FBoneContainer& BoneContainer = Output.Pose.GetPose().GetBoneContainer();
@@ -139,10 +208,22 @@ void FAnimNode_knightLegPlacement::EvaluateSkeletalControl_AnyThread(FComponentS
 		FTransform FootCS;
 		/** 컴포넌트 공간 단위의 지면 높이 차. */
 		double Offset;
+		FknightLegPlacementLeg* Leg;
 	};
+
+	// LOD 등으로 평가를 건너뛰었으면 그동안 몸이 움직였으니 이전 고정 위치를 버린다.
+	const bool bResetFootLock = UpdatesSinceEvaluate > 1;
+	UpdatesSinceEvaluate = 0;
+
 	TArray<FLegPose, TInlineAllocator<4>> Poses;
-	for (const FknightLegPlacementLeg& Leg : Legs)
+	for (FknightLegPlacementLeg& Leg : Legs)
 	{
+		if (bResetFootLock)
+		{
+			Leg.bLocked = false;
+			Leg.bWaitForLift = false;
+			Leg.LockAlpha = 0.f;
+		}
 		if (!Leg.bChainValid)
 		{
 			continue;
@@ -151,7 +232,7 @@ void FAnimNode_knightLegPlacement::EvaluateSkeletalControl_AnyThread(FComponentS
 		const FCompactPoseBoneIndex Joint = Leg.JointBone.GetCompactPoseIndex(BoneContainer);
 		const FCompactPoseBoneIndex Foot = Leg.FootBone.GetCompactPoseIndex(BoneContainer);
 		Poses.Add({ Root, Joint, Foot, Output.Pose.GetComponentSpaceTransform(Root), Output.Pose.GetComponentSpaceTransform(Joint),
-			Output.Pose.GetComponentSpaceTransform(Foot), Leg.Offset * WorldToComponent });
+			Output.Pose.GetComponentSpaceTransform(Foot), Leg.Offset * WorldToComponent, &Leg });
 	}
 	if (Poses.IsEmpty())
 	{
@@ -221,6 +302,10 @@ void FAnimNode_knightLegPlacement::EvaluateSkeletalControl_AnyThread(FComponentS
 	// 2) 다리: 골반이 움직인 만큼 체인을 옮긴 뒤, 발을 원래 높이 + 지면 높이 차로 IK.
 	// 자식의 새 컴포넌트 공간 = 자식 * 골반^-1 * 새 골반 (다리 체인은 모두 골반의 자손이다).
 	const FTransform PelvisDelta = PelvisOld.Inverse() * PelvisNew;
+	const FTransform& ComponentToWorld = Output.AnimInstanceProxy->GetComponentTransform();
+#if ENABLE_ANIM_DRAW_DEBUG
+	const bool bDraw = knightLegPlacement::CVarDraw.GetValueOnAnyThread() != 0;
+#endif
 	for (FLegPose& Pose : Poses)
 	{
 		const double DesiredFootZ = Pose.FootCS.GetLocation().Z + Pose.Offset;
@@ -230,6 +315,22 @@ void FAnimNode_knightLegPlacement::EvaluateSkeletalControl_AnyThread(FComponentS
 
 		FVector Effector = FootCS.GetLocation();
 		Effector.Z = DesiredFootZ;
+
+		// 공중이거나 꺼져 있으면 커브를 0으로 봐서 고정을 부드럽게 푼다.
+		const float LockCurveValue = bFootLockActive ? Output.Curve.Get(Pose.Leg->LockCurve) : 0.f;
+		double YawCorrection = 0.0;
+		UpdateFootLock(*Pose.Leg, LockCurveValue, ComponentToWorld, FootCS.GetLocation(), Effector, YawCorrection);
+		if (YawCorrection != 0.0)
+		{
+			FootCS.SetRotation(FQuat(FVector::UpVector, FMath::DegreesToRadians(YawCorrection)) * FootCS.GetRotation());
+		}
+#if ENABLE_ANIM_DRAW_DEBUG
+		if (bDraw && Pose.Leg->LockAlpha > 0.f)
+		{
+			Output.AnimInstanceProxy->AnimDrawDebugSphere(ComponentToWorld.TransformPosition(Effector), TraceRadius, 8,
+				Pose.Leg->bLocked ? FColor::Yellow : FColor::Orange, false, -1.f, 2.f);
+		}
+#endif
 		// 무릎이 원래 굽은 쪽을 유지하도록, 엉덩이-발 중점에서 무릎 방향으로 밀어 낸 점을 무릎 목표로 쓴다.
 		const FVector Mid = (RootCS.GetLocation() + FootCS.GetLocation()) * 0.5;
 		const FVector JointTarget = JointCS.GetLocation() + (JointCS.GetLocation() - Mid);
