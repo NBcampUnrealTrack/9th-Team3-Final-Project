@@ -49,6 +49,7 @@ void UknightAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		CachedVelocity = Movement->Velocity;
 		bCachedIsFalling = Movement->IsFalling();
 		bCachedHasAcceleration = !Movement->GetCurrentAcceleration().IsNearlyZero();
+		bCachedPlayingRootMotion = bIgnoreRootMotionVelocity && Character->IsPlayingRootMotion();
 	}
 
 	// 공중 하체 고정: 검 뽑기 같은 몽타주는 땅 위 다리를 써서 고정하고, 공격 몽타주는 다리까지 따르게 한다.
@@ -67,7 +68,7 @@ void UknightAnimInstance::NativeThreadSafeUpdateAnimation(float DeltaSeconds)
 {
 	Super::NativeThreadSafeUpdateAnimation(DeltaSeconds);
 	Velocity = CachedVelocity;
-	GroundSpeed = CachedVelocity.Size2D();
+	GroundSpeed = bCachedPlayingRootMotion ? 0.f : CachedVelocity.Size2D();
 	bIsFalling = bCachedIsFalling;
 	bHasAcceleration = bCachedHasAcceleration;
 }
