@@ -19,6 +19,16 @@ namespace knightLegPlacement
 		TEXT("1 = draw the leg placement ground traces (green hit, red miss) and locked feet (yellow)."));
 	static TAutoConsoleVariable<int32> CVarFootLock(TEXT("knight.Anim.FootLock"), 1,
 		TEXT("1 = planted feet stay in place while the FootLock_<foot bone> curve is on, 0 = off for A/B comparison."));
+
+	/** 고정·걸음 상태를 지운다. 발은 다음 디딤부터 다시 잡힌다. */
+	static void ResetFootLock(FknightLegPlacementLeg& Leg)
+	{
+		Leg.bLocked = false;
+		Leg.bWaitForLift = false;
+		Leg.bStepping = false;
+		Leg.LockAlpha = 0.f;
+		Leg.ReleaseLift = 0.0;
+	}
 }
 
 FName FAnimNode_knightLegPlacement::MakeFootLockCurveName(FName FootBone)
@@ -35,16 +45,15 @@ void FAnimNode_knightLegPlacement::InitializeBoneReferences(const FBoneContainer
 		Leg.FootBone.Initialize(RequiredBones);
 		Leg.bChainValid = false;
 		Leg.LockCurve = MakeFootLockCurveName(Leg.FootBone.BoneName);
-		Leg.bLocked = false;
-		Leg.bWaitForLift = false;
-		Leg.bStepping = false;
-		Leg.LockAlpha = 0.f;
+		// 고정 상태는 여기서 지우지 않는다. 이 함수는 LOD가 바뀔 때마다 다시 불려서, 지우면 붙잡고 있던 발이 그 순간 애니메이션
+		// 위치로 튄다. 체인을 못 만든 다리만 아래에서 지운다(평가를 건너뛴 동안의 초기화는 Evaluate가 따로 한다).
 		// 발 -> 무릎 -> 허벅지 순서로 부모를 따라 올라가 2본 체인을 만든다.
 		const int32 Foot = RefSkeleton.FindBoneIndex(Leg.FootBone.BoneName);
 		const int32 Joint = Foot != INDEX_NONE ? RefSkeleton.GetParentIndex(Foot) : INDEX_NONE;
 		const int32 Root = Joint != INDEX_NONE ? RefSkeleton.GetParentIndex(Joint) : INDEX_NONE;
 		if (Root == INDEX_NONE)
 		{
+			knightLegPlacement::ResetFootLock(Leg);
 			continue;
 		}
 		Leg.JointBone = FBoneReference(RefSkeleton.GetBoneName(Joint));
@@ -53,6 +62,11 @@ void FAnimNode_knightLegPlacement::InitializeBoneReferences(const FBoneContainer
 		Leg.RootBone.Initialize(RequiredBones);
 		Leg.bChainValid = Leg.FootBone.IsValidToEvaluate(RequiredBones) && Leg.JointBone.IsValidToEvaluate(RequiredBones)
 			&& Leg.RootBone.IsValidToEvaluate(RequiredBones);
+		if (!Leg.bChainValid)
+		{
+			// 이 LOD에서 다리 뼈가 빠졌다. 다시 들어올 때 예전 고정 위치를 쓰지 않게 지운다.
+			knightLegPlacement::ResetFootLock(Leg);
+		}
 
 		// 기준 포즈에서 허벅지(Root)와 발목의 컴포넌트 공간 거리.
 		const TArray<FTransform>& RefPose = RefSkeleton.GetRefBonePose();
@@ -293,10 +307,7 @@ void FAnimNode_knightLegPlacement::EvaluateSkeletalControl_AnyThread(FComponentS
 	{
 		if (bResetFootLock)
 		{
-			Leg.bLocked = false;
-			Leg.bWaitForLift = false;
-			Leg.bStepping = false;
-			Leg.LockAlpha = 0.f;
+			knightLegPlacement::ResetFootLock(Leg);
 		}
 		if (!Leg.bChainValid)
 		{
