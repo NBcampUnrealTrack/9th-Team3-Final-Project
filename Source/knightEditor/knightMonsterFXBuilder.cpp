@@ -554,6 +554,71 @@ UNiagaraSystem* UknightMonsterFXBuilder::BuildBreathGroundSystem(const FString& 
 		FVector(Length * 0.5f + Margin, Width * 0.5f + Margin, 1200.f), ActiveTime);
 }
 
+UNiagaraSystem* UknightMonsterFXBuilder::BuildFireEruptionSystem(const FString& PackagePath, UMaterialInterface* FireMaterial,
+	UMaterialInterface* CoreMaterial, UMaterialInterface* SmokeMaterial, UMaterialInterface* EmberMaterial, UMaterialInterface* ScorchMaterial,
+	float Height, float Radius)
+{
+	using namespace knightMonsterFX;
+	if (!FireMaterial)
+	{
+		return nullptr;
+	}
+	// 0.35초 동안 한꺼번에 솟고 끝난다. 속도는 수명 동안 Height까지 오르도록 잡는다.
+	const float Burst = 0.35f;
+	const float RiseSpeed = Height / 0.8f;
+	const FVector3f Base(Radius * 2.f, Radius * 2.f, 20.f);
+
+	// 밑동의 흰빛 심지: 짧고 밝게 터진다.
+	FSpriteLayer Core{ TEXT("Core"), CoreMaterial, 90.f, {0.25f, 0.4f}, {140.f, 140.f}, {240.f, 240.f}, {0.f, 0.f}, 0.f, 0.f, 0.f, 0.f, 0.f,
+		{ {0.f, 1.6f}, {0.5f, 1.1f}, {1.f, 0.5f} }, { {0.f, 0.f}, {0.05f, 1.f}, {0.6f, 0.8f}, {1.f, 0.f} }, { {0.f, 0.5f}, {0.3f, 1.f}, {1.f, 1.8f} },
+		ENiagaraSpriteAlignment::Unaligned, 2 };
+	Core.BoxSize = Base;
+	Core.bUseVelocity = true;
+	Core.VelocityMin = FVector3f(-100.f, -100.f, RiseSpeed * 0.2f);
+	Core.VelocityMax = FVector3f(100.f, 100.f, RiseSpeed * 0.5f);
+
+	// 불기둥: 위로 솟으며 커지고, 위쪽은 노이즈로 흔들리며 깎인다.
+	FSpriteLayer Fire{ TEXT("Fire"), FireMaterial, 130.f, {0.6f, 0.9f}, {150.f, 150.f}, {260.f, 260.f}, {0.f, 0.f}, 0.f, 300.f, 0.8f, 300.f, 0.003f,
+		{ {0.f, 1.f}, {0.5f, 0.75f}, {1.f, 0.25f} }, { {0.f, 0.f}, {0.06f, 1.f}, {0.55f, 0.85f}, {1.f, 0.f} }, { {0.f, 0.4f}, {0.25f, 1.f}, {1.f, 2.4f} },
+		ENiagaraSpriteAlignment::Unaligned, 1 };
+	Fire.BoxSize = Base;
+	Fire.bUseVelocity = true;
+	Fire.VelocityMin = FVector3f(-150.f, -150.f, RiseSpeed * 0.6f);
+	Fire.VelocityMax = FVector3f(150.f, 150.f, RiseSpeed * 1.3f);
+
+	// 불이 꺼진 뒤 피어오르는 짙은 연기.
+	FSpriteLayer Smoke{ TEXT("Smoke"), SmokeMaterial, 30.f, {1.4f, 2.f}, {250.f, 250.f}, {400.f, 400.f}, {0.f, 0.f}, 0.f, 200.f, 0.8f, 300.f, 0.002f,
+		{ {0.f, 8.f}, {0.35f, 4.f}, {1.f, 4.f} }, { {0.f, 0.f}, {0.3f, 0.f}, {0.45f, 0.45f}, {0.8f, 0.25f}, {1.f, 0.f} }, { {0.f, 0.5f}, {0.4f, 1.f}, {1.f, 2.5f} },
+		ENiagaraSpriteAlignment::Unaligned, 0 };
+	Smoke.BoxSize = Base;
+	Smoke.bUseVelocity = true;
+	Smoke.VelocityMin = FVector3f(-100.f, -100.f, RiseSpeed * 0.5f);
+	Smoke.VelocityMax = FVector3f(100.f, 100.f, RiseSpeed * 0.9f);
+
+	FSpriteLayer Embers{ TEXT("Embers"), EmberMaterial, 80.f, {0.8f, 1.4f}, {8.f, 30.f}, {14.f, 60.f}, {0.f, 0.f}, 0.f, 200.f, 0.6f, 500.f, 0.004f,
+		{ {0.f, 1.f}, {1.f, 0.6f} }, { {0.f, 0.f}, {0.05f, 1.f}, {0.7f, 1.f}, {1.f, 0.f} }, { {0.f, 1.f}, {1.f, 0.6f} },
+		ENiagaraSpriteAlignment::VelocityAligned, 3 };
+	Embers.BoxSize = Base;
+	Embers.bUseVelocity = true;
+	Embers.VelocityMin = FVector3f(-500.f, -500.f, RiseSpeed * 0.6f);
+	Embers.VelocityMax = FVector3f(500.f, 500.f, RiseSpeed * 1.6f);
+
+	// 불기둥이 솟은 자리에 남는 잔열 자국. 몇 장을 겹쳐 아무 방향으로 돌린다.
+	FSpriteLayer Scorch{ TEXT("Scorch"), ScorchMaterial, 14.f, {5.f, 7.f}, {350.f, 350.f}, {600.f, 600.f}, {0.f, 0.f}, 0.f, 0.f, 0.f, 0.f, 0.f,
+		{ {0.f, 1.f}, {1.f, 1.f} }, { {0.f, 0.f}, {0.04f, 1.f}, {0.5f, 0.8f}, {1.f, 0.f} }, { {0.f, 0.9f}, {0.1f, 1.f}, {1.f, 1.f} },
+		ENiagaraSpriteAlignment::Unaligned, 0 };
+	Scorch.BoxSize = FVector3f(Radius * 2.f, Radius * 2.f, 0.f);
+	Scorch.bUseVelocity = true;
+	Scorch.bDecal = true;
+	Scorch.bRandomColorSeed = true;
+	Scorch.DecalSizeMin = FVector3f(400.f, Radius * 4.f, Radius * 4.f);
+	Scorch.DecalSizeMax = FVector3f(400.f, Radius * 7.f, Radius * 7.f);
+
+	const FSpriteLayer Layers[] = { Scorch, Smoke, Fire, Core, Embers };
+	const float Spread = Radius + 900.f;
+	return BuildLayeredSystem(PackagePath, Layers, 0.f, 1.f, FVector(-Spread, -Spread, -300.f), FVector(Spread, Spread, Height * 2.f + 600.f), Burst);
+}
+
 UNiagaraSystem* UknightMonsterFXBuilder::BuildBurnSystem(const FString& PackagePath, UMaterialInterface* FireMaterial,
 	UMaterialInterface* SmokeMaterial, UMaterialInterface* EmberMaterial, FVector BodyExtent)
 {

@@ -45,6 +45,14 @@ public:
 		float Length = 1200.f, float Width = 600.f, float ActiveTime = 1.6f);
 
 	/**
+	 * 바닥에서 솟구치는 불기둥 한 번과, 그 자리에 5초쯤 남는 빛나는 잔열 자국(데칼). 월드에 스폰하는 일회성이라 cm 그대로다.
+	 * Height(cm)는 불길이 오르는 높이, Radius(cm)는 불기둥 밑동과 자국이 퍼지는 반지름. 머티리얼이 없는 레이어는 끈다.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|FX")
+	static UNiagaraSystem* BuildFireEruptionSystem(const FString& PackagePath, UMaterialInterface* FireMaterial, UMaterialInterface* CoreMaterial,
+		UMaterialInterface* SmokeMaterial, UMaterialInterface* EmberMaterial, UMaterialInterface* ScorchMaterial, float Height = 1000.f, float Radius = 150.f);
+
+	/**
 	 * 화상 입은 캐릭터 몸에 붙는 작은 불길, 연기, 불씨(계속 생성). 캡슐처럼 스케일 1이고 위가 +Z인 컴포넌트 중심에 붙이며,
 	 * BodyExtent(cm, 반 크기) 상자 안에서 생긴다.
 	 */
