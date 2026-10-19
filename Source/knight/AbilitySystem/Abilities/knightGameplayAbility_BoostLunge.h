@@ -41,9 +41,12 @@ public:
 		const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
 
 protected:
-	/** 돌진할 수 있는 최대 거리(대상 표면 기준 도착 지점까지). 더 멀면 이 거리만큼만 간다. */
+	/**
+	 * 돌진할 수 있는 최대 거리(대상 표면 기준 도착 지점까지). 더 멀면 이 거리만큼만 간다.
+	 * (2026-10-18 사용자 결정 '돌진 사거리 감소') 1800 → 900. 바뀔 수 있는 값(BP에서 시험 후 조절).
+	 */
 	UPROPERTY(EditDefaultsOnly, Category="Lunge|Motion", meta=(ClampMin=0, Units="cm"))
-	float MaxLungeDistance = 1800.f;
+	float MaxLungeDistance = 900.f;
 
 	/** 대상 표면(부위 지점이면 그 지점)에서 이만큼 앞에 멈춘다. 칼이 닿는 거리. */
 	UPROPERTY(EditDefaultsOnly, Category="Lunge|Motion", meta=(ClampMin=0, Units="cm"))

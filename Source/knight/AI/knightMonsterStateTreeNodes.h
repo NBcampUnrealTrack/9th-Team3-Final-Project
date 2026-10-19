@@ -174,8 +174,9 @@ struct FknightFaceTargetTaskInstanceData
 	float MaxTime = 1.5f;
 
 	/**
-	 * 지금 각도에서 쓸 수 있는 옆·뒤 전용 공격(Selection.MinAngle이 있는 공격, 예: 꼬리 휩쓸기)이 있으면 돌지 않고 바로 성공한다.
-	 * 돌아서 타깃을 정면에 두면 그런 공격은 고를 수 없게 되기 때문이다.
+	 * 지금 각도에서 쓸 수 있는 옆·뒤 공격(Selection.MinAngle이 있는 옆·뒤 전용 공격, 또는 타깃이 TurnMontageMinAngle 이상
+	 * 벗어났을 때 MaxAngle 180으로 둘레 전체를 덮는 주변 범위 공격)이 있으면 돌지 않고 바로 성공한다.
+	 * 옆·뒤 전용 공격은 돌아서 타깃을 정면에 두면 고를 수 없게 되고, 주변 범위 공격은 돌 필요 없이 바로 쓰는 게 반응이 빠르기 때문이다.
 	 */
 	UPROPERTY(EditAnywhere, Category="Parameter")
 	bool bSkipForSideAttacks = true;

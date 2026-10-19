@@ -31,12 +31,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
 	static bool BuildPrimaryLayout(UWidgetBlueprint* WidgetBlueprint);
 
-	/** WBP_HUDPlayerStatus: 화면 전체 캔버스. 왼쪽 아래 체력(HP 캡션, 큰 현재값, /최대값, 고스트 바), 아래 가운데 부스트(라벨/과열/수치, 3등분 바, 낮을 때 빨간 테두리). */
+	/** WBP_HUDPlayerStatus: 화면 전체 캔버스. 왼쪽 아래에 큰 체력 숫자, 체력 바(고스트 바), BOOST 캡션 + 과열, 부스트 바(3등분, 낮을 때 빨간 테두리)를 위에서 아래로 쌓는다. */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
 	static bool BuildHUDPlayerStatus(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> WarningStyle,
 		TSubclassOf<UCommonTextStyle> NumberStyle = nullptr);
 
-	/** WBP_HUDRaidTimer: OBJECTIVE 캡션, 목표(Txt_Objective)와 남은 시간(Txt_Time) 한 줄, 밑줄. */
+	/** WBP_HUDRaidTimer: 오른쪽 정렬. OBJECTIVE 캡션, 목표(Txt_Objective)와 남은 시간(Txt_Time) 한 줄, 밑줄. */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
 	static bool BuildHUDRaidTimer(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> TimeStyle, TSubclassOf<UCommonTextStyle> CaptionStyle,
 		TSubclassOf<UCommonTextStyle> ObjectiveStyle = nullptr);
@@ -47,11 +47,42 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
 	static bool BuildHUDLockOnMarker(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> NameStyle,
-		UTexture2D* PartFrameTexture = nullptr, TSubclassOf<UCommonTextStyle> StaggerCaptionStyle = nullptr);
+		UTexture2D* PartFrameTexture = nullptr);
 
-	/** WBP_HUDLayout: 화면 전체의 락온 마커(맨 아래)와 플레이어 패널(체력 왼쪽 아래, 부스트 아래 가운데), 세이프존 안쪽 왼쪽 위에 목표/타이머. */
+	/** WBP_HUDFrameStatus: 부위 선화 4장(Img_PartHead/Torso/Arms/Legs)을 겹치고, 그 아래에 실루엣으로 채우는 아래→위 그로기 바(Bar_Groggy). */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
-	static bool BuildHUDLayout(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> PlayerStatusClass, TSubclassOf<UUserWidget> RaidTimerClass, TSubclassOf<UUserWidget> LockOnMarkerClass);
+	static bool BuildHUDFrameStatus(UWidgetBlueprint* WidgetBlueprint, UTexture2D* HeadTexture, UTexture2D* TorsoTexture, UTexture2D* ArmsTexture,
+		UTexture2D* LegsTexture, UTexture2D* FillTexture, FVector2D Size);
+
+	/** WBP_HUDRepairKit: 옅은 네모 테두리 안의 스패너(어두운 바탕 위로 아래→위 충전 바, Bar_RepairGauge)와 오른쪽 개수(Txt_RepairKitCount). */
+	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
+	static bool BuildHUDRepairKit(UWidgetBlueprint* WidgetBlueprint, UTexture2D* WrenchTexture, TSubclassOf<UCommonTextStyle> CountStyle);
+
+	/** WBP_HUDMessageLog: 아래 정렬 세로 상자(Box_Lines) 하나. 줄은 C++가 넣는다. */
+	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
+	static bool BuildHUDMessageLog(UWidgetBlueprint* WidgetBlueprint);
+
+	/** WBP_HUDHint: 남색 반투명 상자 안에 키(Txt_HintKey)와 설명(Txt_HintBody). */
+	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
+	static bool BuildHUDHint(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> KeyStyle, TSubclassOf<UCommonTextStyle> BodyStyle);
+
+	/** WBP_HUDGroggyNoise: 화면보다 한 칸 큰 타일 노이즈(Img_NoiseFrame 안의 Img_Noise)와 가로 주사선 6개(Img_Scan0..5). */
+	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
+	static bool BuildHUDGroggyNoise(UWidgetBlueprint* WidgetBlueprint, UTexture2D* NoiseTexture);
+
+	/** WBP_HUDLowHealth: 화면 전체로 늘린 붉은 가장자리(Img_Vignette)와 화면보다 한 칸 큰 타일 주사선(Img_Scanlines). */
+	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
+	static bool BuildHUDLowHealth(UWidgetBlueprint* WidgetBlueprint, UTexture2D* VignetteTexture, UTexture2D* ScanlineTexture);
+
+	/**
+	 * WBP_HUDLayout: 화면 전체의 저체력 연출(맨 아래)과 락온 마커, 플레이어 패널, 왼쪽 아래 끝에 메카 설계도(체력 위), 아래 가운데 대화창,
+	 * 오른쪽 아래 수리 키트와 그 위 튜토리얼 칸, 오른쪽 위 목표/타이머, 맨 위에 그로기 노이즈.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
+	static bool BuildHUDLayout(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> PlayerStatusClass, TSubclassOf<UUserWidget> RaidTimerClass,
+		TSubclassOf<UUserWidget> LockOnMarkerClass, TSubclassOf<UUserWidget> FrameStatusClass, TSubclassOf<UUserWidget> RepairKitClass,
+		TSubclassOf<UUserWidget> MessageLogClass, TSubclassOf<UUserWidget> HintClass, TSubclassOf<UUserWidget> GroggyNoiseClass,
+		TSubclassOf<UUserWidget> LowHealthClass);
 
 	/** 이름으로 위젯 하나를 자식째 지운다. 이미 만든 블루프린트에서 요소를 빼낼 때 쓴다. 없으면 false. */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")

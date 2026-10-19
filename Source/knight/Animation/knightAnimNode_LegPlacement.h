@@ -21,6 +21,28 @@ struct KNIGHT_API FknightLegPlacementLeg
 	/** 캡슐 바닥(애니메이션이 가정한 평지) 대비 발밑 지면 높이. 월드 cm, 보간된 값. */
 	float Offset = 0.f;
 	bool bChainValid = false;
+
+	/** 접지 커브 이름 "FootLock_<발 뼈>". 값이 1(섞인 포즈가 모두 디딤)일 때 발이 땅에 닿은 것으로 본다. */
+	FName LockCurve;
+	/** 고정한 발의 월드 위치(XY만 쓴다)와, 고정한 순간 컴포넌트의 요(도). */
+	FVector LockedLocation = FVector::ZeroVector;
+	double LockedYaw = 0.0;
+	/** 1 = 고정 위치, 0 = 애니메이션 위치. 고정할 때 바로 1, 풀 때 FootLockReleaseTime 동안 0으로. */
+	float LockAlpha = 0.f;
+	bool bLocked = false;
+	/** 다리가 닿지 않아 강제로 풀었으면, 커브가 한 번 내려갈(발을 들) 때까지 다시 고정하지 않는다. */
+	bool bWaitForLift = false;
+
+	/** 기준 포즈의 체인 길이(허벅지 ~ 발목, 컴포넌트 공간). 거리 기준을 몬스터 크기에 맞춘다. */
+	double LengthCS = 0.0;
+	/** 자동 발 딛기: 고정된 발을 들어 몸 기준 제자리로 옮기는 중. */
+	bool bStepping = false;
+	FVector StepFrom = FVector::ZeroVector;
+	double StepFromYaw = 0.0;
+	float StepElapsed = 0.f;
+	/** 이번 풀기에 걸리는 시간(멀리 떨어진 발일수록 길다)과, 걷던 중에 풀렸을 때 남은 드는 높이(컴포넌트 공간). */
+	float ReleaseTime = 0.f;
+	double ReleaseLift = 0.0;
 };
 
 /**
@@ -31,7 +53,13 @@ struct KNIGHT_API FknightLegPlacementLeg
  * 지면 트레이스는 게임 스레드(PreUpdate)에서 이전 프레임의 발 위치로 하고, 포즈 계산은 워커 스레드에서 한다.
  * 다리 수는 자유다. 3개 미만이면 기울이기 없이 가장 낮은 발만큼 골반을 내린다(2족).
  *
+ * 발 고정: 애니메이션에 "FootLock_<발 뼈>" 커브가 있으면, 커브가 켜진(발이 땅에 닿은) 동안 발의 월드 XY와 요를
+ * 붙잡아 둔다. 몸이 코드로 돌거나 밀려도 디딘 발이 미끄러지지 않는다. 커브가 없는 애니메이션은 지금과 같다.
+ * 자동 발 딛기: 몸이 많이 돌아 고정된 발이 몸에서 멀어지면, 그 발을 들어 몸 기준 제자리(조금 앞)로 옮겨 디딘다.
+ * 한 번에 대각선 다리끼리만 든다.
+ *
  * 콘솔: knight.Anim.LegPlacement 0 으로 끄고, knight.Anim.DrawLegPlacement 1 로 트레이스를 그린다.
+ * knight.Anim.FootLock 0 으로 발 고정만 끈다. 그리기를 켜면 고정된 발(노랑), 걷는 발(하늘색), 풀리는 발(주황)도 보인다.
  */
 USTRUCT(BlueprintInternalUseOnly)
 struct KNIGHT_API FAnimNode_knightLegPlacement : public FAnimNode_SkeletalControlBase
@@ -74,17 +102,91 @@ struct KNIGHT_API FAnimNode_knightLegPlacement : public FAnimNode_SkeletalContro
 	UPROPERTY(EditAnywhere, Category="Trace", meta=(ClampMin=0))
 	float InterpSpeed = 10.f;
 
+	/** 접지 커브가 있는 애니메이션에서 디딘 발을 월드에 고정한다. */
+	UPROPERTY(EditAnywhere, Category="Foot Lock")
+	bool bEnableFootLock = true;
+
+	/** 발을 들 때 고정 위치에서 애니메이션 위치로 돌아가는 최소 시간. */
+	UPROPERTY(EditAnywhere, Category="Foot Lock", meta=(ClampMin=0, Units="s"))
+	float FootLockReleaseTime = 0.15f;
+
+	/** 풀릴 때 발이 애니메이션 위치로 돌아가는 최대 속도(초당 다리 길이 배수). 멀리 떨어진 발이 튀지 않게 풀기 시간을 늘린다. */
+	UPROPERTY(EditAnywhere, Category="Foot Lock", meta=(ClampMin=0.1))
+	float FootLockReleaseSpeed = 1.f;
+
+	/** 고정 위치와 애니메이션 발 위치가 다리 길이의 이 비율만큼 벌어지면 다리가 닿지 않는 것으로 보고 푼다. */
+	UPROPERTY(EditAnywhere, Category="Foot Lock", meta=(ClampMin=0))
+	float MaxFootLockStretch = 0.6f;
+
+	/** 고정된 발이 몸에서 멀어지면 들어서 옮겨 딛는다. 끄면 MaxFootLockStretch에서 풀리며 미끄러진다. */
+	UPROPERTY(EditAnywhere, Category="Foot Lock|Auto Step")
+	bool bEnableAutoStep = true;
+
+	/** 고정 위치와 애니메이션 발 위치가 다리 길이의 이 비율만큼 벌어지면 딛기를 시작한다. */
+	UPROPERTY(EditAnywhere, Category="Foot Lock|Auto Step", meta=(ClampMin=0))
+	float StepTriggerRatio = 0.3f;
+
+	/** 한 걸음에 걸리는 시간. */
+	UPROPERTY(EditAnywhere, Category="Foot Lock|Auto Step", meta=(ClampMin=0.05, Units="s"))
+	float StepDuration = 0.25f;
+
+	/** 발을 드는 높이(다리 길이 비율). */
+	UPROPERTY(EditAnywhere, Category="Foot Lock|Auto Step", meta=(ClampMin=0))
+	float StepHeightRatio = 0.1f;
+
+	/** 몸이 계속 움직인다고 보고 이 시간(StepDuration 배수)만큼 앞을 내다보고 딛는다. 클수록 보폭이 커지고 딛는 횟수가 준다. */
+	UPROPERTY(EditAnywhere, Category="Foot Lock|Auto Step", meta=(ClampMin=0))
+	float StepLead = 1.0f;
+
+	/** 동시에 들 수 있는 발 수. 같이 드는 발은 대각선(좌우·앞뒤가 모두 반대)이어야 한다. */
+	UPROPERTY(EditAnywhere, Category="Foot Lock|Auto Step", meta=(ClampMin=1))
+	int32 MaxSimultaneousSteps = 2;
+
+	/** 발 뼈의 접지 커브 이름 "FootLock_<발 뼈>". 에디터의 커브 굽기 도구도 이 이름으로 쓴다. */
+	static FName MakeFootLockCurveName(FName FootBone);
+
 	//~ FAnimNode_Base
 	virtual bool HasPreUpdate() const override { return true; }
 	virtual void PreUpdate(const UAnimInstance* InAnimInstance) override;
 
 	//~ FAnimNode_SkeletalControlBase
+	virtual void UpdateInternal(const FAnimationUpdateContext& Context) override;
 	virtual void EvaluateSkeletalControl_AnyThread(FComponentSpacePoseContext& Output, TArray<FBoneTransform>& OutBoneTransforms) override;
 	virtual bool IsValidToEvaluate(const USkeleton* Skeleton, const FBoneContainer& RequiredBones) override;
 
 private:
 	virtual void InitializeBoneReferences(const FBoneContainer& RequiredBones) override;
 
+	/** 고정을 풀고, 지금 보이는 발 위치에서 애니메이션 위치까지의 거리로 풀기 시간을 정한다. */
+	void BeginFootRelease(FknightLegPlacementLeg& Leg, const FVector& AnimFootWorld, double Lift);
+
+	/** 다리 하나의 고정·풀기·걸음 진행을 갱신한다. 걸음 시작은 여기서 하지 않는다(다리끼리 순서를 정해야 해서). */
+	void UpdateFootLockState(FknightLegPlacementLeg& Leg, bool bPlanted, const FVector& AnimFootWorld, const FTransform& ComponentToWorld);
+
+	/** 고정·걸음 상태로 IK 목표(컴포넌트 공간)와 발 요 보정(도)을 고친다. */
+	void ApplyFootLock(const FknightLegPlacementLeg& Leg, const FVector& AnimFootWorld, const FTransform& ComponentToWorld,
+		FVector& InOutEffectorCS, double& OutYawCorrection) const;
+
+	/** 몸이 지금 속도와 회전 속도로 Time초 더 움직였을 때 애니메이션 발이 있을 월드 위치. */
+	FVector PredictFootWorld(const FVector& AnimFootWorld, const FTransform& ComponentToWorld, float Time) const;
+
+	/** 다리 길이(월드 cm). */
+	double LegLengthWorld(const FknightLegPlacementLeg& Leg) const { return Leg.LengthCS / FMath::Max(WorldToComponent, UE_KINDA_SMALL_NUMBER); }
+
 	/** 월드 cm를 컴포넌트 공간 단위로 바꾼다(메시 스케일). 게임 스레드에서 갱신. */
 	float WorldToComponent = 1.f;
+
+	/** 땅 위에 있고 발 고정이 켜져 있는지. 게임 스레드(PreUpdate)에서 갱신. */
+	bool bFootLockActive = false;
+
+	/** 이번 프레임 DeltaTime(UpdateInternal)과, 평가를 건너뛴 업데이트 수(LOD 등으로 끊기면 고정을 버린다). */
+	float FootLockDeltaTime = 0.f;
+	int32 UpdatesSinceEvaluate = 0;
+
+	/** 걸음 착지점을 내다보려고 재는 컴포넌트의 속도(월드 cm/s)와 요 회전 속도(도/s). 평가 스레드에서 갱신. */
+	FVector PrevComponentLocation = FVector::ZeroVector;
+	double PrevComponentYaw = 0.0;
+	bool bHasPrevComponent = false;
+	FVector ComponentVelocity = FVector::ZeroVector;
+	double ComponentYawRate = 0.0;
 };

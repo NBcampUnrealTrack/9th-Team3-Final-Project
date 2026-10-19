@@ -391,8 +391,11 @@ bool UKnightMainMenuWidget::RebuildGlobeMarkers()
 	{
 		FKnightGlobeMarker& Marker = Markers.AddDefaulted_GetRef();
 		Marker.StageId = Stage.StageId;
-		Marker.Label = Stage.bDevelopmentOnly ? FText::Format(LOCTEXT("DevStageName", "[DEV] {0}"), Stage.DisplayName) : Stage.DisplayName;
+		// The globe names the region; the stage name is in the info panel.
+		const FText& Name = Stage.RegionName.IsEmpty() ? Stage.DisplayName : Stage.RegionName;
+		Marker.Label = Stage.bDevelopmentOnly ? FText::Format(LOCTEXT("DevStageName", "[DEV] {0}"), Name) : Name;
 		Marker.Location = Stage.GlobeLocation;
+		Marker.RegionRadius = Stage.GlobeRegionRadius;
 		FText Reason;
 		Marker.bLocked = !Flow->CanLaunchStage(Stage.StageId, Reason);
 		StageOrder.Add(Stage.StageId);

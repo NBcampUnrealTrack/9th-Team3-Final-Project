@@ -9,7 +9,7 @@ class UCommonTextStyle;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
 
-/** One region marker on the globe. */
+/** One stage region on the globe. */
 USTRUCT(BlueprintType)
 struct KNIGHT_API FKnightGlobeMarker
 {
@@ -25,6 +25,10 @@ struct KNIGHT_API FKnightGlobeMarker
 	UPROPERTY(BlueprintReadWrite, Category="Knight|Globe")
 	FVector2D Location = FVector2D::ZeroVector;
 
+	/** Angular radius of the painted region around Location, in degrees. */
+	UPROPERTY(BlueprintReadWrite, Category="Knight|Globe")
+	float RegionRadius = 14.f;
+
 	/** Drawn dimmed; still selectable so the panel can explain why it is locked. */
 	UPROPERTY(BlueprintReadWrite, Category="Knight|Globe")
 	bool bLocked = false;
@@ -33,11 +37,15 @@ struct KNIGHT_API FKnightGlobeMarker
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FKnightGlobeStageClicked, FName, StageId);
 
 /**
- * Stage-select globe: a sphere drawn by a UI material, turned by dragging, with region markers on top.
+ * Stage-select globe: a sphere drawn by a UI material, turned by dragging. Each stage is a region of land around its
+ * location, painted by the material in light blue with relief shading; clicking anywhere in a region selects the stage.
  *
- * Everything is painted here (no child widgets): the material quad, the markers, and a leader line from the
- * selected marker to LeaderTarget (the info panel). Marker math and the material must agree on the rotation:
+ * Everything is painted here (no child widgets): the material quad, the region names, and a leader line from the
+ * selected region to LeaderTarget (the info panel). The widget math and the material must agree on the rotation:
  * the material undoes Pitch (around X) and then Yaw (around Y) to find the surface point under each pixel.
+ *
+ * Regions reach the material as vector parameters Region0 .. Region7 = (longitude, latitude, radius in radians, state),
+ * state 0 = unused, 1 normal, 2 hovered, 3 selected, +3 when locked. Stages past the eighth have no painted region.
  */
 UCLASS()
 class KNIGHT_API UKnightStageGlobeWidget : public UUserWidget
@@ -80,7 +88,7 @@ protected:
 	virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual void NativeOnMouseLeave(const FPointerEvent& InMouseEvent) override;
 
-	/** UI-domain material with scalar parameters Yaw, Pitch (radians) and Radius (sphere radius / half the quad). */
+	/** UI-domain material with scalar parameters Yaw, Pitch (radians), Radius (sphere radius / half the quad) and Region0..7. */
 	UPROPERTY(EditAnywhere, Category="Knight|Globe")
 	TObjectPtr<UMaterialInterface> GlobeMaterial;
 
@@ -118,6 +126,8 @@ private:
 	FProjectedMarker Project(const FVector2D& LocationDegrees, const FVector2D& LocalSize) const;
 	float GetPixelRadius(const FVector2D& LocalSize) const;
 	int32 FindMarkerAt(const FVector2D& LocalPosition, const FVector2D& LocalSize) const;
+	/** Unit vector of the globe surface under a local position, in the material's axes; false off the sphere. */
+	bool LocalToSurface(const FVector2D& LocalPosition, const FVector2D& LocalSize, FVector& OutDirection) const;
 	void SetHovered(int32 Index);
 	void ApplyRotationToMaterial();
 

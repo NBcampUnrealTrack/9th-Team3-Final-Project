@@ -9,7 +9,7 @@ class UCommonTextBlock;
 class UknightVM_Raid;
 
 /**
- * Top-left objective line of the HUD: the hunt objective with the time left beside it. Reads the Raid view model.
+ * Top-right objective line of the HUD: the hunt objective with the time left beside it. Reads the Raid view model.
  * The time hides when the raid has no time limit, the whole widget when there is neither. The time turns to the warning
  * color for the last WarningSeconds. Widgets are found by name: Txt_Objective, Txt_Time, Txt_Caption.
  */

@@ -22,7 +22,20 @@ void UknightVM_PlayerStatus::Bind(UAbilitySystemComponent* InASC, UknightTargetL
 			UknightCoreAttributeSet::GetHealthAttribute(),
 			UknightCoreAttributeSet::GetMaxHealthAttribute(),
 			UknightAttributeSet::GetBoostGaugeAttribute(),
-			UknightAttributeSet::GetMaxBoostGaugeAttribute()
+			UknightAttributeSet::GetMaxBoostGaugeAttribute(),
+			UknightAttributeSet::GetHeadHealthAttribute(),
+			UknightAttributeSet::GetMaxHeadHealthAttribute(),
+			UknightAttributeSet::GetTorsoHealthAttribute(),
+			UknightAttributeSet::GetMaxTorsoHealthAttribute(),
+			UknightAttributeSet::GetArmsHealthAttribute(),
+			UknightAttributeSet::GetMaxArmsHealthAttribute(),
+			UknightAttributeSet::GetLegsHealthAttribute(),
+			UknightAttributeSet::GetMaxLegsHealthAttribute(),
+			UknightCoreAttributeSet::GetPoiseAttribute(),
+			UknightCoreAttributeSet::GetMaxPoiseAttribute(),
+			UknightAttributeSet::GetRepairKitCountAttribute(),
+			UknightAttributeSet::GetMaxRepairKitCountAttribute(),
+			UknightAttributeSet::GetRepairKitGaugeAttribute()
 		};
 		for (const FGameplayAttribute& Attribute : Attributes)
 		{
@@ -30,6 +43,14 @@ void UknightVM_PlayerStatus::Bind(UAbilitySystemComponent* InASC, UknightTargetL
 		}
 		OverheatedHandle = InASC->RegisterGameplayTagEvent(knightGameplayTags::State_Overheated, EGameplayTagEventType::NewOrRemoved)
 			.AddUObject(this, &ThisClass::HandleOverheatedChanged);
+		GroggyHandle = InASC->RegisterGameplayTagEvent(knightGameplayTags::State_HitReact_Groggy, EGameplayTagEventType::NewOrRemoved)
+			.AddUObject(this, &ThisClass::HandleGroggyChanged);
+		for (int32 Index = 0; Index < static_cast<int32>(EknightBodyPart::Count); ++Index)
+		{
+			const EknightBodyPart Part = static_cast<EknightBodyPart>(Index);
+			PartBrokenHandles[Index] = InASC->RegisterGameplayTagEvent(UknightPartHealthComponent::GetBrokenTag(Part), EGameplayTagEventType::NewOrRemoved)
+				.AddUObject(this, &ThisClass::HandlePartBrokenChanged, Part);
+		}
 	}
 	if (InTargetLock)
 	{
@@ -47,6 +68,12 @@ void UknightVM_PlayerStatus::Unbind()
 			ASC->GetGameplayAttributeValueChangeDelegate(Entry.Key).Remove(Entry.Value);
 		}
 		ASC->RegisterGameplayTagEvent(knightGameplayTags::State_Overheated, EGameplayTagEventType::NewOrRemoved).Remove(OverheatedHandle);
+		ASC->RegisterGameplayTagEvent(knightGameplayTags::State_HitReact_Groggy, EGameplayTagEventType::NewOrRemoved).Remove(GroggyHandle);
+		for (int32 Index = 0; Index < static_cast<int32>(EknightBodyPart::Count); ++Index)
+		{
+			ASC->RegisterGameplayTagEvent(UknightPartHealthComponent::GetBrokenTag(static_cast<EknightBodyPart>(Index)), EGameplayTagEventType::NewOrRemoved)
+				.Remove(PartBrokenHandles[Index]);
+		}
 	}
 	if (UknightTargetLockComponent* const TargetLock = BoundTargetLock.Get())
 	{
@@ -56,6 +83,11 @@ void UknightVM_PlayerStatus::Unbind()
 	BindTargetPoise(nullptr);
 	AttributeHandles.Reset();
 	OverheatedHandle.Reset();
+	GroggyHandle.Reset();
+	for (FDelegateHandle& Handle : PartBrokenHandles)
+	{
+		Handle.Reset();
+	}
 	BoundASC.Reset();
 	BoundTargetLock.Reset();
 }
@@ -69,7 +101,18 @@ void UknightVM_PlayerStatus::RefreshAll()
 	UE_MVVM_SET_PROPERTY_VALUE(BoostGauge, ASC ? ASC->GetGameplayAttributeValue(UknightAttributeSet::GetBoostGaugeAttribute(), bFound) : 0.f);
 	UE_MVVM_SET_PROPERTY_VALUE(MaxBoostGauge, ASC ? ASC->GetGameplayAttributeValue(UknightAttributeSet::GetMaxBoostGaugeAttribute(), bFound) : 0.f);
 	UE_MVVM_SET_PROPERTY_VALUE(bOverheated, ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_Overheated));
+	UE_MVVM_SET_PROPERTY_VALUE(bGroggy, ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_HitReact_Groggy));
+	int32 Broken = 0;
+	for (int32 Index = 0; Index < static_cast<int32>(EknightBodyPart::Count); ++Index)
+	{
+		if (ASC && ASC->HasMatchingGameplayTag(UknightPartHealthComponent::GetBrokenTag(static_cast<EknightBodyPart>(Index))))
+		{
+			Broken |= 1 << Index;
+		}
+	}
+	UE_MVVM_SET_PROPERTY_VALUE(BrokenParts, Broken);
 	RefreshPercents();
+	RefreshKnightParts();
 
 	const UknightTargetLockComponent* const TargetLock = BoundTargetLock.Get();
 	HandleLockOnChanged(TargetLock ? TargetLock->GetLockedTarget() : nullptr, TargetLock ? TargetLock->GetLockedPartTag() : FGameplayTag());
@@ -99,7 +142,68 @@ void UknightVM_PlayerStatus::HandleAttributeChanged(const FOnAttributeChangeData
 	{
 		UE_MVVM_SET_PROPERTY_VALUE(MaxBoostGauge, Data.NewValue);
 	}
+	else
+	{
+		RefreshKnightParts();
+	}
 	RefreshPercents();
+}
+
+void UknightVM_PlayerStatus::HandleGroggyChanged(const FGameplayTag Tag, int32 NewCount)
+{
+	UE_MVVM_SET_PROPERTY_VALUE(bGroggy, NewCount > 0);
+}
+
+void UknightVM_PlayerStatus::HandlePartBrokenChanged(const FGameplayTag Tag, int32 NewCount, EknightBodyPart Part)
+{
+	// Follows the part health component's tag instead of re-checking health: a broken part stays broken
+	// until it is repaired to 1 or more, so health dipping back to 0 in between is not a new break.
+	const int32 Bit = 1 << static_cast<int32>(Part);
+	UE_MVVM_SET_PROPERTY_VALUE(BrokenParts, NewCount > 0 ? BrokenParts | Bit : BrokenParts & ~Bit);
+	if (NewCount > 0)
+	{
+		OnPlayerPartBroken.Broadcast(Part);
+	}
+}
+
+float UknightVM_PlayerStatus::GetPartHealthPercent(EknightBodyPart Part) const
+{
+	switch (Part)
+	{
+	case EknightBodyPart::Head: return HeadHealthPercent;
+	case EknightBodyPart::Torso: return TorsoHealthPercent;
+	case EknightBodyPart::Arms: return ArmsHealthPercent;
+	case EknightBodyPart::Legs: return LegsHealthPercent;
+	default: return 1.f;
+	}
+}
+
+void UknightVM_PlayerStatus::RefreshKnightParts()
+{
+	const UAbilitySystemComponent* const ASC = BoundASC.Get();
+	const auto Value = [ASC](const FGameplayAttribute& Attribute)
+	{
+		bool bFound = false;
+		return ASC ? ASC->GetGameplayAttributeValue(Attribute, bFound) : 0.f;
+	};
+	// A part with no maximum (no attribute set yet) reads as intact rather than broken.
+	const auto Percent = [&Value](const FGameplayAttribute& Current, const FGameplayAttribute& Max)
+	{
+		const float MaxValue = Value(Max);
+		return MaxValue > 0.f ? FMath::Clamp(Value(Current) / MaxValue, 0.f, 1.f) : 1.f;
+	};
+	UE_MVVM_SET_PROPERTY_VALUE(HeadHealthPercent, Percent(UknightAttributeSet::GetHeadHealthAttribute(), UknightAttributeSet::GetMaxHeadHealthAttribute()));
+	UE_MVVM_SET_PROPERTY_VALUE(TorsoHealthPercent, Percent(UknightAttributeSet::GetTorsoHealthAttribute(), UknightAttributeSet::GetMaxTorsoHealthAttribute()));
+	UE_MVVM_SET_PROPERTY_VALUE(ArmsHealthPercent, Percent(UknightAttributeSet::GetArmsHealthAttribute(), UknightAttributeSet::GetMaxArmsHealthAttribute()));
+	UE_MVVM_SET_PROPERTY_VALUE(LegsHealthPercent, Percent(UknightAttributeSet::GetLegsHealthAttribute(), UknightAttributeSet::GetMaxLegsHealthAttribute()));
+
+	// Poise counts down to the stagger; the gauge shows how much has been taken.
+	const float MaxPoise = Value(UknightCoreAttributeSet::GetMaxPoiseAttribute());
+	UE_MVVM_SET_PROPERTY_VALUE(Stagger, MaxPoise > 0.f ? FMath::Clamp(1.f - Value(UknightCoreAttributeSet::GetPoiseAttribute()) / MaxPoise, 0.f, 1.f) : 0.f);
+
+	UE_MVVM_SET_PROPERTY_VALUE(RepairKitCount, FMath::RoundToInt(Value(UknightAttributeSet::GetRepairKitCountAttribute())));
+	UE_MVVM_SET_PROPERTY_VALUE(MaxRepairKitCount, FMath::RoundToInt(Value(UknightAttributeSet::GetMaxRepairKitCountAttribute())));
+	UE_MVVM_SET_PROPERTY_VALUE(RepairKitGaugePercent, FMath::Clamp(Value(UknightAttributeSet::GetRepairKitGaugeAttribute()) / UknightAttributeSet::RepairKitGaugeFull, 0.f, 1.f));
 }
 
 void UknightVM_PlayerStatus::HandleOverheatedChanged(const FGameplayTag Tag, int32 NewCount)
@@ -191,16 +295,16 @@ void UknightVM_PlayerStatus::HandleTargetPoiseChanged(const FOnAttributeChangeDa
 void UknightVM_PlayerStatus::RefreshTargetStagger()
 {
 	const UAbilitySystemComponent* const ASC = BoundTargetASC.Get();
-	float Stagger = 0.f;
+	float TargetStagger = 0.f;
 	if (ASC)
 	{
 		bool bFound = false;
 		const float Poise = ASC->GetGameplayAttributeValue(UknightCoreAttributeSet::GetPoiseAttribute(), bFound);
 		const float MaxPoise = ASC->GetGameplayAttributeValue(UknightCoreAttributeSet::GetMaxPoiseAttribute(), bFound);
 		// Poise counts down to the stagger; the gauge shows how much has been taken.
-		Stagger = MaxPoise > 0.f ? FMath::Clamp(1.f - Poise / MaxPoise, 0.f, 1.f) : 0.f;
+		TargetStagger = MaxPoise > 0.f ? FMath::Clamp(1.f - Poise / MaxPoise, 0.f, 1.f) : 0.f;
 	}
-	UE_MVVM_SET_PROPERTY_VALUE(LockedTargetStagger, Stagger);
+	UE_MVVM_SET_PROPERTY_VALUE(LockedTargetStagger, TargetStagger);
 	UE_MVVM_SET_PROPERTY_VALUE(bLockedTargetHasStagger, ASC != nullptr);
 }
 

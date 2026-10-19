@@ -30,6 +30,10 @@ struct KNIGHT_API FKnightStageDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stage|Globe")
 	FVector2D GlobeLocation = FVector2D::ZeroVector;
 
+	/** Angular radius of the stage's region on the globe, in degrees. Land within it is painted and clickable. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stage|Globe", meta=(ClampMin=2, ClampMax=45, Units="deg"))
+	float GlobeRegionRadius = 14.f;
+
 	/** Optional picture for the globe panel. The panel hides the image area when empty. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stage|Globe")
 	TSoftObjectPtr<UTexture2D> Thumbnail;

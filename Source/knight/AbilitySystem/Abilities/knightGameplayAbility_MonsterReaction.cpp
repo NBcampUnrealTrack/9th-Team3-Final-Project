@@ -5,6 +5,9 @@
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimMontage.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "System/knightGameplayTags.h"
@@ -47,6 +50,13 @@ void UknightGameplayAbility_MonsterReaction::ActivateAbility(const FGameplayAbil
 	}
 	KNIGHT_PERF_COUNT("Monster.Reactions", 1);
 
+	if (bCancelOtherReactions)
+	{
+		// 취소된 반응의 몽타주는 자기 블렌드 아웃으로 빠지고, 아래 유지 몽타주가 블렌드 인으로 이어받는다.
+		const FGameplayTagContainer ReactionTags(knightGameplayTags::Ability_HitReact);
+		ASC->CancelAbilities(&ReactionTags, nullptr, this);
+	}
+
 	if (StateTag.IsValid())
 	{
 		ASC->AddLooseGameplayTag(StateTag);
@@ -60,6 +70,113 @@ void UknightGameplayAbility_MonsterReaction::ActivateAbility(const FGameplayAbil
 	}
 	Character->GetCharacterMovement()->StopMovementImmediately();
 
+	bHoldStarted = false;
+	if (RewindTime > 0.f)
+	{
+		// 한 프레임 뒤에 되감는다. 패링으로 Poise가 깨지면 다운이 같은 프레임에 켜져 이 반응을 취소하는데, 그 전에 되감기가
+		// 블렌드 없이 시작되면 공격 몽타주가 즉시 사라져 다운이 대기 자세에서 블렌드를 시작한다(자세가 튐).
+		UAbilityTask_WaitDelay* const RewindDelay = UAbilityTask_WaitDelay::WaitDelay(this, 0.f);
+		RewindDelay->OnFinish.AddDynamic(this, &ThisClass::HandleRewindDelayFinished);
+		RewindDelay->ReadyForActivation();
+	}
+	else
+	{
+		StartHold();
+	}
+
+	UE_LOG(LogknightAI, Log, TEXT("%s: %s started (%s)."), *GetNameSafe(Character), *GetName(),
+		TriggerEventData ? *TriggerEventData->EventTag.ToString() : TEXT("tag trigger"));
+}
+
+bool UknightGameplayAbility_MonsterReaction::TryStartRewind(ACharacter& Character)
+{
+	UAnimInstance* const AnimInstance = Character.GetMesh() ? Character.GetMesh()->GetAnimInstance() : nullptr;
+	if (!AnimInstance)
+	{
+		return false;
+	}
+	// 공격 어빌리티는 이 어빌리티가 켜지면서 취소되어(CancelAbilitiesWithTag) 그 몽타주가 막 블렌드 아웃을 시작했다.
+	// 아직 목록에 남아 있는 가장 최근 몽타주가 끊긴 공격이다.
+	const FAnimMontageInstance* Interrupted = nullptr;
+	for (const FAnimMontageInstance* const Instance : AnimInstance->MontageInstances)
+	{
+		if (Instance && Instance->Montage && Instance->Montage != HoldMontage && Instance->Montage != RecoverMontage)
+		{
+			Interrupted = Instance;
+		}
+	}
+	if (!Interrupted)
+	{
+		return false;
+	}
+	const UAnimMontage* const Montage = Interrupted->Montage;
+	const float Position = Interrupted->GetPosition();
+	for (const FSlotAnimationTrack& Track : Montage->SlotAnimTracks)
+	{
+		const FAnimSegment* const Segment = Track.AnimTrack.GetSegmentAtTime(Position);
+		float AnimPosition = 0.f;
+		UAnimSequenceBase* const Sequence = Segment ? Segment->GetAnimationData(Position, AnimPosition) : nullptr;
+		if (!Sequence)
+		{
+			continue;
+		}
+		const float Start = FMath::Max(0.f, AnimPosition - RewindTime);
+		if (AnimPosition - Start <= UE_KINDA_SMALL_NUMBER)
+		{
+			return false;
+		}
+		// 같은 자세에서 이어지므로 블렌드 인 없이 시작하고, 끝(되감긴 자세)에 도착하면 유지 몽타주의 블렌드 인과 같은 시간으로 넘긴다.
+		// 블렌드 아웃 시점을 0으로 둬야 짧은 되감기 도중에 블렌드 아웃이 먼저 시작되지 않는다.
+		const float BlendOutTime = HoldMontage ? HoldMontage->BlendIn.GetBlendTime() : 0.25f;
+		UAnimMontage* const Rewind = UAnimMontage::CreateSlotAnimationAsDynamicMontage(Sequence, Track.SlotName, 0.f, BlendOutTime, 1.f, 1, 0.f);
+		if (!Rewind || Rewind->SlotAnimTracks.IsEmpty() || Rewind->SlotAnimTracks[0].AnimTrack.AnimSegments.IsEmpty())
+		{
+			return false;
+		}
+		FAnimSegment& RewindSegment = Rewind->SlotAnimTracks[0].AnimTrack.AnimSegments[0];
+		RewindSegment.AnimStartTime = Start;
+		RewindSegment.AnimEndTime = AnimPosition;
+		const float Length = RewindSegment.GetLength();
+		Rewind->SetCompositeLength(Length);
+
+		// 끝(지금 자세)에서 시작해 거꾸로 재생한다.
+		UAbilityTask_PlayMontageAndWait* const RewindTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
+			this, TEXT("Rewind"), Rewind, -RewindRate, NAME_None, true, 1.f, Length);
+		RewindTask->OnCompleted.AddDynamic(this, &ThisClass::HandleRewindFinished);
+		RewindTask->OnBlendOut.AddDynamic(this, &ThisClass::HandleRewindFinished);
+		RewindTask->OnInterrupted.AddDynamic(this, &ThisClass::HandleRewindFinished);
+		RewindTask->OnCancelled.AddDynamic(this, &ThisClass::HandleRewindFinished);
+		RewindTask->ReadyForActivation();
+		UE_LOG(LogknightAI, Verbose, TEXT("%s: rewinding %s %.2f -> %.2f s."), *GetNameSafe(&Character), *GetNameSafe(Sequence), AnimPosition, Start);
+		return true;
+	}
+	return false;
+}
+
+void UknightGameplayAbility_MonsterReaction::HandleRewindDelayFinished()
+{
+	ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	if (IsActive() && !(Character && TryStartRewind(*Character)))
+	{
+		StartHold();
+	}
+}
+
+void UknightGameplayAbility_MonsterReaction::HandleRewindFinished()
+{
+	if (IsActive())
+	{
+		StartHold();
+	}
+}
+
+void UknightGameplayAbility_MonsterReaction::StartHold()
+{
+	if (bHoldStarted)
+	{
+		return;
+	}
+	bHoldStarted = true;
 	if (HoldMontage)
 	{
 		UAbilityTask_PlayMontageAndWait* const HoldTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, TEXT("Hold"), HoldMontage);
@@ -68,9 +185,6 @@ void UknightGameplayAbility_MonsterReaction::ActivateAbility(const FGameplayAbil
 	UAbilityTask_WaitDelay* const HoldDelay = UAbilityTask_WaitDelay::WaitDelay(this, HoldTime);
 	HoldDelay->OnFinish.AddDynamic(this, &ThisClass::HandleHoldFinished);
 	HoldDelay->ReadyForActivation();
-
-	UE_LOG(LogknightAI, Log, TEXT("%s: %s started (%s)."), *GetNameSafe(Character), *GetName(),
-		TriggerEventData ? *TriggerEventData->EventTag.ToString() : TEXT("tag trigger"));
 }
 
 void UknightGameplayAbility_MonsterReaction::HandleHoldFinished()
