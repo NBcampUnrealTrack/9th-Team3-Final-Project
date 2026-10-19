@@ -1703,4 +1703,16 @@ bool UknightMonsterRecipeLibrary::SetMontageSegmentRange(UAnimMontage* Montage, 
 	return true;
 }
 
+bool UknightMonsterRecipeLibrary::SetMontageSegmentSequence(UAnimMontage* Montage, int32 SegmentIndex, UAnimSequenceBase* Sequence)
+{
+	if (!Montage || !Sequence || Montage->SlotAnimTracks.IsEmpty() || !Montage->SlotAnimTracks[0].AnimTrack.AnimSegments.IsValidIndex(SegmentIndex))
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetMontageSegmentSequence %s: 구간 %d이나 시퀀스가 없습니다."), *GetNameSafe(Montage), SegmentIndex);
+		return false;
+	}
+	Montage->Modify();
+	Montage->SlotAnimTracks[0].AnimTrack.AnimSegments[SegmentIndex].SetAnimReference(Sequence, true);
+	return SetMontageSegmentRange(Montage, SegmentIndex, 0.f, Sequence->GetPlayLength());
+}
+
 #undef LOCTEXT_NAMESPACE
