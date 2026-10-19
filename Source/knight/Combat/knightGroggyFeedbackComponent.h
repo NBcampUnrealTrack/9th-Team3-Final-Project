@@ -32,6 +32,9 @@ class AknightPlayerCameraManager;
 class UGameplayAbility;
 class UAnimMontage;
 
+/** 그로기 연출 단계 알림. bImpact = false: 예측 슬로우 시작, true: 그로기 명중(멈춤 시작). */
+DECLARE_MULTICAST_DELEGATE_OneParam(FknightGroggyPresentationEvent, bool /*bImpact*/);
+
 UCLASS(ClassGroup=(Knight), meta=(BlueprintSpawnableComponent))
 class KNIGHT_API UknightGroggyFeedbackComponent : public UActorComponent
 {
@@ -48,6 +51,12 @@ public:
 	/** Reports the existing, post-effect Poise/knockdown verdict; never starts a second slow. */
 	void CompletePredictedMeleeHit(AActor* HitTarget, bool bNewKnockdown);
 	void CancelKnockdownPresentation();
+
+	/** 예측 슬로우·줌, 멈춤, 슬로모션 풀기 중 하나라도 진행 중이면 true. HUD 연출이 끝나는 시점을 여기서 판단한다. */
+	bool IsPresentationActive() const;
+
+	/** 연출이 시작될 때(예측 슬로우, 그로기 명중) 알린다. 끝은 IsPresentationActive로 확인한다. */
+	FknightGroggyPresentationEvent OnPresentationEvent;
 
 protected:
 	virtual void BeginPlay() override;
@@ -88,12 +97,16 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=1, ClampMax=180, Units="deg"))
 	float PredictionAngle = 50.f;
 
-	/** Maximum real-time lead effect; a hit ends it immediately. */
+	/**
+	 * Maximum real-time lead effect; a hit ends it immediately.
+	 * (2026-10-19 사용자 '그로기 슬로우 시간이 너무 길다') 1.5 → 0.6초. 바뀔 수 있는 값.
+	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0, Units="s"))
-	float PredictionMaxTime = 1.5f;
+	float PredictionMaxTime = 0.6f;
 
+	/** 예측 슬로우 배속. (2026-10-19 같은 이유로 0.25 → 0.4, 덜 느리게) 바뀔 수 있는 값. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0.02, ClampMax=1))
-	float PredictionSlowSpeed = 0.25f;
+	float PredictionSlowSpeed = 0.4f;
 
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0, Units="s"))
 	float PredictionSlowEnterTime = 0.15f;

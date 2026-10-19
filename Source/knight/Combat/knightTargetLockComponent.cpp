@@ -52,6 +52,11 @@ bool UknightTargetLockComponent::ToggleLockOn()
 
 bool UknightTargetLockComponent::PressLockOn()
 {
+	// (2026-10-19) 기본은 켜기/끄기. 가장 가까운 부위로 다시 잡기는 bReLockNearestOnPress일 때만.
+	if (!bReLockNearestOnPress)
+	{
+		return ToggleLockOn();
+	}
 	const UWorld* const World = GetWorld();
 	const double Now = World ? World->GetRealTimeSeconds() : 0.0;
 	const bool bDoublePress = LastLockOnPressTime >= 0.0 && Now - LastLockOnPressTime <= LockOnDoublePressTime;

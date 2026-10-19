@@ -26,7 +26,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FknightLockOnTargetChanged, AActor*
  * - 잠근 지점이 대상의 락온 지점 목록에서 빠지면(잘려 나간 꼬리 등) 같은 대상의 가장 가까운 지점으로 옮긴다. 남은 지점이 없으면 푼다.
  * - 확인: 출력 로그 LogknightCombat의 "lock-on switch" / "lock-on point ... is gone" 줄.
  *
- * (2026-10-15 사용자 결정) 락온 키(PressLockOn, Tab):
+ * (2026-10-19) 아래 '가장 가까운 부위로 다시 잡기'는 사용자 요청으로 기본 끔(bReLockNearestOnPress). 기본은 누르면 켜기/끄기.
+ * (2026-10-15 사용자 결정) 락온 키(PressLockOn, 가운데 버튼):
  * - 락온이 아닐 때: 지금처럼 보고 있는 쪽 대상을 잡는다(TryLockOn).
  * - 락온 중: 카메라 앞쪽(MaxLockAngle 안)에서 플레이어와 가장 가까운 부위로 다시 잡는다. 그게 지금 잡은 부위면 푼다.
  * - LockOnDoublePressTime 안에 두 번 누르면 푼다.
@@ -88,6 +89,11 @@ public:
 	UFUNCTION(BlueprintPure, Category="Knight|LockOn")
 	FGameplayTag GetLockedPartTag() const { return LockedPartTag; }
 
+	/** 잠근 지점의 컴포넌트·소켓(뼈). 락온 부위 보정(knightCombatLibrary)이 맞은 부위를 바꿀 때 쓴다. */
+	USceneComponent* GetLockedComponent() const { return LockedComponent.Get(); }
+	FName GetLockedSocket() const { return LockedSocket; }
+	float GetLockOnPartAssistRadius() const { return LockOnPartAssistRadius; }
+
 	bool GetLockedTargetLocation(FVector& OutLocation) const;
 
 	/** Radius reported by the locked target, for camera framing. Zero without a lock. */
@@ -117,9 +123,23 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|LockOn", meta=(ClampMin=1, ClampMax=180, Units="deg"))
 	float MaxLockAngle = 60.f;
 
-	/** (2026-10-15) 락온 키를 이 시간(초, 실제 시간) 안에 두 번 누르면 락온을 푼다. 바뀔 수 있는 값. */
-	UPROPERTY(EditDefaultsOnly, Category="Knight|LockOn", meta=(ClampMin=0, Units="s"))
+	/**
+	 * (2026-10-19 사용자 결정 '락온 중 키 누르면 해제 방식으로 다시') 끄면(기본) 락온 키는 켜기/끄기(ToggleLockOn)다.
+	 * 켜면 10-15 방식: 락온 중 누르면 가장 가까운 부위로 다시 잡고, 같은 부위·두 번 누르기면 해제.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|LockOn")
+	bool bReLockNearestOnPress = false;
+
+	/** (2026-10-15) 락온 키를 이 시간(초, 실제 시간) 안에 두 번 누르면 락온을 푼다. bReLockNearestOnPress일 때만. 바뀔 수 있는 값. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|LockOn", meta=(ClampMin=0, Units="s", EditCondition="bReLockNearestOnPress"))
 	float LockOnDoublePressTime = 0.3f;
+
+	/**
+	 * (2026-10-19 사용자 결정) 락온 부위 보정 거리(cm). 부위에 락온 중 같은 대상을 맞혔고, 맞은 지점이 락온 지점에서 이 거리 안이면
+	 * 락온 부위에 맞은 것으로 친다(knightCombatLibrary::ApplyMeleeHit). 0이면 보정 없음. 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|LockOn", meta=(ClampMin=0, Units="cm"))
+	float LockOnPartAssistRadius = 250.f;
 
 	UPROPERTY(EditDefaultsOnly, Category="Knight|LockOn")
 	bool bRequireLineOfSight = true;

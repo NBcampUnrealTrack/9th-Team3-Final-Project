@@ -34,6 +34,13 @@ private:
 	void HandleRaidViewModelChanged(UObject* InViewModel, UE::FieldNotification::FFieldId FieldId);
 	void OpenRaidResult();
 
+	/**
+	 * (2026-10-19) 결과 화면·일시정지 메뉴 클래스를 BeginPlay(로딩 화면이 떠 있는 동안)에 미리 읽어 붙잡아 둔다.
+	 * 전에는 처음 죽을 때 결과 화면을 그 자리에서 읽느라(FlushAsyncLoading) 한 프레임이 0.6초 멈췄다('죽을 때 랙').
+	 */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UClass>> PreloadedScreenClasses;
+
 	TWeakObjectPtr<UCommonActivatableWidget> HUDLayout;
 	TWeakObjectPtr<UCommonActivatableWidget> PauseMenu;
 	TWeakObjectPtr<UCommonActivatableWidget> RaidResult;

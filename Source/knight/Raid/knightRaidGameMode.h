@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Containers/Ticker.h"
 #include "GameplayEffectTypes.h"
 #include "GameplayTagContainer.h"
 #include "knightGameMode.h"
@@ -67,7 +68,39 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Raid")
 	TObjectPtr<const UknightRaidDefinition> DefaultRaidDefinition;
 
+	/**
+	 * (2026-10-19) 레이드에 들어갈 때 월드가 안정될 때까지 로딩 화면(레이드 단계 None)을 유지하고 게임을 일시정지해 둔다.
+	 * 전에는 맵이 올라온 프레임에 바로 출격해서, 텍스처·셰이더가 덜 준비된 채 로딩 화면이 걷히고 몬스터가 먼저 움직였다
+	 * ('로딩이 끝나기 전에 시작'). 끝 = MinLoadingHoldTime이 지나고, 스트리밍을 기다리는 텍스처가 MaxStreamingResources 이하이고,
+	 * (에디터만) 셰이더 컴파일이 끝났을 때. MaxLoadingHoldTime이 지나면 그래도 출격한다. 끄면 예전처럼 바로 출격.
+	 * 확인: 출력 로그 Logknight의 "raid loading hold" 줄.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Raid|Loading")
+	bool bHoldLoadingUntilReady = true;
+
+	/** 로딩 화면을 최소한 이만큼(실제 초) 더 유지한다. 바뀔 수 있는 값. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Raid|Loading", meta=(ClampMin=0, Units="s", EditCondition="bHoldLoadingUntilReady"))
+	float MinLoadingHoldTime = 0.5f;
+
+	/** 준비가 안 끝나도 이 시간(실제 초)이 지나면 출격한다. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Raid|Loading", meta=(ClampMin=0, Units="s", EditCondition="bHoldLoadingUntilReady"))
+	float MaxLoadingHoldTime = 10.f;
+
+	/** 스트리밍을 기다리는 텍스처 등이 이 개수 이하면 준비된 것으로 본다. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Raid|Loading", meta=(ClampMin=0, EditCondition="bHoldLoadingUntilReady"))
+	int32 MaxStreamingResources = 0;
+
 private:
+	/** 로딩 유지 중 0.1초마다(일시정지와 상관없는 코어 틱): 준비됐으면 일시정지를 풀고 출격한다. 계속 기다리면 true. */
+	bool TickLoadingHold(float DeltaTime);
+
+	/** Deploy 단계로 들어가고 출격 시간 뒤 탐색을 시작한다. */
+	void BeginDeploy();
+
+	FTSTicker::FDelegateHandle LoadingHoldTicker;
+	double LoadingHoldStartTime = 0.0;
+	bool bPausedForLoading = false;
+
 	void ResolveRaidDefinition();
 	void BindPlacedTargetMonsters();
 	bool IsTargetMonster(const AknightMonsterCharacterBase* Monster) const;

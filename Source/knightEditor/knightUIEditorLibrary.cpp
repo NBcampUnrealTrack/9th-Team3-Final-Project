@@ -629,13 +629,56 @@ bool UknightUIEditorLibrary::BuildHUDLowHealth(UWidgetBlueprint* WidgetBlueprint
 	return true;
 }
 
+bool UknightUIEditorLibrary::BuildHUDSlowMotion(UWidgetBlueprint* WidgetBlueprint, UTexture2D* VignetteTexture)
+{
+	if (!VignetteTexture || !BeginBuild(WidgetBlueprint, TEXT("BuildHUDSlowMotion")))
+	{
+		return false;
+	}
+	UCanvasPanel* const Root = NewWidget<UCanvasPanel>(WidgetBlueprint, TEXT("Canvas_Root"));
+	WidgetBlueprint->WidgetTree->RootWidget = Root;
+
+	auto AddVignette = [&](const TCHAR* Name, const FLinearColor& Tint)
+	{
+		UImage* const Image = NewWidget<UImage>(WidgetBlueprint, Name, true);
+		Image->SetBrush(HUDTextureBrush(VignetteTexture, FVector2D(512.f, 288.f), Tint));
+		Image->SetVisibility(ESlateVisibility::HitTestInvisible);
+		Image->SetRenderOpacity(0.f);
+		FillCanvas(Root, Image);
+	};
+	AddVignette(TEXT("Img_Edge"), FLinearColor(FColor(0x5F, 0xD0, 0xFF)));
+	AddVignette(TEXT("Img_KnockdownEdge"), FLinearColor::White);
+
+	UImage* const Flash = NewWidget<UImage>(WidgetBlueprint, TEXT("Img_Flash"), true);
+	Flash->SetVisibility(ESlateVisibility::HitTestInvisible);
+	Flash->SetRenderOpacity(0.f);
+	FillCanvas(Root, Flash);
+
+	// 띠는 화면 끝에 붙은 쪽을 기준점으로 세로 크기를 0~1로 키운다(C++).
+	auto AddBar = [&](const TCHAR* Name, float Top, float Pivot)
+	{
+		UImage* const Bar = NewWidget<UImage>(WidgetBlueprint, Name, true);
+		Bar->SetColorAndOpacity(FLinearColor::Black);
+		Bar->SetVisibility(ESlateVisibility::HitTestInvisible);
+		Bar->SetRenderTransformPivot(FVector2D(0.5f, Pivot));
+		Bar->SetRenderScale(FVector2D(1.f, 0.f));
+		UCanvasPanelSlot* const Slot = Root->AddChildToCanvas(Bar);
+		Slot->SetAnchors(FAnchors(0.f, Top, 1.f, Top + 0.1f));
+		Slot->SetOffsets(FMargin(0.f));
+	};
+	AddBar(TEXT("Img_LetterboxTop"), 0.f, 0.f);
+	AddBar(TEXT("Img_LetterboxBottom"), 0.9f, 1.f);
+	EndBuild(WidgetBlueprint);
+	return true;
+}
+
 bool UknightUIEditorLibrary::BuildHUDLayout(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> PlayerStatusClass, TSubclassOf<UUserWidget> RaidTimerClass,
 	TSubclassOf<UUserWidget> LockOnMarkerClass, TSubclassOf<UUserWidget> FrameStatusClass, TSubclassOf<UUserWidget> RepairKitClass,
 	TSubclassOf<UUserWidget> MessageLogClass, TSubclassOf<UUserWidget> HintClass, TSubclassOf<UUserWidget> GroggyNoiseClass,
-	TSubclassOf<UUserWidget> LowHealthClass)
+	TSubclassOf<UUserWidget> LowHealthClass, TSubclassOf<UUserWidget> SlowMotionClass)
 {
 	if (!PlayerStatusClass || !RaidTimerClass || !LockOnMarkerClass || !FrameStatusClass || !RepairKitClass || !MessageLogClass || !HintClass
-		|| !GroggyNoiseClass || !LowHealthClass || !BeginBuild(WidgetBlueprint, TEXT("BuildHUDLayout")))
+		|| !GroggyNoiseClass || !LowHealthClass || !SlowMotionClass || !BeginBuild(WidgetBlueprint, TEXT("BuildHUDLayout")))
 	{
 		return false;
 	}
@@ -645,6 +688,8 @@ bool UknightUIEditorLibrary::BuildHUDLayout(UWidgetBlueprint* WidgetBlueprint, T
 
 	// 저체력 붉은 가장자리는 맨 아래에 깔아서 체력 숫자 등 HUD 글자를 가리지 않는다.
 	FillCanvas(Root, NewWidget<UUserWidget>(WidgetBlueprint, LowHealthClass, TEXT("LowHealth"), true));
+	// 슬로우 모션 띠·가장자리도 HUD 아래. 이 위젯이 자기보다 뒤에 그려지는 HUD 위젯을 흐리게 하므로 HUD보다 먼저 넣는다.
+	FillCanvas(Root, NewWidget<UUserWidget>(WidgetBlueprint, SlowMotionClass, TEXT("SlowMotion"), true));
 	// 화면 전체를 덮고 HUD 중 아래쪽에 그려진다. 마커가 다른 HUD를 가리지 않는다.
 	FillCanvas(Root, NewWidget<UUserWidget>(WidgetBlueprint, LockOnMarkerClass, TEXT("LockOnMarker"), true));
 	// 플레이어 패널은 화면 전체에 깔고 그 안의 왼쪽 아래에 체력·부스트를 놓는다.
