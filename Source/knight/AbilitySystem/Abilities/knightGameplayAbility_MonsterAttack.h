@@ -18,6 +18,15 @@ enum class EknightTargetAirborneRule : uint8
 	OnlyGrounded
 };
 
+/** 타깃이 몬스터의 어느 쪽에 있어야 고를 수 있는지. 한쪽으로 움직이며 치는 기술(옆구르기)에 쓴다. */
+UENUM(BlueprintType)
+enum class EknightTargetSide : uint8
+{
+	Any,
+	Left,
+	Right
+};
+
 /** 몬스터가 공격을 고를 수 있는 조건과, 사용 가능한 공격 중에서 뽑힐 확률. */
 USTRUCT(BlueprintType)
 struct KNIGHT_API FknightMonsterAttackSelection
@@ -38,6 +47,13 @@ struct KNIGHT_API FknightMonsterAttackSelection
 	/** 몬스터 정면과 타깃 사이 |yaw|의 최솟값. 타깃이 옆이나 뒤에 있을 때만 쓰는 기술(꼬리 휩쓸기)에 쓴다. 0이면 정면도 허용. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Selection", meta=(ClampMin=0, ClampMax=180, Units="deg"))
 	float MinAngle = 0.f;
+
+	/**
+	 * Any가 아니면 타깃이 이쪽에 있을 때만 고를 수 있다(MinAngle·MaxAngle은 그쪽 각도에 적용). 몸을 돌리면 의미가 없는 기술이라
+	 * 각도를 무시하는 선택(bIgnoreAngle)에서도 각도와 방향을 검사한다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Selection")
+	EknightTargetSide TargetSide = EknightTargetSide::Any;
 
 	/** 지금 사용 가능한 공격들 사이의 상대 확률. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Selection", meta=(ClampMin=0))

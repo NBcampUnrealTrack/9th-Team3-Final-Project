@@ -50,6 +50,14 @@ FknightSelectionResult FknightMonsterAttackSelectionSimulator::Evaluate(const UG
 	{
 		Result.Reason = FString::Printf(TEXT("너무 정면 (%.0f도 < 최소 %.0f도)"), FMath::Abs(Query.AngleToTarget), Selection.MinAngle);
 	}
+	else if (Selection.TargetSide == EknightTargetSide::Left && Query.AngleToTarget > 0.f)
+	{
+		Result.Reason = TEXT("왼쪽 타깃 전용");
+	}
+	else if (Selection.TargetSide == EknightTargetSide::Right && Query.AngleToTarget < 0.f)
+	{
+		Result.Reason = TEXT("오른쪽 타깃 전용");
+	}
 	else if (Selection.AirborneRule == EknightTargetAirborneRule::OnlyAirborne && !Query.bTargetAirborne)
 	{
 		Result.Reason = TEXT("공중 타깃 전용");
@@ -93,6 +101,7 @@ FknightSelectionShape FknightMonsterAttackSelectionSimulator::GetShape(const UGa
 	Shape.MaxRange = Selection.MaxRange;
 	Shape.MaxAngle = Selection.MaxAngle;
 	Shape.MinAngle = Selection.MinAngle;
+	Shape.Side = Selection.TargetSide == EknightTargetSide::Left ? -1 : Selection.TargetSide == EknightTargetSide::Right ? 1 : 0;
 	Shape.Weight = Selection.Weight;
 	Shape.Cooldown = Selection.Cooldown;
 	Shape.AirborneText = Selection.AirborneRule == EknightTargetAirborneRule::OnlyAirborne ? TEXT("공중 전용")
