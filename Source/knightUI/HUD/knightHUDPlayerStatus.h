@@ -11,8 +11,8 @@ class UProgressBar;
 class UknightVM_PlayerStatus;
 
 /**
- * Player panel of the HUD, laid out over the whole screen: health (large number + bar with a delayed "ghost" bar) at the
- * bottom left, boost gauge at the bottom centre with the overheat warning and a red blinking frame when it runs low.
+ * Player panel of the HUD, laid out over the whole screen: at the bottom left, health (large number over a bar with a delayed
+ * "ghost" bar) and under it the boost gauge with the overheat warning and a red blinking frame when it runs low.
  *
  * Reads the PlayerStatus view model owned by UknightUISubsystem. Widgets are found by name (see the BindWidgetOptional
  * properties), so the layout can be redesigned in the Widget Blueprint as long as the names stay.

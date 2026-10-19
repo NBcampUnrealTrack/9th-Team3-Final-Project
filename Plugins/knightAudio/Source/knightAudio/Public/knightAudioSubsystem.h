@@ -11,6 +11,8 @@ class USoundClass;
 class USoundMix;
 class UWorld;
 
+DECLARE_MULTICAST_DELEGATE_OneParam(FknightVoiceStarted, USoundBase* /*Voice*/);
+
 /**
  * Game-wide audio services.
  *
@@ -31,6 +33,9 @@ class KNIGHTAUDIO_API UknightAudioSubsystem : public UGameInstanceSubsystem
 	GENERATED_BODY()
 
 public:
+	/** A voice line starts playing (after any wait in the queue). The HUD shows its subtitle from here. */
+	FknightVoiceStarted OnVoiceStarted;
+
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Deinitialize() override;
 
