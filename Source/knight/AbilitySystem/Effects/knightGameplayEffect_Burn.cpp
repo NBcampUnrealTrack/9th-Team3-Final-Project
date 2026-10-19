@@ -1,6 +1,7 @@
 #include "AbilitySystem/Effects/knightGameplayEffect_Burn.h"
 
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
+#include "GameplayEffectComponents/TargetTagRequirementsGameplayEffectComponent.h"
 #include "System/knightGameplayTags.h"
 
 UknightGameplayEffect_Burn::UknightGameplayEffect_Burn(const FObjectInitializer& ObjectInitializer)
@@ -25,6 +26,12 @@ UknightGameplayEffect_Burn::UknightGameplayEffect_Burn(const FObjectInitializer&
 	StackLimitCount = 1;
 	StackDurationRefreshPolicy = EGameplayEffectStackingDurationPolicy::RefreshOnSuccessfulApplication;
 	StackPeriodResetPolicy = EGameplayEffectStackingPeriodPolicy::NeverReset;
+
+	// 죽으면 바로 꺼지고(남은 틱과 불길 표시 제거), 죽은 대상에는 걸리지 않는다.
+	UTargetTagRequirementsGameplayEffectComponent* const TagRequirements =
+		CreateDefaultSubobject<UTargetTagRequirementsGameplayEffectComponent>(TEXT("TagRequirements"));
+	TagRequirements->RemovalTagRequirements.RequireTags.AddTag(knightGameplayTags::State_Dead);
+	GEComponents.Add(TagRequirements);
 
 	// 걸려 있는 동안 몸에 불길이 붙는다(GCN_Burn_Loop).
 	GameplayCues.Add(FGameplayEffectCue(knightGameplayTags::GameplayCue_Burn, 0.f, 1.f));
