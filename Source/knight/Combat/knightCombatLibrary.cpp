@@ -48,6 +48,49 @@ namespace
 		}
 		return GetDefault<UknightDamageExecution>()->IsAttackerInGuardArc(Target, Attacker, &Hit);
 	}
+
+	/**
+	 * (2026-10-19 사용자 결정) 락온 부위 보정. 공격자가 이 대상의 부위에 락온 중이고, 맞은 지점이 그 락온 지점에서
+	 * 락온 컴포넌트의 LockOnPartAssistRadius 안이면 그 부위에 맞은 것으로 친다(히트의 뼈·컴포넌트를 락온 지점 것으로 바꿈).
+	 * 큰 몬스터를 휘두르면 칼이 노린 부위보다 앞발·몸통에 먼저 닿아 원하지 않는 부위가 맞던 문제. 락온 컴포넌트가 없는 공격자(몬스터)는 그대로.
+	 * 바꾼 뼈로 부위를 다시 판정해 락온 부위가 나오지 않으면(락온 지점이 부위 뼈가 아님) 원래 히트를 쓴다.
+	 */
+	FHitResult ApplyLockOnPartAssist(const AActor* Attacker, const FHitResult& Hit)
+	{
+		AActor* const Target = Hit.GetActor();
+		const UknightTargetLockComponent* const TargetLock = Attacker ? Attacker->FindComponentByClass<UknightTargetLockComponent>() : nullptr;
+		if (!Target || !TargetLock || TargetLock->GetLockedTarget() != Target || TargetLock->GetLockOnPartAssistRadius() <= 0.f
+			|| !Target->GetClass()->ImplementsInterface(UCombatInterface::StaticClass()))
+		{
+			return Hit;
+		}
+		const FGameplayTag LockedPart = TargetLock->GetLockedPartTag();
+		FVector PartLocation;
+		if (!LockedPart.IsValid() || !TargetLock->GetLockedTargetLocation(PartLocation)
+			|| FVector::DistSquared(Hit.ImpactPoint, PartLocation) > FMath::Square(TargetLock->GetLockOnPartAssistRadius()))
+		{
+			return Hit;
+		}
+		const FGameplayTag HitPart = ICombatInterface::Execute_ResolveHitPartBP(Target, Hit);
+		if (HitPart == LockedPart)
+		{
+			return Hit;
+		}
+		FHitResult Assisted = Hit;
+		Assisted.BoneName = TargetLock->GetLockedSocket();
+		if (UPrimitiveComponent* const LockedPrimitive = Cast<UPrimitiveComponent>(TargetLock->GetLockedComponent()))
+		{
+			Assisted.Component = LockedPrimitive;
+		}
+		if (ICombatInterface::Execute_ResolveHitPartBP(Target, Assisted) != LockedPart)
+		{
+			return Hit;
+		}
+		UE_LOG(LogknightCombat, Log, TEXT("%s: lock-on part assist on %s: %s -> %s (%.0f cm from the locked point)."), *GetNameSafe(Attacker),
+			*GetNameSafe(Target), HitPart.IsValid() ? *HitPart.ToString() : TEXT("no part"), *LockedPart.ToString(),
+			FVector::Dist(Hit.ImpactPoint, PartLocation));
+		return Assisted;
+	}
 }
 
 EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FHitResult& Hit, const FknightMeleeHitParams& Params)
@@ -55,9 +98,11 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 	return ApplyMeleeHit(Attacker, Hit, Params, nullptr);
 }
 
-EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FHitResult& Hit, const FknightMeleeHitParams& Params,
+EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FHitResult& InHit, const FknightMeleeHitParams& Params,
 	const UGameplayAbility* SourceAbility)
 {
+	// (2026-10-19) 플레이어가 부위에 락온 중이면 그 부위 근처 타격을 락온 부위로 보정한다. 아래는 모두 보정된 히트를 쓴다.
+	const FHitResult Hit = ApplyLockOnPartAssist(Attacker, InHit);
 	AActor* const Target = Hit.GetActor();
 	AknightCharacter* const LocalPlayer = Cast<AknightCharacter>(Attacker);
 	UknightGroggyFeedbackComponent* const Feedback = LocalPlayer
@@ -298,7 +343,8 @@ bool UknightCombatLibrary::ComputeAttackWarp(AActor* Attacker, float MaxDistance
 	OutTravel = FMath::Clamp(Distance - Radius - StopDistance, 0.f, MaxDistance);
 	OutLocation = AttackerLocation + Direction * OutTravel;
 	OutRotation = Direction.Rotation();
-	UE_LOG(LogknightCombat, Log, TEXT("Attack warp -> %s: distance %.0f, radius %.0f, travel %.0f"),
+	// (2026-10-19) Verbose: 락온 중 매 프레임 불려서(락온 컴포넌트의 '멀다' 판정) 로그가 한 판에 10만 줄 넘게 쌓이고 랙을 만들었다.
+	UE_LOG(LogknightCombat, Verbose, TEXT("Attack warp -> %s: distance %.0f, radius %.0f, travel %.0f"),
 		*GetNameSafe(TargetActor), Distance, Radius, OutTravel);
 	return true;
 }
