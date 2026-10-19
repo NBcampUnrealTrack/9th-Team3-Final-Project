@@ -4,6 +4,7 @@
 #include "GameplayEffectTypes.h"
 #include "GameplayTagContainer.h"
 #include "MVVMViewModelBase.h"
+#include "Character/knightPartHealthComponent.h"
 #include "Monster/knightMonsterPartComponent.h"
 #include "knightVM_PlayerStatus.generated.h"
 
@@ -11,10 +12,11 @@ class UAbilitySystemComponent;
 class UknightTargetLockComponent;
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FknightLockedPartConditionChanged, EknightPartCondition /*NewCondition*/);
+DECLARE_MULTICAST_DELEGATE_OneParam(FknightPlayerPartBroken, EknightBodyPart /*Part*/);
 
 /**
- * The Knight's status for the HUD: health, boost gauge, overheat and lock-on (target name, locked part and its condition,
- * the target's stagger gauge).
+ * The Knight's status for the HUD: health, boost gauge, overheat, the Knight's own parts, stagger and repair kits, and lock-on
+ * (target name, locked part and its condition, the target's stagger gauge).
  * Registered in the global view model collection as "PlayerStatus" by UknightUISubsystem and rebound when the
  * possessed pawn changes. Values only update on change; widgets bind to them with MVVM bindings.
  */
@@ -41,6 +43,20 @@ public:
 	EknightPartCondition GetLockedPartCondition() const { return LockedPartCondition; }
 	bool LockedTargetHasStagger() const { return bLockedTargetHasStagger; }
 	float GetLockedTargetStagger() const { return LockedTargetStagger; }
+	/** Health of one of the Knight's parts, 0..1 (1 when the part has no maximum). */
+	float GetPartHealthPercent(EknightBodyPart Part) const;
+	float GetHeadHealthPercent() const { return HeadHealthPercent; }
+	float GetTorsoHealthPercent() const { return TorsoHealthPercent; }
+	float GetArmsHealthPercent() const { return ArmsHealthPercent; }
+	float GetLegsHealthPercent() const { return LegsHealthPercent; }
+	float GetStagger() const { return Stagger; }
+	bool IsGroggy() const { return bGroggy; }
+	int32 GetRepairKitCount() const { return RepairKitCount; }
+	int32 GetMaxRepairKitCount() const { return MaxRepairKitCount; }
+	float GetRepairKitGaugePercent() const { return RepairKitGaugePercent; }
+
+	/** One of the Knight's parts dropped to 0 health. */
+	FknightPlayerPartBroken OnPlayerPartBroken;
 
 	/** The locked part changed condition while it stays locked (not on lock or switch). For one-shot feedback like a flash. */
 	FknightLockedPartConditionChanged OnLockedPartConditionChanged;
@@ -60,8 +76,10 @@ private:
 	void HandleTargetPoiseChanged(const FOnAttributeChangeData& Data);
 	void RefreshTargetStagger();
 
+	void HandleGroggyChanged(const FGameplayTag Tag, int32 NewCount);
 	void RefreshAll();
 	void RefreshPercents();
+	void RefreshKnightParts();
 
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Getter, Category="Knight|Status", meta=(AllowPrivateAccess=true))
 	float Health = 0.f;
@@ -110,6 +128,35 @@ private:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Getter, Category="Knight|Status", meta=(AllowPrivateAccess=true))
 	float LockedTargetStagger = 0.f;
 
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Getter, Category="Knight|Status", meta=(AllowPrivateAccess=true))
+	float HeadHealthPercent = 1.f;
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Getter, Category="Knight|Status", meta=(AllowPrivateAccess=true))
+	float TorsoHealthPercent = 1.f;
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Getter, Category="Knight|Status", meta=(AllowPrivateAccess=true))
+	float ArmsHealthPercent = 1.f;
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Getter, Category="Knight|Status", meta=(AllowPrivateAccess=true))
+	float LegsHealthPercent = 1.f;
+
+	/** Poise taken from the Knight, 0..1; the Knight goes groggy at 1. */
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Getter, Category="Knight|Status", meta=(AllowPrivateAccess=true))
+	float Stagger = 0.f;
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Getter="IsGroggy", Category="Knight|Status", meta=(AllowPrivateAccess=true))
+	bool bGroggy = false;
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Getter, Category="Knight|Status", meta=(AllowPrivateAccess=true))
+	int32 RepairKitCount = 0;
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Getter, Category="Knight|Status", meta=(AllowPrivateAccess=true))
+	int32 MaxRepairKitCount = 0;
+
+	/** Progress to the next repair kit (perfect guards), 0..1. */
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Getter, Category="Knight|Status", meta=(AllowPrivateAccess=true))
+	float RepairKitGaugePercent = 0.f;
+
 	TWeakObjectPtr<UAbilitySystemComponent> BoundASC;
 	TWeakObjectPtr<UAbilitySystemComponent> BoundTargetASC;
 	FDelegateHandle TargetPoiseHandle;
@@ -119,4 +166,5 @@ private:
 	FGameplayTag LockedPartTag;
 	TArray<TPair<FGameplayAttribute, FDelegateHandle>> AttributeHandles;
 	FDelegateHandle OverheatedHandle;
+	FDelegateHandle GroggyHandle;
 };

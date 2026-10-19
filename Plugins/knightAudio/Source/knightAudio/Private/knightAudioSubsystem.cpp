@@ -284,6 +284,7 @@ void UknightAudioSubsystem::StartVoice(USoundBase* Voice)
 	Component->OnAudioFinishedNative.AddUObject(this, &ThisClass::HandleVoiceFinished);
 	Component->Play();
 	VoiceComponent = Component;
+	OnVoiceStarted.Broadcast(Voice);
 }
 
 void UknightAudioSubsystem::HandleVoiceFinished(UAudioComponent* Component)
