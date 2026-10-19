@@ -240,6 +240,7 @@ bool UknightGroggyFeedbackComponent::TryStartPredictedKnockdown(UGameplayAbility
 		CameraManager->StartKnockdownZoom(Player, PredictionZoomDegrees, PredictionZoomEnterTime, PredictionStartTime);
 	}
 	EnsureFeedbackTicker();
+	OnPresentationEvent.Broadcast(false);
 	UE_LOG(LogknightCombat, Verbose, TEXT("Predicted knockdown %s -> %s: poise %.1f, expected %.1f"),
 		*GetNameSafe(Player), *GetNameSafe(Boss), TargetCore->GetPoise(), ExpectedPoiseDamage);
 	return true;
@@ -354,6 +355,12 @@ void UknightGroggyFeedbackComponent::CancelKnockdownPresentation()
 	bSkipGenericReleaseSlow = false;
 }
 
+bool UknightGroggyFeedbackComponent::IsPresentationActive() const
+{
+	const UWorld* const World = GetWorld();
+	return bCameraBeatActive || bReleasing || (World && World->GetTimerManager().IsTimerActive(ReleaseDelayTimer));
+}
+
 void UknightGroggyFeedbackComponent::HandlePlayerDied(AknightCharacter* DeadCharacter)
 {
 	CancelKnockdownPresentation();
@@ -415,6 +422,8 @@ void UknightGroggyFeedbackComponent::HandleAnyPoiseBroken(AActor* InVictim, AAct
 	{
 		VictimASC->ExecuteGameplayCue(GroggyCueTag, CueParams);
 	}
+
+	OnPresentationEvent.Broadcast(true);
 
 	// 2·3. FreezeTime 뒤 '쾅'과 슬로모션. 기존 히트스톱 지연 뒤 슬로우 길이는 실시간 티커로 잰다.
 	if (FreezeTime > 0.f)

@@ -32,6 +32,9 @@ class AknightPlayerCameraManager;
 class UGameplayAbility;
 class UAnimMontage;
 
+/** 그로기 연출 단계 알림. bImpact = false: 예측 슬로우 시작, true: 그로기 명중(멈춤 시작). */
+DECLARE_MULTICAST_DELEGATE_OneParam(FknightGroggyPresentationEvent, bool /*bImpact*/);
+
 UCLASS(ClassGroup=(Knight), meta=(BlueprintSpawnableComponent))
 class KNIGHT_API UknightGroggyFeedbackComponent : public UActorComponent
 {
@@ -48,6 +51,12 @@ public:
 	/** Reports the existing, post-effect Poise/knockdown verdict; never starts a second slow. */
 	void CompletePredictedMeleeHit(AActor* HitTarget, bool bNewKnockdown);
 	void CancelKnockdownPresentation();
+
+	/** 예측 슬로우·줌, 멈춤, 슬로모션 풀기 중 하나라도 진행 중이면 true. HUD 연출이 끝나는 시점을 여기서 판단한다. */
+	bool IsPresentationActive() const;
+
+	/** 연출이 시작될 때(예측 슬로우, 그로기 명중) 알린다. 끝은 IsPresentationActive로 확인한다. */
+	FknightGroggyPresentationEvent OnPresentationEvent;
 
 protected:
 	virtual void BeginPlay() override;
