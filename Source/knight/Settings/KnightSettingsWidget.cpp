@@ -17,6 +17,7 @@ const FString UKnightSettingsWidget::OffText(TEXT("끄기"));
 
 namespace
 {
+	constexpr bool bShowSubtitleSetting = false;
 	const TCHAR* const SettingsWidgetPath = TEXT("/Game/Knight/UI/Screens/Settings/WBP_KnightSettings.WBP_KnightSettings_C");
 
 	FString OnOff(bool bValue) { return bValue ? UKnightSettingsWidget::OnText : UKnightSettingsWidget::OffText; }
@@ -253,9 +254,9 @@ void UKnightSettingsWidget::GetTabSections(int32 Tab, TArray<FKnightSettingSecti
 		Quality.Items.Add(Rotator(TEXT("AA"), LOCTEXT("AA", "안티앨리어싱"), LOCTEXT("AADesc", "물체 가장자리의 계단 현상을 줄입니다."), QualityOptions()));
 		Quality.Items.Add(Rotator(TEXT("Shadows"), LOCTEXT("Shadows", "그림자"), LOCTEXT("ShadowsDesc", "그림자의 선명도와 거리입니다. 성능 영향이 큽니다."), QualityOptions()));
 		Quality.Items.Add(Rotator(TEXT("Textures"), LOCTEXT("Textures", "텍스처"), LOCTEXT("TexturesDesc", "표면 이미지의 해상도입니다. 그래픽 메모리를 씁니다."), QualityOptions()));
-		Quality.Items.Add(Rotator(TEXT("Effects"), LOCTEXT("Effects", "이펙트"), LOCTEXT("EffectsDesc", "불꽃, 연기, 파편 같은 효과의 품질입니다."), QualityOptions()));
+		Quality.Items.Add(Rotator(TEXT("Effects"), LOCTEXT("Effects", "이펙트"), FText::GetEmpty(), QualityOptions()));
 		Quality.Items.Add(Rotator(TEXT("PostProcess"), LOCTEXT("Post", "후처리"), LOCTEXT("PostDesc", "블룸, 피사계 심도 같은 화면 효과의 품질입니다."), QualityOptions()));
-		Quality.Items.Add(Rotator(TEXT("ViewDistance"), LOCTEXT("View", "시야 거리"), LOCTEXT("ViewDesc", "먼 물체를 얼마나 자세히 그릴지 정합니다."), QualityOptions()));
+		Quality.Items.Add(Rotator(TEXT("ViewDistance"), LOCTEXT("View", "시야 거리"), FText::GetEmpty(), QualityOptions()));
 		Quality.Items.Add(Toggle(TEXT("MotionBlur"), LOCTEXT("Motion", "모션 블러"), LOCTEXT("MotionDesc", "빠르게 움직일 때 화면을 흐리게 합니다.")));
 		Display.Note = FText::Format(LOCTEXT("DisplayNote", "화면 모드·표시 모니터·해상도는 적용 후 {0}초 안에 유지를 고르지 않으면 이전 값으로 돌아갑니다."),
 			FText::AsNumber(FMath::RoundToInt(DisplayConfirmSeconds)));
@@ -286,14 +287,18 @@ void UKnightSettingsWidget::GetTabSections(int32 Tab, TArray<FKnightSettingSecti
 	else if (Tab == 2)
 	{
 		FKnightSettingSection& Volume = AddSection(INVTEXT("VOLUME"));
-		Volume.Items.Add(Slider(TEXT("Master"), LOCTEXT("Master", "마스터"), LOCTEXT("MasterDesc", "모든 소리의 크기입니다."), 0.f, 100.f));
-		Volume.Items.Add(Slider(TEXT("Music"), INVTEXT("BGM"), LOCTEXT("MusicDesc", "전투와 탐색 음악의 크기입니다."), 0.f, 100.f));
-		Volume.Items.Add(Slider(TEXT("SFX"), LOCTEXT("SFX", "효과음"), LOCTEXT("SFXDesc", "공격, 타격, 인터페이스 소리의 크기입니다."), 0.f, 100.f));
-		Volume.Items.Add(Slider(TEXT("Voice"), LOCTEXT("Voice", "음성"), LOCTEXT("VoiceDesc", "대사와 무전의 크기입니다."), 0.f, 100.f));
+		Volume.Items.Add(Slider(TEXT("Master"), LOCTEXT("Master", "마스터"), FText::GetEmpty(), 0.f, 100.f));
+		Volume.Items.Add(Slider(TEXT("Music"), INVTEXT("BGM"), FText::GetEmpty(), 0.f, 100.f));
+		Volume.Items.Add(Slider(TEXT("SFX"), LOCTEXT("SFX", "효과음"), FText::GetEmpty(), 0.f, 100.f));
+		Volume.Items.Add(Slider(TEXT("Voice"), LOCTEXT("Voice", "음성"), FText::GetEmpty(), 0.f, 100.f));
 		Volume.Note = LOCTEXT("VolumeNote", "조절하는 동안 바로 들립니다. 적용을 눌러야 저장됩니다.");
 
-		FKnightSettingSection& Subtitle = AddSection(INVTEXT("SUBTITLE"));
-		Subtitle.Items.Add(Toggle(TEXT("Subtitles"), LOCTEXT("Subtitles", "자막"), LOCTEXT("SubtitlesDesc", "대사를 화면 아래에 글자로 표시합니다.")));
+		// Hidden until dialogue subtitles are shown in game; the value is still stored and applied.
+		if (bShowSubtitleSetting)
+		{
+			FKnightSettingSection& Subtitle = AddSection(INVTEXT("SUBTITLE"));
+			Subtitle.Items.Add(Toggle(TEXT("Subtitles"), LOCTEXT("Subtitles", "자막"), LOCTEXT("SubtitlesDesc", "대사를 화면 아래에 글자로 표시합니다.")));
+		}
 	}
 	else
 	{
@@ -301,8 +306,8 @@ void UKnightSettingsWidget::GetTabSections(int32 Tab, TArray<FKnightSettingSecti
 		View.Items.Add(Slider(TEXT("FOV"), LOCTEXT("FOV", "시야각"), LOCTEXT("FOVDesc", "카메라가 보여 주는 범위입니다. 넓을수록 주변이 잘 보이지만 멀미가 날 수 있습니다."), 60.f, 110.f));
 
 		FKnightSettingSection& Light = AddSection(INVTEXT("BRIGHTNESS"));
-		Light.Items.Add(Slider(TEXT("Gamma"), LOCTEXT("Gamma", "감마"), LOCTEXT("GammaDesc", "중간 밝기를 조절합니다. 오른쪽 계조표의 칸이 모두 구별되게 맞추세요."), 80.f, 120.f));
-		Light.Items.Add(Slider(TEXT("Brightness"), LOCTEXT("Brightness", "밝기"), LOCTEXT("BrightnessDesc", "화면 전체의 밝기입니다."), 80.f, 120.f));
+		Light.Items.Add(Slider(TEXT("Gamma"), LOCTEXT("Gamma", "감마"), FText::GetEmpty(), 80.f, 120.f));
+		Light.Items.Add(Slider(TEXT("Brightness"), LOCTEXT("Brightness", "밝기"), FText::GetEmpty(), 80.f, 120.f));
 	}
 
 	for (FKnightSettingSection& Section : OutSections)

@@ -178,10 +178,6 @@ void UknightSettingsScreen::HandleTabChanged()
 			Tab->SetTabSelected(Index == GetCurrentTab());
 		}
 	}
-	if (Panel_Chart)
-	{
-		Panel_Chart->SetVisibility(GetCurrentTab() == 3 ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
-	}
 	if (Scroll_Rows)
 	{
 		Scroll_Rows->ScrollToStart();

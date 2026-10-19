@@ -976,14 +976,6 @@ bool UknightUIEditorLibrary::BuildSettingsScreen(UWidgetBlueprint* WidgetBluepri
 		NSLOCTEXT("knightUI", "SettingsDetailPlaceholder", "전투와 탐색 음악의 크기입니다."), true);
 	DetailBody->SetAutoWrapText(true);
 	AddToColumn(Detail, DetailBody, HAlign_Fill, FMargin(0.f, 10.f, 0.f, 0.f));
-	// 감마 계조표: 검정부터 흰색까지 11칸.
-	UHorizontalBox* const Chart = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("Panel_Chart"), true);
-	for (int32 Step = 0; Step <= 10; ++Step)
-	{
-		const float Gray = Step / 10.f;
-		AddCentered(Chart, NewHUDImage(WidgetBlueprint, *FString::Printf(TEXT("Img_Chart%02d"), Step), FLinearColor(Gray, Gray, Gray), FVector2D(30.f, 30.f)), false, VAlign_Top);
-	}
-	AddToColumn(Detail, Chart, HAlign_Left, FMargin(0.f, 24.f, 0.f, 0.f));
 	AddCentered(Body, DetailWidth, false, VAlign_Top, FMargin(28.f, 0.f, 0.f, 0.f));
 
 	// 바닥: 키 안내 | 상태 | 버튼. 저장하지 않고 닫으려 하면 버튼 묶음이 확인 버튼으로 바뀐다.
