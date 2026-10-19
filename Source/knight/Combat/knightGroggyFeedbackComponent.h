@@ -97,12 +97,16 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=1, ClampMax=180, Units="deg"))
 	float PredictionAngle = 50.f;
 
-	/** Maximum real-time lead effect; a hit ends it immediately. */
+	/**
+	 * Maximum real-time lead effect; a hit ends it immediately.
+	 * (2026-10-19 사용자 '그로기 슬로우 시간이 너무 길다') 1.5 → 0.6초. 바뀔 수 있는 값.
+	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0, Units="s"))
-	float PredictionMaxTime = 1.5f;
+	float PredictionMaxTime = 0.6f;
 
+	/** 예측 슬로우 배속. (2026-10-19 같은 이유로 0.25 → 0.4, 덜 느리게) 바뀔 수 있는 값. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0.02, ClampMax=1))
-	float PredictionSlowSpeed = 0.25f;
+	float PredictionSlowSpeed = 0.4f;
 
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0, Units="s"))
 	float PredictionSlowEnterTime = 0.15f;

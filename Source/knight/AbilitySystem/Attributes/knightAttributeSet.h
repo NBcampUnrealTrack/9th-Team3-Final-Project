@@ -193,14 +193,14 @@ private:
 	/**
 	 * 남은 수리 키트 개수(정수로 쓴다). 수리 키트 어빌리티(knightGameplayAbility_RepairKit)가 사용할 때 1 줄인다.
 	 * 스탯이 아니라 소모품 개수지만, HUD가 다른 값처럼 어트리뷰트 변경 알림으로 읽을 수 있게 여기 둔다(2026-10-09).
-	 * 기본 3 = 기획 문서 '출격당 3개'. 출격할 때마다 새 캐릭터라 3개로 시작한다. 보유 수량·상점 연결은 인벤토리 담당이 정해진 뒤.
+	 * 기본 3 = 기획 문서 '출격당 3개' → 2026-10-19 사용자 결정 5개. 출격할 때마다 새 캐릭터라 5개로 시작한다. 보유 수량·상점 연결은 인벤토리 담당이 정해진 뒤.
 	 * 테스트 보충: knight.Player.SetStat RepairKitCount 3
 	 */
 	UPROPERTY(BlueprintReadOnly, Category="Knight|Mech", meta=(AllowPrivateAccess=true))
 	FGameplayAttributeData RepairKitCount;
 
 	/**
-	 * (2026-10-16) 수리 키트 최대 개수. 기본 3 = 출격 시작 개수. 이보다 적을 때만 퍼펙트 가드로 수리 키트 게이지가 찬다.
+	 * (2026-10-16) 수리 키트 최대 개수. 기본 5(2026-10-19, 3 → 5) = 출격 시작 개수. 이보다 적을 때만 퍼펙트 가드로 수리 키트 게이지가 찬다.
 	 * 바뀔 수 있는 값(파츠·업그레이드로 늘릴 수 있게 스탯으로 둠).
 	 */
 	UPROPERTY(BlueprintReadOnly, Category="Knight|Mech", meta=(AllowPrivateAccess=true))

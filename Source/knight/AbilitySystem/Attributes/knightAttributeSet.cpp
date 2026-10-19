@@ -41,8 +41,9 @@ UknightAttributeSet::UknightAttributeSet()
 	InitRepairEfficiency(1.f);
 
 	// 수리 키트 출격당 3개 (기획 문서). 최대 개수도 3개, 게이지는 0에서 시작 (2026-10-16).
-	InitRepairKitCount(3.f);
-	InitMaxRepairKitCount(3.f);
+	// (2026-10-19 사용자 결정) 시작·최대 3 → 5개.
+	InitRepairKitCount(5.f);
+	InitMaxRepairKitCount(5.f);
 	InitRepairKitGauge(0.f);
 }
 

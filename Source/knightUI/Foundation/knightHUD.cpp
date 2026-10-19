@@ -46,6 +46,17 @@ void AknightHUD::BeginPlay()
 		VM->AddFieldValueChangedDelegate(UknightVM_Raid::FFieldNotificationClassDescriptor::Phase,
 			INotifyFieldValueChanged::FFieldValueChangedDelegate::CreateUObject(this, &ThisClass::HandleRaidViewModelChanged));
 	}
+
+	// (2026-10-19) 처음 죽거나 Esc를 누를 때 그 자리에서 읽느라 멈추지 않게, 로딩 화면이 떠 있는 지금 미리 읽어 둔다.
+	const UknightUISettings* const Settings = GetDefault<UknightUISettings>();
+	for (UClass* const ScreenClass : { static_cast<UClass*>(Settings->RaidResultScreenClass.LoadSynchronous()),
+		static_cast<UClass*>(Settings->PauseMenuClass.LoadSynchronous()) })
+	{
+		if (ScreenClass)
+		{
+			PreloadedScreenClasses.Add(ScreenClass);
+		}
+	}
 }
 
 void AknightHUD::HandleRaidViewModelChanged(UObject* InViewModel, UE::FieldNotification::FFieldId FieldId)
@@ -86,7 +97,10 @@ void AknightHUD::OpenRaidResult()
 	}
 	if (UClass* const ScreenClass = GetDefault<UknightUISettings>()->RaidResultScreenClass.LoadSynchronous())
 	{
+		// (2026-10-19) 첫 사망 때 멈춤을 확인하려고 여는 데 걸린 시간을 남긴다.
+		const double StartSeconds = FPlatformTime::Seconds();
 		RaidResult = UI->PushWidgetToLayer(knightUIGameplayTags::UI_Layer_Menu, ScreenClass);
+		UE_LOG(LogknightUI, Log, TEXT("Raid result screen opened in %.0f ms."), (FPlatformTime::Seconds() - StartSeconds) * 1000.0);
 	}
 	else
 	{
