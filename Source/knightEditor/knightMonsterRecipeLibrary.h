@@ -72,4 +72,11 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
 	static bool SetMontageSegmentRange(UAnimMontage* Montage, int32 SegmentIndex, float StartTime, float EndTime);
+
+	/**
+	 * 몽타주 첫 슬롯의 SegmentIndex번 구간을 Sequence 전체로 바꾸고, 뒤 구간과 섹션 위치를 다시 맞춘다(SetMontageSegmentRange와 같음).
+	 * 노티파이는 몽타주 시간 그대로 남는다. 저장은 호출한 쪽.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
+	static bool SetMontageSegmentSequence(UAnimMontage* Montage, int32 SegmentIndex, UAnimSequenceBase* Sequence);
 };

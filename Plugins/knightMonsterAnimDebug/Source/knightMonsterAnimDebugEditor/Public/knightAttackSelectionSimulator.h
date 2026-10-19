@@ -38,6 +38,8 @@ struct FknightSelectionShape
 	float MaxAngle = 180.f;
 	/** 정면 기준 좌우 최소 각도(도). 0보다 크면 정면 쪽 MinAngle 안은 고를 수 없다(옆·뒤 전용 기술). */
 	float MinAngle = 0.f;
+	/** 타깃이 있어야 하는 쪽. -1 왼쪽, 1 오른쪽, 0 양쪽. */
+	int32 Side = 0;
 	float Weight = 0.f;
 	float Cooldown = 0.f;
 	/** "공중 전용", "지상 전용" 같은 짧은 설명. 제한이 없으면 빈 문자열. */
