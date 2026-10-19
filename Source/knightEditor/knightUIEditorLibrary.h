@@ -75,14 +75,21 @@ public:
 	static bool BuildHUDLowHealth(UWidgetBlueprint* WidgetBlueprint, UTexture2D* VignetteTexture, UTexture2D* ScanlineTexture);
 
 	/**
-	 * WBP_HUDLayout: 화면 전체의 저체력 연출(맨 아래)과 락온 마커, 플레이어 패널, 왼쪽 아래 끝에 메카 설계도(체력 위), 아래 가운데 대화창,
+	 * WBP_HUDSlowMotion: 화면 전체로 늘린 시안 가장자리(Img_Edge), 흰 가장자리(Img_KnockdownEdge), 흰 번쩍임(Img_Flash),
+	 * 위아래 끝에 붙은 검은 띠(Img_LetterboxTop/Bottom, 화면 높이의 10%). 처음에는 모두 투명하고 띠는 높이 0이다.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
+	static bool BuildHUDSlowMotion(UWidgetBlueprint* WidgetBlueprint, UTexture2D* VignetteTexture);
+
+	/**
+	 * WBP_HUDLayout: 화면 전체의 저체력 연출(맨 아래)과 슬로우 모션 연출, 락온 마커, 플레이어 패널, 왼쪽 아래 끝에 메카 설계도(체력 위), 아래 가운데 대화창,
 	 * 오른쪽 아래 수리 키트와 그 위 튜토리얼 칸, 오른쪽 위 목표/타이머, 맨 위에 그로기 노이즈.
 	 */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
 	static bool BuildHUDLayout(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> PlayerStatusClass, TSubclassOf<UUserWidget> RaidTimerClass,
 		TSubclassOf<UUserWidget> LockOnMarkerClass, TSubclassOf<UUserWidget> FrameStatusClass, TSubclassOf<UUserWidget> RepairKitClass,
 		TSubclassOf<UUserWidget> MessageLogClass, TSubclassOf<UUserWidget> HintClass, TSubclassOf<UUserWidget> GroggyNoiseClass,
-		TSubclassOf<UUserWidget> LowHealthClass);
+		TSubclassOf<UUserWidget> LowHealthClass, TSubclassOf<UUserWidget> SlowMotionClass);
 
 	/** 이름으로 위젯 하나를 자식째 지운다. 이미 만든 블루프린트에서 요소를 빼낼 때 쓴다. 없으면 false. */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")

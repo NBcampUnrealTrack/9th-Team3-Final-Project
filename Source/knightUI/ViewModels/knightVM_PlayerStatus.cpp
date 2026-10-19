@@ -4,6 +4,7 @@
 #include "AbilitySystemGlobals.h"
 #include "AbilitySystem/Attributes/knightAttributeSet.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
+#include "Combat/knightGroggyFeedbackComponent.h"
 #include "Combat/knightTargetLockComponent.h"
 #include "Monster/knightMonsterCharacterBase.h"
 #include "Monster/knightMonsterDefinition.h"
@@ -45,6 +46,13 @@ void UknightVM_PlayerStatus::Bind(UAbilitySystemComponent* InASC, UknightTargetL
 			.AddUObject(this, &ThisClass::HandleOverheatedChanged);
 		GroggyHandle = InASC->RegisterGameplayTagEvent(knightGameplayTags::State_HitReact_Groggy, EGameplayTagEventType::NewOrRemoved)
 			.AddUObject(this, &ThisClass::HandleGroggyChanged);
+		KnockdownHandle = InASC->RegisterGameplayTagEvent(knightGameplayTags::State_HitReact_Knockdown, EGameplayTagEventType::NewOrRemoved)
+			.AddUObject(this, &ThisClass::HandleKnockdownChanged);
+		if (UknightGroggyFeedbackComponent* const Feedback = InASC->GetAvatarActor() ? InASC->GetAvatarActor()->FindComponentByClass<UknightGroggyFeedbackComponent>() : nullptr)
+		{
+			BoundGroggyFeedback = Feedback;
+			GroggyPresentationHandle = Feedback->OnPresentationEvent.AddWeakLambda(this, [this](bool bImpact) { OnGroggyPresentation.Broadcast(bImpact); });
+		}
 		for (int32 Index = 0; Index < static_cast<int32>(EknightBodyPart::Count); ++Index)
 		{
 			const EknightBodyPart Part = static_cast<EknightBodyPart>(Index);
@@ -69,6 +77,7 @@ void UknightVM_PlayerStatus::Unbind()
 		}
 		ASC->RegisterGameplayTagEvent(knightGameplayTags::State_Overheated, EGameplayTagEventType::NewOrRemoved).Remove(OverheatedHandle);
 		ASC->RegisterGameplayTagEvent(knightGameplayTags::State_HitReact_Groggy, EGameplayTagEventType::NewOrRemoved).Remove(GroggyHandle);
+		ASC->RegisterGameplayTagEvent(knightGameplayTags::State_HitReact_Knockdown, EGameplayTagEventType::NewOrRemoved).Remove(KnockdownHandle);
 		for (int32 Index = 0; Index < static_cast<int32>(EknightBodyPart::Count); ++Index)
 		{
 			ASC->RegisterGameplayTagEvent(UknightPartHealthComponent::GetBrokenTag(static_cast<EknightBodyPart>(Index)), EGameplayTagEventType::NewOrRemoved)
@@ -79,6 +88,13 @@ void UknightVM_PlayerStatus::Unbind()
 	{
 		TargetLock->OnLockOnTargetChanged.RemoveDynamic(this, &ThisClass::HandleLockOnChanged);
 	}
+	if (UknightGroggyFeedbackComponent* const Feedback = BoundGroggyFeedback.Get())
+	{
+		Feedback->OnPresentationEvent.Remove(GroggyPresentationHandle);
+	}
+	BoundGroggyFeedback.Reset();
+	GroggyPresentationHandle.Reset();
+	KnockdownHandle.Reset();
 	BindParts(nullptr);
 	BindTargetPoise(nullptr);
 	AttributeHandles.Reset();
@@ -152,6 +168,20 @@ void UknightVM_PlayerStatus::HandleAttributeChanged(const FOnAttributeChangeData
 void UknightVM_PlayerStatus::HandleGroggyChanged(const FGameplayTag Tag, int32 NewCount)
 {
 	UE_MVVM_SET_PROPERTY_VALUE(bGroggy, NewCount > 0);
+}
+
+void UknightVM_PlayerStatus::HandleKnockdownChanged(const FGameplayTag Tag, int32 NewCount)
+{
+	if (NewCount > 0)
+	{
+		OnPlayerKnockdown.Broadcast();
+	}
+}
+
+bool UknightVM_PlayerStatus::IsGroggyPresentationActive() const
+{
+	const UknightGroggyFeedbackComponent* const Feedback = BoundGroggyFeedback.Get();
+	return Feedback && Feedback->IsPresentationActive();
 }
 
 void UknightVM_PlayerStatus::HandlePartBrokenChanged(const FGameplayTag Tag, int32 NewCount, EknightBodyPart Part)

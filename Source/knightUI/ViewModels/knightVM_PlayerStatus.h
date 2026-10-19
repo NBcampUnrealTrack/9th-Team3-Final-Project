@@ -10,9 +10,12 @@
 
 class UAbilitySystemComponent;
 class UknightTargetLockComponent;
+class UknightGroggyFeedbackComponent;
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FknightLockedPartConditionChanged, EknightPartCondition /*NewCondition*/);
 DECLARE_MULTICAST_DELEGATE_OneParam(FknightPlayerPartBroken, EknightBodyPart /*Part*/);
+DECLARE_MULTICAST_DELEGATE_OneParam(FknightPlayerGroggyPresentation, bool /*bImpact*/);
+DECLARE_MULTICAST_DELEGATE(FknightPlayerKnockdown);
 
 /**
  * The Knight's status for the HUD: health, boost gauge, overheat, the Knight's own parts, stagger and repair kits, and lock-on
@@ -61,6 +64,15 @@ public:
 	/** One of the Knight's parts just got its broken tag (not on rebind to an already broken part). */
 	FknightPlayerPartBroken OnPlayerPartBroken;
 
+	/** The Knight's groggy presentation on a target started its prediction slow (false) or landed (true). */
+	FknightPlayerGroggyPresentation OnGroggyPresentation;
+
+	/** Still in the groggy presentation (prediction slow, freeze or slow release). */
+	bool IsGroggyPresentationActive() const;
+
+	/** The Knight was knocked down (State.HitReact.Knockdown added). */
+	FknightPlayerKnockdown OnPlayerKnockdown;
+
 	/** The locked part changed condition while it stays locked (not on lock or switch). For one-shot feedback like a flash. */
 	FknightLockedPartConditionChanged OnLockedPartConditionChanged;
 
@@ -80,6 +92,7 @@ private:
 	void RefreshTargetStagger();
 
 	void HandleGroggyChanged(const FGameplayTag Tag, int32 NewCount);
+	void HandleKnockdownChanged(const FGameplayTag Tag, int32 NewCount);
 	void HandlePartBrokenChanged(const FGameplayTag Tag, int32 NewCount, EknightBodyPart Part);
 	void RefreshAll();
 	void RefreshPercents();
@@ -175,5 +188,8 @@ private:
 	TArray<TPair<FGameplayAttribute, FDelegateHandle>> AttributeHandles;
 	FDelegateHandle OverheatedHandle;
 	FDelegateHandle GroggyHandle;
+	FDelegateHandle KnockdownHandle;
+	TWeakObjectPtr<UknightGroggyFeedbackComponent> BoundGroggyFeedback;
+	FDelegateHandle GroggyPresentationHandle;
 	FDelegateHandle PartBrokenHandles[static_cast<int32>(EknightBodyPart::Count)];
 };
