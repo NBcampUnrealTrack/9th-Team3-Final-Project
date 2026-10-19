@@ -43,6 +43,9 @@ public:
 	EknightPartCondition GetLockedPartCondition() const { return LockedPartCondition; }
 	bool LockedTargetHasStagger() const { return bLockedTargetHasStagger; }
 	float GetLockedTargetStagger() const { return LockedTargetStagger; }
+	/** The part carries its State.PartBroken.* tag (same rule as gameplay: broken at 0, repaired at 1 or more). */
+	bool IsPartBroken(EknightBodyPart Part) const { return (BrokenParts & (1 << static_cast<int32>(Part))) != 0; }
+	int32 GetBrokenParts() const { return BrokenParts; }
 	/** Health of one of the Knight's parts, 0..1 (1 when the part has no maximum). */
 	float GetPartHealthPercent(EknightBodyPart Part) const;
 	float GetHeadHealthPercent() const { return HeadHealthPercent; }
@@ -55,7 +58,7 @@ public:
 	int32 GetMaxRepairKitCount() const { return MaxRepairKitCount; }
 	float GetRepairKitGaugePercent() const { return RepairKitGaugePercent; }
 
-	/** One of the Knight's parts dropped to 0 health. */
+	/** One of the Knight's parts just got its broken tag (not on rebind to an already broken part). */
 	FknightPlayerPartBroken OnPlayerPartBroken;
 
 	/** The locked part changed condition while it stays locked (not on lock or switch). For one-shot feedback like a flash. */
@@ -77,6 +80,7 @@ private:
 	void RefreshTargetStagger();
 
 	void HandleGroggyChanged(const FGameplayTag Tag, int32 NewCount);
+	void HandlePartBrokenChanged(const FGameplayTag Tag, int32 NewCount, EknightBodyPart Part);
 	void RefreshAll();
 	void RefreshPercents();
 	void RefreshKnightParts();
@@ -140,6 +144,10 @@ private:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Getter, Category="Knight|Status", meta=(AllowPrivateAccess=true))
 	float LegsHealthPercent = 1.f;
 
+	/** Bit per EknightBodyPart, set while the part is broken. */
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Getter, Category="Knight|Status", meta=(AllowPrivateAccess=true))
+	int32 BrokenParts = 0;
+
 	/** Poise taken from the Knight, 0..1; the Knight goes groggy at 1. */
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Getter, Category="Knight|Status", meta=(AllowPrivateAccess=true))
 	float Stagger = 0.f;
@@ -167,4 +175,5 @@ private:
 	TArray<TPair<FGameplayAttribute, FDelegateHandle>> AttributeHandles;
 	FDelegateHandle OverheatedHandle;
 	FDelegateHandle GroggyHandle;
+	FDelegateHandle PartBrokenHandles[static_cast<int32>(EknightBodyPart::Count)];
 };

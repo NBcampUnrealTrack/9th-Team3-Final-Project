@@ -52,14 +52,14 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Knight|HUD|Colors")
 	FLinearColor GroggyColor = FLinearColor(FColor(0xF2, 0xC2, 0x30, 0x8C));
 
-	/** Part health fraction at or below which its outline turns DamagedColor (0 is BrokenColor). */
+	/** Part health fraction at or below which its outline turns DamagedColor. Broken parts (by tag) use BrokenColor. */
 	UPROPERTY(EditAnywhere, Category="Knight|HUD", meta=(ClampMin=0, ClampMax=1))
 	float DamagedThreshold = 0.3f;
 
 private:
 	void HandleViewModelChanged(UObject* InViewModel, UE::FieldNotification::FFieldId FieldId);
 	void Refresh();
-	FLinearColor GetPartColor(float HealthPercent) const;
+	FLinearColor GetPartColor(bool bBroken, float HealthPercent) const;
 
 	TWeakObjectPtr<UknightVM_PlayerStatus> ViewModel;
 };

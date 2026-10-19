@@ -22,7 +22,7 @@ void UknightHUDFrameStatus::NativeConstruct()
 	using FFields = UknightVM_PlayerStatus::FFieldNotificationClassDescriptor;
 	const UE::FieldNotification::FFieldId Fields[] = {
 		FFields::HeadHealthPercent, FFields::TorsoHealthPercent, FFields::ArmsHealthPercent, FFields::LegsHealthPercent,
-		FFields::Stagger, FFields::bGroggy };
+		FFields::BrokenParts, FFields::Stagger, FFields::bGroggy };
 	for (const UE::FieldNotification::FFieldId& Field : Fields)
 	{
 		VM->AddFieldValueChangedDelegate(Field, INotifyFieldValueChanged::FFieldValueChangedDelegate::CreateUObject(this, &ThisClass::HandleViewModelChanged));
@@ -45,9 +45,9 @@ void UknightHUDFrameStatus::HandleViewModelChanged(UObject* InViewModel, UE::Fie
 	Refresh();
 }
 
-FLinearColor UknightHUDFrameStatus::GetPartColor(float HealthPercent) const
+FLinearColor UknightHUDFrameStatus::GetPartColor(bool bBroken, float HealthPercent) const
 {
-	return HealthPercent <= 0.f ? BrokenColor : HealthPercent <= DamagedThreshold ? DamagedColor : NormalColor;
+	return bBroken ? BrokenColor : HealthPercent <= DamagedThreshold ? DamagedColor : NormalColor;
 }
 
 void UknightHUDFrameStatus::Refresh()
@@ -64,7 +64,7 @@ void UknightHUDFrameStatus::Refresh()
 	{
 		if (Part.Key)
 		{
-			Part.Key->SetColorAndOpacity(GetPartColor(VM->GetPartHealthPercent(Part.Value)));
+			Part.Key->SetColorAndOpacity(GetPartColor(VM->IsPartBroken(Part.Value), VM->GetPartHealthPercent(Part.Value)));
 		}
 	}
 	if (Bar_Groggy)

@@ -96,6 +96,9 @@ public:
 
 	static FGameplayTag GetPartTag(EknightBodyPart Part);
 
+	/** 부위 파괴 태그(State.PartBroken.*). 파괴 여부는 이 태그로 판단한다. */
+	static FGameplayTag GetBrokenTag(EknightBodyPart Part);
+
 protected:
 	/** 본 이름 → 부위. 기본값은 생성자에 나이트 메시 기준으로 들어 있다(메시가 바뀌면 BP에서 수정). 없는 본은 FindHitPart가 가까운 몸체 본으로 다시 찾는다. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|PartHealth")
@@ -141,8 +144,6 @@ private:
 
 	/** 파괴 페널티 GE (무한 지속, 스탯에 곱하기). 머리는 GE 없이 GetDamageMultiplier로 처리한다. */
 	const UGameplayEffect* GetPenaltyEffect(EknightBodyPart Part);
-
-	static FGameplayTag GetBrokenTag(EknightBodyPart Part);
 
 	TWeakObjectPtr<UAbilitySystemComponent> ASC;
 

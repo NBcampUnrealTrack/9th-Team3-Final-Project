@@ -45,6 +45,12 @@ void UknightVM_PlayerStatus::Bind(UAbilitySystemComponent* InASC, UknightTargetL
 			.AddUObject(this, &ThisClass::HandleOverheatedChanged);
 		GroggyHandle = InASC->RegisterGameplayTagEvent(knightGameplayTags::State_HitReact_Groggy, EGameplayTagEventType::NewOrRemoved)
 			.AddUObject(this, &ThisClass::HandleGroggyChanged);
+		for (int32 Index = 0; Index < static_cast<int32>(EknightBodyPart::Count); ++Index)
+		{
+			const EknightBodyPart Part = static_cast<EknightBodyPart>(Index);
+			PartBrokenHandles[Index] = InASC->RegisterGameplayTagEvent(UknightPartHealthComponent::GetBrokenTag(Part), EGameplayTagEventType::NewOrRemoved)
+				.AddUObject(this, &ThisClass::HandlePartBrokenChanged, Part);
+		}
 	}
 	if (InTargetLock)
 	{
@@ -63,6 +69,11 @@ void UknightVM_PlayerStatus::Unbind()
 		}
 		ASC->RegisterGameplayTagEvent(knightGameplayTags::State_Overheated, EGameplayTagEventType::NewOrRemoved).Remove(OverheatedHandle);
 		ASC->RegisterGameplayTagEvent(knightGameplayTags::State_HitReact_Groggy, EGameplayTagEventType::NewOrRemoved).Remove(GroggyHandle);
+		for (int32 Index = 0; Index < static_cast<int32>(EknightBodyPart::Count); ++Index)
+		{
+			ASC->RegisterGameplayTagEvent(UknightPartHealthComponent::GetBrokenTag(static_cast<EknightBodyPart>(Index)), EGameplayTagEventType::NewOrRemoved)
+				.Remove(PartBrokenHandles[Index]);
+		}
 	}
 	if (UknightTargetLockComponent* const TargetLock = BoundTargetLock.Get())
 	{
@@ -73,6 +84,10 @@ void UknightVM_PlayerStatus::Unbind()
 	AttributeHandles.Reset();
 	OverheatedHandle.Reset();
 	GroggyHandle.Reset();
+	for (FDelegateHandle& Handle : PartBrokenHandles)
+	{
+		Handle.Reset();
+	}
 	BoundASC.Reset();
 	BoundTargetLock.Reset();
 }
@@ -87,6 +102,15 @@ void UknightVM_PlayerStatus::RefreshAll()
 	UE_MVVM_SET_PROPERTY_VALUE(MaxBoostGauge, ASC ? ASC->GetGameplayAttributeValue(UknightAttributeSet::GetMaxBoostGaugeAttribute(), bFound) : 0.f);
 	UE_MVVM_SET_PROPERTY_VALUE(bOverheated, ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_Overheated));
 	UE_MVVM_SET_PROPERTY_VALUE(bGroggy, ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_HitReact_Groggy));
+	int32 Broken = 0;
+	for (int32 Index = 0; Index < static_cast<int32>(EknightBodyPart::Count); ++Index)
+	{
+		if (ASC && ASC->HasMatchingGameplayTag(UknightPartHealthComponent::GetBrokenTag(static_cast<EknightBodyPart>(Index))))
+		{
+			Broken |= 1 << Index;
+		}
+	}
+	UE_MVVM_SET_PROPERTY_VALUE(BrokenParts, Broken);
 	RefreshPercents();
 	RefreshKnightParts();
 
@@ -120,16 +144,6 @@ void UknightVM_PlayerStatus::HandleAttributeChanged(const FOnAttributeChangeData
 	}
 	else
 	{
-		const FGameplayAttribute PartAttributes[] = {
-			UknightAttributeSet::GetHeadHealthAttribute(), UknightAttributeSet::GetTorsoHealthAttribute(),
-			UknightAttributeSet::GetArmsHealthAttribute(), UknightAttributeSet::GetLegsHealthAttribute() };
-		for (int32 Index = 0; Index < UE_ARRAY_COUNT(PartAttributes); ++Index)
-		{
-			if (Data.Attribute == PartAttributes[Index] && Data.OldValue > 0.f && Data.NewValue <= 0.f)
-			{
-				OnPlayerPartBroken.Broadcast(static_cast<EknightBodyPart>(Index));
-			}
-		}
 		RefreshKnightParts();
 	}
 	RefreshPercents();
@@ -138,6 +152,18 @@ void UknightVM_PlayerStatus::HandleAttributeChanged(const FOnAttributeChangeData
 void UknightVM_PlayerStatus::HandleGroggyChanged(const FGameplayTag Tag, int32 NewCount)
 {
 	UE_MVVM_SET_PROPERTY_VALUE(bGroggy, NewCount > 0);
+}
+
+void UknightVM_PlayerStatus::HandlePartBrokenChanged(const FGameplayTag Tag, int32 NewCount, EknightBodyPart Part)
+{
+	// Follows the part health component's tag instead of re-checking health: a broken part stays broken
+	// until it is repaired to 1 or more, so health dipping back to 0 in between is not a new break.
+	const int32 Bit = 1 << static_cast<int32>(Part);
+	UE_MVVM_SET_PROPERTY_VALUE(BrokenParts, NewCount > 0 ? BrokenParts | Bit : BrokenParts & ~Bit);
+	if (NewCount > 0)
+	{
+		OnPlayerPartBroken.Broadcast(Part);
+	}
 }
 
 float UknightVM_PlayerStatus::GetPartHealthPercent(EknightBodyPart Part) const
