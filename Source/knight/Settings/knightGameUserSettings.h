@@ -16,6 +16,16 @@ struct FKnightDisplayInfo
 	bool bPrimary = false;
 };
 
+/** User-facing DLSS Super Resolution modes only. Off preserves the existing upscaler. */
+UENUM(BlueprintType)
+enum class EknightDLSSMode : uint8
+{
+	Off,
+	Quality,
+	Balanced,
+	Performance
+};
+
 USTRUCT(BlueprintType)
 struct FKnightGraphicsChoice
 {
@@ -34,6 +44,7 @@ struct FKnightGraphicsChoice
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 PostProcess = 3;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 ViewDistance = 3;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bMotionBlur = true;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) EknightDLSSMode DLSSMode = EknightDLSSMode::Off;
 
 	bool operator==(const FKnightGraphicsChoice& Other) const;
 	bool operator!=(const FKnightGraphicsChoice& Other) const { return !(*this == Other); }
@@ -93,6 +104,9 @@ public:
 	void RestoreDisconnectedDisplay();
 	/** Startup display correction may precede viewport creation; consume it after OnStart. */
 	bool ConsumeStartupDisplayRefresh();
+	/** Reapply saved DLSS after the rendering plugin's PostEngineInit modules are available. */
+	void ApplyDLSSAtStartup();
+	static bool IsDLSSModeSupported(EknightDLSSMode Mode, FIntPoint OutputResolution);
 
 	UFUNCTION(BlueprintCallable, Category="Knight|Settings")
 	void SetUpscaler(EknightUpscaler NewUpscaler) { Upscaler = NewUpscaler; }
@@ -109,6 +123,7 @@ public:
 private:
 	/** Sets the engine values without applying them. */
 	void SetGraphics(const FKnightGraphicsChoice& Choice);
+	void ApplyDLSSRendering();
 
 	UPROPERTY(Config)
 	FKnightGraphicsChoice PendingGraphics;
@@ -130,4 +145,22 @@ private:
 
 	UPROPERTY(Config)
 	bool bMotionBlurEnabled = true;
+
+	UPROPERTY(Config)
+	EknightDLSSMode DLSSMode = EknightDLSSMode::Off;
+
+	/** Stored outside the three save slots, so turning DLSS off after a restart restores the prior render scale. */
+	UPROPERTY(Config)
+	bool bHasPreDLSSScreenPercentage = false;
+
+	UPROPERTY(Config)
+	float PreDLSSScreenPercentage = 100.f;
+
+	UPROPERTY(Config)
+	int32 PreDLSSTemporalAAUpscaler = 1;
+
+	UPROPERTY(Config)
+	int32 PreDLSSTemporalAAUpsampling = 1;
+
+	bool bDLSSRuntimeActive = false;
 };

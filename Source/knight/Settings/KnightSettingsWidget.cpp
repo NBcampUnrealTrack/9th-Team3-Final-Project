@@ -45,6 +45,23 @@ namespace
 	{
 		return Mode == EWindowMode::Fullscreen ? TEXT("전체 화면") : Mode == EWindowMode::Windowed ? TEXT("창 모드") : TEXT("테두리 없는 창");
 	}
+	FString DLSSModeText(EknightDLSSMode Mode)
+	{
+		switch (Mode)
+		{
+		case EknightDLSSMode::Quality: return TEXT("품질");
+		case EknightDLSSMode::Balanced: return TEXT("균형");
+		case EknightDLSSMode::Performance: return TEXT("성능");
+		default: return TEXT("꺼짐");
+		}
+	}
+	EknightDLSSMode DLSSModeFromText(const FString& Text)
+	{
+		if (Text == TEXT("품질")) return EknightDLSSMode::Quality;
+		if (Text == TEXT("균형")) return EknightDLSSMode::Balanced;
+		if (Text == TEXT("성능")) return EknightDLSSMode::Performance;
+		return EknightDLSSMode::Off;
+	}
 	bool IsUniformQuality(const FKnightGraphicsChoice& Graphics)
 	{
 		const int32 Q = Graphics.AntiAliasing;
@@ -188,6 +205,8 @@ FString UKnightSettingsWidget::GetValue(FName Id, bool bSaved) const
 	if (Id == TEXT("Resolution")) return FString::Printf(TEXT("%dx%d"), G.Resolution.X, G.Resolution.Y);
 	if (Id == TEXT("FPS")) return FString::FromInt(G.FrameRateLimit);
 	if (Id == TEXT("VSync")) return OnOff(G.bVSync);
+	if (Id == TEXT("DLSS")) return UknightGameUserSettings::IsDLSSModeSupported(G.DLSSMode, G.Resolution)
+		? DLSSModeText(G.DLSSMode) : DLSSModeText(EknightDLSSMode::Off);
 	if (Id == TEXT("Preset")) return IsUniformQuality(G) ? QualityText(G.AntiAliasing) : QualityText(4);
 	if (Id == TEXT("AA")) return QualityText(G.AntiAliasing);
 	if (Id == TEXT("Shadows")) return QualityText(G.Shadows);
@@ -211,7 +230,11 @@ FString UKnightSettingsWidget::GetValue(FName Id, bool bSaved) const
 	return FString();
 }
 
-bool UKnightSettingsWidget::IsItemDirty(FName Id) const { return GetValue(Id, false) != GetValue(Id, true); }
+bool UKnightSettingsWidget::IsItemDirty(FName Id) const
+{
+	return Id == TEXT("DLSS") ? DraftGraphics.DLSSMode != SavedGraphics.DLSSMode
+		: GetValue(Id, false) != GetValue(Id, true);
+}
 
 void UKnightSettingsWidget::GetTabSections(int32 Tab, TArray<FKnightSettingSection>& OutSections) const
 {
@@ -250,7 +273,24 @@ void UKnightSettingsWidget::GetTabSections(int32 Tab, TArray<FKnightSettingSecti
 
 		FKnightSettingSection& Quality = AddSection(INVTEXT("QUALITY"));
 		Quality.Items.Add(Rotator(TEXT("Preset"), LOCTEXT("Preset", "전체 품질"), LOCTEXT("PresetDesc", "아래 품질 항목을 한 번에 바꿉니다."), QualityOptions(true)));
-		Quality.Items.Add(Rotator(TEXT("AA"), LOCTEXT("AA", "안티앨리어싱"), LOCTEXT("AADesc", "물체 가장자리의 계단 현상을 줄입니다."), QualityOptions()));
+		TArray<FString> DLSSOptions = {TEXT("꺼짐")};
+		for (const EknightDLSSMode Mode : {EknightDLSSMode::Quality, EknightDLSSMode::Balanced, EknightDLSSMode::Performance})
+		{
+			if (UknightGameUserSettings::IsDLSSModeSupported(Mode, DraftGraphics.Resolution))
+			{
+				DLSSOptions.Add(DLSSModeText(Mode));
+			}
+		}
+		FKnightSettingItem& DLSS = Quality.Items.Add_GetRef(Rotator(TEXT("DLSS"), INVTEXT("NVIDIA DLSS"),
+			DLSSOptions.Num() > 1 ? LOCTEXT("DLSSDesc", "Super Resolution입니다. 적용하면 렌더 해상도와 동적 해상도를 DLSS가 제어합니다. 끄면 이전 설정으로 돌아갑니다.")
+				: LOCTEXT("DLSSUnavailable", "현재 환경에서 지원하지 않습니다."), DLSSOptions));
+		DLSS.bEnabled = DLSSOptions.Num() > 1;
+		FKnightSettingItem& AA = Quality.Items.Add_GetRef(Rotator(TEXT("AA"), LOCTEXT("AA", "안티앨리어싱"),
+			DraftGraphics.DLSSMode != EknightDLSSMode::Off && UknightGameUserSettings::IsDLSSModeSupported(DraftGraphics.DLSSMode, DraftGraphics.Resolution)
+				? LOCTEXT("AADLSSDesc", "DLSS 사용 중에는 DLSS가 화면의 계단 현상을 처리합니다. 끄면 이전 품질 설정이 복원됩니다.")
+				: LOCTEXT("AADesc", "물체 가장자리의 계단 현상을 줄입니다."), QualityOptions()));
+		AA.bEnabled = DraftGraphics.DLSSMode == EknightDLSSMode::Off
+			|| !UknightGameUserSettings::IsDLSSModeSupported(DraftGraphics.DLSSMode, DraftGraphics.Resolution);
 		Quality.Items.Add(Rotator(TEXT("Shadows"), LOCTEXT("Shadows", "그림자"), LOCTEXT("ShadowsDesc", "그림자의 선명도와 거리입니다. 성능 영향이 큽니다."), QualityOptions()));
 		Quality.Items.Add(Rotator(TEXT("Textures"), LOCTEXT("Textures", "텍스처"), LOCTEXT("TexturesDesc", "표면 이미지의 해상도입니다. 그래픽 메모리를 씁니다."), QualityOptions()));
 		Quality.Items.Add(Rotator(TEXT("Effects"), LOCTEXT("Effects", "이펙트"), FText::GetEmpty(), QualityOptions()));
@@ -320,7 +360,7 @@ int32 UKnightSettingsWidget::GetDirtyCount() const
 	// Every id GetValue knows except the preset, which only mirrors the quality rows. Listed rather than built from
 	// GetTabSections, which queries the display modes and runs on every slider step.
 	static const FName Ids[] = {
-		TEXT("WindowMode"), TEXT("Display"), TEXT("Resolution"), TEXT("FPS"), TEXT("VSync"), TEXT("AA"), TEXT("Shadows"), TEXT("Textures"),
+		TEXT("WindowMode"), TEXT("Display"), TEXT("Resolution"), TEXT("FPS"), TEXT("VSync"), TEXT("DLSS"), TEXT("AA"), TEXT("Shadows"), TEXT("Textures"),
 		TEXT("Effects"), TEXT("PostProcess"), TEXT("ViewDistance"), TEXT("MotionBlur"), TEXT("MouseSensitivity"),
 		TEXT("MouseAcceleration"), TEXT("Master"), TEXT("Music"), TEXT("SFX"), TEXT("Voice"), TEXT("Subtitles"),
 		TEXT("FOV"), TEXT("Gamma"), TEXT("Brightness") };
@@ -450,6 +490,7 @@ void UKnightSettingsWidget::OptionEdited(FName Id, const FString& Value)
 	}
 	else if (Id == TEXT("FPS")) DraftGraphics.FrameRateLimit = FCString::Atoi(*Value);
 	else if (Id == TEXT("VSync")) DraftGraphics.bVSync = bOn;
+	else if (Id == TEXT("DLSS")) DraftGraphics.DLSSMode = DLSSModeFromText(Value);
 	else if (Id == TEXT("Preset")) { const int32 Q = QualityFromText(Value); if (Q < 4) ApplyPreset(Q); }
 	else if (Id == TEXT("AA")) DraftGraphics.AntiAliasing = QualityFromText(Value);
 	else if (Id == TEXT("Shadows")) DraftGraphics.Shadows = QualityFromText(Value);
@@ -503,6 +544,13 @@ void UKnightSettingsWidget::OptionEdited(FName Id, const FString& Value)
 void UKnightSettingsWidget::Apply()
 {
 	if (bDisplayConfirmShown || !IsDirty()) return;
+	// A saved mode can become unavailable after a GPU, driver, or resolution change.
+	// The disabled row displays Off; keep the value we apply and save in sync with it.
+	if (DraftGraphics.DLSSMode != EknightDLSSMode::Off
+		&& !UknightGameUserSettings::IsDLSSModeSupported(DraftGraphics.DLSSMode, DraftGraphics.Resolution))
+	{
+		DraftGraphics.DLSSMode = EknightDLSSMode::Off;
+	}
 	UknightGameUserSettings* const Graphics = UknightGameUserSettings::Get();
 	ULocalPlayer* const Player = GetOwningLocalPlayer();
 	UknightSettingsSubsystem* const Settings = Player ? Player->GetSubsystem<UknightSettingsSubsystem>() : nullptr;

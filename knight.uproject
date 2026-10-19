@@ -120,6 +120,14 @@
 		{
 			"Name": "Water",
 			"Enabled": true
+		},
+		{
+			"Name": "DLSS",
+			"Enabled": true
+		},
+		{
+			"Name": "StreamlineNGXCommon",
+			"Enabled": true
 		}
 	]
 }

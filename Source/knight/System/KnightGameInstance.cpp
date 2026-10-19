@@ -45,5 +45,9 @@ void UKnightGameInstance::OnStart()
 			GSystemResolution.ForceRefresh();
 			IConsoleManager::Get().CallAllConsoleVariableSinks();
 		}
+		if (UknightGameUserSettings* const Graphics = UknightGameUserSettings::Get())
+		{
+			Graphics->ApplyDLSSAtStartup();
+		}
 	}
 }
