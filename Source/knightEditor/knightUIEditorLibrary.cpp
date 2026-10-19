@@ -603,12 +603,40 @@ bool UknightUIEditorLibrary::BuildHUDGroggyNoise(UWidgetBlueprint* WidgetBluepri
 	return true;
 }
 
+bool UknightUIEditorLibrary::BuildHUDLowHealth(UWidgetBlueprint* WidgetBlueprint, UTexture2D* VignetteTexture, UTexture2D* ScanlineTexture)
+{
+	if (!VignetteTexture || !ScanlineTexture || !BeginBuild(WidgetBlueprint, TEXT("BuildHUDLowHealth")))
+	{
+		return false;
+	}
+	UCanvasPanel* const Root = NewWidget<UCanvasPanel>(WidgetBlueprint, TEXT("Canvas_Root"));
+	WidgetBlueprint->WidgetTree->RootWidget = Root;
+
+	// 주사선은 화면 위로 한 타일(6) 더 깔아서, C++가 아래로 흘려도 위 가장자리가 비지 않는다.
+	UImage* const Scan = NewWidget<UImage>(WidgetBlueprint, TEXT("Img_Scanlines"), true);
+	FSlateBrush ScanBrush = HUDTextureBrush(ScanlineTexture, FVector2D(8.f, 6.f), FLinearColor(1.f, 0.16f, 0.16f, 0.25f));
+	ScanBrush.Tiling = ESlateBrushTileType::Both;
+	Scan->SetBrush(ScanBrush);
+	Scan->SetVisibility(ESlateVisibility::HitTestInvisible);
+	UCanvasPanelSlot* const ScanSlot = Root->AddChildToCanvas(Scan);
+	ScanSlot->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f));
+	ScanSlot->SetOffsets(FMargin(0.f, -6.f, 0.f, 0.f));
+
+	UImage* const Vignette = NewWidget<UImage>(WidgetBlueprint, TEXT("Img_Vignette"), true);
+	Vignette->SetBrush(HUDTextureBrush(VignetteTexture, FVector2D(512.f, 288.f), FLinearColor(FColor(0xC8, 0x0A, 0x14))));
+	Vignette->SetVisibility(ESlateVisibility::HitTestInvisible);
+	FillCanvas(Root, Vignette);
+	EndBuild(WidgetBlueprint);
+	return true;
+}
+
 bool UknightUIEditorLibrary::BuildHUDLayout(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> PlayerStatusClass, TSubclassOf<UUserWidget> RaidTimerClass,
 	TSubclassOf<UUserWidget> LockOnMarkerClass, TSubclassOf<UUserWidget> FrameStatusClass, TSubclassOf<UUserWidget> RepairKitClass,
-	TSubclassOf<UUserWidget> MessageLogClass, TSubclassOf<UUserWidget> HintClass, TSubclassOf<UUserWidget> GroggyNoiseClass)
+	TSubclassOf<UUserWidget> MessageLogClass, TSubclassOf<UUserWidget> HintClass, TSubclassOf<UUserWidget> GroggyNoiseClass,
+	TSubclassOf<UUserWidget> LowHealthClass)
 {
 	if (!PlayerStatusClass || !RaidTimerClass || !LockOnMarkerClass || !FrameStatusClass || !RepairKitClass || !MessageLogClass || !HintClass
-		|| !GroggyNoiseClass || !BeginBuild(WidgetBlueprint, TEXT("BuildHUDLayout")))
+		|| !GroggyNoiseClass || !LowHealthClass || !BeginBuild(WidgetBlueprint, TEXT("BuildHUDLayout")))
 	{
 		return false;
 	}
@@ -616,7 +644,9 @@ bool UknightUIEditorLibrary::BuildHUDLayout(UWidgetBlueprint* WidgetBlueprint, T
 	UCanvasPanel* const Root = NewWidget<UCanvasPanel>(WidgetBlueprint, TEXT("Canvas_Root"));
 	WidgetBlueprint->WidgetTree->RootWidget = Root;
 
-	// 화면 전체를 덮고 맨 아래에 그려진다. 마커가 다른 HUD를 가리지 않는다.
+	// 저체력 붉은 가장자리는 맨 아래에 깔아서 체력 숫자 등 HUD 글자를 가리지 않는다.
+	FillCanvas(Root, NewWidget<UUserWidget>(WidgetBlueprint, LowHealthClass, TEXT("LowHealth"), true));
+	// 화면 전체를 덮고 HUD 중 아래쪽에 그려진다. 마커가 다른 HUD를 가리지 않는다.
 	FillCanvas(Root, NewWidget<UUserWidget>(WidgetBlueprint, LockOnMarkerClass, TEXT("LockOnMarker"), true));
 	// 플레이어 패널은 화면 전체에 깔고 그 안의 왼쪽 아래에 체력·부스트를 놓는다.
 	FillCanvas(Root, NewWidget<UUserWidget>(WidgetBlueprint, PlayerStatusClass, TEXT("PlayerStatus"), true));
