@@ -462,6 +462,7 @@ namespace knightRecipe
 		UAnimMontage* RecoverMontage = nullptr;
 		bool bRestorePoise = false;
 		float MaxPoiseGrowth = 0.25f;
+		bool bCancelOtherReactions = false;
 		FGameplayTag TriggerTag;
 		EGameplayAbilityTriggerSource::Type TriggerSource = EGameplayAbilityTriggerSource::GameplayEvent;
 	};
@@ -480,6 +481,7 @@ namespace knightRecipe
 		SetObject(CDO, TEXT("RecoverMontage"), Settings.RecoverMontage, Log);
 		SetBool(CDO, TEXT("bRestorePoise"), Settings.bRestorePoise, Log);
 		SetValue<float>(CDO, TEXT("MaxPoiseGrowth"), Settings.MaxPoiseGrowth, Log);
+		SetBool(CDO, TEXT("bCancelOtherReactions"), Settings.bCancelOtherReactions, Log);
 
 		FAbilityTriggerData Trigger;
 		Trigger.TriggerTag = Settings.TriggerTag;
@@ -528,6 +530,8 @@ namespace knightRecipe
 			Down.RecoverTime = Down.RecoverMontage ? Down.RecoverMontage->GetPlayLength() : 1.f;
 			Down.bRestorePoise = true;
 			Down.MaxPoiseGrowth = Reactions.MaxPoiseGrowth;
+			// 패링으로 Poise가 깨지면 패리 경직과 같은 프레임에 켜지므로 다운이 이어받는다.
+			Down.bCancelOtherReactions = true;
 			Down.TriggerTag = Tag(TEXT("Event.PoiseBroken"));
 			OutAbilities.Add(BuildReactionAbility(Context, Down));
 		}

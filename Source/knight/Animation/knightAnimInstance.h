@@ -70,11 +70,19 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Locomotion", meta=(ClampMin=0, Units="s"))
 	float AirLegLockBlendTime = 0.15f;
 
+	/**
+	 * 루트 모션 몽타주가 캡슐을 움직이는 동안 GroundSpeed를 0으로 둔다. 몬스터용: 다운·구르기처럼 몽타주가 몸을 옮기면 그 속도로
+	 * 이동 블렌드스페이스가 걷기로 바뀌고, 몽타주가 덜 섞인 블렌드 구간(특히 히트스톱으로 멈춘 첫 순간)에 그 걷기 자세가 비쳐 몸이 튄다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Locomotion")
+	bool bIgnoreRootMotionVelocity = false;
+
 private:
 	// Game thread copies read by the thread-safe update.
 	FVector CachedVelocity = FVector::ZeroVector;
 	bool bCachedIsFalling = false;
 	bool bCachedHasAcceleration = false;
+	bool bCachedPlayingRootMotion = false;
 	bool bAbilitySystemBound = false;
 	TWeakObjectPtr<UAbilitySystemComponent> BoundASC;
 };
