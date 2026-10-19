@@ -42,6 +42,9 @@ public:
 	/** 소유자에게 SlowTags 중 하나라도 있으면 true. */
 	bool IsMovementSlowed() const;
 
+	/** TurnTowards로 돌고 있거나, 회전을 끝내고 남은 속도를 관성으로 줄이는 중이면 true. */
+	bool IsTurning() const { return !FMath::IsNearlyZero(TurnSpeed); }
+
 	/** 지금 회전 속도에 곱할 값. SlowTags가 있으면 SlowTurnScale, 없으면 1. */
 	float GetTurnScale() const { return IsMovementSlowed() ? SlowTurnScale : 1.f; }
 
