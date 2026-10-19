@@ -1,5 +1,13 @@
 # Unreal Engine generated data (matches the project and any plugins)
 Binaries/
+!Plugins/DLSS/Binaries/
+Plugins/DLSS/Binaries/*
+!Plugins/DLSS/Binaries/ThirdParty/
+Plugins/DLSS/Binaries/ThirdParty/*
+!Plugins/DLSS/Binaries/ThirdParty/Win64/
+Plugins/DLSS/Binaries/ThirdParty/Win64/*
+!Plugins/DLSS/Binaries/ThirdParty/Win64/nvngx_dlss.dll
+!Plugins/DLSS/Binaries/ThirdParty/Win64/nvngx_dlssd.dll
 DerivedDataCache/
 Intermediate/
 Saved/

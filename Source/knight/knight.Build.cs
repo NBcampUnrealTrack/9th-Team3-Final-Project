@@ -37,7 +37,7 @@ public class knight : ModuleRules
 		});
 
 		// knightPerfTracker: KNIGHT_PERF_* counters for test captures; compiled out in Shipping.
-		PrivateDependencyModuleNames.AddRange(new string[] { "knightPerfTracker", "Niagara" });
+		PrivateDependencyModuleNames.AddRange(new string[] { "knightPerfTracker", "Niagara", "DLSSBlueprint" });
 
 		// 2본 IK 풀이(AnimationCore::SolveTwoBoneIK).
 		PrivateDependencyModuleNames.Add("AnimationCore");
