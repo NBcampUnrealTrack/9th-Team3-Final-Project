@@ -291,7 +291,9 @@ EStateTreeRunStatus FknightStateTreeFaceTargetTask::Tick(FStateTreeExecutionCont
 			return EStateTreeRunStatus::Running;
 		}
 	}
-	if (Movement->TurnTowards(InstanceData.Target->GetActorLocation(), DeltaTime, InstanceData.TurnRate, InstanceData.Tolerance))
+	// 허용 각도에 들어와도 관성 회전이 다 멈춘 뒤에 끝낸다. 남은 회전이 다음 공격 첫머리까지 이어지면 공격 중에 몸이 돌며 발이 미끄러진다.
+	if (Movement->TurnTowards(InstanceData.Target->GetActorLocation(), DeltaTime, InstanceData.TurnRate, InstanceData.Tolerance)
+		&& !Movement->IsTurning())
 	{
 		return EStateTreeRunStatus::Succeeded;
 	}
