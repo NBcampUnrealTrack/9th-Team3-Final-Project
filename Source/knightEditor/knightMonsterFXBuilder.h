@@ -18,11 +18,31 @@ class KNIGHTEDITOR_API UknightMonsterFXBuilder : public UBlueprintFunctionLibrar
 
 public:
 	/**
-	 * 입에서 로컬 +X로 뻗는 불줄기. Reach(cm)는 불꽃이 닿는 거리, OwnerScale은 붙을 메시의 월드 스케일(잔열 12).
-	 * 스프라이트 크기는 cm 그대로 쓴다.
+	 * 입에서 로컬 +X로 뻗는 불줄기. Reach(cm)는 불꽃이 닿는 거리, OwnerScale은 붙을 메시의 월드 스케일(잔열 8).
+	 * 스프라이트 크기는 cm 그대로 쓴다. 이미터 네 개(뒤에서 앞 순서로 Smoke, Fire, Core, Embers)를 만들고, 머티리얼이 없는
+	 * 레이어는 끈다. Fire는 불줄기 몸통, Core는 입 앞의 흰빛 심지, Smoke는 불줄기 끝에서 피어올라 쏘기가 끝난 뒤에도 남는
+	 * 짙은 회갈색 연기, Embers는 흩날리는 불씨다.
 	 */
 	UFUNCTION(BlueprintCallable, Category="Knight|FX")
-	static UNiagaraSystem* BuildBreathSystem(const FString& PackagePath, UMaterialInterface* Material, float Reach = 3000.f, float OwnerScale = 1.f);
+	static UNiagaraSystem* BuildBreathSystem(const FString& PackagePath, UMaterialInterface* FireMaterial, UMaterialInterface* CoreMaterial,
+		UMaterialInterface* SmokeMaterial, UMaterialInterface* EmberMaterial, float Reach = 3000.f, float OwnerScale = 1.f);
+
+	/**
+	 * 브레스 예고: 입 안에서 달아오르는 빛, 콧김처럼 새어 나와 오르는 연기, 입가에서 튀는 작은 불씨. 브레스와 같은 머리 소켓
+	 * 위치·방향(로컬 +X가 입 앞)에 붙여 준비 동작 동안 재생한다. OwnerScale은 붙을 메시의 월드 스케일.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|FX")
+	static UNiagaraSystem* BuildBreathChargeSystem(const FString& PackagePath, UMaterialInterface* GlowMaterial, UMaterialInterface* SmokeMaterial,
+		UMaterialInterface* EmberMaterial, float OwnerScale = 1.f);
+
+	/**
+	 * 브레스가 바닥에 닿는 띠(로컬 +X가 앞, Length x Width cm)에서 짧게 솟는 불길과, 바닥에 투영해 5초쯤 남는 빛나는 잔열 자국.
+	 * 몸에 붙이지 않고 바닥에 스폰하는 일회성 이펙트다(Knight Spawn Ground FX 노티파이). ActiveTime(초) 동안 생성하고,
+	 * 남은 자국이 식어 사라지면 스스로 끝나므로 몬스터가 움직여도 자국은 제자리에 남는다.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|FX")
+	static UNiagaraSystem* BuildBreathGroundSystem(const FString& PackagePath, UMaterialInterface* FlameMaterial, UMaterialInterface* ScorchMaterial,
+		float Length = 1200.f, float Width = 600.f, float ActiveTime = 1.6f);
 
 	/** 바닥에서 옆으로 퍼지며 피어오르는 먼지 한 번(땅울림). 붙이지 않고 월드에 스폰하는 용도라 cm 그대로다. */
 	UFUNCTION(BlueprintCallable, Category="Knight|FX")
