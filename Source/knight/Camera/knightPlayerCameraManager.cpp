@@ -48,7 +48,7 @@ void AknightPlayerCameraManager::UpdateViewTarget(FTViewTarget& OutVT, float Del
 		}
 		// OutVT contains this frame's camera mode and user FOV; never subtract from last frame's zoomed FOV.
 		const float BaseFOV = OutVT.POV.FOV;
-		OutVT.POV.FOV = FMath::Max(BaseFOV - KnockdownZoomDegrees * GetKnockdownZoomWeight(Now), FMath::Min(BaseFOV, 50.f));
+		OutVT.POV.FOV = FMath::Clamp(BaseFOV - KnockdownZoomDegrees * GetKnockdownZoomWeight(Now), FMath::Min(BaseFOV, 50.f), 115.f);
 	}
 }
 
@@ -58,7 +58,10 @@ float AknightPlayerCameraManager::GetKnockdownZoomWeight(double Now) const
 	{
 		const float Alpha = KnockdownZoomReturn > 0.f
 			? FMath::Clamp(static_cast<float>((Now - KnockdownZoomReturnStartTime) / KnockdownZoomReturn), 0.f, 1.f) : 1.f;
-		return KnockdownZoomReturnStartWeight * (1.f - Alpha * Alpha * (3.f - 2.f * Alpha));
+		// Explosive snap-out on release with a subtle shockwave wide-FOV rebound (-0.12) before settling.
+		const float FastOut = 1.f - FMath::Pow(1.f - Alpha, 2.6f);
+		const float Rebound = FMath::Sin(Alpha * PI) * (1.f - Alpha) * 0.14f;
+		return KnockdownZoomReturnStartWeight * ((1.f - FastOut) - Rebound);
 	}
 	const float Alpha = KnockdownZoomEnter > 0.f
 		? FMath::Clamp(static_cast<float>((Now - KnockdownZoomStartTime) / KnockdownZoomEnter), 0.f, 1.f) : 1.f;
@@ -102,6 +105,40 @@ void AknightPlayerCameraManager::CancelKnockdownZoom()
 void AknightPlayerCameraManager::UpdateCamera(float DeltaTime)
 {
 	Super::UpdateCamera(DeltaTime);
+
+	if (bKnockdownZoomActive)
+	{
+		const float ShakeScale = FMath::Clamp(GetShakeScale(), 0.f, 2.f);
+		if (ShakeScale > KINDA_SMALL_NUMBER)
+		{
+			const double Now = FPlatformTime::Seconds();
+			FPostProcessSettings ImpactPP;
+			if (!bKnockdownZoomReturning)
+			{
+				const float Weight = FMath::Clamp(GetKnockdownZoomWeight(Now), 0.f, 1.f) * ShakeScale;
+				ImpactPP.bOverride_VignetteIntensity = true;
+				ImpactPP.VignetteIntensity = FMath::Lerp(0.4f, 0.72f, Weight);
+				ImpactPP.bOverride_SceneFringeIntensity = true;
+				ImpactPP.SceneFringeIntensity = 2.4f * Weight;
+				AddCachedPPBlend(ImpactPP, FMath::Clamp(Weight, 0.f, 1.f), VTBlendOrder_Override);
+			}
+			else
+			{
+				const float ReturnAlpha = KnockdownZoomReturn > 0.f
+					? FMath::Clamp(static_cast<float>((Now - KnockdownZoomReturnStartTime) / KnockdownZoomReturn), 0.f, 1.f) : 1.f;
+				const float Pulse = FMath::Pow(1.f - ReturnAlpha, 1.4f) * KnockdownZoomReturnStartWeight * ShakeScale;
+				if (Pulse > KINDA_SMALL_NUMBER)
+				{
+					ImpactPP.bOverride_SceneFringeIntensity = true;
+					ImpactPP.SceneFringeIntensity = 5.0f * Pulse;
+					ImpactPP.bOverride_VignetteIntensity = true;
+					ImpactPP.VignetteIntensity = FMath::Lerp(0.4f, 0.68f, Pulse);
+					AddCachedPPBlend(ImpactPP, FMath::Clamp(Pulse, 0.f, 1.f), VTBlendOrder_Override);
+				}
+			}
+		}
+	}
+
 	const ULocalPlayer* const LocalPlayer = PCOwner ? PCOwner->GetLocalPlayer() : nullptr;
 	UknightSettingsSubsystem* const Settings = LocalPlayer ? LocalPlayer->GetSubsystem<UknightSettingsSubsystem>() : nullptr;
 	if (!Settings) return;

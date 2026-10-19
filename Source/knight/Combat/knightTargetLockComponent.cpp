@@ -677,8 +677,15 @@ void UknightTargetLockComponent::UpdateControlRotation(float DeltaTime) const
 	{
 		return;
 	}
-	FRotator Desired = (TargetLocation - ViewLocation).Rotation();
-	Desired.Pitch = FMath::Clamp(FRotator::NormalizeAxis(Desired.Pitch + PitchOffset), MinPitch, MaxPitch);
+	// Measure pitch from the character's chest pivot rather than the orbiting camera location.
+	// Measuring from ViewLocation creates a positive feedback loop (looking down raises the boom, which looks
+	// further down into a top-view; looking up lowers the boom into the floor/water, which looks further up).
+	const FVector LookOrigin = Pawn->GetActorLocation() + FVector(0.f, 0.f, 65.f);
+	const float HorizontalDist = FMath::Max(FVector::Dist2D(TargetLocation, LookOrigin), 480.f);
+	const float RawPitch = FMath::RadiansToDegrees(FMath::Atan2((TargetLocation.Z - LookOrigin.Z) * 0.65f, HorizontalDist));
+
+	FRotator Desired = (TargetLocation - LookOrigin).Rotation();
+	Desired.Pitch = FMath::Clamp(FRotator::NormalizeAxis(RawPitch + PitchOffset), MinPitch, MaxPitch);
 	Desired.Roll = 0.f;
 	const FRotator Current = Controller->GetControlRotation();
 	Controller->SetControlRotation(FMath::RInterpTo(Current, Desired, DeltaTime, ControlRotationInterpSpeed));

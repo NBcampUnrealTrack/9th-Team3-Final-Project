@@ -12,7 +12,11 @@ UknightCameraMode_LockOn::UknightCameraMode_LockOn()
 
 float UknightCameraMode_LockOn::GetArmLength(const FRotator& ViewRotation) const
 {
-	return FMath::Min(Super::GetArmLength(ViewRotation) + CurrentExtraArm, MaxArmLength);
+	const float NormalizedPitch = FRotator::NormalizeAxis(ViewRotation.Pitch);
+	const float UpScale = NormalizedPitch > 0.f
+		? FMath::Lerp(1.f, 0.45f, FMath::Clamp(NormalizedPitch / 40.f, 0.f, 1.f))
+		: 1.f;
+	return FMath::Min(Super::GetArmLength(ViewRotation) + CurrentExtraArm * UpScale, MaxArmLength);
 }
 
 void UknightCameraMode_LockOn::UpdateView(float DeltaTime)
