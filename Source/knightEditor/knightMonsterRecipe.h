@@ -238,6 +238,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Animation")
 	FName PelvisBone = TEXT("pelvis");
 
+	/**
+	 * Build할 때 Locomotion 샘플 애니메이션에 발 고정용 접지 커브(FootLock_<발 뼈>)를 굽는다. 디딘 발이 미끄러지지 않고,
+	 * 코드로 몸을 돌리면 발을 옮겨 딛는다. 다른 애니메이션(회전, 공격 등)은 knightFootLockLibrary로 따로 굽는다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Animation", meta=(EditCondition="!FootBones.IsEmpty()"))
+	bool bBakeFootLockCurves = true;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stats", meta=(ClampMin=1))
 	float MaxHealth = 1000.f;
 

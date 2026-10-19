@@ -215,7 +215,11 @@ namespace knightMonsterStateTree
 	/** 타깃이 반대편으로 넘어가도 회전 몽타주가 이 각도보다 덜 돌지는 않는다(발 디딤과 회전이 크게 어긋나지 않게). */
 	constexpr float TurnWarpMinAngle = 30.f;
 
-	/** 지금 각도에서 고를 수 있는 옆·뒤 전용 공격(MinAngle > 0)이 있는가. Tags가 있으면 그 태그를 모두 가진 공격만 본다. */
+	/**
+	 * 지금 각도에서 고를 수 있는 옆·뒤 공격이 있는가. 옆·뒤 전용(MinAngle > 0)과 둘레 전체를 덮는 공격(MaxAngle 180, 예: 주변 범위)을
+	 * 센다. 둘레 전체 공격은 타깃이 회전 몽타주가 필요할 만큼(TurnMontageMinAngle) 벗어났을 때만 센다. 조금 벗어났을 때는 짧게
+	 * 조준하고 정면 공격을 고르는 게 맞다. Tags가 있으면 그 태그를 모두 가진 공격만 본다.
+	 */
 	static bool HasUsableSideAttack(const AknightMonsterCharacterBase& Monster, const AActor* Target, const FGameplayTagContainer& Tags)
 	{
 		UAbilitySystemComponent* const ASC = Monster.GetAbilitySystemComponent();
@@ -224,12 +228,15 @@ namespace knightMonsterStateTree
 			return false;
 		}
 		const FknightMonsterAttackContext AttackContext = FknightMonsterAttackContext::Make(&Monster, Target);
+		const UknightMonsterDefinition* const Definition = Monster.GetMonsterDefinition();
+		const bool bNeedsTurnMontage = FMath::Abs(AttackContext.AngleToTarget) >= (Definition ? Definition->TurnMontageMinAngle : 45.f);
 		for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
 		{
 			const UGameplayAbility* const Instance = Spec.GetPrimaryInstance() ? Spec.GetPrimaryInstance() : Spec.Ability.Get();
 			const UknightGameplayAbility_MonsterAttack* const Attack = Cast<UknightGameplayAbility_MonsterAttack>(Instance);
-			if (Attack && Attack->GetSelection().MinAngle > 0.f && (Tags.IsEmpty() || Attack->GetAssetTags().HasAll(Tags))
-				&& Attack->GetSelectionWeight(AttackContext) > 0.f)
+			const bool bCoversSides = Attack
+				&& (Attack->GetSelection().MinAngle > 0.f || (Attack->GetSelection().MaxAngle >= 180.f && bNeedsTurnMontage));
+			if (bCoversSides && (Tags.IsEmpty() || Attack->GetAssetTags().HasAll(Tags)) && Attack->GetSelectionWeight(AttackContext) > 0.f)
 			{
 				return true;
 			}

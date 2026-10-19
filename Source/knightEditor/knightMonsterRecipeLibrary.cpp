@@ -47,6 +47,7 @@
 #include "StateTreeEditorData.h"
 #include "StateTreeState.h"
 #include "knightEditor.h"
+#include "knightFootLockLibrary.h"
 #include "knightMonsterRecipe.h"
 
 #define LOCTEXT_NAMESPACE "knightMonsterRecipe"
@@ -776,6 +777,36 @@ namespace knightRecipe
 		return AnimBlueprint;
 	}
 
+	/** Locomotion 샘플 애니메이션마다 발 고정용 접지 커브를 다시 굽는다. */
+	void BuildFootLockCurves(FContext& Context)
+	{
+		const UknightMonsterRecipe& Recipe = *Context.Recipe;
+		if (!Recipe.bBakeFootLockCurves || Recipe.FootBones.IsEmpty() || !Recipe.Locomotion)
+		{
+			return;
+		}
+		TSet<UAnimSequence*> Sequences;
+		for (const FBlendSample& Sample : Recipe.Locomotion->GetBlendSamples())
+		{
+			if (UAnimSequence* const Sequence = Cast<UAnimSequence>(Sample.Animation.Get()))
+			{
+				Sequences.Add(Sequence);
+			}
+		}
+		for (UAnimSequence* const Sequence : Sequences)
+		{
+			if (UknightFootLockLibrary::BakeFootLockCurves(Sequence, Recipe.FootBones) > 0)
+			{
+				Context.Touch(Sequence);
+			}
+			else
+			{
+				Context.Log.Warning(FString::Printf(TEXT("%s에 접지 커브를 굽지 못했습니다. 발 뼈 이름을 확인하세요."), *Sequence->GetName()));
+			}
+		}
+		Context.Log.Info(FString::Printf(TEXT("이동 애니메이션 %d개에 접지 커브를 구웠습니다."), Sequences.Num()));
+	}
+
 	UBlueprint* BuildMonsterBlueprint(FContext& Context, UknightMonsterDefinition* Definition, UAnimBlueprint* AnimBlueprint)
 	{
 		const UknightMonsterRecipe& Recipe = *Context.Recipe;
@@ -1105,6 +1136,7 @@ bool UknightMonsterRecipeLibrary::BuildMonsterRecipe(UknightMonsterRecipe* Recip
 	UknightAbilitySet* const AbilitySet = BuildAbilitySet(Context, Abilities, InitEffect);
 	UknightMonsterDefinition* const Definition = BuildDefinition(Context, AbilitySet, PartData, Enrage, Exhaust);
 	UAnimBlueprint* const AnimBlueprint = BuildAnimBlueprint(Context);
+	BuildFootLockCurves(Context);
 	BuildMonsterBlueprint(Context, Definition, AnimBlueprint);
 
 	if (!SavePackages(Context.Touched))
