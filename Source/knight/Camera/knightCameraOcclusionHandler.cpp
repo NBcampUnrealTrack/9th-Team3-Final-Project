@@ -54,5 +54,7 @@ FVector UknightCameraOcclusionHandler::ResolveCameraLocation(const AActor* ViewO
 	CurrentFraction = BlockedFraction < CurrentFraction
 		? BlockedFraction
 		: FMath::FInterpTo(CurrentFraction, BlockedFraction, DeltaTime, RecoverySpeed);
-	return FMath::Lerp(Pivot, DesiredLocation, CurrentFraction);
+	FVector ResolvedLocation = FMath::Lerp(Pivot, DesiredLocation, CurrentFraction);
+	ResolvedLocation.Z = FMath::Max(ResolvedLocation.Z, ViewOwner->GetActorLocation().Z - 8.f);
+	return ResolvedLocation;
 }
