@@ -266,11 +266,18 @@ void UknightGroggyFeedbackComponent::ResolvePredictedMeleeContact(AActor* HitTar
 		return;
 	}
 	const bool bMatchingTarget = HitTarget && HitTarget == PredictedBoss.Get() && SourceAbility == PredictionAttack.Get();
-	BeginPredictionReturn();
 	if (bMatchingTarget && bAccepted)
 	{
+		// End pre-hit local slow before the damage effect / hit-stop snapshots CustomTimeDilation,
+		// but keep the camera zoom held through FreezeTime so the impact freezes at peak close-up.
+		FinishPredictionSlow();
+		bPredictionActive = false;
+		PredictionAttack.Reset();
 		bPredictionHitPending = true;
+		PresentationEndTime = FPlatformTime::Seconds() + FMath::Max(FreezeTime, 0.f) + FMath::Max(PredictionZoomReturnTime, 0.f) + 0.5;
+		return;
 	}
+	BeginPredictionReturn();
 }
 
 void UknightGroggyFeedbackComponent::CompletePredictedMeleeHit(AActor* HitTarget, bool bNewKnockdown)
@@ -279,13 +286,17 @@ void UknightGroggyFeedbackComponent::CompletePredictedMeleeHit(AActor* HitTarget
 	{
 		UE_LOG(LogknightCombat, Verbose, TEXT("Predicted hit on %s: new knockdown %s"),
 			*GetNameSafe(HitTarget), bNewKnockdown ? TEXT("yes") : TEXT("no"));
-		if (Victim.Get() == HitTarget)
-		{
-			// A poise-break event can arrive before the post-effect knockdown verdict.
-			// Keep its existing release behavior when the prediction was wrong.
-			bSkipGenericReleaseSlow = bNewKnockdown;
-		}
 		bPredictionHitPending = false;
+		const UWorld* const World = GetWorld();
+		const bool bFreezeWaiting = World && World->GetTimerManager().IsTimerActive(ReleaseDelayTimer);
+		if (!bNewKnockdown && !bFreezeWaiting)
+		{
+			if (AknightPlayerCameraManager* const CameraManager = ZoomCameraManager.Get())
+			{
+				CameraManager->ReturnKnockdownZoom(PredictionZoomReturnTime);
+			}
+			PresentationEndTime = FPlatformTime::Seconds() + FMath::Max(PredictionZoomReturnTime, 0.f);
+		}
 	}
 }
 
@@ -377,7 +388,7 @@ void UknightGroggyFeedbackComponent::HandleAnyPoiseBroken(AActor* InVictim, AAct
 	{
 		CancelKnockdownPresentation();
 	}
-	bSkipGenericReleaseSlow = bPredictedContact;
+	bSkipGenericReleaseSlow = false;
 	// 앞 그로기의 슬로모션이 아직 진행 중이면 정리하고 새로 시작한다.
 	World->GetTimerManager().ClearTimer(ReleaseDelayTimer);
 	FinishRelease();
@@ -443,6 +454,14 @@ void UknightGroggyFeedbackComponent::StartRelease()
 	{
 		CancelKnockdownPresentation();
 		return;
+	}
+	if (bCameraBeatActive)
+	{
+		if (AknightPlayerCameraManager* const CameraManager = ZoomCameraManager.Get())
+		{
+			CameraManager->ReturnKnockdownZoom(PredictionZoomReturnTime);
+		}
+		PresentationEndTime = FPlatformTime::Seconds() + FMath::Max(PredictionZoomReturnTime, 0.f);
 	}
 
 	if (UAbilitySystemComponent* const VictimASC = VictimActor ? UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(VictimActor) : nullptr)
