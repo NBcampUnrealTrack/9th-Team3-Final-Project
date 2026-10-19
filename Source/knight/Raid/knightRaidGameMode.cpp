@@ -2,6 +2,11 @@
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
+#include "ContentStreaming.h"
+#include "Kismet/GameplayStatics.h"
+#if WITH_EDITOR
+#include "ShaderCompiler.h"
+#endif
 #include "AbilitySystem/knightGameplayCueManager.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
 #include "Engine/GameInstance.h"
@@ -85,6 +90,46 @@ void AknightRaidGameMode::StartPlay()
 		}
 	}
 
+	// (2026-10-19) 월드가 안정될 때까지 로딩 화면(단계 None)과 일시정지를 유지한 뒤 출격한다.
+	if (bHoldLoadingUntilReady)
+	{
+		LoadingHoldStartTime = FPlatformTime::Seconds();
+		bPausedForLoading = !UGameplayStatics::IsGamePaused(this) && UGameplayStatics::SetGamePaused(this, true);
+		LoadingHoldTicker = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateUObject(this, &ThisClass::TickLoadingHold), 0.1f);
+	}
+	else
+	{
+		BeginDeploy();
+	}
+}
+
+bool AknightRaidGameMode::TickLoadingHold(float DeltaTime)
+{
+	const double Elapsed = FPlatformTime::Seconds() - LoadingHoldStartTime;
+	const int32 StreamingResources = IStreamingManager::Get().GetNumWantingResources();
+	int32 ShaderJobs = 0;
+#if WITH_EDITOR
+	ShaderJobs = GShaderCompilingManager ? GShaderCompilingManager->GetNumRemainingJobs() : 0;
+#endif
+	const bool bReady = Elapsed >= MinLoadingHoldTime && StreamingResources <= MaxStreamingResources && ShaderJobs == 0;
+	if (!bReady && Elapsed < MaxLoadingHoldTime)
+	{
+		return true;
+	}
+	UE_LOG(Logknight, Log, TEXT("%s: raid loading hold %.2fs (%s, streaming %d, shader jobs %d)."), *GetNameSafe(this), Elapsed,
+		bReady ? TEXT("ready") : TEXT("timed out"), StreamingResources, ShaderJobs);
+	LoadingHoldTicker.Reset();
+	if (bPausedForLoading)
+	{
+		bPausedForLoading = false;
+		UGameplayStatics::SetGamePaused(this, false);
+	}
+	BeginDeploy();
+	return false;
+}
+
+void AknightRaidGameMode::BeginDeploy()
+{
 	SetPhase(EknightRaidPhase::Deploy);
 	const float DeployDuration = RaidDefinition ? RaidDefinition->DeployDuration : 0.f;
 	if (DeployDuration > 0.f)
@@ -251,6 +296,11 @@ void AknightRaidGameMode::UpdateCombatMusic(EknightRaidPhase Phase)
 
 void AknightRaidGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (LoadingHoldTicker.IsValid())
+	{
+		FTSTicker::GetCoreTicker().RemoveTicker(LoadingHoldTicker);
+		LoadingHoldTicker.Reset();
+	}
 	if (UknightGameplayCueManager* const CueManager = UknightGameplayCueManager::Get())
 	{
 		CueManager->ReleasePreloadedCues();
