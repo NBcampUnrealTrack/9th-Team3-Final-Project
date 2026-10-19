@@ -17,7 +17,6 @@ const FString UKnightSettingsWidget::OffText(TEXT("끄기"));
 
 namespace
 {
-	constexpr bool bShowSubtitleSetting = false;
 	const TCHAR* const SettingsWidgetPath = TEXT("/Game/Knight/UI/Screens/Settings/WBP_KnightSettings.WBP_KnightSettings_C");
 
 	FString OnOff(bool bValue) { return bValue ? UKnightSettingsWidget::OnText : UKnightSettingsWidget::OffText; }
@@ -293,12 +292,8 @@ void UKnightSettingsWidget::GetTabSections(int32 Tab, TArray<FKnightSettingSecti
 		Volume.Items.Add(Slider(TEXT("Voice"), LOCTEXT("Voice", "음성"), FText::GetEmpty(), 0.f, 100.f));
 		Volume.Note = LOCTEXT("VolumeNote", "조절하는 동안 바로 들립니다. 적용을 눌러야 저장됩니다.");
 
-		// Hidden until dialogue subtitles are shown in game; the value is still stored and applied.
-		if (bShowSubtitleSetting)
-		{
-			FKnightSettingSection& Subtitle = AddSection(INVTEXT("SUBTITLE"));
-			Subtitle.Items.Add(Toggle(TEXT("Subtitles"), LOCTEXT("Subtitles", "자막"), LOCTEXT("SubtitlesDesc", "대사를 화면 아래에 글자로 표시합니다.")));
-		}
+		FKnightSettingSection& Subtitle = AddSection(INVTEXT("SUBTITLE"));
+		Subtitle.Items.Add(Toggle(TEXT("Subtitles"), LOCTEXT("Subtitles", "자막"), LOCTEXT("SubtitlesDesc", "AI 음성 대사를 화면 아래 대화창에 글자로 표시합니다. 부위 파손 알림은 항상 표시됩니다.")));
 	}
 	else
 	{
