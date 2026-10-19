@@ -16,18 +16,24 @@ namespace
 
 	/** Clicks that move less than this are clicks, not drags. Slate units. */
 	constexpr float ClickSlop = 4.f;
+	/** Clicks this close to a region's name or centre also count, for regions seen edge-on. */
 	constexpr float MarkerHitRadius = 22.f;
+	/** The material wobbles region edges by up to about 20%; clicks use the outer edge so a painted pixel is never missed. */
+	constexpr float RegionHitScale = 1.2f;
+	constexpr int32 MaxRegions = 8;
+
+	FVector DirectionOf(const FVector2D& LocationDegrees)
+	{
+		const float Lat = FMath::DegreesToRadians(LocationDegrees.Y);
+		const float Lon = FMath::DegreesToRadians(LocationDegrees.X);
+		return FVector(FMath::Cos(Lat) * FMath::Sin(Lon), FMath::Sin(Lat), FMath::Cos(Lat) * FMath::Cos(Lon));
+	}
 
 	FLinearColor WithAlpha(const FLinearColor& Color, float Alpha)
 	{
 		return FLinearColor(Color.R, Color.G, Color.B, Color.A * Alpha);
 	}
 
-	void AddDiamond(TArray<FVector2f>& Points, const FVector2D& Center, float HalfSize)
-	{
-		const FVector2f C(Center);
-		Points = { C + FVector2f(0.f, -HalfSize), C + FVector2f(HalfSize, 0.f), C + FVector2f(0.f, HalfSize), C + FVector2f(-HalfSize, 0.f), C + FVector2f(0.f, -HalfSize) };
-	}
 }
 
 UKnightStageGlobeWidget::UKnightStageGlobeWidget(const FObjectInitializer& ObjectInitializer)
@@ -86,11 +92,10 @@ float UKnightStageGlobeWidget::GetPixelRadius(const FVector2D& LocalSize) const
 
 UKnightStageGlobeWidget::FProjectedMarker UKnightStageGlobeWidget::Project(const FVector2D& LocationDegrees, const FVector2D& LocalSize) const
 {
-	const float Lat = FMath::DegreesToRadians(LocationDegrees.Y);
-	const float Lon = FMath::DegreesToRadians(LocationDegrees.X);
-	const float X = FMath::Cos(Lat) * FMath::Sin(Lon);
-	const float Y = FMath::Sin(Lat);
-	const float Z = FMath::Cos(Lat) * FMath::Cos(Lon);
+	const FVector Direction = DirectionOf(LocationDegrees);
+	const float X = Direction.X;
+	const float Y = Direction.Y;
+	const float Z = Direction.Z;
 
 	// Inverse of the material: undo the yaw, then the pitch.
 	const float CY = FMath::Cos(Yaw), SY = FMath::Sin(Yaw);
@@ -127,7 +132,44 @@ void UKnightStageGlobeWidget::ApplyRotationToMaterial()
 		GlobeMID->SetScalarParameterValue(TEXT("Yaw"), Yaw);
 		GlobeMID->SetScalarParameterValue(TEXT("Pitch"), Pitch);
 		GlobeMID->SetScalarParameterValue(TEXT("Radius"), SphereRadius);
+		for (int32 Index = 0; Index < MaxRegions; ++Index)
+		{
+			FLinearColor Region(0.f, 0.f, 0.f, 0.f);
+			if (Markers.IsValidIndex(Index))
+			{
+				const FKnightGlobeMarker& Marker = Markers[Index];
+				const float State = Marker.StageId == SelectedStageId ? 3.f : (Index == HoveredIndex ? 2.f : 1.f);
+				Region = FLinearColor(FMath::DegreesToRadians(Marker.Location.X), FMath::DegreesToRadians(Marker.Location.Y),
+					FMath::DegreesToRadians(Marker.RegionRadius), State + (Marker.bLocked ? 3.f : 0.f));
+			}
+			static const FName RegionNames[MaxRegions] = { TEXT("Region0"), TEXT("Region1"), TEXT("Region2"), TEXT("Region3"),
+				TEXT("Region4"), TEXT("Region5"), TEXT("Region6"), TEXT("Region7") };
+			GlobeMID->SetVectorParameterValue(RegionNames[Index], Region);
+		}
 	}
+}
+
+bool UKnightStageGlobeWidget::LocalToSurface(const FVector2D& LocalPosition, const FVector2D& LocalSize, FVector& OutDirection) const
+{
+	const float Radius = GetPixelRadius(LocalSize);
+	if (Radius <= 0.f)
+	{
+		return false;
+	}
+	const FVector2D S = (LocalPosition - LocalSize * 0.5f) / Radius;
+	const float SquaredLength = static_cast<float>(S.SizeSquared());
+	if (SquaredLength > 1.f)
+	{
+		return false;
+	}
+	// Same steps as the material: screen up is +Y, then undo pitch (around X) and yaw (around Y).
+	const float X = S.X, Y = -S.Y, Z = FMath::Sqrt(1.f - SquaredLength);
+	const float CP = FMath::Cos(Pitch), SP = FMath::Sin(Pitch);
+	const float Y1 = CP * Y + SP * Z;
+	const float Z1 = -SP * Y + CP * Z;
+	const float CY = FMath::Cos(Yaw), SY = FMath::Sin(Yaw);
+	OutDirection = FVector(CY * X - SY * Z1, Y1, SY * X + CY * Z1);
+	return true;
 }
 
 void UKnightStageGlobeWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
@@ -167,6 +209,28 @@ void UKnightStageGlobeWidget::NativeTick(const FGeometry& MyGeometry, float InDe
 
 int32 UKnightStageGlobeWidget::FindMarkerAt(const FVector2D& LocalPosition, const FVector2D& LocalSize) const
 {
+	// Inside a painted region first; the nearest centre wins where two regions overlap.
+	FVector Direction;
+	if (LocalToSurface(LocalPosition, LocalSize, Direction))
+	{
+		int32 BestRegion = INDEX_NONE;
+		float BestRatio = RegionHitScale;
+		for (int32 Index = 0; Index < FMath::Min(Markers.Num(), MaxRegions); ++Index)
+		{
+			const float Angle = FMath::Acos(FMath::Clamp(static_cast<float>(FVector::DotProduct(Direction, DirectionOf(Markers[Index].Location))), -1.f, 1.f));
+			const float Ratio = Angle / FMath::Max(FMath::DegreesToRadians(Markers[Index].RegionRadius), UE_KINDA_SMALL_NUMBER);
+			if (Ratio < BestRatio)
+			{
+				BestRatio = Ratio;
+				BestRegion = Index;
+			}
+		}
+		if (BestRegion != INDEX_NONE)
+		{
+			return BestRegion;
+		}
+	}
+
 	int32 Best = INDEX_NONE;
 	float BestDistance = MarkerHitRadius;
 	for (int32 Index = 0; Index < Markers.Num(); ++Index)
@@ -326,6 +390,7 @@ int32 UKnightStageGlobeWidget::NativePaint(const FPaintArgs& Args, const FGeomet
 	++LayerId;
 	FVector2D SelectedPosition = FVector2D::ZeroVector;
 	bool bSelectedVisible = false;
+	float SelectedLabelHalfWidth = 0.f;
 	TArray<FVector2f> Points;
 	for (int32 Index = 0; Index < Markers.Num(); ++Index)
 	{
@@ -344,41 +409,25 @@ int32 UKnightStageGlobeWidget::NativePaint(const FPaintArgs& Args, const FGeomet
 			SelectedPosition = Projected.Position;
 			bSelectedVisible = Projected.Depth > 0.1f;
 		}
-		const FLinearColor Color = Marker.bLocked ? FrostDim : (bSelected ? GlobeEmber : (bHovered ? GlobeWhite : GlobeFrost));
-		const float HalfSize = bSelected || bHovered ? 9.f : 7.f;
-
-		AddDiamond(Points, Projected.Position, HalfSize);
-		FSlateDrawElement::MakeLines(OutDrawElements, LayerId, AllottedGeometry.ToPaintGeometry(), Points, ESlateDrawEffect::None, WithAlpha(Color, Fade), true, 2.f);
-		AddDiamond(Points, Projected.Position, 2.5f);
-		FSlateDrawElement::MakeLines(OutDrawElements, LayerId, AllottedGeometry.ToPaintGeometry(), Points, ESlateDrawEffect::None, WithAlpha(Color, Fade), true, 3.f);
-
-		if (bSelected)
-		{
-			// A ring that keeps opening outward.
-			const float Phase = FMath::Fmod(Time, 1.4f) / 1.4f;
-			const float RingRadius = FMath::Lerp(12.f, 30.f, Phase);
-			TArray<FVector2f> Ring;
-			for (int32 Step = 0; Step <= 32; ++Step)
-			{
-				const float Angle = UE_TWO_PI * Step / 32.f;
-				Ring.Add(FVector2f(Projected.Position) + FVector2f(FMath::Cos(Angle), FMath::Sin(Angle)) * RingRadius);
-			}
-			FSlateDrawElement::MakeLines(OutDrawElements, LayerId, AllottedGeometry.ToPaintGeometry(), Ring, ESlateDrawEffect::None,
-				WithAlpha(GlobeEmber, Fade * (1.f - Phase)), true, 1.5f);
-		}
-
 		if (!Marker.Label.IsEmpty() && Font.FontObject)
 		{
+			// The region itself shows hover and selection; the name sits on its centre.
 			const FVector2D TextSize = Measure->Measure(Marker.Label, Font);
-			const bool bLabelLeft = bSelected && bHasTarget && TopLeft.X > Projected.Position.X;
-			const FVector2f TextPosition(Projected.Position + FVector2D(bLabelLeft ? -16.f - TextSize.X : 16.f, -TextSize.Y * 0.5f));
-			const FLinearColor TextColor = bSelected ? GlobeEmber : (bHovered ? GlobeWhite : LabelColor);
+			const FVector2f TextPosition(Projected.Position - TextSize * 0.5f);
+			if (bSelected)
+			{
+				SelectedLabelHalfWidth = static_cast<float>(TextSize.X * 0.5f);
+			}
+			const FLinearColor TextColor = Marker.bLocked ? FrostDim : (bSelected ? GlobeEmber : (bHovered ? GlobeWhite : LabelColor));
+			// Dark shadow so the name stays readable on the light region.
+			FSlateDrawElement::MakeText(OutDrawElements, LayerId, AllottedGeometry.ToPaintGeometry(FVector2f(TextSize), FSlateLayoutTransform(TextPosition + FVector2f(1.f, 1.f))),
+				Marker.Label, Font, ESlateDrawEffect::None, FLinearColor(0.f, 0.01f, 0.03f, 0.85f * Fade));
 			FSlateDrawElement::MakeText(OutDrawElements, LayerId, AllottedGeometry.ToPaintGeometry(FVector2f(TextSize), FSlateLayoutTransform(TextPosition)),
-				Marker.Label, Font, ESlateDrawEffect::None, WithAlpha(TextColor, Fade * (bSelected || bHovered ? 1.f : 0.75f)));
+				Marker.Label, Font, ESlateDrawEffect::None, WithAlpha(TextColor, Fade));
 		}
 	}
 
-	// Leader line: marker → diagonal → short shelf → panel edge (same shape as the lock-on marker).
+	// Leader line: region name → diagonal → short shelf → panel edge (same shape as the lock-on marker).
 	if (bSelectedVisible && bHasTarget)
 	{
 		const bool bTargetOnRight = TopLeft.X > SelectedPosition.X;
@@ -386,9 +435,9 @@ int32 UKnightStageGlobeWidget::NativePaint(const FPaintArgs& Args, const FGeomet
 		const float AnchorY = FMath::Clamp(SelectedPosition.Y, TopLeft.Y + 24.f, BottomRight.Y - 24.f);
 		const FVector2f Anchor(EdgeX, AnchorY);
 		const FVector2f Elbow(EdgeX + (bTargetOnRight ? -36.f : 36.f), AnchorY);
-		const FVector2f Start(SelectedPosition);
-		const FVector2f Direction = (Elbow - Start).GetSafeNormal();
-		Points = { Start + Direction * 12.f, Elbow, Anchor };
+		// Start just past the end of the region name, on the panel's side.
+		const FVector2f Start(SelectedPosition.X + (bTargetOnRight ? 1.f : -1.f) * (SelectedLabelHalfWidth + 6.f), SelectedPosition.Y);
+		Points = { Start, Elbow, Anchor };
 		FSlateDrawElement::MakeLines(OutDrawElements, LayerId, AllottedGeometry.ToPaintGeometry(), Points, ESlateDrawEffect::None, WithAlpha(GlobeEmber, 0.9f * Opacity), true, 1.5f);
 	}
 	return LayerId;
