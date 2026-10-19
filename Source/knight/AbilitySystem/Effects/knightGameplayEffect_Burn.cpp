@@ -1,6 +1,7 @@
 #include "AbilitySystem/Effects/knightGameplayEffect_Burn.h"
 
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
+#include "System/knightGameplayTags.h"
 
 UknightGameplayEffect_Burn::UknightGameplayEffect_Burn(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -24,4 +25,7 @@ UknightGameplayEffect_Burn::UknightGameplayEffect_Burn(const FObjectInitializer&
 	StackLimitCount = 1;
 	StackDurationRefreshPolicy = EGameplayEffectStackingDurationPolicy::RefreshOnSuccessfulApplication;
 	StackPeriodResetPolicy = EGameplayEffectStackingPeriodPolicy::NeverReset;
+
+	// 걸려 있는 동안 몸에 불길이 붙는다(GCN_Burn_Loop).
+	GameplayCues.Add(FGameplayEffectCue(knightGameplayTags::GameplayCue_Burn, 0.f, 1.f));
 }

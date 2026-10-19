@@ -554,6 +554,46 @@ UNiagaraSystem* UknightMonsterFXBuilder::BuildBreathGroundSystem(const FString& 
 		FVector(Length * 0.5f + Margin, Width * 0.5f + Margin, 1200.f), ActiveTime);
 }
 
+UNiagaraSystem* UknightMonsterFXBuilder::BuildBurnSystem(const FString& PackagePath, UMaterialInterface* FireMaterial,
+	UMaterialInterface* SmokeMaterial, UMaterialInterface* EmberMaterial, FVector BodyExtent)
+{
+	using namespace knightMonsterFX;
+	if (!FireMaterial)
+	{
+		return nullptr;
+	}
+	const FVector3f Box = FVector3f(BodyExtent) * 2.f;
+	// 몸 곳곳에서 붙었다 꺼지는 작은 불꽃. 위로 날리며 금방 사라진다.
+	FSpriteLayer Flames{ TEXT("Flames"), FireMaterial, 45.f, {0.35f, 0.6f}, {50.f, 50.f}, {95.f, 95.f}, {0.f, 0.f}, 0.f, 250.f, 0.f, 150.f, 0.02f,
+		{ {0.f, 1.2f}, {0.5f, 0.8f}, {1.f, 0.3f} }, { {0.f, 0.f}, {0.1f, 1.f}, {0.6f, 0.8f}, {1.f, 0.f} }, { {0.f, 0.5f}, {0.3f, 1.f}, {1.f, 1.6f} },
+		ENiagaraSpriteAlignment::Unaligned, 1 };
+	Flames.BoxSize = Box;
+	Flames.bUseVelocity = true;
+	Flames.VelocityMin = FVector3f(-30.f, -30.f, 60.f);
+	Flames.VelocityMax = FVector3f(30.f, 30.f, 160.f);
+
+	// 그을린 연기: 몸 위쪽에서 가늘게 피어오른다.
+	FSpriteLayer Smoke{ TEXT("Smoke"), SmokeMaterial, 8.f, {0.9f, 1.4f}, {50.f, 50.f}, {90.f, 90.f}, {0.f, 0.f}, 0.f, 120.f, 0.5f, 60.f, 0.02f,
+		{ {0.f, 3.f}, {0.4f, 1.5f}, {1.f, 1.5f} }, { {0.f, 0.f}, {0.2f, 0.35f}, {1.f, 0.f} }, { {0.f, 0.6f}, {1.f, 2.2f} },
+		ENiagaraSpriteAlignment::Unaligned, 0 };
+	Smoke.BoxSize = FVector3f(Box.X, Box.Y, Box.Z * 0.5f);
+	Smoke.bUseVelocity = true;
+	Smoke.VelocityMin = FVector3f(-20.f, -20.f, 80.f);
+	Smoke.VelocityMax = FVector3f(20.f, 20.f, 160.f);
+
+	FSpriteLayer Embers{ TEXT("Embers"), EmberMaterial, 18.f, {0.5f, 0.9f}, {3.f, 8.f}, {5.f, 14.f}, {0.f, 0.f}, 0.f, 150.f, 0.5f, 150.f, 0.02f,
+		{ {0.f, 1.f}, {1.f, 0.6f} }, { {0.f, 0.f}, {0.1f, 1.f}, {0.7f, 1.f}, {1.f, 0.f} }, { {0.f, 1.f}, {1.f, 0.5f} },
+		ENiagaraSpriteAlignment::VelocityAligned, 2 };
+	Embers.BoxSize = Box;
+	Embers.bUseVelocity = true;
+	Embers.VelocityMin = FVector3f(-120.f, -120.f, 50.f);
+	Embers.VelocityMax = FVector3f(120.f, 120.f, 250.f);
+
+	const FSpriteLayer Layers[] = { Smoke, Flames, Embers };
+	const FVector Margin(200.f, 200.f, 400.f);
+	return BuildLayeredSystem(PackagePath, Layers, 0.f, 1.f, -BodyExtent - Margin, BodyExtent + Margin);
+}
+
 UNiagaraSystem* UknightMonsterFXBuilder::BuildGroundDustSystem(const FString& PackagePath, UMaterialInterface* Material, float Radius)
 {
 	using namespace knightMonsterFX;

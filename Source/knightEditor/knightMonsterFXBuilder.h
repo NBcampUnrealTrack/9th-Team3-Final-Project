@@ -44,6 +44,14 @@ public:
 	static UNiagaraSystem* BuildBreathGroundSystem(const FString& PackagePath, UMaterialInterface* FlameMaterial, UMaterialInterface* ScorchMaterial,
 		float Length = 1200.f, float Width = 600.f, float ActiveTime = 1.6f);
 
+	/**
+	 * 화상 입은 캐릭터 몸에 붙는 작은 불길, 연기, 불씨(계속 생성). 캡슐처럼 스케일 1이고 위가 +Z인 컴포넌트 중심에 붙이며,
+	 * BodyExtent(cm, 반 크기) 상자 안에서 생긴다.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|FX")
+	static UNiagaraSystem* BuildBurnSystem(const FString& PackagePath, UMaterialInterface* FireMaterial, UMaterialInterface* SmokeMaterial,
+		UMaterialInterface* EmberMaterial, FVector BodyExtent = FVector(60.f, 60.f, 120.f));
+
 	/** 바닥에서 옆으로 퍼지며 피어오르는 먼지 한 번(땅울림). 붙이지 않고 월드에 스폰하는 용도라 cm 그대로다. */
 	UFUNCTION(BlueprintCallable, Category="Knight|FX")
 	static UNiagaraSystem* BuildGroundDustSystem(const FString& PackagePath, UMaterialInterface* Material, float Radius = 900.f);
