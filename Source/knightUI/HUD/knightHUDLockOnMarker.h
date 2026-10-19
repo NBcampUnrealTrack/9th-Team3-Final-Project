@@ -92,7 +92,7 @@ protected:
 	FLinearColor BrokenColor = FLinearColor(FColor(0x7A, 0x7F, 0x87));
 
 	UPROPERTY(EditAnywhere, Category="Knight|HUD|Part")
-	FLinearColor UnbreakableColor = FLinearColor(FColor(0xA8, 0xC8, 0xF0));
+	FLinearColor UnbreakableColor = FLinearColor(FColor(0xF4, 0xF8, 0xFC));
 
 	/** One full fade out and back in while the part is critical. */
 	UPROPERTY(EditAnywhere, Category="Knight|HUD|Part", meta=(ClampMin=0.1, Units="s"))
