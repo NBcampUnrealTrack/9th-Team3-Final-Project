@@ -47,7 +47,7 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
 	static bool BuildHUDLockOnMarker(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> NameStyle,
-		UTexture2D* PartFrameTexture = nullptr, TSubclassOf<UCommonTextStyle> StaggerCaptionStyle = nullptr);
+		UTexture2D* PartFrameTexture = nullptr);
 
 	/** WBP_HUDLayout: 화면 전체의 락온 마커(맨 아래)와 플레이어 패널(체력 왼쪽 아래, 부스트 아래 가운데), 세이프존 안쪽 왼쪽 위에 목표/타이머. */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")

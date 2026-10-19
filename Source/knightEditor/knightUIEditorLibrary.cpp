@@ -336,7 +336,7 @@ bool UknightUIEditorLibrary::BuildHUDRaidTimer(UWidgetBlueprint* WidgetBlueprint
 }
 
 bool UknightUIEditorLibrary::BuildHUDLockOnMarker(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> NameStyle,
-	UTexture2D* PartFrameTexture, TSubclassOf<UCommonTextStyle> StaggerCaptionStyle)
+	UTexture2D* PartFrameTexture)
 {
 	if (!BeginBuild(WidgetBlueprint, TEXT("BuildHUDLockOnMarker")))
 	{
@@ -421,10 +421,9 @@ bool UknightUIEditorLibrary::BuildHUDLockOnMarker(UWidgetBlueprint* WidgetBluepr
 	// 박스 아래에 경직 게이지, 그 아래 거리. 가지선이 위로 나가므로 겹치지 않는다. 채움 색은 C++가 칠한다.
 	UVerticalBox* const Stagger = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("Stagger"), true);
 	Stagger->SetVisibility(ESlateVisibility::HitTestInvisible);
-	AddToColumn(Stagger, NewText(WidgetBlueprint, TEXT("Txt_StaggerCaption"), StaggerCaptionStyle ? StaggerCaptionStyle : CaptionStyle, INVTEXT("STAGGER"), false), HAlign_Center);
 	USizeBox* const StaggerBox = NewSizeBox(WidgetBlueprint, TEXT("SizeBox_Stagger"), 96.f, 5.f);
 	StaggerBox->AddChild(NewBar(WidgetBlueprint, TEXT("Bar_Stagger"), true, 0.6f));
-	AddToColumn(Stagger, StaggerBox, HAlign_Center, FMargin(0.f, 2.f, 0.f, 0.f));
+	AddToColumn(Stagger, StaggerBox, HAlign_Center);
 	UCanvasPanelSlot* const StaggerSlot = Root->AddChildToCanvas(Stagger);
 	StaggerSlot->SetAutoSize(true);
 	StaggerSlot->SetAlignment(FVector2D(0.5f, 0.f));
