@@ -71,7 +71,7 @@ protected:
  * returns to the categories. The key hints at the bottom follow the level.
  *
  * Layout lives in the Widget Blueprint designer. Required: Box_Rows (panel the rows go into), Btn_Apply, Btn_Revert.
- * Optional: Tab_0 .. Tab_3, Scroll_Rows, Txt_DetailTitle, Txt_DetailBody, Panel_Chart, Txt_Status, Txt_DirtyCount,
+ * Optional: Tab_0 .. Tab_3, Scroll_Rows, Txt_DetailTitle, Txt_DetailBody, Txt_Status, Txt_DirtyCount,
  * Btn_Defaults, Panel_Prompt, Panel_Footer, Btn_PromptApply, Btn_PromptDiscard, Btn_PromptContinue,
  * Panel_HintsTabs, Panel_HintsRows.
  */
@@ -150,10 +150,6 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, Category="Knight|Settings", meta=(BindWidgetOptional))
 	TObjectPtr<UCommonTextBlock> Txt_DetailBody;
-
-	/** Gray steps for gamma, shown on the calibration tab only. */
-	UPROPERTY(BlueprintReadOnly, Category="Knight|Settings", meta=(BindWidgetOptional))
-	TObjectPtr<UWidget> Panel_Chart;
 
 	UPROPERTY(BlueprintReadOnly, Category="Knight|Settings", meta=(BindWidgetOptional))
 	TObjectPtr<UCommonTextBlock> Txt_Status;
