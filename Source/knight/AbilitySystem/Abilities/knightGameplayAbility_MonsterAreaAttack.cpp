@@ -1,6 +1,7 @@
 #include "AbilitySystem/Abilities/knightGameplayAbility_MonsterAreaAttack.h"
 
 #include "AbilitySystemComponent.h"
+#include "AbilitySystemGlobals.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_Repeat.h"
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
@@ -112,7 +113,21 @@ void UknightGameplayAbility_MonsterAreaAttack::OnImpact()
 
 	const FVector Center = GetAreaCenter();
 	const int32 NewHits = UknightCombatLibrary::ApplyAreaMeleeHits(Avatar, Center, FCollisionShape::MakeSphere(AreaRadius), HitParams, HitActors,
-		[this, Avatar](const AActor& Target) { return IsInsideCone(*Avatar, Target.GetActorLocation()); });
+		[this, Avatar](const AActor& Target) { return IsInsideCone(*Avatar, Target.GetActorLocation()); },
+		[this](AActor& Target, EknightHitOutcome Outcome)
+		{
+			if (Outcome != EknightHitOutcome::Hit || !HitTargetEffect)
+			{
+				return;
+			}
+			UAbilitySystemComponent* const SourceASC = GetAbilitySystemComponentFromActorInfo();
+			UAbilitySystemComponent* const TargetASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(&Target);
+			if (SourceASC && TargetASC)
+			{
+				const FGameplayEffectSpecHandle Spec = MakeOutgoingGameplayEffectSpec(HitTargetEffect, GetAbilityLevel());
+				SourceASC->ApplyGameplayEffectSpecToTarget(*Spec.Data.Get(), TargetASC);
+			}
+		});
 
 #if ENABLE_DRAW_DEBUG
 	if (knightMonsterDebug::ShouldDrawAttacks())
