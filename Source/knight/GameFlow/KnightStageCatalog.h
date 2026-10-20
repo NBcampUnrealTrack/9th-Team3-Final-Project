@@ -22,19 +22,19 @@ struct KNIGHT_API FKnightStageDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stage", meta=(MultiLine=true))
 	FText Description;
 
-	/** Region shown on the stage-select globe panel (e.g. "북부 폐허 도시"). */
+	/** Region shown on the stage-select map panel (e.g. "북부 폐허 도시"). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stage|Globe")
 	FText RegionName;
 
-	/** Marker position on the stage-select globe in degrees: X = longitude (-180..180), Y = latitude (-90..90). */
+	/** Marker position on the stage-select map in degrees: X = longitude (-180..180), Y = latitude (-75..75, the map edge). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stage|Globe")
 	FVector2D GlobeLocation = FVector2D::ZeroVector;
 
-	/** Angular radius of the stage's region on the globe, in degrees. Land within it is painted and clickable. */
+	/** Radius of the stage's region on the map, in degrees of latitude. The area within it is painted and clickable. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stage|Globe", meta=(ClampMin=2, ClampMax=45, Units="deg"))
 	float GlobeRegionRadius = 14.f;
 
-	/** Optional picture for the globe panel. The panel hides the image area when empty. */
+	/** Optional picture for the map panel. The panel hides the image area when empty. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stage|Globe")
 	TSoftObjectPtr<UTexture2D> Thumbnail;
 

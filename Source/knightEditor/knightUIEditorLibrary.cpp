@@ -184,6 +184,10 @@ namespace
 
 	/** 1080p 기준 세이프존 4.5% (86 x 49)보다 조금 안쪽. */
 	const FVector2D HUDMargin(96.f, 64.f);
+
+	/** 스테이지 지도: 화면 가운데 기준 위치와 크기. 오른쪽에 정보 패널(420)이 들어가도록 왼쪽으로 민다. */
+	const FVector2D StageMapPosition(-250.f, 10.f);
+	const FVector2D StageMapSize(1100.f, 620.f);
 }
 
 bool UknightUIEditorLibrary::BuildKnightButtonLayout(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> BracketClass, TSubclassOf<UCommonTextStyle> LabelStyle)
@@ -732,6 +736,59 @@ bool UknightUIEditorLibrary::RemoveWidget(UWidgetBlueprint* WidgetBlueprint, FNa
 		Each->Rename(nullptr, GetTransientPackage(), REN_DontCreateRedirectors | REN_NonTransactional);
 	}
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBlueprint);
+	return true;
+}
+
+bool UknightUIEditorLibrary::ReplaceUserWidget(UWidgetBlueprint* WidgetBlueprint, FName WidgetName, TSubclassOf<UUserWidget> NewClass, FName NewName)
+{
+	UWidget* const Old = WidgetBlueprint && WidgetBlueprint->WidgetTree && NewClass ? WidgetBlueprint->WidgetTree->FindWidget(WidgetName) : nullptr;
+	UPanelWidget* const Parent = Old ? Old->GetParent() : nullptr;
+	if (!Parent || (NewName != WidgetName && WidgetBlueprint->WidgetTree->FindWidget(NewName)))
+	{
+		return false;
+	}
+	WidgetBlueprint->Modify();
+	WidgetBlueprint->WidgetTree->Modify();
+	const int32 Index = Parent->GetChildIndex(Old);
+	const bool bVariable = Old->bIsVariable;
+
+	// 이전 위젯의 이름을 먼저 비워야 같은 이름으로 새로 만들 수 있다.
+	WidgetBlueprint->OnVariableRemoved(Old->GetFName());
+	Old->Rename(nullptr, GetTransientPackage(), REN_DontCreateRedirectors | REN_NonTransactional);
+	UUserWidget* const New = NewWidget<UUserWidget>(WidgetBlueprint, NewClass, NewName, bVariable);
+	// 슬롯(위치, 크기, 정렬)은 그대로 두고 내용만 바꾼다.
+	Parent->ReplaceChildAt(Index, New);
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBlueprint);
+	return true;
+}
+
+bool UknightUIEditorLibrary::SetCanvasSlotLayout(UWidgetBlueprint* WidgetBlueprint, FName WidgetName, FVector2D Position, FVector2D Size)
+{
+	UWidget* const Widget = WidgetBlueprint && WidgetBlueprint->WidgetTree ? WidgetBlueprint->WidgetTree->FindWidget(WidgetName) : nullptr;
+	UCanvasPanelSlot* const CanvasSlot = Widget ? Cast<UCanvasPanelSlot>(Widget->Slot) : nullptr;
+	if (!CanvasSlot)
+	{
+		return false;
+	}
+	WidgetBlueprint->Modify();
+	CanvasSlot->Modify();
+	CanvasSlot->SetPosition(Position);
+	CanvasSlot->SetSize(Size);
+	FBlueprintEditorUtils::MarkBlueprintAsModified(WidgetBlueprint);
+	return true;
+}
+
+bool UknightUIEditorLibrary::SetWidgetText(UWidgetBlueprint* WidgetBlueprint, FName WidgetName, FText Text)
+{
+	UTextBlock* const Label = WidgetBlueprint && WidgetBlueprint->WidgetTree ? Cast<UTextBlock>(WidgetBlueprint->WidgetTree->FindWidget(WidgetName)) : nullptr;
+	if (!Label)
+	{
+		return false;
+	}
+	WidgetBlueprint->Modify();
+	Label->Modify();
+	Label->SetText(Text);
+	FBlueprintEditorUtils::MarkBlueprintAsModified(WidgetBlueprint);
 	return true;
 }
 
@@ -1509,11 +1566,11 @@ bool UknightUIEditorLibrary::BuildTitleMenu(UWidgetBlueprint* WidgetBlueprint, T
 }
 
 bool UknightUIEditorLibrary::BuildMainMenu(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> MenuItemClass, TSubclassOf<UUserWidget> ButtonClass,
-	TSubclassOf<UCommonButtonStyle> SecondaryButtonStyle, TSubclassOf<UUserWidget> GlobeClass, UTexture2D* Gradient,
+	TSubclassOf<UCommonButtonStyle> SecondaryButtonStyle, TSubclassOf<UUserWidget> MapClass, UTexture2D* Gradient,
 	TSubclassOf<UCommonTextStyle> TitleStyle, TSubclassOf<UCommonTextStyle> BodyStyle, TSubclassOf<UCommonTextStyle> BodyDimStyle,
 	TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> WarningStyle, TSubclassOf<UCommonTextStyle> NumberStyle)
 {
-	if (!MenuItemClass || !MenuItemClass->IsChildOf<UknightButtonBase>() || !ButtonClass || !ButtonClass->IsChildOf<UknightButtonBase>() || !GlobeClass
+	if (!MenuItemClass || !MenuItemClass->IsChildOf<UknightButtonBase>() || !ButtonClass || !ButtonClass->IsChildOf<UknightButtonBase>() || !MapClass
 		|| !BeginBuild(WidgetBlueprint, TEXT("BuildMainMenu")))
 	{
 		return false;
@@ -1540,7 +1597,7 @@ bool UknightUIEditorLibrary::BuildMainMenu(UWidgetBlueprint* WidgetBlueprint, TS
 		{ TEXT("Button_ReturnToTitle"), NSLOCTEXT("knightUI", "LobbyTitle", "타이틀로") } }),
 		FAnchors(0.f, 0.5f), FVector2D(0.f, 0.f), FMargin(HUDMargin.X, 8.f, 0.f, 0.f), true);
 
-	// Stage: globe in the middle, info panel beside it (C++ picks the side).
+	// Stage: map left of centre, info panel against its right edge (C++ places it).
 	UCanvasPanel* const Stage = NewWidget<UCanvasPanel>(WidgetBlueprint, TEXT("Panel_Stage"), true);
 	Pages->AddChild(Stage);
 	UImage* const StageDim = NewWidget<UImage>(WidgetBlueprint, TEXT("Img_StageDim"));
@@ -1553,12 +1610,12 @@ bool UknightUIEditorLibrary::BuildMainMenu(UWidgetBlueprint* WidgetBlueprint, TS
 	AddToColumn(StageHeader, NewText(WidgetBlueprint, TEXT("Txt_StageHeading"), TitleStyle, NSLOCTEXT("knightUI", "StageHeading", "작전 지역 선택"), false), HAlign_Left);
 	AddToCanvas(Stage, StageHeader, FAnchors(0.f, 0.f), FVector2D::ZeroVector, FMargin(HUDMargin.X, HUDMargin.Y, 0.f, 0.f), true);
 
-	UUserWidget* const Globe = NewWidget<UUserWidget>(WidgetBlueprint, GlobeClass, TEXT("Globe_Stages"), true);
-	AddToCanvas(Stage, Globe, FAnchors(0.5f, 0.5f), FVector2D(0.5f, 0.5f), FMargin(0.f, 10.f, 700.f, 700.f));
+	UUserWidget* const Map = NewWidget<UUserWidget>(WidgetBlueprint, MapClass, TEXT("Map_Stages"), true);
+	AddToCanvas(Stage, Map, FAnchors(0.5f, 0.5f), FVector2D(0.5f, 0.5f), FMargin(StageMapPosition.X, StageMapPosition.Y, StageMapSize.X, StageMapSize.Y));
 
 	USizeBox* const Info = NewSizeBox(WidgetBlueprint, TEXT("Panel_StageInfo"), 420.f, 0.f);
 	Info->bIsVariable = true;
-	AddToCanvas(Stage, Info, FAnchors(0.5f, 0.5f), FVector2D(0.f, 0.5f), FMargin(414.f, 10.f, 0.f, 0.f), true);
+	AddToCanvas(Stage, Info, FAnchors(0.5f, 0.5f), FVector2D(0.f, 0.5f), FMargin(StageMapPosition.X + StageMapSize.X * 0.5f + 64.f, StageMapPosition.Y, 0.f, 0.f), true);
 	UBorder* const InfoFrame = NewWidget<UBorder>(WidgetBlueprint, TEXT("Border_StageInfo"));
 	InfoFrame->SetBrush(FrameBrush(0.92f));
 	InfoFrame->SetPadding(FMargin(32.f, 28.f, 32.f, 28.f));
@@ -1598,7 +1655,7 @@ bool UknightUIEditorLibrary::BuildMainMenu(UWidgetBlueprint* WidgetBlueprint, TS
 	AddToColumn(InfoColumn, Launch, HAlign_Fill, FMargin(0.f, 24.f, 0.f, 0.f));
 
 	AddToCanvas(Stage, NewKeyHints(WidgetBlueprint, TEXT("Panel_StageHints"), CaptionStyle, {
-		{ { NSLOCTEXT("knightUI", "KeyDrag", "드래그") }, NSLOCTEXT("knightUI", "HintRotate", "회전") },
+		{ { NSLOCTEXT("knightUI", "KeyDrag", "드래그") }, NSLOCTEXT("knightUI", "HintPan", "이동") },
 		{ { NSLOCTEXT("knightUI", "KeyClick", "클릭") }, NSLOCTEXT("knightUI", "HintSelectRegion", "지역 선택") },
 		{ { INVTEXT("←"), INVTEXT("→") }, NSLOCTEXT("knightUI", "HintCycleRegion", "지역 전환") } }),
 		FAnchors(0.f, 1.f), FVector2D(0.f, 1.f), FMargin(HUDMargin.X, -96.f, 0.f, 0.f), true);

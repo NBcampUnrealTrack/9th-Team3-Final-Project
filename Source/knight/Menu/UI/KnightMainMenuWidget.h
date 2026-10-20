@@ -8,7 +8,7 @@ class UCommonButtonBase;
 class UImage;
 class UPanelWidget;
 class UTextBlock;
-class UKnightStageGlobeWidget;
+class UKnightStageMapWidget;
 class UKnightSettingsWidget;
 class UKnightCodexWidget;
 class UKnightMaintenanceWidget;
@@ -26,8 +26,8 @@ enum class EKnightMainMenuPage : uint8
 };
 
 /**
- * C++ parent for the main-menu root WBP. The stage page is a globe: clicking a region (or Left/Right) selects it,
- * the info panel moves to the region's side, and the launch button unlocks when the stage can be played.
+ * C++ parent for the main-menu root WBP. The stage page is a flat map: clicking a region (or Left/Right) selects it,
+ * the info panel shows it to the right of the map, and the launch button unlocks when the stage can be played.
  */
 UCLASS()
 class KNIGHT_API UKnightMainMenuWidget : public UKnightMenuWidgetBase
@@ -41,7 +41,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|Menu")
 	bool ShowPage(EKnightMainMenuPage NewPage);
 
-	/** Shared entry point for globe clicks, keyboard cycling and tests. NAME_None clears the selection. */
+	/** Shared entry point for map clicks, keyboard cycling and tests. NAME_None clears the selection. */
 	UFUNCTION(BlueprintCallable, Category="Knight|Stage")
 	bool SelectStage(FName StageId);
 
@@ -65,9 +65,9 @@ protected:
 	TObjectPtr<UPanelWidget> Panel_Stage;
 
 	UPROPERTY(meta=(BindWidget))
-	TObjectPtr<UKnightStageGlobeWidget> Globe_Stages;
+	TObjectPtr<UKnightStageMapWidget> Map_Stages;
 
-	/** Info panel next to the globe. Must sit directly in a CanvasPanel: C++ moves it to the selected region's side. */
+	/** Info panel to the right of the map. Must sit directly in a CanvasPanel: C++ places it against the map's edge. */
 	UPROPERTY(meta=(BindWidget))
 	TObjectPtr<UWidget> Panel_StageInfo;
 
@@ -127,7 +127,7 @@ protected:
 	UPROPERTY(meta=(BindWidget))
 	TObjectPtr<UCommonButtonBase> Button_Codex;
 
-	/** Gap between the globe's edge and the info panel. Slate units. */
+	/** Gap between the map's edge and the info panel. Slate units. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Stage", meta=(ClampMin=0))
 	float StageInfoGap = 64.f;
 
@@ -152,13 +152,13 @@ private:
 	UFUNCTION() void HandleCodexClosed();
 
 	UFUNCTION()
-	void HandleGlobeStageClicked(FName StageId);
+	void HandleMapStageClicked(FName StageId);
 
 	UFUNCTION()
 	void HandleLaunchStageClicked();
 
 	bool ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDuringTravel);
-	bool RebuildGlobeMarkers();
+	bool RebuildMapMarkers();
 	void RefreshStageDetails();
 	void RefreshRaidDetails();
 	void PlaceStageInfo();
@@ -181,8 +181,6 @@ private:
 	TArray<FName> StageOrder;
 	FName SelectedStageId;
 	bool bStageLaunchAvailable = false;
-	/** Panel stays on one side while the player drags; it only moves when a region is selected. */
-	bool bStageInfoOnRight = true;
 
 	/** Raid rules load in the background: the target monster's definition can pull in large assets. */
 	TSharedPtr<FStreamableHandle> RaidDefinitionHandle;

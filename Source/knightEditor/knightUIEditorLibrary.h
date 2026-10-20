@@ -95,6 +95,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
 	static bool RemoveWidget(UWidgetBlueprint* WidgetBlueprint, FName WidgetName);
 
+	/** 이름으로 찾은 위젯을 다른 유저 위젯 클래스로 바꾼다. 부모 슬롯 설정은 그대로 둔다. 없거나 새 이름이 이미 있으면 false. */
+	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
+	static bool ReplaceUserWidget(UWidgetBlueprint* WidgetBlueprint, FName WidgetName, TSubclassOf<UUserWidget> NewClass, FName NewName);
+
+	/** 캔버스 패널에 놓인 위젯의 위치와 크기를 바꾼다. 앵커와 정렬은 그대로. */
+	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
+	static bool SetCanvasSlotLayout(UWidgetBlueprint* WidgetBlueprint, FName WidgetName, FVector2D Position, FVector2D Size);
+
+	/** 텍스트 위젯의 글자를 바꾼다. */
+	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
+	static bool SetWidgetText(UWidgetBlueprint* WidgetBlueprint, FName WidgetName, FText Text);
+
 	/** WBP_KnightConfirmModal: 화면을 덮는 어두운 막(클릭 차단), 가운데 패널(제목, 본문, 오른쪽 아래 [취소] [확인]). */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
 	static bool BuildConfirmModal(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> ButtonClass, TSubclassOf<UCommonButtonStyle> CancelButtonStyle,
@@ -145,10 +157,10 @@ public:
 		TSubclassOf<UCommonButtonStyle> SecondaryButtonStyle, TSubclassOf<UUserWidget> SaveCardClass, UTexture2D* Logo, UTexture2D* Gradient,
 		TSubclassOf<UCommonTextStyle> TitleStyle, TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> BodyDimStyle);
 
-	/** WBP_KnightMainMenu: 로비 글자 메뉴, 지구본 스테이지 선택(가운데 지구본 + 옆 정보 패널), 정비/설정/도감 자리. */
+	/** WBP_KnightMainMenu: 로비 글자 메뉴, 지도 스테이지 선택(왼쪽 평면 지도 + 오른쪽 정보 패널), 정비/설정/도감 자리. */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
 	static bool BuildMainMenu(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> MenuItemClass, TSubclassOf<UUserWidget> ButtonClass,
-		TSubclassOf<UCommonButtonStyle> SecondaryButtonStyle, TSubclassOf<UUserWidget> GlobeClass, UTexture2D* Gradient,
+		TSubclassOf<UCommonButtonStyle> SecondaryButtonStyle, TSubclassOf<UUserWidget> MapClass, UTexture2D* Gradient,
 		TSubclassOf<UCommonTextStyle> TitleStyle, TSubclassOf<UCommonTextStyle> BodyStyle, TSubclassOf<UCommonTextStyle> BodyDimStyle,
 		TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> WarningStyle, TSubclassOf<UCommonTextStyle> NumberStyle);
 
