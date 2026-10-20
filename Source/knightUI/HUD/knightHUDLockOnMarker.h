@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
-#include "Containers/Ticker.h"
+#include "Engine/EngineBaseTypes.h"
 #include "FieldNotificationId.h"
 #include "Monster/knightMonsterPartComponent.h"
 #include "knightHUDLockOnMarker.generated.h"
@@ -24,7 +24,8 @@ class UknightVM_PlayerStatus;
  * Fills the HUD; the pieces are positioned every frame from the target's projected screen position, so they must be
  * direct children of the root Canvas Panel: Box, PartFrame, PartFlash, Line_Diagonal, Line_Shelf, Plate,
  * Txt_Distance (and Txt_TargetName / Txt_PartName anywhere). The branch flips to the left when the target is on the right side of the
- * screen. Ticks only while locked.
+ * screen. Ticks only while locked, right after the world tick (cameras updated, before Slate paints) so the marker
+ * lands on the target in the same frame instead of one frame behind.
  */
 UCLASS(Abstract, Blueprintable, meta=(DisableNativeTick))
 class KNIGHTUI_API UknightHUDLockOnMarker : public UUserWidget
@@ -147,7 +148,7 @@ private:
 	void RefreshLockState();
 	void RefreshPart();
 	void HandleLockedPartConditionChanged(EknightPartCondition NewCondition);
-	bool TickMarker(float DeltaTime);
+	void TickMarker(UWorld* World, ELevelTick TickType, float DeltaSeconds);
 	void StopTicking();
 	bool UpdateLayout();
 	void ApplyAnimation();
@@ -155,7 +156,7 @@ private:
 
 	TWeakObjectPtr<UknightVM_PlayerStatus> ViewModel;
 	TWeakObjectPtr<AActor> ShownTarget;
-	FTSTicker::FDelegateHandle Ticker;
+	FDelegateHandle Ticker;
 	FDelegateHandle PartConditionHandle;
 	float AnimTime = 0.f;
 	/** Time since the last condition flash; starts past the end so nothing flashes on lock. */
