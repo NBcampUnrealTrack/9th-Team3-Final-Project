@@ -119,7 +119,9 @@ void UknightDemoAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	SetBoolVar(TEXT("isWalk"), false);
 	SetBoolVar(TEXT("isOneHanded"), !HasTag(knightGameplayTags::State_Stance_TwoHanded));
 	// 락온 중에도 몸이 대상을 바라보며 좌우·후방 스텝(Speed_X/Y/Degree 블렌드 스페이스)으로 이동하도록 전투 이동 자세를 쓴다.
-	SetBoolVar(TEXT("isBattleState"), HasTag(TAG_State_Combat_Demo) || HasTag(knightGameplayTags::State_LockedOn));
+	// (2026-10-20) 칼을 든 때(State.Combat)만. 락온 중이어도 칼이 등에 있으면 칼을 쥔 자세·다리 보정·왼손 IK가 켜지지 않게 한다.
+	// 락온 중에는 납도하지 않으므로(CombatStance), 칼을 든 락온은 내내 전투 이동(옆·뒤 스텝)이다.
+	SetBoolVar(TEXT("isBattleState"), HasTag(TAG_State_Combat_Demo));
 	SetBoolVar(TEXT("isLocomotion"), !Movement->IsFalling() && !IsAnyMontagePlaying());
 	SetFloatVar(TEXT("BattleStanceTimer"), 0.0);
 
