@@ -499,10 +499,9 @@ bool UknightUIEditorLibrary::BuildHUDRepairKit(UWidgetBlueprint* WidgetBlueprint
 	{
 		return false;
 	}
-	UHorizontalBox* const Root = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("HorizontalBox_Root"));
-	WidgetBlueprint->WidgetTree->RootWidget = Root;
-
-	USizeBox* const Box = NewSizeBox(WidgetBlueprint, TEXT("SizeBox_Wrench"), 54.f, 54.f);
+	// 중요한 아이템이라 크게: 스패너를 96 칸에 꽉 채운다(텍스처 자체 여백이 약 10%). 개수는 칸 오른쪽 아래 모서리에 겹친다.
+	USizeBox* const Box = NewSizeBox(WidgetBlueprint, TEXT("SizeBox_Wrench"), 96.f, 96.f);
+	WidgetBlueprint->WidgetTree->RootWidget = Box;
 	UOverlay* const Layers = NewWidget<UOverlay>(WidgetBlueprint, TEXT("Overlay_Wrench"));
 	Box->AddChild(Layers);
 	// 너무 눈에 띄지 않게 옅은 1px 테두리.
@@ -517,12 +516,12 @@ bool UknightUIEditorLibrary::BuildHUDRepairKit(UWidgetBlueprint* WidgetBlueprint
 	Frame->SetPixelSnapping(EWidgetPixelSnapping::Disabled);
 	AddToOverlay(Layers, Frame, HAlign_Fill, VAlign_Fill);
 	// 어두운 스패너 위로 충전량만큼 밝은 스패너가 아래에서 차오른다.
-	const FVector2D IconSize(46.f, 46.f);
+	const FVector2D IconSize(96.f, 96.f);
 	USizeBox* const Icon = NewSizeBox(WidgetBlueprint, TEXT("SizeBox_WrenchIcon"), IconSize.X, IconSize.Y);
 	Icon->AddChild(NewFillBar(WidgetBlueprint, TEXT("Bar_RepairGauge"), HUDTextureBrush(WrenchTexture, IconSize, FLinearColor(FColor(0x3A, 0x4A, 0x58))), WrenchTexture, IconSize));
 	AddToOverlay(Layers, Icon, HAlign_Center, VAlign_Center);
-	AddToRow(Root, Box, false, HAlign_Left);
-	AddToRow(Root, NewText(WidgetBlueprint, TEXT("Txt_RepairKitCount"), CountStyle, INVTEXT("2"), true), false, HAlign_Left, FMargin(8.f, 0.f, 0.f, 0.f));
+	// 스패너 위에 겹치므로 외곽선이 있는 글자 스타일을 쓴다.
+	AddToOverlay(Layers, NewText(WidgetBlueprint, TEXT("Txt_RepairKitCount"), CountStyle, INVTEXT("2"), true), HAlign_Right, VAlign_Bottom, FMargin(0.f, 0.f, 6.f, 0.f));
 
 	EndBuild(WidgetBlueprint);
 	return true;
@@ -696,9 +695,11 @@ bool UknightUIEditorLibrary::BuildHUDLayout(UWidgetBlueprint* WidgetBlueprint, T
 	LogSlot->SetPosition(FVector2D(0.f, -HUDMargin.Y));
 	LogSlot->SetSize(FVector2D(760.f, 64.f));
 
-	// 수리 키트: 오른쪽 아래. 튜토리얼 칸은 그 위.
-	PlaceInCorner(Root, NewWidget<UUserWidget>(WidgetBlueprint, RepairKitClass, TEXT("RepairKit"), true), FVector2D(1.f, 1.f), FVector2D(-HUDMargin.X, -HUDMargin.Y));
-	PlaceInCorner(Root, NewWidget<UUserWidget>(WidgetBlueprint, HintClass, TEXT("Hint"), true), FVector2D(1.f, 1.f), FVector2D(-HUDMargin.X, -(HUDMargin.Y + 84.f)));
+	// 수리 키트: 메카 설계도(폭 180) 바로 오른쪽, 아래를 설계도 발끝에 맞춘다. 그로기 게이지와 같이 보이게.
+	PlaceInCorner(Root, NewWidget<UUserWidget>(WidgetBlueprint, RepairKitClass, TEXT("RepairKit"), true), FVector2D(0.f, 1.f),
+		FVector2D(28.f + 180.f + 8.f, -(HUDMargin.Y + 100.f)));
+	// 튜토리얼 칸: 오른쪽 아래.
+	PlaceInCorner(Root, NewWidget<UUserWidget>(WidgetBlueprint, HintClass, TEXT("Hint"), true), FVector2D(1.f, 1.f), FVector2D(-HUDMargin.X, -HUDMargin.Y));
 
 	// 목표 + 남은 시간: 오른쪽 위.
 	PlaceInCorner(Root, NewWidget<UUserWidget>(WidgetBlueprint, RaidTimerClass, TEXT("RaidTimer"), true), FVector2D(1.f, 0.f), FVector2D(-HUDMargin.X, HUDMargin.Y));
