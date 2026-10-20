@@ -32,6 +32,9 @@ public:
     float Heat = 0.f;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Janyeol|Fire", meta=(ClampMin="0"))
     float TransitionSpeed = 2.f;
+    /** Manual dimming on top of Heat. 1 is normal; lower values shrink every flame and the body glow without hiding them. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Janyeol|Fire", meta=(ClampMin="0", ClampMax="1"))
+    float Strength = 1.f;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Janyeol|Fire")
     bool FireEnabled = true;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Janyeol|Fire")
@@ -49,11 +52,13 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Janyeol|Assets") TObjectPtr<UMaterialInterface> MantleMaterial;
 
     UFUNCTION(BlueprintCallable, Category="Janyeol|Fire") void SetFireHeat(float Value);
+    UFUNCTION(BlueprintCallable, Category="Janyeol|Fire") void SetFireStrength(float Value);
     UFUNCTION(BlueprintCallable, Category="Janyeol|Fire") void SetFireEnabled(bool Enabled);
     UFUNCTION(BlueprintCallable, CallInEditor, Category="Janyeol|Fire") void RefreshFire();
     UFUNCTION(BlueprintPure, Category="Janyeol|Fire") bool IsFireReady() const;
     UFUNCTION(BlueprintPure, Category="Janyeol|Fire") USkeletalMeshComponent* GetTargetMesh() const;
     UFUNCTION(BlueprintPure, Category="Janyeol|Fire") float GetCurrentHeat() const { return CurrentHeat; }
+    UFUNCTION(BlueprintPure, Category="Janyeol|Fire") float GetCurrentStrength() const { return CurrentStrength; }
 
     virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* TickFunction) override;
 
@@ -83,5 +88,6 @@ private:
     UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> MantleMID;
     UPROPERTY(Transient) TObjectPtr<UMaterialInterface> OriginalBodyMaterial;
     float CurrentHeat = 0.f;
+    float CurrentStrength = 1.f;
     bool LastFireEnabled = false;
 };
