@@ -60,13 +60,18 @@ void UknightGameplayAbility_JumpHover::ActivateAbility(const FGameplayAbilitySpe
 	{
 		// 공격·검 뽑기·대시 몽타주 중에는 점프하지 않는다.
 		const UAnimInstance* const Anim = Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr;
-		if ((Anim && Anim->IsAnyMontagePlaying()) || !Character->CanJump())
+		// (2026-10-20) 점프 행동 에너지: 조금이라도 남아 있어야 뛰고, 뛴 뒤에 JumpStaminaCost만큼 쓴다.
+		const UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();
+		const FGameplayAttribute Gauge = UknightAttributeSet::GetBoostGaugeAttribute();
+		const bool bOutOfStamina = JumpStaminaCost > 0.f && ASC && ASC->HasAttributeSetForAttribute(Gauge) && ASC->GetNumericAttribute(Gauge) <= 0.f;
+		if ((Anim && Anim->IsAnyMontagePlaying()) || !Character->CanJump() || bOutOfStamina)
 		{
 			EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 			return;
 		}
 		Character->Jump();
 		bJumped = true;
+		ApplyStaminaCost(JumpStaminaCost);
 	}
 	else if (!StartHover())
 	{

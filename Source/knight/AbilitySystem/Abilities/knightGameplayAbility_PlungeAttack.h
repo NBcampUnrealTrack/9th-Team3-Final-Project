@@ -238,6 +238,12 @@ private:
 	UFUNCTION()
 	void OnMeleeHitEvent(FGameplayEventData Payload);
 
+	/**
+	 * (2026-10-20 사용자 결정 '점프 공격은 1타만') 이번 발동에서 이미 맞힌 대상. 시작 베기(MeleeTrace)와 착지 충격(MeleeArea)이
+	 * 같은 적을 각각 맞혀 두 번 들어가던 것을 막는다. 먼저 맞힌 쪽만 들어간다.
+	 */
+	TSet<TWeakObjectPtr<AActor>> HitActorsThisAttack;
+
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UNiagaraComponent>> ThrusterComponents;
 
