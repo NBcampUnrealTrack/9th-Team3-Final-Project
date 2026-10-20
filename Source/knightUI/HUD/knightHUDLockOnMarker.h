@@ -8,7 +8,6 @@
 #include "knightHUDLockOnMarker.generated.h"
 
 class UCommonTextBlock;
-class UProgressBar;
 class USoundBase;
 class UknightTargetLockComponent;
 class UknightVM_PlayerStatus;
@@ -20,12 +19,11 @@ class UknightVM_PlayerStatus;
  * When the lock is on a monster part, a part frame around the box shows the part's condition by color (red, dark red
  * blinking when critical, gray when broken, neutral when unbreakable) and flashes when the condition changes.
  *
- * Below the box a stagger gauge fills as the target's poise is taken and blinks when it staggers, and under it the
- * distance to the target is shown in meters.
+ * Below the box the distance to the target is shown in meters.
  *
  * Fills the HUD; the pieces are positioned every frame from the target's projected screen position, so they must be
- * direct children of the root Canvas Panel: Box, PartFrame, PartFlash, Line_Diagonal, Line_Shelf, Plate, Stagger,
- * Txt_Distance (and Txt_TargetName / Txt_PartName / Bar_Stagger anywhere). The branch flips to the left when the target is on the right side of the
+ * direct children of the root Canvas Panel: Box, PartFrame, PartFlash, Line_Diagonal, Line_Shelf, Plate,
+ * Txt_Distance (and Txt_TargetName / Txt_PartName anywhere). The branch flips to the left when the target is on the right side of the
  * screen. Ticks only while locked.
  */
 UCLASS(Abstract, Blueprintable, meta=(DisableNativeTick))
@@ -63,15 +61,7 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category="Knight|HUD", meta=(BindWidgetOptional))
 	TObjectPtr<UCommonTextBlock> Txt_PartName;
 
-	/** Below the box: caption + Bar_Stagger. Hidden when the target has no poise. */
-	UPROPERTY(BlueprintReadOnly, Category="Knight|HUD", meta=(BindWidgetOptional))
-	TObjectPtr<UWidget> Stagger;
-
-	/** Poise taken from the target; full means it staggers. */
-	UPROPERTY(BlueprintReadOnly, Category="Knight|HUD", meta=(BindWidgetOptional))
-	TObjectPtr<UProgressBar> Bar_Stagger;
-
-	/** Under the stagger gauge: "[ 42M ]" */
+	/** Under the box: "[ 42M ]" */
 	UPROPERTY(BlueprintReadOnly, Category="Knight|HUD", meta=(BindWidgetOptional))
 	TObjectPtr<UCommonTextBlock> Txt_Distance;
 
@@ -109,26 +99,9 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Knight|HUD|Part", meta=(ClampMin=1))
 	float FlashStartScale = 1.5f;
 
-	UPROPERTY(EditAnywhere, Category="Knight|HUD|Stagger")
-	FLinearColor StaggerColor = FLinearColor(FColor(0xFF, 0x7A, 0x1A));
-
-	/** The full gauge blinks in this color for StaggerFlashTime when the target staggers. */
-	UPROPERTY(EditAnywhere, Category="Knight|HUD|Stagger")
-	FLinearColor StaggerFullColor = FLinearColor(FColor(0xF4, 0xF8, 0xFC));
-
-	UPROPERTY(EditAnywhere, Category="Knight|HUD|Stagger", meta=(ClampMin=0, Units="s"))
-	float StaggerFlashTime = 1.2f;
-
-	UPROPERTY(EditAnywhere, Category="Knight|HUD|Stagger", meta=(ClampMin=0.05, Units="s"))
-	float StaggerBlinkPeriod = 0.2f;
-
-	/** Distance from the box centre down to the top of the stagger gauge (clears the 104 part frame). Below the box, because the leader line leaves upward. */
+	/** Distance from the box centre down to the top of the distance readout (clears the 104 part frame). Below the box, because the leader line leaves upward. */
 	UPROPERTY(EditAnywhere, Category="Knight|HUD|Layout", meta=(ClampMin=0))
-	float StaggerOffset = 58.f;
-
-	/** Distance from the box centre down to the top of the distance readout, under the stagger gauge. */
-	UPROPERTY(EditAnywhere, Category="Knight|HUD|Layout", meta=(ClampMin=0))
-	float DistanceOffset = 90.f;
+	float DistanceOffset = 58.f;
 
 	/** Side of the corner box, in slate units at 1080p. */
 	UPROPERTY(EditAnywhere, Category="Knight|HUD|Layout", meta=(ClampMin=8))
@@ -174,8 +147,6 @@ private:
 	void RefreshLockState();
 	void RefreshPart();
 	void HandleLockedPartConditionChanged(EknightPartCondition NewCondition);
-	void HandleStaggerChanged(UObject* InViewModel, UE::FieldNotification::FFieldId FieldId);
-	void RefreshStagger();
 	bool TickMarker(float DeltaTime);
 	void StopTicking();
 	bool UpdateLayout();
@@ -189,9 +160,6 @@ private:
 	float AnimTime = 0.f;
 	/** Time since the last condition flash; starts past the end so nothing flashes on lock. */
 	float FlashElapsed = TNumericLimits<float>::Max();
-	/** Time since the gauge filled; starts past the end so nothing blinks on lock. */
-	float StaggerFlashElapsed = TNumericLimits<float>::Max();
-	float ShownStagger = 0.f;
 	int32 ShownDistance = -1;
 	bool bFlipped = false;
 };

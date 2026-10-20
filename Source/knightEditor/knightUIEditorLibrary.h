@@ -43,7 +43,7 @@ public:
 
 	/**
 	 * WBP_HUDLockOnMarker: 캔버스 직속의 Box(주황 귀퉁이), PartFrame/PartFlash(부위 틀, PartFrameTexture가 있을 때), Line_Diagonal, Line_Shelf,
-	 * Plate(TARGET LOCK + 이름 + 부위 이름), Stagger(경직 게이지), Txt_Distance. 위치는 C++가 매 프레임 정한다.
+	 * Plate(TARGET LOCK + 이름 + 부위 이름), Txt_Distance. 위치는 C++가 매 프레임 정한다.
 	 */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
 	static bool BuildHUDLockOnMarker(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> NameStyle,
@@ -54,7 +54,7 @@ public:
 	static bool BuildHUDFrameStatus(UWidgetBlueprint* WidgetBlueprint, UTexture2D* HeadTexture, UTexture2D* TorsoTexture, UTexture2D* ArmsTexture,
 		UTexture2D* LegsTexture, UTexture2D* FillTexture, FVector2D Size);
 
-	/** WBP_HUDRepairKit: 옅은 네모 테두리 안의 스패너(어두운 바탕 위로 아래→위 충전 바, Bar_RepairGauge)와 오른쪽 개수(Txt_RepairKitCount). */
+	/** WBP_HUDRepairKit: 옅은 네모 테두리(96)를 채우는 스패너(어두운 바탕 위로 아래→위 충전 바, Bar_RepairGauge)와 오른쪽 아래 모서리의 개수(Txt_RepairKitCount). */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
 	static bool BuildHUDRepairKit(UWidgetBlueprint* WidgetBlueprint, UTexture2D* WrenchTexture, TSubclassOf<UCommonTextStyle> CountStyle);
 
@@ -83,7 +83,7 @@ public:
 
 	/**
 	 * WBP_HUDLayout: 화면 전체의 저체력 연출(맨 아래)과 슬로우 모션 연출, 락온 마커, 플레이어 패널, 왼쪽 아래 끝에 메카 설계도(체력 위), 아래 가운데 대화창,
-	 * 오른쪽 아래 수리 키트와 그 위 튜토리얼 칸, 오른쪽 위 목표/타이머, 맨 위에 그로기 노이즈.
+	 * 설계도 오른쪽에 수리 키트, 오른쪽 아래 튜토리얼 칸, 오른쪽 위 목표/타이머, 맨 위에 그로기 노이즈.
 	 */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
 	static bool BuildHUDLayout(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> PlayerStatusClass, TSubclassOf<UUserWidget> RaidTimerClass,
@@ -94,6 +94,18 @@ public:
 	/** 이름으로 위젯 하나를 자식째 지운다. 이미 만든 블루프린트에서 요소를 빼낼 때 쓴다. 없으면 false. */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
 	static bool RemoveWidget(UWidgetBlueprint* WidgetBlueprint, FName WidgetName);
+
+	/** 이름으로 찾은 위젯을 다른 유저 위젯 클래스로 바꾼다. 부모 슬롯 설정은 그대로 둔다. 없거나 새 이름이 이미 있으면 false. */
+	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
+	static bool ReplaceUserWidget(UWidgetBlueprint* WidgetBlueprint, FName WidgetName, TSubclassOf<UUserWidget> NewClass, FName NewName);
+
+	/** 캔버스 패널에 놓인 위젯의 위치와 크기를 바꾼다. 앵커와 정렬은 그대로. */
+	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
+	static bool SetCanvasSlotLayout(UWidgetBlueprint* WidgetBlueprint, FName WidgetName, FVector2D Position, FVector2D Size);
+
+	/** 텍스트 위젯의 글자를 바꾼다. */
+	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
+	static bool SetWidgetText(UWidgetBlueprint* WidgetBlueprint, FName WidgetName, FText Text);
 
 	/** WBP_KnightConfirmModal: 화면을 덮는 어두운 막(클릭 차단), 가운데 패널(제목, 본문, 오른쪽 아래 [취소] [확인]). */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
@@ -145,10 +157,10 @@ public:
 		TSubclassOf<UCommonButtonStyle> SecondaryButtonStyle, TSubclassOf<UUserWidget> SaveCardClass, UTexture2D* Logo, UTexture2D* Gradient,
 		TSubclassOf<UCommonTextStyle> TitleStyle, TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> BodyDimStyle);
 
-	/** WBP_KnightMainMenu: 로비 글자 메뉴, 지구본 스테이지 선택(가운데 지구본 + 옆 정보 패널), 정비/설정/도감 자리. */
+	/** WBP_KnightMainMenu: 로비 글자 메뉴, 지도 스테이지 선택(왼쪽 평면 지도 + 오른쪽 정보 패널), 정비/설정/도감 자리. */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
 	static bool BuildMainMenu(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> MenuItemClass, TSubclassOf<UUserWidget> ButtonClass,
-		TSubclassOf<UCommonButtonStyle> SecondaryButtonStyle, TSubclassOf<UUserWidget> GlobeClass, UTexture2D* Gradient,
+		TSubclassOf<UCommonButtonStyle> SecondaryButtonStyle, TSubclassOf<UUserWidget> MapClass, UTexture2D* Gradient,
 		TSubclassOf<UCommonTextStyle> TitleStyle, TSubclassOf<UCommonTextStyle> BodyStyle, TSubclassOf<UCommonTextStyle> BodyDimStyle,
 		TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> WarningStyle, TSubclassOf<UCommonTextStyle> NumberStyle);
 

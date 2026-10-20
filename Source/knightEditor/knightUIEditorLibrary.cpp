@@ -184,6 +184,10 @@ namespace
 
 	/** 1080p 기준 세이프존 4.5% (86 x 49)보다 조금 안쪽. */
 	const FVector2D HUDMargin(96.f, 64.f);
+
+	/** 스테이지 지도: 화면 가운데 기준 위치와 크기. 오른쪽에 정보 패널(420)이 들어가도록 왼쪽으로 민다. */
+	const FVector2D StageMapPosition(-250.f, 10.f);
+	const FVector2D StageMapSize(1100.f, 620.f);
 }
 
 bool UknightUIEditorLibrary::BuildKnightButtonLayout(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> BracketClass, TSubclassOf<UCommonTextStyle> LabelStyle)
@@ -406,23 +410,13 @@ bool UknightUIEditorLibrary::BuildHUDLockOnMarker(UWidgetBlueprint* WidgetBluepr
 	PlateSlot->SetAlignment(FVector2D(0.f, 1.f));
 	PlateSlot->SetPosition(Preview + FVector2D(64.f, -78.f));
 
-	// 박스 아래에 경직 게이지, 그 아래 거리. 가지선이 위로 나가므로 겹치지 않는다. 채움 색은 C++가 칠한다.
-	UVerticalBox* const Stagger = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("Stagger"), true);
-	Stagger->SetVisibility(ESlateVisibility::HitTestInvisible);
-	USizeBox* const StaggerBox = NewSizeBox(WidgetBlueprint, TEXT("SizeBox_Stagger"), 96.f, 5.f);
-	StaggerBox->AddChild(NewBar(WidgetBlueprint, TEXT("Bar_Stagger"), true, 0.6f));
-	AddToColumn(Stagger, StaggerBox, HAlign_Center);
-	UCanvasPanelSlot* const StaggerSlot = Root->AddChildToCanvas(Stagger);
-	StaggerSlot->SetAutoSize(true);
-	StaggerSlot->SetAlignment(FVector2D(0.5f, 0.f));
-	StaggerSlot->SetPosition(Preview + FVector2D(0.f, 58.f));
-
+	// 박스 아래에 거리. 가지선이 위로 나가므로 겹치지 않는다.
 	UCommonTextBlock* const Distance = NewText(WidgetBlueprint, TEXT("Txt_Distance"), CaptionStyle, INVTEXT("[ 42M ]"), true);
 	Distance->SetVisibility(ESlateVisibility::HitTestInvisible);
 	UCanvasPanelSlot* const DistanceSlot = Root->AddChildToCanvas(Distance);
 	DistanceSlot->SetAutoSize(true);
 	DistanceSlot->SetAlignment(FVector2D(0.5f, 0.f));
-	DistanceSlot->SetPosition(Preview + FVector2D(0.f, 90.f));
+	DistanceSlot->SetPosition(Preview + FVector2D(0.f, 58.f));
 
 	EndBuild(WidgetBlueprint);
 	return true;
@@ -509,10 +503,9 @@ bool UknightUIEditorLibrary::BuildHUDRepairKit(UWidgetBlueprint* WidgetBlueprint
 	{
 		return false;
 	}
-	UHorizontalBox* const Root = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("HorizontalBox_Root"));
-	WidgetBlueprint->WidgetTree->RootWidget = Root;
-
-	USizeBox* const Box = NewSizeBox(WidgetBlueprint, TEXT("SizeBox_Wrench"), 54.f, 54.f);
+	// 중요한 아이템이라 크게: 스패너를 96 칸에 꽉 채운다(텍스처 자체 여백이 약 10%). 개수는 칸 오른쪽 아래 모서리에 겹친다.
+	USizeBox* const Box = NewSizeBox(WidgetBlueprint, TEXT("SizeBox_Wrench"), 96.f, 96.f);
+	WidgetBlueprint->WidgetTree->RootWidget = Box;
 	UOverlay* const Layers = NewWidget<UOverlay>(WidgetBlueprint, TEXT("Overlay_Wrench"));
 	Box->AddChild(Layers);
 	// 너무 눈에 띄지 않게 옅은 1px 테두리.
@@ -527,12 +520,12 @@ bool UknightUIEditorLibrary::BuildHUDRepairKit(UWidgetBlueprint* WidgetBlueprint
 	Frame->SetPixelSnapping(EWidgetPixelSnapping::Disabled);
 	AddToOverlay(Layers, Frame, HAlign_Fill, VAlign_Fill);
 	// 어두운 스패너 위로 충전량만큼 밝은 스패너가 아래에서 차오른다.
-	const FVector2D IconSize(46.f, 46.f);
+	const FVector2D IconSize(96.f, 96.f);
 	USizeBox* const Icon = NewSizeBox(WidgetBlueprint, TEXT("SizeBox_WrenchIcon"), IconSize.X, IconSize.Y);
 	Icon->AddChild(NewFillBar(WidgetBlueprint, TEXT("Bar_RepairGauge"), HUDTextureBrush(WrenchTexture, IconSize, FLinearColor(FColor(0x3A, 0x4A, 0x58))), WrenchTexture, IconSize));
 	AddToOverlay(Layers, Icon, HAlign_Center, VAlign_Center);
-	AddToRow(Root, Box, false, HAlign_Left);
-	AddToRow(Root, NewText(WidgetBlueprint, TEXT("Txt_RepairKitCount"), CountStyle, INVTEXT("2"), true), false, HAlign_Left, FMargin(8.f, 0.f, 0.f, 0.f));
+	// 스패너 위에 겹치므로 외곽선이 있는 글자 스타일을 쓴다.
+	AddToOverlay(Layers, NewText(WidgetBlueprint, TEXT("Txt_RepairKitCount"), CountStyle, INVTEXT("2"), true), HAlign_Right, VAlign_Bottom, FMargin(0.f, 0.f, 6.f, 0.f));
 
 	EndBuild(WidgetBlueprint);
 	return true;
@@ -706,9 +699,11 @@ bool UknightUIEditorLibrary::BuildHUDLayout(UWidgetBlueprint* WidgetBlueprint, T
 	LogSlot->SetPosition(FVector2D(0.f, -HUDMargin.Y));
 	LogSlot->SetSize(FVector2D(760.f, 64.f));
 
-	// 수리 키트: 오른쪽 아래. 튜토리얼 칸은 그 위.
-	PlaceInCorner(Root, NewWidget<UUserWidget>(WidgetBlueprint, RepairKitClass, TEXT("RepairKit"), true), FVector2D(1.f, 1.f), FVector2D(-HUDMargin.X, -HUDMargin.Y));
-	PlaceInCorner(Root, NewWidget<UUserWidget>(WidgetBlueprint, HintClass, TEXT("Hint"), true), FVector2D(1.f, 1.f), FVector2D(-HUDMargin.X, -(HUDMargin.Y + 84.f)));
+	// 수리 키트: 메카 설계도(폭 180) 바로 오른쪽, 아래를 설계도 발끝에 맞춘다. 그로기 게이지와 같이 보이게.
+	PlaceInCorner(Root, NewWidget<UUserWidget>(WidgetBlueprint, RepairKitClass, TEXT("RepairKit"), true), FVector2D(0.f, 1.f),
+		FVector2D(28.f + 180.f + 8.f, -(HUDMargin.Y + 100.f)));
+	// 튜토리얼 칸: 오른쪽 아래.
+	PlaceInCorner(Root, NewWidget<UUserWidget>(WidgetBlueprint, HintClass, TEXT("Hint"), true), FVector2D(1.f, 1.f), FVector2D(-HUDMargin.X, -HUDMargin.Y));
 
 	// 목표 + 남은 시간: 오른쪽 위.
 	PlaceInCorner(Root, NewWidget<UUserWidget>(WidgetBlueprint, RaidTimerClass, TEXT("RaidTimer"), true), FVector2D(1.f, 0.f), FVector2D(-HUDMargin.X, HUDMargin.Y));
@@ -741,6 +736,59 @@ bool UknightUIEditorLibrary::RemoveWidget(UWidgetBlueprint* WidgetBlueprint, FNa
 		Each->Rename(nullptr, GetTransientPackage(), REN_DontCreateRedirectors | REN_NonTransactional);
 	}
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBlueprint);
+	return true;
+}
+
+bool UknightUIEditorLibrary::ReplaceUserWidget(UWidgetBlueprint* WidgetBlueprint, FName WidgetName, TSubclassOf<UUserWidget> NewClass, FName NewName)
+{
+	UWidget* const Old = WidgetBlueprint && WidgetBlueprint->WidgetTree && NewClass ? WidgetBlueprint->WidgetTree->FindWidget(WidgetName) : nullptr;
+	UPanelWidget* const Parent = Old ? Old->GetParent() : nullptr;
+	if (!Parent || (NewName != WidgetName && WidgetBlueprint->WidgetTree->FindWidget(NewName)))
+	{
+		return false;
+	}
+	WidgetBlueprint->Modify();
+	WidgetBlueprint->WidgetTree->Modify();
+	const int32 Index = Parent->GetChildIndex(Old);
+	const bool bVariable = Old->bIsVariable;
+
+	// 이전 위젯의 이름을 먼저 비워야 같은 이름으로 새로 만들 수 있다.
+	WidgetBlueprint->OnVariableRemoved(Old->GetFName());
+	Old->Rename(nullptr, GetTransientPackage(), REN_DontCreateRedirectors | REN_NonTransactional);
+	UUserWidget* const New = NewWidget<UUserWidget>(WidgetBlueprint, NewClass, NewName, bVariable);
+	// 슬롯(위치, 크기, 정렬)은 그대로 두고 내용만 바꾼다.
+	Parent->ReplaceChildAt(Index, New);
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBlueprint);
+	return true;
+}
+
+bool UknightUIEditorLibrary::SetCanvasSlotLayout(UWidgetBlueprint* WidgetBlueprint, FName WidgetName, FVector2D Position, FVector2D Size)
+{
+	UWidget* const Widget = WidgetBlueprint && WidgetBlueprint->WidgetTree ? WidgetBlueprint->WidgetTree->FindWidget(WidgetName) : nullptr;
+	UCanvasPanelSlot* const CanvasSlot = Widget ? Cast<UCanvasPanelSlot>(Widget->Slot) : nullptr;
+	if (!CanvasSlot)
+	{
+		return false;
+	}
+	WidgetBlueprint->Modify();
+	CanvasSlot->Modify();
+	CanvasSlot->SetPosition(Position);
+	CanvasSlot->SetSize(Size);
+	FBlueprintEditorUtils::MarkBlueprintAsModified(WidgetBlueprint);
+	return true;
+}
+
+bool UknightUIEditorLibrary::SetWidgetText(UWidgetBlueprint* WidgetBlueprint, FName WidgetName, FText Text)
+{
+	UTextBlock* const Label = WidgetBlueprint && WidgetBlueprint->WidgetTree ? Cast<UTextBlock>(WidgetBlueprint->WidgetTree->FindWidget(WidgetName)) : nullptr;
+	if (!Label)
+	{
+		return false;
+	}
+	WidgetBlueprint->Modify();
+	Label->Modify();
+	Label->SetText(Text);
+	FBlueprintEditorUtils::MarkBlueprintAsModified(WidgetBlueprint);
 	return true;
 }
 
@@ -1518,11 +1566,11 @@ bool UknightUIEditorLibrary::BuildTitleMenu(UWidgetBlueprint* WidgetBlueprint, T
 }
 
 bool UknightUIEditorLibrary::BuildMainMenu(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> MenuItemClass, TSubclassOf<UUserWidget> ButtonClass,
-	TSubclassOf<UCommonButtonStyle> SecondaryButtonStyle, TSubclassOf<UUserWidget> GlobeClass, UTexture2D* Gradient,
+	TSubclassOf<UCommonButtonStyle> SecondaryButtonStyle, TSubclassOf<UUserWidget> MapClass, UTexture2D* Gradient,
 	TSubclassOf<UCommonTextStyle> TitleStyle, TSubclassOf<UCommonTextStyle> BodyStyle, TSubclassOf<UCommonTextStyle> BodyDimStyle,
 	TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> WarningStyle, TSubclassOf<UCommonTextStyle> NumberStyle)
 {
-	if (!MenuItemClass || !MenuItemClass->IsChildOf<UknightButtonBase>() || !ButtonClass || !ButtonClass->IsChildOf<UknightButtonBase>() || !GlobeClass
+	if (!MenuItemClass || !MenuItemClass->IsChildOf<UknightButtonBase>() || !ButtonClass || !ButtonClass->IsChildOf<UknightButtonBase>() || !MapClass
 		|| !BeginBuild(WidgetBlueprint, TEXT("BuildMainMenu")))
 	{
 		return false;
@@ -1549,7 +1597,7 @@ bool UknightUIEditorLibrary::BuildMainMenu(UWidgetBlueprint* WidgetBlueprint, TS
 		{ TEXT("Button_ReturnToTitle"), NSLOCTEXT("knightUI", "LobbyTitle", "타이틀로") } }),
 		FAnchors(0.f, 0.5f), FVector2D(0.f, 0.f), FMargin(HUDMargin.X, 8.f, 0.f, 0.f), true);
 
-	// Stage: globe in the middle, info panel beside it (C++ picks the side).
+	// Stage: map left of centre, info panel against its right edge (C++ places it).
 	UCanvasPanel* const Stage = NewWidget<UCanvasPanel>(WidgetBlueprint, TEXT("Panel_Stage"), true);
 	Pages->AddChild(Stage);
 	UImage* const StageDim = NewWidget<UImage>(WidgetBlueprint, TEXT("Img_StageDim"));
@@ -1562,12 +1610,12 @@ bool UknightUIEditorLibrary::BuildMainMenu(UWidgetBlueprint* WidgetBlueprint, TS
 	AddToColumn(StageHeader, NewText(WidgetBlueprint, TEXT("Txt_StageHeading"), TitleStyle, NSLOCTEXT("knightUI", "StageHeading", "작전 지역 선택"), false), HAlign_Left);
 	AddToCanvas(Stage, StageHeader, FAnchors(0.f, 0.f), FVector2D::ZeroVector, FMargin(HUDMargin.X, HUDMargin.Y, 0.f, 0.f), true);
 
-	UUserWidget* const Globe = NewWidget<UUserWidget>(WidgetBlueprint, GlobeClass, TEXT("Globe_Stages"), true);
-	AddToCanvas(Stage, Globe, FAnchors(0.5f, 0.5f), FVector2D(0.5f, 0.5f), FMargin(0.f, 10.f, 700.f, 700.f));
+	UUserWidget* const Map = NewWidget<UUserWidget>(WidgetBlueprint, MapClass, TEXT("Map_Stages"), true);
+	AddToCanvas(Stage, Map, FAnchors(0.5f, 0.5f), FVector2D(0.5f, 0.5f), FMargin(StageMapPosition.X, StageMapPosition.Y, StageMapSize.X, StageMapSize.Y));
 
 	USizeBox* const Info = NewSizeBox(WidgetBlueprint, TEXT("Panel_StageInfo"), 420.f, 0.f);
 	Info->bIsVariable = true;
-	AddToCanvas(Stage, Info, FAnchors(0.5f, 0.5f), FVector2D(0.f, 0.5f), FMargin(414.f, 10.f, 0.f, 0.f), true);
+	AddToCanvas(Stage, Info, FAnchors(0.5f, 0.5f), FVector2D(0.f, 0.5f), FMargin(StageMapPosition.X + StageMapSize.X * 0.5f + 64.f, StageMapPosition.Y, 0.f, 0.f), true);
 	UBorder* const InfoFrame = NewWidget<UBorder>(WidgetBlueprint, TEXT("Border_StageInfo"));
 	InfoFrame->SetBrush(FrameBrush(0.92f));
 	InfoFrame->SetPadding(FMargin(32.f, 28.f, 32.f, 28.f));
@@ -1607,7 +1655,7 @@ bool UknightUIEditorLibrary::BuildMainMenu(UWidgetBlueprint* WidgetBlueprint, TS
 	AddToColumn(InfoColumn, Launch, HAlign_Fill, FMargin(0.f, 24.f, 0.f, 0.f));
 
 	AddToCanvas(Stage, NewKeyHints(WidgetBlueprint, TEXT("Panel_StageHints"), CaptionStyle, {
-		{ { NSLOCTEXT("knightUI", "KeyDrag", "드래그") }, NSLOCTEXT("knightUI", "HintRotate", "회전") },
+		{ { NSLOCTEXT("knightUI", "KeyDrag", "드래그") }, NSLOCTEXT("knightUI", "HintPan", "이동") },
 		{ { NSLOCTEXT("knightUI", "KeyClick", "클릭") }, NSLOCTEXT("knightUI", "HintSelectRegion", "지역 선택") },
 		{ { INVTEXT("←"), INVTEXT("→") }, NSLOCTEXT("knightUI", "HintCycleRegion", "지역 전환") } }),
 		FAnchors(0.f, 1.f), FVector2D(0.f, 1.f), FMargin(HUDMargin.X, -96.f, 0.f, 0.f), true);
