@@ -36,6 +36,24 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Occlusion")
 	bool bIgnoreTargetableActors = true;
 
+	/**
+	 * (2026-10-20) 카메라가 물(워터 바디) 속으로 들어가지 않게 수면 + MinHeightAboveWater 아래로는 내리지 않는다.
+	 * 수면은 충돌이 아니라 워터 바디 질의(UknightWaterRippleSubsystem::FindWaterSurface)로 찾는다.
+	 * 예: L_Raid02 물가에서 올려다보거나 깊은 물에 들어갈 때.
+	 */
+	UPROPERTY(EditAnywhere, Category="Occlusion|Water")
+	bool bKeepAboveWater = true;
+
+	UPROPERTY(EditAnywhere, Category="Occlusion|Water", meta=(ClampMin=0, Units="cm", EditCondition="bKeepAboveWater"))
+	float MinHeightAboveWater = 25.f;
+
+	/**
+	 * (2026-10-20) 벽 판정 스윕에서 워터 바디는 무시한다(이 맵에서 물 충돌이 WorldStatic이라 카메라가 수면에 걸려
+	 * 캐릭터 쪽으로 확 당겨질 수 있다). 물은 위의 수면 높이 제한으로 대신한다.
+	 */
+	UPROPERTY(EditAnywhere, Category="Occlusion|Water")
+	bool bIgnoreWaterInSweep = true;
+
 private:
 	/** 0..1 fraction of the pivot-to-camera distance currently allowed. */
 	float CurrentFraction = 1.f;
