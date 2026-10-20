@@ -43,7 +43,7 @@ public:
 
 	/**
 	 * WBP_HUDLockOnMarker: 캔버스 직속의 Box(주황 귀퉁이), PartFrame/PartFlash(부위 틀, PartFrameTexture가 있을 때), Line_Diagonal, Line_Shelf,
-	 * Plate(TARGET LOCK + 이름 + 부위 이름), Stagger(경직 게이지), Txt_Distance. 위치는 C++가 매 프레임 정한다.
+	 * Plate(TARGET LOCK + 이름 + 부위 이름), Txt_Distance. 위치는 C++가 매 프레임 정한다.
 	 */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
 	static bool BuildHUDLockOnMarker(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UCommonTextStyle> CaptionStyle, TSubclassOf<UCommonTextStyle> NameStyle,
