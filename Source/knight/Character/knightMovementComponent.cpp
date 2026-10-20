@@ -17,6 +17,8 @@ namespace
 {
 	// 달리기 중. 달리기 공격 조건으로 쓴다(태그는 Config/Tags에 이미 있음).
 	UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_State_Sprinting, "State.Sprinting");
+	// 콘텐츠 태그 (Config/DefaultGameplayTags.ini). 칼을 든 전투 상태.
+	UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_State_Combat_Movement, "State.Combat");
 
 	// 락온 중 뒤로 이동(백스텝)할 때는 Shift를 눌러도 달리지 않고 걷는다.
 	bool IsMovingBackwardWhileLockedOn(const UCharacterMovementComponent& Movement)
@@ -259,8 +261,11 @@ void UknightMovementComponent::OnMovementUpdated(float DeltaSeconds, const FVect
 	// 비락온 중 차지 공격(State.Charging) 중에도 이동 키 방향으로 몸이 돌지 않고 화면 중앙(카메라 방향)을 바라본다.
 	FVector TargetLocation = FVector::ZeroVector;
 	const UknightTargetLockComponent* const TargetLock = CharacterOwner ? CharacterOwner->FindComponentByClass<UknightTargetLockComponent>() : nullptr;
-	const bool bLockedOn = TargetLock && TargetLock->GetLockedTargetLocation(TargetLocation);
 	UAbilitySystemComponent* const ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner());
+	// (2026-10-20) 칼을 든 전투 상태(State.Combat)일 때만 락온 대상을 보며 옆걸음한다. 칼이 등에 있으면 애님BP가 비전투 이동
+	// (앞으로만 걷는 블렌드스페이스)이라, 몸을 대상에 고정하면 옆·뒤로 미끄러진다. 그때는 이동 방향을 본다(카메라 락온은 그대로).
+	const bool bLockedOn = TargetLock && TargetLock->GetLockedTargetLocation(TargetLocation)
+		&& ASC && ASC->HasMatchingGameplayTag(TAG_State_Combat_Movement);
 	const bool bChargingUnlocked = !bLockedOn && ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_Charging);
 	const bool bGuardingUnlocked = !bLockedOn && ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_Guarding);
 	bOrientRotationToMovement = !bLockedOn && !bChargingUnlocked && !bGuardingUnlocked;

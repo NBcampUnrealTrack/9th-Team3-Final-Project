@@ -106,12 +106,12 @@ void UknightGameplayAbility_MeleeAttack::ActivateAbility(const FGameplayAbilityS
 		return;
 	}
 
-	// 락온 중이 아니면 화면 중앙(카메라 방향)을 바로 보고 공격한다.
-	FaceScreenCenterIfUnlocked(Cast<ACharacter>(GetAvatarActorFromActorInfo()), GetAbilitySystemComponentFromActorInfo());
-
 	bAttackStarted = false;
 	if (DrawMontage && !IsWeaponInHand())
 	{
+		// 락온 중이 아니면 화면 중앙(카메라 방향)을 보고 뽑는다. 공격은 StartAttack에서 한 번 더 맞춘다(뽑는 동안 카메라가 돌 수 있음).
+		// (2026-10-20) 뽑기 없이 바로 공격하면 StartAttack만 돌린다(중복 호출 정리).
+		FaceScreenCenterIfUnlocked(Cast<ACharacter>(GetAvatarActorFromActorInfo()), GetAbilitySystemComponentFromActorInfo());
 		// (2026-10-15) 뽑을 때는 항상 한손 스탠스로 시작한다.
 		UknightGameplayAbility_StanceSwitch::ResetToOneHanded(GetAbilitySystemComponentFromActorInfo());
 		// 발도도 행동 속도를 따른다. 공격으로 넘어가는 시점(DrawAttackStartTime)도 같은 배속으로 맞춘다. (2026-10-08)
@@ -237,7 +237,7 @@ void UknightGameplayAbility_MeleeAttack::StartAttack()
 	{
 		if (UknightGroggyFeedbackComponent* const Feedback = Avatar->FindComponentByClass<UknightGroggyFeedbackComponent>())
 		{
-			Feedback->WatchAttack(this, Montage, HitParams);
+			Feedback->WatchAttack(this, Montage, GetStanceScaledHitParams(HitParams));
 		}
 	}
 
@@ -390,6 +390,6 @@ void UknightGameplayAbility_MeleeAttack::OnMeleeHitEvent(FGameplayEventData Payl
 	{
 		return;
 	}
-	const EknightHitOutcome Outcome = UknightCombatLibrary::ApplyMeleeHit(GetAvatarActorFromActorInfo(), *Hit, HitParams, this);
+	const EknightHitOutcome Outcome = UknightCombatLibrary::ApplyMeleeHit(GetAvatarActorFromActorInfo(), *Hit, GetStanceScaledHitParams(HitParams), this);
 	OnHitResolved(*Hit, Outcome);
 }

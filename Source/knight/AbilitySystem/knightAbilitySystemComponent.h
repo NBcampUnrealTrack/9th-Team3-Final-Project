@@ -6,6 +6,7 @@
 #include "knightAbilitySystemComponent.generated.h"
 
 class UknightAbilityTagRelationshipMapping;
+class UCameraShakeBase;
 
 /**
  * 그로기 자연 회복의 순수 계산. GAS 객체 없이 테스트(knightPoiseRecoveryTest.cpp)로 검증한다.
@@ -40,6 +41,38 @@ namespace knightBoostRecovery
 	KNIGHT_API float Step(float CurrentGauge, float MaxGauge, float RecoveryRate, float DeltaSeconds,
 		float SecondsSinceLastSpend, float RecoveryDelay, bool bRecoveryPaused = false);
 }
+
+/**
+ * (2026-10-20) 스탠스(한손/양손)별 공격 보정 배율. 1이면 공격 BP에 적힌 값 그대로.
+ * 공격 어빌리티(Ability.Attack 계열)가 피해·그로기 피해·재생 속도·행동 에너지 소모에 곱한다.
+ */
+USTRUCT(BlueprintType)
+struct KNIGHT_API FknightStanceModifiers
+{
+	GENERATED_BODY()
+
+	FknightStanceModifiers() = default;
+	FknightStanceModifiers(float InDamage, float InPoise, float InSpeed, float InStamina)
+		: DamageScale(InDamage), PoiseDamageScale(InPoise), AttackSpeedScale(InSpeed), StaminaCostScale(InStamina)
+	{
+	}
+
+	/** 피해(모션 밸류·기본 피해) 배율. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stance", meta=(ClampMin=0))
+	float DamageScale = 1.f;
+
+	/** 그로기 피해(PoiseDamage) 배율. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stance", meta=(ClampMin=0))
+	float PoiseDamageScale = 1.f;
+
+	/** 공격 모션 재생 속도 배율(공격 배속에 곱한다). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stance", meta=(ClampMin=0.1))
+	float AttackSpeedScale = 1.f;
+
+	/** 행동 에너지(StaminaCost) 소모 배율. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stance", meta=(ClampMin=0))
+	float StaminaCostScale = 1.f;
+};
 
 /**
  * 프로젝트 ASC. 입력 태그로 어빌리티 발동, 활성화 그룹, 데이터 기반 태그 관계를 추가한다.
@@ -107,6 +140,19 @@ public:
 	 */
 	float GetAttackAnimationSpeed() const { return AttackAnimationSpeed; }
 	void SetAttackAnimationSpeed(float NewSpeed) { AttackAnimationSpeed = FMath::Max(0.1f, NewSpeed); }
+
+	/**
+	 * (2026-10-20) 지금 스탠스의 공격 보정(한손 OneHandedModifiers / 양손 TwoHandedModifiers).
+	 * 행동 에너지 속성이 없는 액터(몬스터)나 bApplyStanceModifiers가 꺼져 있으면 모두 1.
+	 */
+	const FknightStanceModifiers& GetStanceModifiers() const;
+
+	/**
+	 * (2026-10-20) 내가 때린 공격의 무게만큼 추가 카메라 흔들림(AttackImpactShake). ApplyMeleeHit이 맞힌·막힌 뒤 부른다.
+	 * 세기 = 그로기 피해(스탠스·차지 배율까지 곱한 값)가 AttackShakeMinPoise~AttackShakeFullPoise 사이에서 0~AttackShakeMaxScale.
+	 * 로컬 플레이어가 조종하는 아바타만. 타격 큐(GCN_Hit_Melee)의 기본 흔들림 위에 겹친다.
+	 */
+	void PlayAttackImpactShake(float PoiseDamage, bool bGuarded) const;
 	void CancelActivationGroupAbilities(EknightAbilityActivationGroup Group, const UknightGameplayAbility* IgnoreAbility);
 
 	// 태그 관계
@@ -210,6 +256,46 @@ protected:
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack", meta=(ClampMin=0.1))
 	float AttackAnimationSpeed = 0.75f;
+
+	/**
+	 * (2026-10-20) 스탠스별 공격 차이를 쓸지. 끄면 한손·양손이 모션만 다르고 수치는 같다.
+	 * 테스트: PIE 콘솔 knight.Player.StanceModifiers 0/1
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Stance")
+	bool bApplyStanceModifiers = true;
+
+	/** (2026-10-20 임시값) 한손: 빠르고 가볍다. 피해·그로기는 낮고 행동 에너지를 덜 쓴다. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Stance", meta=(EditCondition="bApplyStanceModifiers"))
+	FknightStanceModifiers OneHandedModifiers = FknightStanceModifiers(0.85f, 0.75f, 1.1f, 0.8f);
+
+	/** (2026-10-20 임시값) 양손: 느리고 무겁다. 피해·그로기가 높고 행동 에너지를 더 쓴다. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Stance", meta=(EditCondition="bApplyStanceModifiers"))
+	FknightStanceModifiers TwoHandedModifiers = FknightStanceModifiers(1.2f, 1.35f, 0.92f, 1.25f);
+
+	/** (2026-10-20) 큰 공격이 맞았을 때 더하는 카메라 흔들림. 비우면 추가 흔들림 없음. BP_Knight에서 CS_Knight_Impact. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack Feel")
+	TSubclassOf<UCameraShakeBase> AttackImpactShake;
+
+	/** 이 그로기 피해 이하는 추가 흔들림 없음(약공격). 예: 한손 3타 15, 양손 3타 27. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack Feel", meta=(ClampMin=0))
+	float AttackShakeMinPoise = 20.f;
+
+	/** 이 그로기 피해 이상이면 AttackShakeMaxScale. 예: 양손 내려찍기 91, 양손 풀차지 108. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack Feel", meta=(ClampMin=1))
+	float AttackShakeFullPoise = 80.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack Feel", meta=(ClampMin=0))
+	float AttackShakeMaxScale = 1.f;
+
+	/** 적이 가드로 막았을 때의 비율. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack Feel", meta=(ClampMin=0, ClampMax=1))
+	float AttackShakeGuardedRatio = 0.5f;
+
+	/** 한 번 휘두르기가 여러 부위·여러 적을 동시에 맞혀도 흔들림이 겹치지 않게 하는 최소 간격(초). */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack Feel", meta=(ClampMin=0, Units="s"))
+	float AttackShakeCooldown = 0.12f;
+
+	mutable double LastAttackShakeTime = -UE_BIG_NUMBER;
 
 	FTimerHandle BoostRecoveryTimer;
 
