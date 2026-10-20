@@ -6,6 +6,7 @@
 #include "knightAbilitySystemComponent.generated.h"
 
 class UknightAbilityTagRelationshipMapping;
+class UCameraShakeBase;
 
 /**
  * 그로기 자연 회복의 순수 계산. GAS 객체 없이 테스트(knightPoiseRecoveryTest.cpp)로 검증한다.
@@ -145,6 +146,13 @@ public:
 	 * 행동 에너지 속성이 없는 액터(몬스터)나 bApplyStanceModifiers가 꺼져 있으면 모두 1.
 	 */
 	const FknightStanceModifiers& GetStanceModifiers() const;
+
+	/**
+	 * (2026-10-20) 내가 때린 공격의 무게만큼 추가 카메라 흔들림(AttackImpactShake). ApplyMeleeHit이 맞힌·막힌 뒤 부른다.
+	 * 세기 = 그로기 피해(스탠스·차지 배율까지 곱한 값)가 AttackShakeMinPoise~AttackShakeFullPoise 사이에서 0~AttackShakeMaxScale.
+	 * 로컬 플레이어가 조종하는 아바타만. 타격 큐(GCN_Hit_Melee)의 기본 흔들림 위에 겹친다.
+	 */
+	void PlayAttackImpactShake(float PoiseDamage, bool bGuarded) const;
 	void CancelActivationGroupAbilities(EknightAbilityActivationGroup Group, const UknightGameplayAbility* IgnoreAbility);
 
 	// 태그 관계
@@ -263,6 +271,31 @@ protected:
 	/** (2026-10-20 임시값) 양손: 느리고 무겁다. 피해·그로기가 높고 행동 에너지를 더 쓴다. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Stance", meta=(EditCondition="bApplyStanceModifiers"))
 	FknightStanceModifiers TwoHandedModifiers = FknightStanceModifiers(1.2f, 1.35f, 0.92f, 1.25f);
+
+	/** (2026-10-20) 큰 공격이 맞았을 때 더하는 카메라 흔들림. 비우면 추가 흔들림 없음. BP_Knight에서 CS_Knight_Impact. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack Feel")
+	TSubclassOf<UCameraShakeBase> AttackImpactShake;
+
+	/** 이 그로기 피해 이하는 추가 흔들림 없음(약공격). 예: 한손 3타 15, 양손 3타 27. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack Feel", meta=(ClampMin=0))
+	float AttackShakeMinPoise = 20.f;
+
+	/** 이 그로기 피해 이상이면 AttackShakeMaxScale. 예: 양손 내려찍기 91, 양손 풀차지 108. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack Feel", meta=(ClampMin=1))
+	float AttackShakeFullPoise = 80.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack Feel", meta=(ClampMin=0))
+	float AttackShakeMaxScale = 1.f;
+
+	/** 적이 가드로 막았을 때의 비율. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack Feel", meta=(ClampMin=0, ClampMax=1))
+	float AttackShakeGuardedRatio = 0.5f;
+
+	/** 한 번 휘두르기가 여러 부위·여러 적을 동시에 맞혀도 흔들림이 겹치지 않게 하는 최소 간격(초). */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack Feel", meta=(ClampMin=0, Units="s"))
+	float AttackShakeCooldown = 0.12f;
+
+	mutable double LastAttackShakeTime = -UE_BIG_NUMBER;
 
 	FTimerHandle BoostRecoveryTimer;
 

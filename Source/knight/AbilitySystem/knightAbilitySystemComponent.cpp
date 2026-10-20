@@ -8,6 +8,9 @@
 #include "GameFramework/Character.h"
 #include "System/knightGameplayTags.h"
 #include "HAL/IConsoleManager.h"
+#include "Camera/CameraShakeBase.h"
+#include "Camera/PlayerCameraManager.h"
+#include "GameFramework/PlayerController.h"
 #include "TimerManager.h"
 #include "knight.h"
 
@@ -431,6 +434,30 @@ const FknightStanceModifiers& UknightAbilitySystemComponent::GetStanceModifiers(
 		return Neutral;
 	}
 	return HasMatchingGameplayTag(knightGameplayTags::State_Stance_TwoHanded) ? TwoHandedModifiers : OneHandedModifiers;
+}
+
+void UknightAbilitySystemComponent::PlayAttackImpactShake(const float PoiseDamage, const bool bGuarded) const
+{
+	if (!AttackImpactShake || AttackShakeMaxScale <= 0.f || AttackShakeFullPoise <= AttackShakeMinPoise)
+	{
+		return;
+	}
+	const APawn* const Pawn = Cast<APawn>(GetAvatarActor());
+	const APlayerController* const PC = Pawn && Pawn->IsLocallyControlled() ? Pawn->GetController<APlayerController>() : nullptr;
+	if (!PC || !PC->PlayerCameraManager)
+	{
+		return;
+	}
+	const float Alpha = FMath::Clamp((PoiseDamage - AttackShakeMinPoise) / (AttackShakeFullPoise - AttackShakeMinPoise), 0.f, 1.f);
+	const float Scale = Alpha * AttackShakeMaxScale * (bGuarded ? AttackShakeGuardedRatio : 1.f);
+	const UWorld* const World = GetWorld();
+	const double Now = World ? World->GetRealTimeSeconds() : 0.0;
+	if (Scale > KINDA_SMALL_NUMBER && Now - LastAttackShakeTime >= AttackShakeCooldown)
+	{
+		LastAttackShakeTime = Now;
+		// 화면 흔들림 설정(CameraShakeScale)은 AknightPlayerCameraManager::StartCameraShake가 곱한다.
+		PC->PlayerCameraManager->StartCameraShake(AttackImpactShake, Scale);
+	}
 }
 
 bool UknightAbilitySystemComponent::IsAttackRecoveryDashOnly() const
