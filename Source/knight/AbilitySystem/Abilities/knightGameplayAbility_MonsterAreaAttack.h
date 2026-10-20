@@ -6,6 +6,7 @@
 #include "knightGameplayAbility_MonsterAreaAttack.generated.h"
 
 class UAnimMontage;
+class UGameplayEffect;
 
 /**
  * 몽타주 대신 어빌리티가 타이밍을 잡는 몬스터 공격. 예고 → 몬스터 앞쪽 구체 오버랩(내려찍기, 발구르기는 한 번,
@@ -66,6 +67,10 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category="Attack")
 	FknightMeleeHitParams HitParams;
+
+	/** 선택 사항. 실제로 맞은 대상(가드·패링·회피 제외)에게 추가로 거는 효과(브레스 화상 등). */
+	UPROPERTY(EditDefaultsOnly, Category="Attack")
+	TSubclassOf<UGameplayEffect> HitTargetEffect;
 
 	/** 선택 사항. 연출용으로만 재생하며 어빌리티가 끝나면 멈춘다. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Presentation")

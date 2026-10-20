@@ -96,6 +96,7 @@ UE_DEFINE_GAMEPLAY_TAG_COMMENT(GameplayCue_Hit_Groggy_Release, "GameplayCue.Hit.
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(GameplayCue_Boost_Dash, "GameplayCue.Boost.Dash", "Boost dash thrusters.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(GameplayCue_Repair_Loop, "GameplayCue.Repair.Loop", "Repair kit in use (looping, removed when the repair ends).");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(GameplayCue_Repair_Finish, "GameplayCue.Repair.Finish", "Repair kit finished and healed (one shot).");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(GameplayCue_Burn, "GameplayCue.Burn", "Burning from a fire attack (looping while the burn effect lasts).");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Message_Combat_Hit, "Message.Combat.Hit", "Broadcast after a hit resolves.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Message_Combat_PartBroken, "Message.Combat.PartBroken", "Broadcast when a monster part breaks.");
