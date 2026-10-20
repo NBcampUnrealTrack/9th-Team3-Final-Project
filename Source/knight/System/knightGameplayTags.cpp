@@ -58,6 +58,7 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Monster_Exhausted, "State.Monster.Exhausted", "Monster fatigue state.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Monster_Reacting, "State.Monster.Reacting", "Monster is in a down, flinch or roar; its StateTree waits instead of acting.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Monster_Phase2, "State.Monster.Phase2", "Monster health fell below its Phase2HealthRatio (once per life; never removed).");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Monster_PassThroughPawns, "State.Monster.PassThroughPawns", "Monster's movement capsule ignores pawns (body attacks roll or charge through the player; push-out moves the player aside).");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_PartBroken, "State.PartBroken", "Root for broken Knight parts (part health at or below zero).");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_PartBroken_Head, "State.PartBroken.Head", "Head broken: takes more damage.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_PartBroken_Torso, "State.PartBroken.Torso", "Torso broken: lower MaxPoise.");
