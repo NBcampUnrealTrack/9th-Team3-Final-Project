@@ -15,9 +15,15 @@ struct KNIGHT_API FknightLegPlacementLeg
 	UPROPERTY(EditAnywhere, Category="Leg")
 	FBoneReference FootBone;
 
+	/** 접지점(발 뼈의 자손 중 가장 낮은 뼈, 보통 발가락 끝)에서 실제 발바닥까지의 높이(스켈레톤 단위). 발가락 끝이 발바닥보다 높으면 양수. */
+	UPROPERTY(EditAnywhere, Category="Leg")
+	float SoleOffset = 0.f;
+
 	// 아래는 런타임 상태(직렬화하지 않음).
 	FBoneReference JointBone;
 	FBoneReference RootBone;
+	/** 발 뼈의 자손(발가락·발톱). 이 중 가장 낮은 뼈를 접지점으로 본다. 없으면 발 뼈 자신. */
+	TArray<FBoneReference> ContactBones;
 	/** 캡슐 바닥(애니메이션이 가정한 평지) 대비 발밑 지면 높이. 월드 cm, 보간된 값. */
 	float Offset = 0.f;
 	bool bChainValid = false;
@@ -49,6 +55,7 @@ struct KNIGHT_API FknightLegPlacementLeg
  * 큰 몬스터의 발을 지형에 맞춘다. 캡슐 하나가 몸 전체를 받치므로 경사나 요철에서 발이 뜨거나 묻힌다.
  * 다리마다 발밑 지면 높이를 재서 (1) 골반을 그 지면 평면에 맞춰 내리고 기울인 뒤 (2) 남은 차이를 다리별
  * 2본 IK로 맞춘다. 평지에서는 모든 높이 차가 0이라 포즈를 바꾸지 않는다.
+ * 접지 붙이기: 애니메이션의 발이 땅 근처에 있으면(GroundSnapRatio) 발가락 끝을 땅 높이에 붙인다. 평지에서도 적용된다.
  *
  * 지면 트레이스는 게임 스레드(PreUpdate)에서 이전 프레임의 발 위치로 하고, 포즈 계산은 워커 스레드에서 한다.
  * 다리 수는 자유다. 3개 미만이면 기울이기 없이 가장 낮은 발만큼 골반을 내린다(2족).
@@ -101,6 +108,13 @@ struct KNIGHT_API FAnimNode_knightLegPlacement : public FAnimNode_SkeletalContro
 	/** 높이 차가 목표를 따라가는 속도. 클수록 빨리 붙고, 작을수록 부드럽다. */
 	UPROPERTY(EditAnywhere, Category="Trace", meta=(ClampMin=0))
 	float InterpSpeed = 10.f;
+
+	/**
+	 * 애니메이션에서 발이 땅 근처(다리 길이의 이 비율 안)에 있으면 접지점을 땅에 딱 붙인다. 2배 높이까지 서서히 줄어 원래 높이로 돌아간다.
+	 * 애니메이션이 디딘 발을 살짝 들고 있거나(잔열 대기 자세의 앞발) 땅에 묻고 있어도 바닥에 닿아 보인다. 0이면 끈다.
+	 */
+	UPROPERTY(EditAnywhere, Category="Ground Contact", meta=(ClampMin=0, ClampMax=0.5))
+	float GroundSnapRatio = 0.1f;
 
 	/** 접지 커브가 있는 애니메이션에서 디딘 발을 월드에 고정한다. */
 	UPROPERTY(EditAnywhere, Category="Foot Lock")
@@ -178,6 +192,9 @@ private:
 
 	/** 땅 위에 있고 발 고정이 켜져 있는지. 게임 스레드(PreUpdate)에서 갱신. */
 	bool bFootLockActive = false;
+
+	/** 접지 붙이기 강도. 땅 위면 1, 공중이면 0으로 InterpSpeed로 따라간다. 게임 스레드(PreUpdate)에서 갱신. */
+	float GroundSnapAlpha = 0.f;
 
 	/** 이번 프레임 DeltaTime(UpdateInternal)과, 평가를 건너뛴 업데이트 수(LOD 등으로 끊기면 고정을 버린다). */
 	float FootLockDeltaTime = 0.f;
