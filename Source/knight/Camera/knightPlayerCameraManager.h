@@ -42,6 +42,8 @@ public:
 	void StartKnockdownZoom(AActor* InViewTarget, float Degrees, float EnterSeconds, double StartRealTime);
 	/** Ease out from the exact zoom weight reached at the hit or cancellation. */
 	void ReturnKnockdownZoom(float ReturnSeconds);
+	/** (2026-10-20) 맞는 순간 줌을 ExtraDegrees만큼 Seconds 동안 더 당긴다. ReturnKnockdownZoom이 불리면 함께 돌아간다. */
+	void PunchKnockdownZoom(float ExtraDegrees, float Seconds);
 	void CancelKnockdownZoom();
 
 	/** The player's CameraShakeScale setting. Screen effects that move or distort the view scale with it too. */
@@ -67,6 +69,12 @@ private:
 	float KnockdownZoomReturn = 0.f;
 	float KnockdownZoomReturnStartWeight = 0.f;
 	bool bKnockdownZoomActive = false;
+	bool bKnockdownPunched = false;
+	float KnockdownPunchDegrees = 0.f;
+	float KnockdownPunchTime = 0.f;
+	double KnockdownPunchStartTime = 0.0;
+	/** 지금 줌 각도 = 기본 + 펀치(올라가는 중이면 그만큼만). */
+	float GetKnockdownZoomDegrees(double Now) const;
 	bool bKnockdownZoomReturning = false;
 	float GetKnockdownZoomWeight(double Now) const;
 };

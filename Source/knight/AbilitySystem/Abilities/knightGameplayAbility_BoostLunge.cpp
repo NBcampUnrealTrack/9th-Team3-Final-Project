@@ -127,6 +127,14 @@ void UknightGameplayAbility_BoostLunge::ActivateAbility(const FGameplayAbilitySp
 	LungeTask->OnFinish.AddDynamic(this, &ThisClass::OnLungeFinished);
 	LungeTask->ReadyForActivation();
 
+	// (2026-10-20) 그로기 예측 슬로가 돌진 중에도 시작될 수 있게 미리 알린다. 예전에는 베기가 시작된 뒤에야 봐서
+	// 끝부분(베기 직전)에만 슬로가 걸렸다.
+	if (UknightGroggyFeedbackComponent* const Feedback = Character->FindComponentByClass<UknightGroggyFeedbackComponent>())
+	{
+		Feedback->WatchLungeDash(this, PickStanceMontage(StrikeMontage, OneHandedStrikeMontage), StrikePlayRate * GetAttackSpeed(),
+			GetStanceScaledHitParams(HitParams), Destination, Duration);
+	}
+
 	StartBackThrusters(*Character);
 	if (bAirLunge)
 	{
