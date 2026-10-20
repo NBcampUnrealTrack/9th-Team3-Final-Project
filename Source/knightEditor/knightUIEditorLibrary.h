@@ -54,7 +54,7 @@ public:
 	static bool BuildHUDFrameStatus(UWidgetBlueprint* WidgetBlueprint, UTexture2D* HeadTexture, UTexture2D* TorsoTexture, UTexture2D* ArmsTexture,
 		UTexture2D* LegsTexture, UTexture2D* FillTexture, FVector2D Size);
 
-	/** WBP_HUDRepairKit: 옅은 네모 테두리 안의 스패너(어두운 바탕 위로 아래→위 충전 바, Bar_RepairGauge)와 오른쪽 개수(Txt_RepairKitCount). */
+	/** WBP_HUDRepairKit: 옅은 네모 테두리(96)를 채우는 스패너(어두운 바탕 위로 아래→위 충전 바, Bar_RepairGauge)와 오른쪽 아래 모서리의 개수(Txt_RepairKitCount). */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
 	static bool BuildHUDRepairKit(UWidgetBlueprint* WidgetBlueprint, UTexture2D* WrenchTexture, TSubclassOf<UCommonTextStyle> CountStyle);
 
@@ -83,7 +83,7 @@ public:
 
 	/**
 	 * WBP_HUDLayout: 화면 전체의 저체력 연출(맨 아래)과 슬로우 모션 연출, 락온 마커, 플레이어 패널, 왼쪽 아래 끝에 메카 설계도(체력 위), 아래 가운데 대화창,
-	 * 오른쪽 아래 수리 키트와 그 위 튜토리얼 칸, 오른쪽 위 목표/타이머, 맨 위에 그로기 노이즈.
+	 * 설계도 오른쪽에 수리 키트, 오른쪽 아래 튜토리얼 칸, 오른쪽 위 목표/타이머, 맨 위에 그로기 노이즈.
 	 */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
 	static bool BuildHUDLayout(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> PlayerStatusClass, TSubclassOf<UUserWidget> RaidTimerClass,
