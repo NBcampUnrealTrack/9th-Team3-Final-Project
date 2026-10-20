@@ -5,7 +5,6 @@
 #include "CommonTextBlock.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/Image.h"
-#include "Components/ProgressBar.h"
 #include "Engine/LocalPlayer.h"
 #include "Foundation/knightUISubsystem.h"
 #include "GameFramework/Pawn.h"
@@ -52,8 +51,6 @@ void UknightHUDLockOnMarker::NativeConstruct()
 		VM->AddFieldValueChangedDelegate(FFields::bHasLockedPart, INotifyFieldValueChanged::FFieldValueChangedDelegate::CreateUObject(this, &ThisClass::HandleViewModelChanged));
 		VM->AddFieldValueChangedDelegate(FFields::LockedPartName, INotifyFieldValueChanged::FFieldValueChangedDelegate::CreateUObject(this, &ThisClass::HandleViewModelChanged));
 		VM->AddFieldValueChangedDelegate(FFields::LockedPartCondition, INotifyFieldValueChanged::FFieldValueChangedDelegate::CreateUObject(this, &ThisClass::HandleViewModelChanged));
-		VM->AddFieldValueChangedDelegate(FFields::LockedTargetStagger, INotifyFieldValueChanged::FFieldValueChangedDelegate::CreateUObject(this, &ThisClass::HandleStaggerChanged));
-		VM->AddFieldValueChangedDelegate(FFields::bLockedTargetHasStagger, INotifyFieldValueChanged::FFieldValueChangedDelegate::CreateUObject(this, &ThisClass::HandleStaggerChanged));
 		PartConditionHandle = VM->OnLockedPartConditionChanged.AddUObject(this, &ThisClass::HandleLockedPartConditionChanged);
 	}
 	RefreshLockState();
@@ -102,15 +99,12 @@ void UknightHUDLockOnMarker::RefreshLockState()
 		Txt_TargetName->SetText(VM->GetLockedTargetName());
 	}
 	RefreshPart();
-	RefreshStagger();
 	if (ShownTarget.Get() != Target)
 	{
 		// A new lock (or a switch to another target) replays the whole open motion.
 		ShownTarget = Target;
 		AnimTime = 0.f;
 		FlashElapsed = TNumericLimits<float>::Max();
-		StaggerFlashElapsed = TNumericLimits<float>::Max();
-		ShownStagger = VM->GetLockedTargetStagger();
 		ShownDistance = -1;
 		if (LockOnSound)
 		{
@@ -157,33 +151,6 @@ void UknightHUDLockOnMarker::RefreshPart()
 	}
 }
 
-void UknightHUDLockOnMarker::HandleStaggerChanged(UObject* InViewModel, UE::FieldNotification::FFieldId FieldId)
-{
-	const UknightVM_PlayerStatus* const VM = ViewModel.Get();
-	const float NewStagger = VM ? VM->GetLockedTargetStagger() : 0.f;
-	// Blink once when the gauge fills on the target already shown (a fresh lock on a staggered target does not blink).
-	if (ShownTarget.IsValid() && NewStagger >= 1.f && ShownStagger < 1.f)
-	{
-		StaggerFlashElapsed = 0.f;
-	}
-	ShownStagger = NewStagger;
-	RefreshStagger();
-}
-
-void UknightHUDLockOnMarker::RefreshStagger()
-{
-	const UknightVM_PlayerStatus* const VM = ViewModel.Get();
-	const bool bShow = VM && VM->LockedTargetHasStagger();
-	if (Stagger)
-	{
-		Stagger->SetVisibility(bShow ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
-	}
-	if (Bar_Stagger && bShow)
-	{
-		Bar_Stagger->SetPercent(VM->GetLockedTargetStagger());
-	}
-}
-
 void UknightHUDLockOnMarker::HandleLockedPartConditionChanged(EknightPartCondition NewCondition)
 {
 	FlashElapsed = 0.f;
@@ -215,10 +182,6 @@ bool UknightHUDLockOnMarker::TickMarker(float DeltaTime)
 	if (FlashElapsed < FlashTime)
 	{
 		FlashElapsed += Step;
-	}
-	if (StaggerFlashElapsed < StaggerFlashTime)
-	{
-		StaggerFlashElapsed += Step;
 	}
 	SetVisibility(UpdateLayout() ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
 	ApplyAnimation();
@@ -287,7 +250,6 @@ bool UknightHUDLockOnMarker::UpdateLayout()
 	PlatePosition.Y = FMath::Clamp(PlatePosition.Y, SafeMargin.Y, Viewport.Y - SafeMargin.Y);
 	PlaceInCanvas(Plate, PlatePosition, FVector2D(bFlipped ? 1.f : 0.f, 1.f));
 
-	PlaceInCanvas(Stagger, Center + FVector2D(0.f, StaggerOffset), FVector2D(0.5f, 0.f));
 	PlaceInCanvas(Txt_Distance, Center + FVector2D(0.f, DistanceOffset), FVector2D(0.5f, 0.f));
 	if (Txt_Distance)
 	{
@@ -345,19 +307,9 @@ void UknightHUDLockOnMarker::ApplyAnimation()
 	{
 		Line_Shelf->SetRenderScale(FVector2D(ShelfAlpha, 1.f));
 	}
-	if (Stagger)
-	{
-		Stagger->SetRenderOpacity(PlateAlpha);
-	}
 	if (Txt_Distance)
 	{
 		Txt_Distance->SetRenderOpacity(PlateAlpha);
-	}
-	if (Bar_Stagger)
-	{
-		const bool bBlinking = StaggerFlashElapsed < StaggerFlashTime;
-		const bool bLit = bBlinking && FMath::Fmod(StaggerFlashElapsed, StaggerBlinkPeriod) < StaggerBlinkPeriod * 0.5f;
-		Bar_Stagger->SetFillColorAndOpacity(bLit ? StaggerFullColor : StaggerColor);
 	}
 	if (Plate)
 	{

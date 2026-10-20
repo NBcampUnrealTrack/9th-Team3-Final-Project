@@ -406,23 +406,13 @@ bool UknightUIEditorLibrary::BuildHUDLockOnMarker(UWidgetBlueprint* WidgetBluepr
 	PlateSlot->SetAlignment(FVector2D(0.f, 1.f));
 	PlateSlot->SetPosition(Preview + FVector2D(64.f, -78.f));
 
-	// 박스 아래에 경직 게이지, 그 아래 거리. 가지선이 위로 나가므로 겹치지 않는다. 채움 색은 C++가 칠한다.
-	UVerticalBox* const Stagger = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("Stagger"), true);
-	Stagger->SetVisibility(ESlateVisibility::HitTestInvisible);
-	USizeBox* const StaggerBox = NewSizeBox(WidgetBlueprint, TEXT("SizeBox_Stagger"), 96.f, 5.f);
-	StaggerBox->AddChild(NewBar(WidgetBlueprint, TEXT("Bar_Stagger"), true, 0.6f));
-	AddToColumn(Stagger, StaggerBox, HAlign_Center);
-	UCanvasPanelSlot* const StaggerSlot = Root->AddChildToCanvas(Stagger);
-	StaggerSlot->SetAutoSize(true);
-	StaggerSlot->SetAlignment(FVector2D(0.5f, 0.f));
-	StaggerSlot->SetPosition(Preview + FVector2D(0.f, 58.f));
-
+	// 박스 아래에 거리. 가지선이 위로 나가므로 겹치지 않는다.
 	UCommonTextBlock* const Distance = NewText(WidgetBlueprint, TEXT("Txt_Distance"), CaptionStyle, INVTEXT("[ 42M ]"), true);
 	Distance->SetVisibility(ESlateVisibility::HitTestInvisible);
 	UCanvasPanelSlot* const DistanceSlot = Root->AddChildToCanvas(Distance);
 	DistanceSlot->SetAutoSize(true);
 	DistanceSlot->SetAlignment(FVector2D(0.5f, 0.f));
-	DistanceSlot->SetPosition(Preview + FVector2D(0.f, 90.f));
+	DistanceSlot->SetPosition(Preview + FVector2D(0.f, 58.f));
 
 	EndBuild(WidgetBlueprint);
 	return true;
