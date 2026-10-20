@@ -159,12 +159,14 @@ void UJanyeolFireComponent::RefreshFire()
         if (FireEnabled) Flame->Activate(true);
     }
     CurrentHeat = FMath::Clamp(Heat, 0.f, 1.f);
+    CurrentStrength = FMath::Clamp(Strength, 0.f, 1.f);
     LastFireEnabled = FireEnabled;
     ApplyHeat(0.f);
     UpdateMantle(true);
 }
 
 void UJanyeolFireComponent::SetFireHeat(float Value) { Heat = FMath::Clamp(Value, 0.f, 1.f); }
+void UJanyeolFireComponent::SetFireStrength(float Value) { Strength = FMath::Clamp(Value, 0.f, 1.f); }
 void UJanyeolFireComponent::SetFireEnabled(bool Enabled)
 {
     FireEnabled = Enabled;
@@ -183,7 +185,8 @@ void UJanyeolFireComponent::SetFireEnabled(bool Enabled)
 void UJanyeolFireComponent::ApplyHeat(float DeltaTime)
 {
     CurrentHeat = FMath::FInterpTo(CurrentHeat, FMath::Clamp(Heat, 0.f, 1.f), DeltaTime, TransitionSpeed);
-    const float Enabled = FireEnabled ? 1.f : 0.f;
+    CurrentStrength = FMath::FInterpTo(CurrentStrength, FMath::Clamp(Strength, 0.f, 1.f), DeltaTime, TransitionSpeed);
+    const float Enabled = FireEnabled ? CurrentStrength : 0.f;
     if (MouthMID) MouthMID->SetScalarParameterValue(TEXT("FireStrength"), Enabled * (.75f + CurrentHeat * .4f));
     if (MouthRightMID) MouthRightMID->SetScalarParameterValue(TEXT("FireStrength"), Enabled * (.72f + CurrentHeat * .4f));
     if (LowMID) LowMID->SetScalarParameterValue(TEXT("FireStrength"), Enabled * (.28f + CurrentHeat * .12f));
