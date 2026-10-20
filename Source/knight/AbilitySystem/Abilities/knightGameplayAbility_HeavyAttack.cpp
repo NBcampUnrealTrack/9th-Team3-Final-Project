@@ -83,7 +83,8 @@ void UknightGameplayAbility_HeavyAttack::OnReleased(float TimeHeld)
 		const double Held = (World ? World->GetTimeSeconds() : ChargeStartTime) - ChargeStartTime;
 		const float Alpha = FMath::Clamp(static_cast<float>(Held) / MaxChargeTime, 0.f, 1.f);
 		const float Scale = FMath::Lerp(1.f, MaxChargeMultiplier, Alpha);
-		ActiveHitParams = ReleaseHitParams;
+		// (2026-10-20) 스탠스 보정(한손/양손)을 먼저 곱하고 차지 배율을 곱한다.
+		ActiveHitParams = GetStanceScaledHitParams(ReleaseHitParams);
 		ActiveHitParams.MotionValue *= Scale;
 		ActiveHitParams.PoiseDamage *= Scale;
 		UE_LOG(LogknightAbility, Log, TEXT("%s: released after %.2fs charge, x%.2f (MV %.0f)"), *GetName(), Held, Scale, ActiveHitParams.MotionValue);
@@ -197,7 +198,7 @@ void UknightGameplayAbility_HeavyAttack::StartCharge()
 	FaceScreenCenterForHeavyAttack(Cast<ACharacter>(GetAvatarActorFromActorInfo()), ASC);
 	const UWorld* const World = GetWorld();
 	ChargeStartTime = World ? World->GetTimeSeconds() : 0.0;
-	ActiveHitParams = LoopHitParams;
+	ActiveHitParams = GetStanceScaledHitParams(LoopHitParams);
 
 	FGameplayTagContainer Interrupt;
 	Interrupt.AddTag(knightGameplayTags::Ability_Attack);

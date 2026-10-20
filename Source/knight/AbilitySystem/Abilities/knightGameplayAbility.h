@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Abilities/GameplayAbility.h"
+#include "Combat/knightCombatTypes.h"
 #include "knightGameplayAbility.generated.h"
 
 class UknightAbilitySystemComponent;
@@ -113,6 +114,15 @@ protected:
 	 * 시험: PIE 콘솔 knight.Player.AttackSpeed 0.9
 	 */
 	float GetAttackSpeed() const;
+
+	/**
+	 * (2026-10-20) 스탠스(한손/양손) 보정을 곱한 타격 값. 공격 어빌리티가 ApplyMeleeHit·그로기 예측(WatchAttack)에 넘기기 전에 부른다.
+	 * 보정값은 ASC(UknightAbilitySystemComponent::GetStanceModifiers). 몬스터는 그대로.
+	 */
+	FknightMeleeHitParams GetStanceScaledHitParams(const FknightMeleeHitParams& Params) const;
+
+	/** (2026-10-20) 이번에 쓸 행동 에너지. 공격(Ability.Attack 계열)이면 StaminaCost x 스탠스 배율, 아니면 StaminaCost. */
+	float GetEffectiveStaminaCost(const UAbilitySystemComponent* ASC) const;
 
 	/**
 	 * 락온 중이 아니고 이동 입력이 있으면 아바타를 그 방향으로 즉시 돌린다. 돌렸으면 true. (2026-10-08)

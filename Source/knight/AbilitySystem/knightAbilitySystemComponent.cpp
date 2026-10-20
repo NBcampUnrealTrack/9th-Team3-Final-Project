@@ -7,8 +7,18 @@
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "System/knightGameplayTags.h"
+#include "HAL/IConsoleManager.h"
 #include "TimerManager.h"
 #include "knight.h"
+
+namespace
+{
+	// (2026-10-20) 스탠스별 공격 차이 비교용. 0이면 한손·양손 수치가 같다(모션만 다름).
+	TAutoConsoleVariable<int32> CVarStanceModifiers(
+		TEXT("knight.Player.StanceModifiers"), 1,
+		TEXT("1: one/two-handed stance attack modifiers on (damage, poise, attack speed, stamina). 0: off."),
+		ECVF_Cheat);
+}
 
 // ---- 그로기 자연 회복: 순수 계산 (테스트 대상) ----
 
@@ -409,6 +419,18 @@ bool UknightAbilitySystemComponent::IsActivationGroupBlocked(EknightAbilityActiv
 		checkf(false, TEXT("Invalid activation group %d"), static_cast<int32>(Group));
 		return true;
 	}
+}
+
+const FknightStanceModifiers& UknightAbilitySystemComponent::GetStanceModifiers() const
+{
+	static const FknightStanceModifiers Neutral;
+	// 행동 에너지 속성(메카 속성 세트)이 있는 나이트만. 몬스터도 이 ASC를 쓰지만 스탠스가 없다.
+	if (!bApplyStanceModifiers || CVarStanceModifiers.GetValueOnGameThread() == 0
+		|| !HasAttributeSetForAttribute(UknightAttributeSet::GetBoostGaugeAttribute()))
+	{
+		return Neutral;
+	}
+	return HasMatchingGameplayTag(knightGameplayTags::State_Stance_TwoHanded) ? TwoHandedModifiers : OneHandedModifiers;
 }
 
 bool UknightAbilitySystemComponent::IsAttackRecoveryDashOnly() const

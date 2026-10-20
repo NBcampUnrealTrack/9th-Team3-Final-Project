@@ -151,7 +151,7 @@ void UknightGameplayAbility_PlungeAttack::PlayMontage(UAnimMontage* Montage, boo
 		{
 			if (UknightGroggyFeedbackComponent* const Feedback = Avatar->FindComponentByClass<UknightGroggyFeedbackComponent>())
 			{
-				Feedback->WatchAttack(this, Montage, HitParams);
+				Feedback->WatchAttack(this, Montage, GetStanceScaledHitParams(HitParams));
 			}
 		}
 		return;
@@ -164,7 +164,7 @@ void UknightGameplayAbility_PlungeAttack::PlayMontage(UAnimMontage* Montage, boo
 		{
 			if (UknightGroggyFeedbackComponent* const Feedback = Avatar->FindComponentByClass<UknightGroggyFeedbackComponent>())
 			{
-				Feedback->WatchAttack(this, Montage, HitParams);
+				Feedback->WatchAttack(this, Montage, GetStanceScaledHitParams(HitParams));
 			}
 		}
 	}
@@ -589,7 +589,7 @@ void UknightGameplayAbility_PlungeAttack::OnMeleeHitEvent(FGameplayEventData Pay
 	const FHitResult* const Hit = Payload.TargetData.Num() > 0 && Payload.TargetData.Get(0) ? Payload.TargetData.Get(0)->GetHitResult() : nullptr;
 	if (Hit)
 	{
-		UknightCombatLibrary::ApplyMeleeHit(GetAvatarActorFromActorInfo(), *Hit, HitParams, this);
+		UknightCombatLibrary::ApplyMeleeHit(GetAvatarActorFromActorInfo(), *Hit, GetStanceScaledHitParams(HitParams), this);
 	}
 }
 

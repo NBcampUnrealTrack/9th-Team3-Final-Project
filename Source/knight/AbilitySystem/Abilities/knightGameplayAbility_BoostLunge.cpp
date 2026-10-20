@@ -195,7 +195,7 @@ void UknightGameplayAbility_BoostLunge::OnLungeFinished()
 	{
 		if (UknightGroggyFeedbackComponent* const Feedback = Avatar->FindComponentByClass<UknightGroggyFeedbackComponent>())
 		{
-			Feedback->WatchAttack(this, Strike, HitParams);
+			Feedback->WatchAttack(this, Strike, GetStanceScaledHitParams(HitParams));
 		}
 	}
 }
@@ -210,7 +210,7 @@ void UknightGameplayAbility_BoostLunge::OnMeleeHitEvent(FGameplayEventData Paylo
 	const FHitResult* const Hit = Payload.TargetData.Num() > 0 && Payload.TargetData.Get(0) ? Payload.TargetData.Get(0)->GetHitResult() : nullptr;
 	if (Hit)
 	{
-		UknightCombatLibrary::ApplyMeleeHit(GetAvatarActorFromActorInfo(), *Hit, HitParams, this);
+		UknightCombatLibrary::ApplyMeleeHit(GetAvatarActorFromActorInfo(), *Hit, GetStanceScaledHitParams(HitParams), this);
 	}
 }
 
