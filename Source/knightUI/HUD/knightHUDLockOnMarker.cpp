@@ -6,10 +6,12 @@
 #include "Components/CanvasPanelSlot.h"
 #include "Components/Image.h"
 #include "Engine/LocalPlayer.h"
+#include "Engine/World.h"
 #include "Foundation/knightUISubsystem.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
+#include "Misc/App.h"
 #include "ViewModels/knightVM_PlayerStatus.h"
 
 namespace
@@ -113,8 +115,7 @@ void UknightHUDLockOnMarker::RefreshLockState()
 	}
 	if (!Ticker.IsValid() && !IsDesignTime())
 	{
-		Ticker = FTSTicker::GetCoreTicker().AddTicker(
-			FTickerDelegate::CreateWeakLambda(this, [this](float DeltaTime) { return TickMarker(DeltaTime); }));
+		Ticker = FWorldDelegates::OnWorldPostActorTick.AddUObject(this, &UknightHUDLockOnMarker::TickMarker);
 	}
 	// Placed before the first frame so the marker never flashes at the screen origin.
 	SetVisibility(UpdateLayout() ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
@@ -164,20 +165,25 @@ void UknightHUDLockOnMarker::StopTicking()
 {
 	if (Ticker.IsValid())
 	{
-		FTSTicker::RemoveTicker(Ticker);
+		FWorldDelegates::OnWorldPostActorTick.Remove(Ticker);
 		Ticker.Reset();
 	}
 }
 
-bool UknightHUDLockOnMarker::TickMarker(float DeltaTime)
+void UknightHUDLockOnMarker::TickMarker(UWorld* World, ELevelTick TickType, float DeltaSeconds)
 {
+	if (World != GetWorld())
+	{
+		return;
+	}
 	if (!ShownTarget.IsValid())
 	{
-		Ticker.Reset();
+		StopTicking();
 		SetVisibility(ESlateVisibility::Collapsed);
-		return false;
+		return;
 	}
-	const float Step = FMath::Min(DeltaTime, 0.05f);
+	// Real time, so the open motion keeps its speed in slow motion.
+	const float Step = FMath::Min(static_cast<float>(FApp::GetDeltaTime()), 0.05f);
 	AnimTime += Step;
 	if (FlashElapsed < FlashTime)
 	{
@@ -185,7 +191,6 @@ bool UknightHUDLockOnMarker::TickMarker(float DeltaTime)
 	}
 	SetVisibility(UpdateLayout() ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
 	ApplyAnimation();
-	return true;
 }
 
 bool UknightHUDLockOnMarker::UpdateLayout()
