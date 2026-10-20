@@ -254,6 +254,11 @@ void UknightGameplayAbility_HeavyAttack::PlayMontage(UAnimMontage* Montage, FNam
 		Task->OnBlendOut.AddDynamic(this, &ThisClass::OnChargeStartFinished);
 	}
 	Task->ReadyForActivation();
+	if (Phase == EPhase::Releasing)
+	{
+		// (2026-10-20) 차지 발사에만 기계식 타이밍(차지 시작·반복은 그대로).
+		StartMechTiming(Montage, GetAttackSpeed());
+	}
 	if (AActor* const Avatar = GetAvatarActorFromActorInfo())
 	{
 		if (UknightGroggyFeedbackComponent* const Feedback = Avatar->FindComponentByClass<UknightGroggyFeedbackComponent>())

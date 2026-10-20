@@ -199,6 +199,7 @@ void UknightGameplayAbility_BoostLunge::OnLungeFinished()
 	StrikeTask->OnInterrupted.AddDynamic(this, &ThisClass::OnStrikeFinished);
 	StrikeTask->OnCancelled.AddDynamic(this, &ThisClass::OnStrikeFinished);
 	StrikeTask->ReadyForActivation();
+	StartMechTiming(Strike, StrikePlayRate * GetAttackSpeed());
 	if (AActor* const Avatar = GetAvatarActorFromActorInfo())
 	{
 		if (UknightGroggyFeedbackComponent* const Feedback = Avatar->FindComponentByClass<UknightGroggyFeedbackComponent>())

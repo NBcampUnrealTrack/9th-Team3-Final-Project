@@ -6,6 +6,7 @@
 #include "knightGameplayAbility.generated.h"
 
 class UknightAbilitySystemComponent;
+class UAnimMontage;
 
 /** How an ability is activated. */
 UENUM(BlueprintType)
@@ -93,6 +94,10 @@ protected:
 
 	virtual void OnGiveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec) override;
 
+	/** (2026-10-20) 기계식 타이밍이 남아 있으면 끝낸다. */
+	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+		const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
+
 	/** Adds the tag relationship mapping's required and blocked tags to the engine checks. */
 	virtual bool DoesAbilitySatisfyTagRequirements(const UAbilitySystemComponent& AbilitySystemComponent,
 		const FGameplayTagContainer* SourceTags = nullptr, const FGameplayTagContainer* TargetTags = nullptr,
@@ -125,6 +130,13 @@ protected:
 	float GetEffectiveStaminaCost(const UAbilitySystemComponent* ASC) const;
 
 	/**
+	 * (2026-10-20) 방금 재생한 공격 모션에 기계식 타이밍(락 → 버스트 → 스톱)을 건다. BaseRate = 그 모션을 재생한 배속.
+	 * 이전 것은 끝낸다. 끝낼 때 StopMechTiming. 나이트 ASC가 아니거나 꺼져 있으면 아무것도 하지 않는다.
+	 */
+	void StartMechTiming(UAnimMontage* Montage, float BaseRate);
+	void StopMechTiming();
+
+	/**
 	 * 락온 중이 아니고 이동 입력이 있으면 아바타를 그 방향으로 즉시 돌린다. 돌렸으면 true. (2026-10-08)
 	 * 퀵스텝과 같은 규칙으로, 방향키를 누른 채 공격·가드를 시작하면 그 방향을 보고 나가게 한다.
 	 */
@@ -142,4 +154,11 @@ protected:
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Knight|Ability Activation")
 	bool bRetryPressWhileHeld = false;
+
+	/** (2026-10-20) 공격 모션에 기계식 타이밍(ASC MechTiming)을 쓸지. 공격마다 끌 수 있다(StartMechTiming을 부르는 공격만 해당). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Knight|Attack Feel")
+	bool bUseMechTiming = true;
+
+private:
+	TSharedPtr<class FknightMechAttackTiming> ActiveMechTiming;
 };

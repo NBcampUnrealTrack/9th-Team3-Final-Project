@@ -4,6 +4,9 @@
 #include "AbilitySystem/Attributes/knightAttributeSet.h"
 #include "AbilitySystem/Effects/knightGameplayEffect_StaminaCost.h"
 #include "AbilitySystemGlobals.h"
+#include "Animation/AnimInstance.h"
+#include "Combat/knightMechAttackTiming.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "System/knightGameplayTags.h"
@@ -97,6 +100,37 @@ float UknightGameplayAbility::GetEffectiveStaminaCost(const UAbilitySystemCompon
 		return StaminaCost;
 	}
 	return StaminaCost * KnightASC->GetStanceModifiers().StaminaCostScale;
+}
+
+void UknightGameplayAbility::StartMechTiming(UAnimMontage* Montage, float BaseRate)
+{
+	StopMechTiming();
+	const UknightAbilitySystemComponent* const ASC = GetKnightAbilitySystemComponentFromActorInfo();
+	const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	UAnimInstance* const Anim = Character && Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr;
+	// 행동 에너지 속성이 있는 나이트만(몬스터도 같은 ASC를 쓴다).
+	if (!bUseMechTiming || !ASC || !Anim || !ASC->HasAttributeSetForAttribute(UknightAttributeSet::GetBoostGaugeAttribute()))
+	{
+		return;
+	}
+	ActiveMechTiming = FknightMechAttackTiming::Start(Anim, Montage, BaseRate, ASC->GetMechTimingSettings(),
+		ASC->HasMatchingGameplayTag(knightGameplayTags::State_Stance_TwoHanded));
+}
+
+void UknightGameplayAbility::StopMechTiming()
+{
+	if (ActiveMechTiming.IsValid())
+	{
+		ActiveMechTiming->Stop();
+		ActiveMechTiming.Reset();
+	}
+}
+
+void UknightGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
+{
+	StopMechTiming();
+	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
 
 bool UknightGameplayAbility::FaceMoveInputDirection() const
