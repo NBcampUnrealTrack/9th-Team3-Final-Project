@@ -48,8 +48,32 @@ void AknightPlayerCameraManager::UpdateViewTarget(FTViewTarget& OutVT, float Del
 		}
 		// OutVT contains this frame's camera mode and user FOV; never subtract from last frame's zoomed FOV.
 		const float BaseFOV = OutVT.POV.FOV;
-		OutVT.POV.FOV = FMath::Clamp(BaseFOV - KnockdownZoomDegrees * GetKnockdownZoomWeight(Now), FMath::Min(BaseFOV, 50.f), 115.f);
+		OutVT.POV.FOV = FMath::Clamp(BaseFOV - GetKnockdownZoomDegrees(Now) * GetKnockdownZoomWeight(Now), FMath::Min(BaseFOV, 45.f), 115.f);
 	}
+}
+
+float AknightPlayerCameraManager::GetKnockdownZoomDegrees(double Now) const
+{
+	if (!bKnockdownPunched || KnockdownPunchDegrees <= 0.f)
+	{
+		return KnockdownZoomDegrees;
+	}
+	const float Alpha = KnockdownPunchTime > 0.f
+		? FMath::Clamp(static_cast<float>((Now - KnockdownPunchStartTime) / KnockdownPunchTime), 0.f, 1.f) : 1.f;
+	// 확 당기는 느낌: 처음에 거의 다 가고 끝에 멈춘다.
+	return KnockdownZoomDegrees + KnockdownPunchDegrees * (1.f - FMath::Square(1.f - Alpha));
+}
+
+void AknightPlayerCameraManager::PunchKnockdownZoom(float ExtraDegrees, float Seconds)
+{
+	if (!bKnockdownZoomActive || bKnockdownZoomReturning || ExtraDegrees <= 0.f)
+	{
+		return;
+	}
+	bKnockdownPunched = true;
+	KnockdownPunchDegrees = ExtraDegrees;
+	KnockdownPunchTime = FMath::Max(Seconds, 0.f);
+	KnockdownPunchStartTime = FPlatformTime::Seconds();
 }
 
 float AknightPlayerCameraManager::GetKnockdownZoomWeight(double Now) const
@@ -99,6 +123,7 @@ void AknightPlayerCameraManager::CancelKnockdownZoom()
 {
 	bKnockdownZoomActive = false;
 	bKnockdownZoomReturning = false;
+	bKnockdownPunched = false;
 	KnockdownViewTarget.Reset();
 }
 
@@ -120,6 +145,20 @@ void AknightPlayerCameraManager::UpdateCamera(float DeltaTime)
 				ImpactPP.VignetteIntensity = FMath::Lerp(0.4f, 0.72f, Weight);
 				ImpactPP.bOverride_SceneFringeIntensity = true;
 				ImpactPP.SceneFringeIntensity = 2.4f * Weight;
+				// (2026-10-20) 슬로 동안 색을 빼서(집중) 맞는 순간 색이 터지게 한다. 맞은 뒤(펀치~멈춤)에는 채도·대비를 올리고 색수차를 크게.
+				ImpactPP.bOverride_ColorSaturation = true;
+				if (bKnockdownPunched)
+				{
+					ImpactPP.ColorSaturation = FVector4(1.25f, 1.25f, 1.25f, 1.f);
+					ImpactPP.bOverride_ColorContrast = true;
+					ImpactPP.ColorContrast = FVector4(1.15f, 1.15f, 1.15f, 1.f);
+					ImpactPP.SceneFringeIntensity = 4.5f * Weight;
+				}
+				else
+				{
+					const float Sat = FMath::Lerp(1.f, 0.55f, Weight);
+					ImpactPP.ColorSaturation = FVector4(Sat, Sat, Sat, 1.f);
+				}
 				AddCachedPPBlend(ImpactPP, FMath::Clamp(Weight, 0.f, 1.f), VTBlendOrder_Override);
 			}
 			else

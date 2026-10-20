@@ -31,6 +31,8 @@ class AknightMonsterCharacterBase;
 class AknightPlayerCameraManager;
 class UGameplayAbility;
 class UAnimMontage;
+class USoundClass;
+class USoundMix;
 
 /** 그로기 연출 단계 알림. bImpact = false: 예측 슬로우 시작, true: 그로기 명중(멈춤 시작). */
 DECLARE_MULTICAST_DELEGATE_OneParam(FknightGroggyPresentationEvent, bool /*bImpact*/);
@@ -45,6 +47,14 @@ public:
 
 	/** Watch an already playing attack montage; the trace notify's lead-in gates prediction. */
 	void WatchAttack(UGameplayAbility* Attack, UAnimMontage* Montage, const FknightMeleeHitParams& HitParams);
+
+	/**
+	 * (2026-10-20) 락온 돌진 베기: 돌진(판정 없음) 중에도 예측 슬로를 시작할 수 있게 미리 알린다.
+	 * 도착 자리(Destination)와 돌진 길이, 베기 모션·배속으로 맞기까지 남은 시간을 재고, LungePredictionLeadTime 안에 들면 시작한다.
+	 * 베기가 시작되면(WatchAttack) 같은 슬로를 이어받아 베기 판정 직전에 채찍으로 푼다.
+	 */
+	void WatchLungeDash(UGameplayAbility* Attack, UAnimMontage* StrikeMontage, float StrikePlayRate, const FknightMeleeHitParams& HitParams,
+		const FVector& Destination, float DashDuration);
 	void EndPredictionForAttack(const UGameplayAbility* Attack);
 	/** Resolve before the damage effect or any hit stop can snapshot our local time dilation. */
 	void ResolvePredictedMeleeContact(AActor* HitTarget, bool bAccepted, const UGameplayAbility* SourceAbility);
@@ -86,9 +96,27 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy", meta=(Categories="GameplayCue"))
 	FGameplayTag ReleaseCueTag;
 
-	/** Real-time interval before the next trace notify in which prediction may start. */
-	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0, Units="s"))
-	float PredictionLeadTime = 0.50f;
+	/**
+	 * 첫 판정 몇 초 전(정상 속도 기준)부터 예측 슬로를 시작할지. 슬로로 늘어난 실제 길이 ≈ 이 값 x 0.8 / PredictionSlowSpeed + 채찍.
+	 * (2026-10-20) 예전에는 코드가 이 값을 무시하고 1.2초로 시작해 슬로가 안전 제한(1.5초)에 걸려 맞기 전에 풀렸다. 0.5 → 0.35(실제 약 0.8초).
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0.1, Units="s"))
+	float PredictionLeadTime = 0.35f;
+
+	/** (2026-10-20) 락온 돌진 베기는 돌진까지 슬로에 넣으려고 더 일찍(맞기 이 초 전, 정상 속도 기준) 시작한다. bLungeSlowFromDashStart면 무시. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0.1, Units="s"))
+	float LungePredictionLeadTime = 0.55f;
+
+	/** (2026-10-20 사용자 요청) 락온 돌진 베기는 돌진을 시작하는 순간부터 슬로. 끄면 LungePredictionLeadTime 기준. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction")
+	bool bLungeSlowFromDashStart = true;
+
+	/**
+	 * (2026-10-20) 돌진 베기 슬로 배속. 돌진 전체가 슬로라 일반 예측 슬로(PredictionSlowSpeed)보다 덜 느리게 해서 너무 길어지지 않게 한다.
+	 * 베기가 이어받을 때도 이 배속을 유지하다가 채찍으로 푼다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0.02, ClampMax=1))
+	float LungeSlowSpeed = 0.5f;
 
 	/** Surface distance from the player to a target point along the current attack direction. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0, Units="cm"))
@@ -108,8 +136,50 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0.02, ClampMax=1))
 	float PredictionSlowSpeed = 0.4f;
 
+	/** (2026-10-20) 슬로로 들어가는 시간(실제 초). 예전에는 코드에 0.04초로 고정돼 있어 뚝 끊기듯 느려졌다. 감속 곡선(처음 빠르고 끝에 부드럽게). */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0, Units="s"))
-	float PredictionSlowEnterTime = 0.15f;
+	float PredictionSlowEnterTime = 0.1f;
+
+	/**
+	 * (2026-10-20) 슬로를 언제부터 풀지. 공격 모션의 첫 판정까지 진행률(0~1). 이 지점까지 슬로를 유지하다가
+	 * 칼이 닿기 직전에 확 빨라져 정상 속도로 맞힌다(채찍). 예전에는 0.5부터 천천히 풀려서 맞기 전에 이미 정상 속도였다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0, ClampMax=0.98))
+	float PredictionWhipStartProgress = 0.8f;
+
+	/** (2026-10-20) 예측 슬로로 들어온 그로기 타격의 멈춤 시간(초). 예전에는 0.08초로 고정돼 한 방이 작았다. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0, Units="s"))
+	float PredictedImpactFreezeTime = 0.14f;
+
+	/** (2026-10-20) 맞는 순간 줌을 한 번 더 당기는 각도(도)와 시간. 0이면 없음. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0, Units="deg"))
+	float ImpactZoomPunchDegrees = 6.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0, Units="s"))
+	float ImpactZoomPunchTime = 0.05f;
+
+	/**
+	 * (2026-10-20) 그로기 후 여운: 멈춤이 풀린 뒤 보스만 이 시간 동안 느리게 쓰러지다 정상 속도로. 나이트는 바로 정상 속도(조작감 유지).
+	 * 0이면 없음(예전과 같음).
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0, Units="s"))
+	float VictimFollowThroughTime = 0.3f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0.02, ClampMax=1))
+	float VictimFollowThroughStartSpeed = 0.35f;
+
+	/**
+	 * (2026-10-20) 예측 슬로 동안 소리를 먹먹하게(로패스 + 조금 작게) 할 사운드 클래스. 맞는 순간 바로 돌아와 타격음이 더 크게 들린다.
+	 * 비우면 소리 연출 없음. 예: SC_Knight_SFX, SC_Knight_BGM.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Audio")
+	TArray<TObjectPtr<USoundClass>> PredictionMuffledClasses;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Audio", meta=(ClampMin=100, ClampMax=20000, Units="Hz"))
+	float PredictionLowPassFrequency = 1200.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Audio", meta=(ClampMin=0, ClampMax=1))
+	float PredictionVolumeScale = 0.7f;
 
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0, Units="deg"))
 	float PredictionZoomDegrees = 25.f;
@@ -132,7 +202,10 @@ private:
 	bool TickFeedback(float DeltaRealTime);
 	void EnsureFeedbackTicker();
 	void TickWatchedAttack();
-	bool TryStartPredictedKnockdown(UGameplayAbility* Attack, const FknightMeleeHitParams& HitParams);
+	/** LeadRemaining >= 0: 돌진 중(모션 판정 없음) 시작. 맞기까지 남은 시간과 도착 자리를 호출하는 쪽이 준다. */
+	bool TryStartPredictedKnockdown(UGameplayAbility* Attack, const FknightMeleeHitParams& HitParams,
+		float LeadRemaining = -1.f, const FVector* LeadDestination = nullptr);
+	void TickLungeWatch(float DeltaRealTime);
 	void TickPrediction();
 	void FinishPredictionSlow();
 	void BeginPredictionReturn();
@@ -140,6 +213,18 @@ private:
 
 	/** 진행 중인 풀기를 끝내고 이 컴포넌트가 적용한 속도만 돌려놓는다. */
 	void FinishRelease();
+
+	/** (2026-10-20) 예측 슬로 중 소리 먹먹하게 켜기/끄기. */
+	void SetPredictionAudio(bool bMuffled);
+
+	UPROPERTY(Transient)
+	TObjectPtr<USoundMix> PredictionSoundMix;
+	bool bPredictionAudioPushed = false;
+
+	/** 이번 풀기가 보스만(예측 그로기 여운)인지, 그때의 길이·시작 속도. */
+	bool bReleaseVictimOnly = false;
+	float ActiveReleaseTime = 0.f;
+	float ActiveReleaseStartSpeed = 1.f;
 
 	UFUNCTION()
 	void HandlePlayerDied(AknightCharacter* DeadCharacter);
@@ -163,6 +248,23 @@ private:
 	FGameplayCueParameters CueParams;
 	double ReleaseStartTime = 0.0;
 	double PredictionStartTime = 0.0;
+	/** 예측 슬로가 시작된 모션 위치와 그때 잰 다음 판정 시각(모션 초). 슬로 곡선의 진행률 기준. */
+	float PredictionStartPosition = 0.f;
+	float PredictionHitTime = MAX_FLT;
+
+	/** (2026-10-20) 돌진 베기 미리 보기: 돌진 중 예측 시작 조건을 매 틱 본다. */
+	TWeakObjectPtr<UGameplayAbility> LungeAttack;
+	UPROPERTY(Transient)
+	FknightMeleeHitParams LungeHitParams;
+	FVector LungeDestination = FVector::ZeroVector;
+	float LungeDashRemaining = 0.f;
+	float LungeStrikeLead = 0.f;
+	bool bLungeWatch = false;
+	/** 예측 슬로가 돌진 중에 시작돼 아직 베기 모션이 없는 상태(슬로 유지만). */
+	bool bPredictionLead = false;
+	/** 이번 예측 슬로의 배속과 안전 제한(실제 초). 시작할 때 정한다. */
+	float ActivePredictionSlowSpeed = 0.4f;
+	double ActivePredictionMaxDuration = 1.5;
 	double PresentationEndTime = 0.0;
 	float OwnerBaseSpeed = 1.f;
 	float VictimBaseSpeed = 1.f;
