@@ -107,6 +107,14 @@ public:
 	 */
 	float GetAttackAnimationSpeed() const { return AttackAnimationSpeed; }
 	void SetAttackAnimationSpeed(float NewSpeed) { AttackAnimationSpeed = FMath::Max(0.1f, NewSpeed); }
+
+	/**
+	 * (2026-10-20) 마지막으로 패링한 공격의 주인(투사체면 쏜 쪽). 가드가 패링에 성공하면 넣는다.
+	 * 패링 반격(근접 공격 bWarpToParriedAttacker)이 락온이 아닐 때 이 대상에게 돌진한다.
+	 */
+	void SetParryCounterTarget(AActor* Target) { ParryCounterTarget = Target; }
+	AActor* GetParryCounterTarget() const { return ParryCounterTarget.Get(); }
+
 	void CancelActivationGroupAbilities(EknightAbilityActivationGroup Group, const UknightGameplayAbility* IgnoreAbility);
 
 	// 태그 관계
@@ -225,6 +233,9 @@ protected:
 
 	/** ProcessAbilityInput이 마지막으로 실행된 뒤 발동한 어빌리티들의 입력 태그. */
 	FGameplayTagContainer RecentlyActivatedInputTags;
+
+	/** (2026-10-20) SetParryCounterTarget 참고. */
+	TWeakObjectPtr<AActor> ParryCounterTarget;
 
 	int32 ActivationGroupCounts[static_cast<uint8>(EknightAbilityActivationGroup::MAX)];
 };

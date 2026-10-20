@@ -6,6 +6,8 @@
 #include "AbilitySystemGlobals.h"
 #include "AbilitySystem/knightAbilitySystemComponent.h"
 #include "AbilitySystem/Abilities/knightGameplayAbility_StanceSwitch.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimMontage.h"
 #include "Combat/knightCombatLibrary.h"
 #include "Combat/knightGroggyFeedbackComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -13,6 +15,7 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/Controller.h"
 #include "Input/knightInputBufferComponent.h"
+#include "MotionWarpingComponent.h"
 #include "TimerManager.h"
 #include "System/knightGameplayTags.h"
 #include "knight.h"
@@ -203,6 +206,59 @@ bool UknightGameplayAbility_MeleeAttack::IsWeaponInHand() const
 	return true;
 }
 
+AActor* UknightGameplayAbility_MeleeAttack::GetParriedWarpTarget() const
+{
+	const UknightAbilitySystemComponent* const ASC = Cast<UknightAbilitySystemComponent>(GetAbilitySystemComponentFromActorInfo());
+	if (!bWarpToParriedAttacker || !ASC || ASC->HasMatchingGameplayTag(knightGameplayTags::State_LockedOn))
+	{
+		return nullptr;
+	}
+	AActor* const Target = ASC->GetParryCounterTarget();
+	const UAbilitySystemComponent* const TargetASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Target);
+	return Target && !(TargetASC && TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_Dead)) ? Target : nullptr;
+}
+
+void UknightGameplayAbility_MeleeAttack::UpdateTrackedWarpTarget()
+{
+	AActor* const Avatar = GetAvatarActorFromActorInfo();
+	const ACharacter* const Character = Cast<ACharacter>(Avatar);
+	UAnimInstance* const Anim = Character && Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr;
+	UAnimMontage* const Montage = TrackWarpMontage.Get();
+	UMotionWarpingComponent* const MotionWarping = Avatar ? Avatar->FindComponentByClass<UMotionWarpingComponent>() : nullptr;
+	// 휘두르기 시작(워프 구간 끝)을 지나면 더 따라가지 않는다.
+	if (!IsActive() || !Anim || !Montage || !MotionWarping || !Anim->Montage_IsPlaying(Montage)
+		|| Anim->Montage_GetPosition(Montage) >= TrackWarpEndTime)
+	{
+		if (UWorld* const World = GetWorld())
+		{
+			World->GetTimerManager().ClearTimer(TrackWarpTimer);
+		}
+		return;
+	}
+	// 지금 자리에서 대상 앞 지점을 구한 뒤(거리 제한 없이), 공격을 시작한 자리에서 MaxWarpDistance 안으로 자른다.
+	const float Unlimited = MaxWarpDistance + 10000.f;
+	FVector Location;
+	FRotator Rotation;
+	float Travel = 0.f;
+	AActor* const ParriedTarget = GetParriedWarpTarget();
+	const bool bHasTarget = ParriedTarget
+		? UknightCombatLibrary::ComputeAttackWarpToActor(Avatar, ParriedTarget, Unlimited, WarpStopDistance, Location, Rotation, Travel)
+		: UknightCombatLibrary::ComputeAttackWarp(Avatar, Unlimited, WarpStopDistance, bUseSoftTarget, SoftTargetRange, SoftTargetAngle,
+			Location, Rotation, Travel);
+	if (!bHasTarget)
+	{
+		return;
+	}
+	FVector FromStart = Location - TrackWarpStart;
+	FromStart.Z = 0.f;
+	if (FromStart.Size() > MaxWarpDistance)
+	{
+		const FVector Clamped = TrackWarpStart + FromStart.GetSafeNormal() * MaxWarpDistance;
+		Location = FVector(Clamped.X, Clamped.Y, Location.Z);
+	}
+	MotionWarping->AddOrUpdateWarpTargetFromLocationAndRotation(WarpTargetName, Location, Rotation);
+}
+
 void UknightGameplayAbility_MeleeAttack::StartAttack()
 {
 	bAttackStarted = true;
@@ -210,14 +266,28 @@ void UknightGameplayAbility_MeleeAttack::StartAttack()
 	{
 		World->GetTimerManager().ClearTimer(DrawTimer);
 	}
-	FaceScreenCenterIfUnlocked(Cast<ACharacter>(GetAvatarActorFromActorInfo()), GetAbilitySystemComponentFromActorInfo());
-	const bool bWarp = UknightCombatLibrary::SetAttackWarpTarget(GetAvatarActorFromActorInfo(), WarpTargetName, MaxWarpDistance,
-		WarpStopDistance, bUseSoftTarget, SoftTargetRange, SoftTargetAngle);
 	FVector WarpLocation;
 	FRotator WarpRotation;
 	float WarpTravel = 0.f;
-	const bool bLunge = bWarp && UknightCombatLibrary::ComputeAttackWarp(GetAvatarActorFromActorInfo(), MaxWarpDistance, WarpStopDistance,
-		bUseSoftTarget, SoftTargetRange, SoftTargetAngle, WarpLocation, WarpRotation, WarpTravel);
+	bool bLunge = false;
+	if (AActor* const ParriedTarget = GetParriedWarpTarget())
+	{
+		// (2026-10-20) 패링 반격: 락온이 아니어도 패링한 적을 보고 그쪽으로 돌진한다.
+		bLunge = UknightCombatLibrary::SetAttackWarpTargetToActor(GetAvatarActorFromActorInfo(), WarpTargetName, ParriedTarget,
+			MaxWarpDistance, WarpStopDistance, WarpLocation, WarpRotation, WarpTravel);
+		if (bLunge)
+		{
+			GetAvatarActorFromActorInfo()->SetActorRotation(FRotator(0.f, WarpRotation.Yaw, 0.f));
+		}
+	}
+	else
+	{
+		FaceScreenCenterIfUnlocked(Cast<ACharacter>(GetAvatarActorFromActorInfo()), GetAbilitySystemComponentFromActorInfo());
+		const bool bWarp = UknightCombatLibrary::SetAttackWarpTarget(GetAvatarActorFromActorInfo(), WarpTargetName, MaxWarpDistance,
+			WarpStopDistance, bUseSoftTarget, SoftTargetRange, SoftTargetAngle);
+		bLunge = bWarp && UknightCombatLibrary::ComputeAttackWarp(GetAvatarActorFromActorInfo(), MaxWarpDistance, WarpStopDistance,
+			bUseSoftTarget, SoftTargetRange, SoftTargetAngle, WarpLocation, WarpRotation, WarpTravel);
+	}
 
 	UAbilityTask_WaitGameplayEvent* const HitTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, knightGameplayTags::Event_Melee_Hit, nullptr, false, true);
 	HitTask->EventReceived.AddDynamic(this, &ThisClass::OnMeleeHitEvent);
@@ -245,6 +315,17 @@ void UknightGameplayAbility_MeleeAttack::StartAttack()
 	if (bLunge && bLungeWithCode)
 	{
 		UknightCombatLibrary::StartAttackLunge(this, Montage, Rate, WarpLocation, WarpTravel, MaxLungeTime);
+	}
+	// (2026-10-20) 패링 반격은 휘두르기 전(워프 구간 끝)까지 대상을 따라간다.
+	TrackWarpEndTime = bWarpToParriedAttacker && bLunge ? UknightCombatLibrary::GetWarpWindowEnd(Montage) : -1.f;
+	if (TrackWarpEndTime > 0.f)
+	{
+		TrackWarpMontage = Montage;
+		TrackWarpStart = GetAvatarActorFromActorInfo()->GetActorLocation();
+		if (UWorld* const World = GetWorld())
+		{
+			World->GetTimerManager().SetTimer(TrackWarpTimer, this, &ThisClass::UpdateTrackedWarpTarget, MoveCancelCheckInterval, true);
+		}
 	}
 	if (ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
 	{
@@ -342,6 +423,7 @@ void UknightGameplayAbility_MeleeAttack::EndAbility(const FGameplayAbilitySpecHa
 	{
 		World->GetTimerManager().ClearTimer(MoveCancelTimer);
 		World->GetTimerManager().ClearTimer(DrawTimer);
+		World->GetTimerManager().ClearTimer(TrackWarpTimer);
 	}
 	if (bRootMotionScaleApplied)
 	{

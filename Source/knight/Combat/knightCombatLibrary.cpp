@@ -91,6 +91,33 @@ namespace
 			FVector::Dist(Hit.ImpactPoint, PartLocation));
 		return Assisted;
 	}
+
+	/**
+	 * 공격 워프 계산(ComputeAttackWarp·ComputeAttackWarpToActor 공용). TargetLocation 쪽으로 수평 이동하되,
+	 * bSubtractRadius면 대상 반지름(ITargetableInterface)만큼 표면까지만, 거기서 StopDistance 앞에서 멈춘다. 이동량은 MaxDistance까지.
+	 */
+	bool ComputeWarpToPoint(const AActor* Attacker, AActor* TargetActor, const FVector& TargetLocation, bool bSubtractRadius,
+		float MaxDistance, float StopDistance, FVector& OutLocation, FRotator& OutRotation, float& OutTravel)
+	{
+		const FVector AttackerLocation = Attacker->GetActorLocation();
+		FVector ToTarget = TargetLocation - AttackerLocation;
+		ToTarget.Z = 0.f;
+		const float Distance = ToTarget.Size();
+		if (Distance < KINDA_SMALL_NUMBER)
+		{
+			return false;
+		}
+		const FVector Direction = ToTarget / Distance;
+		const float Radius = bSubtractRadius && TargetActor && TargetActor->GetClass()->ImplementsInterface(UTargetableInterface::StaticClass())
+			? ITargetableInterface::Execute_QueryTargetRadius(TargetActor) : 0.f;
+		OutTravel = FMath::Clamp(Distance - Radius - StopDistance, 0.f, MaxDistance);
+		OutLocation = AttackerLocation + Direction * OutTravel;
+		OutRotation = Direction.Rotation();
+		// (2026-10-19) Verbose: 락온 중 매 프레임 불려서(락온 컴포넌트의 '멀다' 판정) 로그가 한 판에 10만 줄 넘게 쌓이고 랙을 만들었다.
+		UE_LOG(LogknightCombat, Verbose, TEXT("Attack warp -> %s: distance %.0f, radius %.0f, travel %.0f"),
+			*GetNameSafe(TargetActor), Distance, Radius, OutTravel);
+		return true;
+	}
 }
 
 EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FHitResult& Hit, const FknightMeleeHitParams& Params)
@@ -327,25 +354,36 @@ bool UknightCombatLibrary::ComputeAttackWarp(AActor* Attacker, float MaxDistance
 	}
 	AActor* const TargetActor = TargetLock->GetLockedTarget();
 	const FGameplayTag PartTag = TargetLock->GetLockedPartTag();
+	// 부위 지점은 몸 표면 근처라 반지름을 빼지 않는다. 단일 지점(몬스터 중심)은 반지름만큼 표면까지.
+	return ComputeWarpToPoint(Attacker, TargetActor, TargetLocation, !PartTag.IsValid(), MaxDistance, StopDistance,
+		OutLocation, OutRotation, OutTravel);
+}
 
-	const FVector AttackerLocation = Attacker->GetActorLocation();
-	FVector ToTarget = TargetLocation - AttackerLocation;
-	ToTarget.Z = 0.f;
-	const float Distance = ToTarget.Size();
-	if (Distance < KINDA_SMALL_NUMBER)
+bool UknightCombatLibrary::ComputeAttackWarpToActor(AActor* Attacker, AActor* Target, float MaxDistance, float StopDistance,
+	FVector& OutLocation, FRotator& OutRotation, float& OutTravel)
+{
+	if (!Attacker || !Target)
 	{
 		return false;
 	}
-	const FVector Direction = ToTarget / Distance;
-	// 부위 지점은 몸 표면 근처라 반지름을 빼지 않는다. 단일 지점(몬스터 중심)은 반지름만큼 표면까지.
-	const float Radius = !PartTag.IsValid() && TargetActor && TargetActor->GetClass()->ImplementsInterface(UTargetableInterface::StaticClass())
-		? ITargetableInterface::Execute_QueryTargetRadius(TargetActor) : 0.f;
-	OutTravel = FMath::Clamp(Distance - Radius - StopDistance, 0.f, MaxDistance);
-	OutLocation = AttackerLocation + Direction * OutTravel;
-	OutRotation = Direction.Rotation();
-	// (2026-10-19) Verbose: 락온 중 매 프레임 불려서(락온 컴포넌트의 '멀다' 판정) 로그가 한 판에 10만 줄 넘게 쌓이고 랙을 만들었다.
-	UE_LOG(LogknightCombat, Verbose, TEXT("Attack warp -> %s: distance %.0f, radius %.0f, travel %.0f"),
-		*GetNameSafe(TargetActor), Distance, Radius, OutTravel);
+	// 대상 중심에서 반지름만큼 표면까지. 락온한 몬스터(부위 없음)와 같은 계산이다.
+	return ComputeWarpToPoint(Attacker, Target, Target->GetActorLocation(), true, MaxDistance, StopDistance, OutLocation, OutRotation, OutTravel);
+}
+
+bool UknightCombatLibrary::SetAttackWarpTargetToActor(AActor* Attacker, FName WarpTargetName, AActor* Target, float MaxDistance,
+	float StopDistance, FVector& OutLocation, FRotator& OutRotation, float& OutTravel)
+{
+	UMotionWarpingComponent* const MotionWarping = Attacker ? Attacker->FindComponentByClass<UMotionWarpingComponent>() : nullptr;
+	if (!MotionWarping)
+	{
+		return false;
+	}
+	if (!ComputeAttackWarpToActor(Attacker, Target, MaxDistance, StopDistance, OutLocation, OutRotation, OutTravel))
+	{
+		MotionWarping->RemoveWarpTarget(WarpTargetName);
+		return false;
+	}
+	MotionWarping->AddOrUpdateWarpTargetFromLocationAndRotation(WarpTargetName, OutLocation, OutRotation);
 	return true;
 }
 
