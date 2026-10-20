@@ -620,7 +620,7 @@ UNiagaraSystem* UknightMonsterFXBuilder::BuildFireEruptionSystem(const FString& 
 }
 
 UNiagaraSystem* UknightMonsterFXBuilder::BuildBurnSystem(const FString& PackagePath, UMaterialInterface* FireMaterial,
-	UMaterialInterface* SmokeMaterial, UMaterialInterface* EmberMaterial, FVector BodyExtent)
+	UMaterialInterface* SmokeMaterial, UMaterialInterface* EmberMaterial, FVector BodyExtent, float FlameScale)
 {
 	using namespace knightMonsterFX;
 	if (!FireMaterial)
@@ -653,6 +653,13 @@ UNiagaraSystem* UknightMonsterFXBuilder::BuildBurnSystem(const FString& PackageP
 	Embers.bUseVelocity = true;
 	Embers.VelocityMin = FVector3f(-120.f, -120.f, 50.f);
 	Embers.VelocityMax = FVector3f(120.f, 120.f, 250.f);
+
+	for (FSpriteLayer* const Layer : { &Flames, &Smoke })
+	{
+		Layer->SizeMin *= FlameScale;
+		Layer->SizeMax *= FlameScale;
+		Layer->Rate *= FlameScale;
+	}
 
 	const FSpriteLayer Layers[] = { Smoke, Flames, Embers };
 	const FVector Margin(200.f, 200.f, 400.f);

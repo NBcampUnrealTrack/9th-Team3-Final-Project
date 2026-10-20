@@ -5,6 +5,7 @@
 #include "DrawDebugHelpers.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
+#include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "Monster/knightMonsterDebug.h"
 #include "knight.h"
@@ -32,6 +33,7 @@ AknightMonsterSpikeProjectile::AknightMonsterSpikeProjectile()
 
 void AknightMonsterSpikeProjectile::SetLook(const FknightSpikeLook& Look)
 {
+	SpikeEffect = Look.Effect;
 	if (!Look.Mesh)
 	{
 		return;
@@ -71,6 +73,16 @@ void AknightMonsterSpikeProjectile::LaunchDown(AActor* InAttacker, const Fknight
 	Remaining = FMath::Max(FallTime, 0.01f);
 	Velocity = (Impact.Landing - GetActorLocation()) / Remaining;
 	SetActorRotation(Velocity.Rotation());
+	// 올라가는 가시는 금방 사라지므로 떨어지는 가시에만 불길을 붙인다. 가시는 비스듬히 돌 수 있어도 불길은 늘 위로 오른다.
+	if (SpikeEffect)
+	{
+		if (UNiagaraComponent* const Fire = UNiagaraFunctionLibrary::SpawnSystemAttached(SpikeEffect, Root, NAME_None, FVector::ZeroVector, FRotator::ZeroRotator,
+			EAttachLocation::KeepRelativeOffset, true))
+		{
+			Fire->SetUsingAbsoluteRotation(true);
+			Fire->SetWorldRotation(FRotator::ZeroRotator);
+		}
+	}
 }
 
 void AknightMonsterSpikeProjectile::Tick(float DeltaSeconds)
@@ -119,12 +131,31 @@ void AknightMonsterSpikeProjectile::Land()
 		return;
 	}
 
-	// 가시는 대상을 통과해 땅에 박히므로, 착탄점 위 낙하 경로(기둥) 안에 있던 대상이 맞는다. 맞은 목록은 볼리 전체가 같이 쓴다.
+	// 가시는 대상을 통과해 땅에 박히므로, 착탄점 위 낙하 경로(기둥) 안에 있던 대상이 맞는다. 맞은 기록은 볼리 전체가 같이 쓴다.
 	const float HalfHeight = FMath::Max(Impact.PathHeight * 0.5f, Impact.HitRadius);
 	const FVector PathCenter = Impact.Landing + FVector::UpVector * HalfHeight;
-	FknightSpikeVolleyHits LocalHits;
+	FknightSpikeVolleyHits LocalVolley;
+	FknightSpikeVolleyHits& Volley = VolleyHits ? *VolleyHits : LocalVolley;
+	const double Now = World->GetTimeSeconds();
+	// 아직 다시 맞을 수 없는 대상은 이미 맞은 것으로 넘겨 건너뛰게 한다.
+	TSet<TWeakObjectPtr<AActor>> Skip;
+	for (const TPair<TWeakObjectPtr<AActor>, double>& Entry : Volley.LastHitTime)
+	{
+		if (Volley.RehitInterval < 0.f || Now - Entry.Value < Volley.RehitInterval)
+		{
+			Skip.Add(Entry.Key);
+		}
+	}
+	TSet<TWeakObjectPtr<AActor>> Hit = Skip;
 	const int32 NewHits = UknightCombatLibrary::ApplyAreaMeleeHits(AttackerActor, PathCenter, FCollisionShape::MakeCapsule(Impact.HitRadius, HalfHeight),
-		HitParams, VolleyHits ? *VolleyHits : LocalHits, [](const AActor&) { return true; }, [](AActor&, EknightHitOutcome) {}, FVector::UpVector);
+		HitParams, Hit, [](const AActor&) { return true; }, [](AActor&, EknightHitOutcome) {}, FVector::UpVector);
+	for (const TWeakObjectPtr<AActor>& Actor : Hit)
+	{
+		if (!Skip.Contains(Actor))
+		{
+			Volley.LastHitTime.Add(Actor, Now);
+		}
+	}
 
 #if ENABLE_DRAW_DEBUG
 	if (knightMonsterDebug::ShouldDrawAttacks())
