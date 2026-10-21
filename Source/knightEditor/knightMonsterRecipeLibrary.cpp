@@ -1745,4 +1745,40 @@ int32 UknightMonsterRecipeLibrary::SetMontageSoundTime(UAnimMontage* Montage, co
 	return Moved;
 }
 
+bool UknightMonsterRecipeLibrary::SetMontagePlayRateWindow(UAnimMontage* Montage, float Start, float End, float PlayRate)
+{
+	if (!Montage || Start < 0.f || End <= Start || End > Montage->GetPlayLength() || PlayRate <= 0.f)
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetMontagePlayRateWindow %s: 구간 %.3f~%.3f이나 속도 %.2f가 잘못됐습니다."), *GetNameSafe(Montage), Start, End, PlayRate);
+		return false;
+	}
+	Montage->Modify();
+	for (const FAnimNotifyEvent& Event : Montage->Notifies)
+	{
+		UknightAnimNotifyState_PlayRate* const Existing = Cast<UknightAnimNotifyState_PlayRate>(Event.NotifyStateClass);
+		if (Existing && FMath::IsNearlyEqual(Event.GetTime(), Start, 0.001f) && FMath::IsNearlyEqual(Event.GetEndTriggerTime(), End, 0.001f))
+		{
+			Existing->Modify();
+			if (float* const Rate = knightRecipe::ValuePtr<float>(Existing->GetClass(), Existing, TEXT("PlayRate"), nullptr))
+			{
+				*Rate = PlayRate;
+			}
+			Montage->PostEditChange();
+			Montage->MarkPackageDirty();
+			return true;
+		}
+	}
+	UknightAnimNotifyState_PlayRate* const NotifyState = NewObject<UknightAnimNotifyState_PlayRate>(Montage, NAME_None, RF_Transactional);
+	if (float* const Rate = knightRecipe::ValuePtr<float>(NotifyState->GetClass(), NotifyState, TEXT("PlayRate"), nullptr))
+	{
+		*Rate = PlayRate;
+	}
+	knightRecipe::AddNotifyState(Montage, NotifyState, Start, End, knightRecipe::FindOrAddNotifyTrack(Montage, TEXT("PlayRate")));
+	Montage->SortNotifies();
+	Montage->RefreshCacheData();
+	Montage->PostEditChange();
+	Montage->MarkPackageDirty();
+	return true;
+}
+
 #undef LOCTEXT_NAMESPACE
