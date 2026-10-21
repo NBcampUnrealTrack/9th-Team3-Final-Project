@@ -16,6 +16,8 @@
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 #include "Sound/SoundBase.h"
+#include "TimerManager.h"
+#include "knight.h"
 
 namespace
 {
@@ -31,6 +33,10 @@ TSharedPtr<FknightMechAttackTiming> FknightMechAttackTiming::Start(UAnimInstance
 	if (!InSettings.bEnabled || CVarMechTiming.GetValueOnGameThread() == 0 || !AnimInstance || !InMontage || InBaseRate <= 0.f
 		|| !AnimInstance->Montage_IsPlaying(InMontage))
 	{
+		// (2026-10-21) 소리가 안 나던 문제 확인용: 왜 시작 못 했는지 남긴다.
+		UE_LOG(LogknightCombat, Log, TEXT("MechTiming skipped %s: enabled %d, cvar %d, anim %d, rate %.2f, playing %d"),
+			*GetNameSafe(InMontage), InSettings.bEnabled, CVarMechTiming.GetValueOnGameThread(), AnimInstance != nullptr, InBaseRate,
+			AnimInstance && InMontage ? AnimInstance->Montage_IsPlaying(InMontage) : 0);
 		return nullptr;
 	}
 
@@ -49,8 +55,12 @@ TSharedPtr<FknightMechAttackTiming> FknightMechAttackTiming::Start(UAnimInstance
 	}
 	if (FirstStart == MAX_FLT)
 	{
+		UE_LOG(LogknightCombat, Log, TEXT("MechTiming skipped %s: no melee trace notify"), *GetNameSafe(InMontage));
 		return nullptr;
 	}
+	UE_LOG(LogknightCombat, Log, TEXT("MechTiming start %s: trace %.2f-%.2f, lock at %.2f, rate %.2f, lock sound %s"),
+		*GetNameSafe(InMontage), FirstStart, FirstEnd, FMath::Max(0.f, FirstStart - InSettings.LockLeadTime), InBaseRate,
+		*GetNameSafe(InSettings.LockSound.Get()));
 
 	TSharedPtr<FknightMechAttackTiming> Timing = MakeShared<FknightMechAttackTiming>();
 	Timing->Anim = AnimInstance;
@@ -191,13 +201,25 @@ void FknightMechAttackTiming::EnterPhase(EPhase NewPhase)
 	case EPhase::Lock:
 		SetRate(Settings.LockRate);
 		PlaySound(Settings.LockSound);
+		UE_LOG(LogknightCombat, Log, TEXT("MechTiming lock %s at %.2f, sound %s"), *GetNameSafe(Montage.Get()),
+			IsStillPlaying() ? Anim->Montage_GetPosition(Montage.Get()) : -1.f, *GetNameSafe(Settings.LockSound.Get()));
 		break;
 	case EPhase::Burst:
 	{
+		UE_LOG(LogknightCombat, Log, TEXT("MechTiming burst %s at %.2f"), *GetNameSafe(Montage.Get()),
+			IsStillPlaying() ? Anim->Montage_GetPosition(Montage.Get()) : -1.f);
 		SetRate(BurstRate);
 		SpawnEffects(Settings.BurstEffect, bTwoHandedStance && !Settings.TwoHandedBurstSockets.IsEmpty()
 			? Settings.TwoHandedBurstSockets : Settings.BurstSockets, Settings.BurstEffectScale, BurstFx);
-		PlaySound(Settings.BurstSound);
+		{
+			// (2026-10-21) 후보가 있으면 무작위로 하나.
+			USoundBase* BurstSoundToPlay = Settings.BurstSound;
+			if (!Settings.BurstSoundVariants.IsEmpty())
+			{
+				BurstSoundToPlay = Settings.BurstSoundVariants[FMath::RandRange(0, Settings.BurstSoundVariants.Num() - 1)];
+			}
+			PlaySound(BurstSoundToPlay);
+		}
 		const USkeletalMeshComponent* const MeshComp = Mesh.Get();
 		const APawn* const Pawn = MeshComp ? Cast<APawn>(MeshComp->GetOwner()) : nullptr;
 		APlayerController* const PC = Pawn && Pawn->IsLocallyControlled() ? Pawn->GetController<APlayerController>() : nullptr;
@@ -211,7 +233,36 @@ void FknightMechAttackTiming::EnterPhase(EPhase NewPhase)
 		SetRate(Settings.StopRate);
 		// 휘두르기가 끝났으니 분사를 끈다.
 		StopEffects(BurstFx);
-		SpawnEffects(Settings.StopEffect, Settings.StopSockets, Settings.StopEffectScale, StopFx);
+		if (Settings.StopEffectDuration > 0.f)
+		{
+			// (2026-10-21) 증기는 스톱 구간(0.1초 남짓)보다 길게 뿜어야 보인다. 공격이 끝나도 정해진 시간 뒤에 스스로 끈다.
+			TArray<TWeakObjectPtr<UNiagaraComponent>> Steam;
+			SpawnEffects(Settings.StopEffect, Settings.StopSockets, Settings.StopEffectScale, Steam, Settings.bAttachStopEffect);
+			const USkeletalMeshComponent* const MeshComp = Mesh.Get();
+			UWorld* const World = MeshComp ? MeshComp->GetWorld() : nullptr;
+			for (const TWeakObjectPtr<UNiagaraComponent>& Fx : Steam)
+			{
+				UNiagaraComponent* const Component = Fx.Get();
+				if (!Component)
+				{
+					continue;
+				}
+				if (!World)
+				{
+					Component->Deactivate();
+					continue;
+				}
+				FTimerHandle Handle;
+				World->GetTimerManager().SetTimer(Handle, FTimerDelegate::CreateWeakLambda(Component, [Component]()
+				{
+					Component->Deactivate();
+				}), Settings.StopEffectDuration, false);
+			}
+		}
+		else
+		{
+			SpawnEffects(Settings.StopEffect, Settings.StopSockets, Settings.StopEffectScale, StopFx, Settings.bAttachStopEffect);
+		}
 		PlaySound(Settings.StopSound);
 		break;
 	case EPhase::Done:
@@ -237,7 +288,7 @@ void FknightMechAttackTiming::StopEffects(TArray<TWeakObjectPtr<UNiagaraComponen
 }
 
 void FknightMechAttackTiming::SpawnEffects(UNiagaraSystem* Effect, const TArray<FName>& Sockets, float Scale,
-	TArray<TWeakObjectPtr<UNiagaraComponent>>& OutSpawned) const
+	TArray<TWeakObjectPtr<UNiagaraComponent>>& OutSpawned, const bool bAttach) const
 {
 	USkeletalMeshComponent* const MeshComp = Mesh.Get();
 	if (!Effect || !MeshComp || Scale <= 0.f)
@@ -250,8 +301,19 @@ void FknightMechAttackTiming::SpawnEffects(UNiagaraSystem* Effect, const TArray<
 		{
 			continue;
 		}
-		if (UNiagaraComponent* const Fx = UNiagaraFunctionLibrary::SpawnSystemAttached(Effect, MeshComp, Socket, FVector::ZeroVector, FRotator::ZeroRotator,
-			FVector(Scale), EAttachLocation::SnapToTarget, true, ENCPoolMethod::None))
+		UNiagaraComponent* Fx = nullptr;
+		if (bAttach)
+		{
+			Fx = UNiagaraFunctionLibrary::SpawnSystemAttached(Effect, MeshComp, Socket, FVector::ZeroVector, FRotator::ZeroRotator,
+				FVector(Scale), EAttachLocation::SnapToTarget, true, ENCPoolMethod::None);
+		}
+		else
+		{
+			// (2026-10-21) 그 자리에 남는다. 방향은 위쪽(증기가 올라간다).
+			Fx = UNiagaraFunctionLibrary::SpawnSystemAtLocation(MeshComp, Effect, MeshComp->GetSocketLocation(Socket), FRotator::ZeroRotator,
+				FVector(Scale), true, true, ENCPoolMethod::None);
+		}
+		if (Fx)
 		{
 			OutSpawned.Add(Fx);
 		}
