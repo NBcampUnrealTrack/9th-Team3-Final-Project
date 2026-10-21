@@ -17,6 +17,7 @@ struct FAbilityEndedData;
  *   공중 턴: State.Monster.Airborne이 붙는다. 공중 공격을 AirAttacksPerTurn번 쓰거나 AirTurnMaxTime이 지나면,
  *            공격이 끝난 뒤 착지(Event.Monster.Land)
  *   격추: 공중 턴에 다운(State.HitReact.Knockdown)되면 곧바로 떨어지고 지상 턴이 처음부터 시작된다.
+ *   거리 벌리기: 공중 턴에 공격·반응 중이 아니고 타깃이 AirKeepDistance보다 가까우면 타깃을 본 채 뒤로 물러난다(다이브 거리 확보).
  *
  * 공중에서도 캡슐과 이동은 땅에 그대로 두고 메시만 띄운다(UknightMonsterHoverComponent::SetAirborne). 길찾기, 추격,
  * StateTree를 지상 턴과 똑같이 쓰기 위해서다. 그 대신 공중 턴 동안 캡슐이 플레이어(Pawn)를 막지 않게 한다.
@@ -65,6 +66,13 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(ClampMin=0, Units="s", EditCondition="GroundTurnTime > 0"))
 	float LandBlendTime = 1.5f;
 
+	/** 공중 턴에 타깃과 이 거리(수평)보다 가까우면 뒤로 물러난다. 0이면 물러나지 않는다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(ClampMin=0, Units="cm", EditCondition="GroundTurnTime > 0"))
+	float AirKeepDistance = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(ClampMin=1, Units="cm/s", EditCondition="AirKeepDistance > 0"))
+	float RetreatSpeed = 1200.f;
+
 	/** 격추되거나 공중에서 죽었을 때 떨어지는 시간. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(ClampMin=0, Units="s", EditCondition="GroundTurnTime > 0"))
 	float FallBlendTime = 0.4f;
@@ -78,6 +86,8 @@ private:
 	bool IsAttacking() const;
 	bool CanChangeTurn() const;
 	void SendEvent(const FGameplayTag& EventTag) const;
+	/** 타깃이 AirKeepDistance보다 가까우면 뒤로 물러난다. */
+	void UpdateRetreat(float DeltaTime);
 
 	TWeakObjectPtr<UAbilitySystemComponent> ASC;
 	TWeakObjectPtr<UknightMonsterHoverComponent> Hover;
@@ -87,5 +97,6 @@ private:
 	float GroundTime = 0.f;
 	float AirTime = 0.f;
 	int32 AirAttacksUsed = 0;
+	double RetreatEndTime = 0.0;
 	TEnumAsByte<ECollisionResponse> SavedPawnResponse = ECR_Block;
 };

@@ -248,6 +248,13 @@ public:
 	float HoverFootHeight = 0.f;
 
 	/**
+	 * 레시피 항목으로 만들지 않는 어빌리티(공중 패턴처럼 전용 클래스로 직접 만든 공격). Build가 어빌리티 세트에 그대로 넣고 건드리지 않는다.
+	 * 공중 턴 공격이면 그 어빌리티의 Selection에 State.Monster.Airborne 필요 태그를 직접 둔다.
+	 */
+	UPROPERTY(EditAnywhere, Category="Attacks")
+	TArray<TSubclassOf<UGameplayAbility>> ExtraAbilities;
+
+	/**
 	 * 지상 턴 시간(knightMonsterAirTurnComponent). 0보다 크면 지상 턴 → 이륙 → 공중 공격 AirAttacksPerTurn번 → 착지를 반복한다.
 	 * 지상 공격은 공중 턴에 막히고, bAirAttack 공격만 공중 턴에 쓴다.
 	 */
@@ -260,6 +267,10 @@ public:
 	/** 공중 공격을 다 쓰지 못해도 이 시간이 지나면 착지한다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(ClampMin=0, Units="s", EditCondition="AirGroundTurnTime > 0"))
 	float AirTurnMaxTime = 20.f;
+
+	/** 공중 턴에 타깃과 이 거리(수평)보다 가까우면 뒤로 물러난다. 0이면 물러나지 않는다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(ClampMin=0, Units="cm", EditCondition="AirGroundTurnTime > 0"))
+	float AirKeepDistance = 0.f;
 
 	/** 공중 턴에 애니메이션 원래 높이(HoverDrop을 빼지 않은 높이)보다 더 띄우는 높이. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(ClampMin=0, Units="cm", EditCondition="AirGroundTurnTime > 0"))
@@ -392,6 +403,10 @@ public:
 	/** 공용 StateTree의 추격 정지 거리. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="cm"))
 	float ChaseStopDistance = 900.f;
+
+	/** 공중 턴 동안의 추격 정지 거리. 0이면 ChaseStopDistance. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="cm"))
+	float AirChaseStopDistance = 0.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="cm"))
 	float RangedMinDistance = 533.f;

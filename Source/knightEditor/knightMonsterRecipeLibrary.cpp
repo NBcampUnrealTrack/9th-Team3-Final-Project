@@ -43,6 +43,7 @@
 #include "Monster/knightMonsterBodyBlockerComponent.h"
 #include "Monster/knightMonsterCharacterBase.h"
 #include "Monster/knightMonsterDefinition.h"
+#include "AbilitySystem/Abilities/knightGameplayAbility_MonsterDiveAttack.h"
 #include "Monster/knightMonsterAirTurnComponent.h"
 #include "Monster/knightMonsterHoverComponent.h"
 #include "Monster/knightMonsterPartData.h"
@@ -504,6 +505,8 @@ namespace knightRecipe
 		bool bCancelOtherReactions = false;
 		FGameplayTag TriggerTag;
 		EGameplayAbilityTriggerSource::Type TriggerSource = EGameplayAbilityTriggerSource::GameplayEvent;
+		/** 경직 반응(패링·부위 파괴)은 State.Monster.NoFlinch 동안 시작하지 않는다(다이브가 패링을 직접 처리). */
+		bool bFlinch = false;
 	};
 
 	TSubclassOf<UGameplayAbility> BuildReactionAbility(FContext& Context, const FReactionSettings& Settings)
@@ -521,6 +524,12 @@ namespace knightRecipe
 		SetBool(CDO, TEXT("bRestorePoise"), Settings.bRestorePoise, Log);
 		SetValue<float>(CDO, TEXT("MaxPoiseGrowth"), Settings.MaxPoiseGrowth, Log);
 		SetBool(CDO, TEXT("bCancelOtherReactions"), Settings.bCancelOtherReactions, Log);
+		FGameplayTagContainer Blocked(Tag(TEXT("State.Dead")));
+		if (Settings.bFlinch)
+		{
+			Blocked.AddTag(Tag(TEXT("State.Monster.NoFlinch")));
+		}
+		SetValue(CDO, TEXT("ActivationBlockedTags"), Blocked, Log);
 
 		FAbilityTriggerData Trigger;
 		Trigger.TriggerTag = Settings.TriggerTag;
@@ -545,6 +554,7 @@ namespace knightRecipe
 			Parried.HoldTime = StaggerTime;
 			Parried.HoldMontage = Hit;
 			Parried.TriggerTag = Tag(TEXT("Event.Parried"));
+			Parried.bFlinch = true;
 			OutAbilities.Add(BuildReactionAbility(Context, Parried));
 
 			FReactionSettings BreakFlinch = Parried;
@@ -769,6 +779,7 @@ namespace knightRecipe
 		Definition->TargetRadius = Recipe.TargetRadius;
 		Definition->FallbackLockOnSocket = Recipe.FallbackLockOnSocket;
 		Definition->ChaseStopDistance = Recipe.ChaseStopDistance;
+		Definition->AirChaseStopDistance = Recipe.AirChaseStopDistance;
 		Definition->bAvoidRepeatingLastAttack = Recipe.bAvoidRepeatingLastAttack;
 		Definition->RangedMinDistance = Recipe.RangedMinDistance;
 		Definition->RangedMaxDistance = Recipe.RangedMaxDistance;
@@ -1060,6 +1071,7 @@ namespace knightRecipe
 			SetValue<float>(AirTurn, TEXT("GroundTurnTime"), Recipe.AirGroundTurnTime, Context.Log);
 			SetValue<int32>(AirTurn, TEXT("AirAttacksPerTurn"), Recipe.AirAttacksPerTurn, Context.Log);
 			SetValue<float>(AirTurn, TEXT("AirTurnMaxTime"), Recipe.AirTurnMaxTime, Context.Log);
+			SetValue<float>(AirTurn, TEXT("AirKeepDistance"), Recipe.AirKeepDistance, Context.Log);
 			SetValue<float>(AirTurn, TEXT("TakeOffBlendTime"), RangeLength(Recipe.TakeOff, Recipe.TakeOffStart, Recipe.TakeOffEnd, 1.f), Context.Log);
 			SetValue<float>(AirTurn, TEXT("LandBlendTime"), RangeLength(Recipe.Landing, Recipe.LandingStart, Recipe.LandingEnd, 1.5f), Context.Log);
 		}
@@ -1333,6 +1345,7 @@ bool UknightMonsterRecipeLibrary::BuildMonsterRecipe(UknightMonsterRecipe* Recip
 		Abilities.Add(BuildAttackAbility(Context, Attack));
 	}
 	BuildReactionAbilities(Context, Abilities);
+	Abilities.Append(Recipe->ExtraAbilities);
 
 	const TSubclassOf<UGameplayEffect> InitEffect = BuildInitEffect(Context);
 	const TSubclassOf<UGameplayEffect> Enrage = BuildTimedEffect(Context, TEXT("Enrage"), SharedEnrage, Recipe->EnrageDuration);
@@ -1653,6 +1666,7 @@ UknightMonsterRecipe* UknightMonsterRecipeLibrary::CreateRecipeFromMonster(TSubc
 		GetValue(AirTurn, TEXT("GroundTurnTime"), Recipe->AirGroundTurnTime);
 		GetValue(AirTurn, TEXT("AirAttacksPerTurn"), Recipe->AirAttacksPerTurn);
 		GetValue(AirTurn, TEXT("AirTurnMaxTime"), Recipe->AirTurnMaxTime);
+		GetValue(AirTurn, TEXT("AirKeepDistance"), Recipe->AirKeepDistance);
 	}
 	if (const UBlueprint* const MonsterBlueprint = Cast<UBlueprint>(MonsterClass->ClassGeneratedBy))
 	{
@@ -1697,6 +1711,7 @@ UknightMonsterRecipe* UknightMonsterRecipeLibrary::CreateRecipeFromMonster(TSubc
 	Recipe->TargetRadius = Definition->TargetRadius;
 	Recipe->FallbackLockOnSocket = Definition->FallbackLockOnSocket;
 	Recipe->ChaseStopDistance = Definition->ChaseStopDistance;
+	Recipe->AirChaseStopDistance = Definition->AirChaseStopDistance;
 	Recipe->bAvoidRepeatingLastAttack = Definition->bAvoidRepeatingLastAttack;
 	Recipe->RangedMinDistance = Definition->RangedMinDistance;
 	Recipe->RangedMaxDistance = Definition->RangedMaxDistance;
@@ -1747,6 +1762,12 @@ UknightMonsterRecipe* UknightMonsterRecipeLibrary::CreateRecipeFromMonster(TSubc
 			ShortName.RemoveFromEnd(TEXT("_C"));
 			ShortName.RemoveFromStart(AbilityPrefix);
 
+			// 레시피 항목(근접·범위 공격)으로 만들 수 없는 전용 공격은 추가 어빌리티로 그대로 둔다.
+			if (CDO->IsA<UknightGameplayAbility_MonsterDiveAttack>())
+			{
+				Recipe->ExtraAbilities.Add(Entry.Ability.Get());
+				continue;
+			}
 			if (CDO->IsA<UknightGameplayAbility_MonsterAttack>())
 			{
 				FknightRecipeAttack& Attack = Recipe->Attacks.AddDefaulted_GetRef();

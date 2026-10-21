@@ -83,6 +83,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="cm"))
 	float ChaseStopDistance = 900.f;
 
+	/** 0보다 크면 공중 턴(State.Monster.Airborne) 동안 ChaseStopDistance 대신 쓴다. 공중 공격(다이브)이 쓸 거리를 남긴다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="cm"))
+	float AirChaseStopDistance = 0.f;
+
 	/** 공용 StateTree가 원거리 공격(Ability.Attack.Ranged)으로 넘어가는 거리 구간. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="cm"))
 	float RangedMinDistance = 533.f;

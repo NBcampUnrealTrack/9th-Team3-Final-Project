@@ -30,6 +30,9 @@ public:
 	/** 공중 높이(내리지 않고 AirLift만큼 더 띄움)와 지상 높이 사이를 BlendTime 동안 옮긴다. 0이면 바로 바꾼다. */
 	void SetAirborne(bool bInAirborne, float BlendTime);
 
+	/** 0 = 지상 높이, 1 = 공중 높이. */
+	float GetAirAlpha() const { return AirAlpha; }
+
 protected:
 	/** 메시를 내리는 최대 높이(cm). 떠 있는 대기 자세에서 발이 바닥 바로 위에 오는 값. 0이면 쓰지 않는다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Hover", meta=(ClampMin=0, Units="Centimeters"))

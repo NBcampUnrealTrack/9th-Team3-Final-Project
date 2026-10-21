@@ -57,6 +57,7 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Monster_Enraged, "State.Monster.Enraged", "Monster rage state.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Monster_Exhausted, "State.Monster.Exhausted", "Monster fatigue state.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Monster_Airborne, "State.Monster.Airborne", "Flying monster is in its air turn (ground attacks blocked, air attacks allowed).");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Monster_NoFlinch, "State.Monster.NoFlinch", "Parry and part-break flinch reactions do not start (the running attack handles the parry itself, e.g. a dive).");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Monster_Reacting, "State.Monster.Reacting", "Monster is in a down, flinch or roar; its StateTree waits instead of acting.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Monster_Phase2, "State.Monster.Phase2", "Monster health fell below its Phase2HealthRatio (once per life; never removed).");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Monster_PassThroughPawns, "State.Monster.PassThroughPawns", "Monster's movement capsule ignores pawns (body attacks roll or charge through the player; push-out moves the player aside).");

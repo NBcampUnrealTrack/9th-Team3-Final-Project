@@ -31,6 +31,7 @@ void UknightMonsterRecipe::Resize()
 	HoverDrop *= Factor;
 	HoverFootHeight *= Factor;
 	AirLift *= Factor;
+	AirKeepDistance *= Factor;
 	AirCeiling *= Factor;
 	CapsuleRadius *= Factor;
 	CapsuleHalfHeight *= Factor;
@@ -40,6 +41,7 @@ void UknightMonsterRecipe::Resize()
 	PushOutBodyAxisHalfLength *= Factor;
 	TargetRadius *= Factor;
 	ChaseStopDistance *= Factor;
+	AirChaseStopDistance *= Factor;
 	RangedMinDistance *= Factor;
 	RangedMaxDistance *= Factor;
 	for (FknightRecipeAttack& Attack : Attacks)

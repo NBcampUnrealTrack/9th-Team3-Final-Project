@@ -74,7 +74,8 @@ void FknightStateTreeMonsterTargetEvaluator::Update(FInstanceDataType& InstanceD
 
 	if (const UknightMonsterDefinition* const Definition = Monster ? Monster->GetMonsterDefinition() : nullptr)
 	{
-		InstanceData.ChaseStopDistance = Definition->ChaseStopDistance;
+		InstanceData.ChaseStopDistance = Definition->AirChaseStopDistance > 0.f && ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Airborne)
+			? Definition->AirChaseStopDistance : Definition->ChaseStopDistance;
 		InstanceData.RangedMinDistance = Definition->RangedMinDistance;
 		InstanceData.RangedMaxDistance = Definition->RangedMaxDistance;
 	}

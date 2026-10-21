@@ -3,6 +3,10 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystem/Abilities/knightGameplayAbility_MonsterAttack.h"
 #include "Components/CapsuleComponent.h"
+#include "Engine/World.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/RootMotionSource.h"
+#include "Monster/knightMonsterMovementComponent.h"
 #include "Monster/knightMonsterCharacterBase.h"
 #include "Monster/knightMonsterHoverComponent.h"
 #include "Monster/knightMonsterTargetingComponent.h"
@@ -80,7 +84,48 @@ void UknightMonsterAirTurnComponent::TickComponent(float DeltaTime, ELevelTick T
 	if ((AirAttacksUsed >= AirAttacksPerTurn || AirTime >= AirTurnMaxTime) && CanChangeTurn())
 	{
 		Land();
+		return;
 	}
+	UpdateRetreat(DeltaTime);
+}
+
+void UknightMonsterAirTurnComponent::UpdateRetreat(float DeltaTime)
+{
+	AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetOwner());
+	const UknightMonsterTargetingComponent* const Targeting = Monster ? Monster->GetTargetingComponent() : nullptr;
+	const AActor* const Target = Targeting ? Targeting->GetCurrentTarget() : nullptr;
+	if (AirKeepDistance <= 0.f || !Target || !CanChangeTurn())
+	{
+		return;
+	}
+	const double Now = GetWorld()->GetTimeSeconds();
+	if (Now < RetreatEndTime)
+	{
+		// 물러나는 동안 타깃을 본다.
+		if (UknightMonsterMovementComponent* const Movement = Monster->GetMonsterMovementComponent())
+		{
+			Movement->TurnTowards(Target->GetActorLocation(), DeltaTime, 180.f, 5.f);
+		}
+		return;
+	}
+	const FVector Away = Monster->GetActorLocation() - Target->GetActorLocation();
+	const float Gap = AirKeepDistance - static_cast<float>(Away.Size2D());
+	UCharacterMovementComponent* const Movement = Monster->GetCharacterMovement();
+	if (Gap < 100.f || !Movement)
+	{
+		return;
+	}
+	const float Duration = FMath::Clamp(Gap / RetreatSpeed, 0.3f, 2.f);
+	const TSharedPtr<FRootMotionSource_ConstantForce> Force = MakeShared<FRootMotionSource_ConstantForce>();
+	Force->InstanceName = TEXT("AirRetreat");
+	Force->AccumulateMode = ERootMotionAccumulateMode::Override;
+	Force->Priority = 5;
+	Force->Force = Away.GetSafeNormal2D(UE_SMALL_NUMBER, -Monster->GetActorForwardVector()) * (Gap / Duration);
+	Force->Duration = Duration;
+	Force->FinishVelocityParams.Mode = ERootMotionFinishVelocityMode::SetVelocity;
+	Force->FinishVelocityParams.SetVelocity = FVector::ZeroVector;
+	Movement->ApplyRootMotionSource(Force);
+	RetreatEndTime = Now + Duration;
 }
 
 void UknightMonsterAirTurnComponent::TakeOff()
@@ -104,7 +149,9 @@ void UknightMonsterAirTurnComponent::Land()
 	if (bAirborne)
 	{
 		UE_LOG(LogknightAI, Log, TEXT("%s: land after %.1f s in the air, %d air attack(s)."), *GetNameSafe(GetOwner()), AirTime, AirAttacksUsed);
-		EndAirTurn(LandBlendTime, true);
+		// 마지막 공중 공격이 땅에서 끝났으면(다이브) 착지 애니메이션 없이 그대로 지상 턴을 시작한다.
+		const bool bAlreadyLow = Hover.IsValid() && Hover->GetAirAlpha() < 0.5f;
+		EndAirTurn(bAlreadyLow ? 0.3f : LandBlendTime, !bAlreadyLow);
 	}
 }
 

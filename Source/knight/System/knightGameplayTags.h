@@ -80,6 +80,7 @@ namespace knightGameplayTags
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Monster_Enraged);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Monster_Exhausted);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Monster_Airborne);
+	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Monster_NoFlinch);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Monster_Reacting);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Monster_Phase2);
 	// (2026-10-20) 구르기·몸통박치기처럼 몸으로 덮치는 동안 이동 캡슐이 플레이어에 막히지 않는다(UknightMonsterPushOutComponent).
