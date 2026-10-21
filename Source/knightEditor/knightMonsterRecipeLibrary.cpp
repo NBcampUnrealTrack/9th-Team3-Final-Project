@@ -15,6 +15,7 @@
 #include "Animation/AnimSequence.h"
 #include "Animation/BlendSpace.h"
 #include "Animation/knightAnimNode_LegPlacement.h"
+#include "Animation/knightAnimNode_WingClearance.h"
 #include "Animation/knightAnimNotifyState_MeleeTrace.h"
 #include "Animation/knightAnimNotifyState_PlayRate.h"
 #include "AssetRegistry/AssetRegistryModule.h"
@@ -36,12 +37,18 @@
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Logging/MessageLog.h"
+#include "MeshUtilitiesCommon.h"
+#include "MeshUtilitiesEngine.h"
 #include "Misc/PackageName.h"
 #include "Monster/knightMonsterBodyBlockerComponent.h"
 #include "Monster/knightMonsterCharacterBase.h"
 #include "Monster/knightMonsterDefinition.h"
+#include "Monster/knightMonsterHoverComponent.h"
 #include "Monster/knightMonsterPartData.h"
 #include "Monster/knightMonsterPushOutComponent.h"
+#include "PhysicsAssetUtils.h"
+#include "PhysicsEngine/PhysicsAsset.h"
+#include "PhysicsEngine/SkeletalBodySetup.h"
 #include "StateTree.h"
 #include "StateTreeCompilerLog.h"
 #include "StateTreeEditingSubsystem.h"
@@ -713,6 +720,47 @@ namespace knightRecipe
 namespace knightRecipe
 {
 	/** 공용 ABP_Monster_Base를 복사한 뒤 스켈레톤, 블렌드스페이스, 발 뼈만 레시피 값으로 바꾼다. */
+	const FName WingClearanceNodeClass = TEXT("AnimGraphNode_knightWingClearance");
+
+	/**
+	 * Knight Leg Placement 노드 출력 바로 뒤에 Knight Wing Clearance 노드를 끼운다. 공용 애님 Blueprint에는 이 노드가 없어서
+	 * 날짐승 레시피에서만 넣는다. 그래프 노드 클래스는 knightAnimGraph 모듈에 있어 이름으로 찾는다.
+	 */
+	UEdGraphNode* InsertWingClearanceNode(UEdGraphNode* LegGraphNode)
+	{
+		UClass* const WingClass = FindObject<UClass>(nullptr, TEXT("/Script/knightAnimGraph.AnimGraphNode_knightWingClearance"));
+		UEdGraphPin* const LegOut = LegGraphNode ? LegGraphNode->FindPin(TEXT("Pose"), EGPD_Output) : nullptr;
+		if (!WingClass || !LegOut)
+		{
+			return nullptr;
+		}
+		UEdGraph* const Graph = LegGraphNode->GetGraph();
+		Graph->Modify();
+		UEdGraphNode* const WingNode = NewObject<UEdGraphNode>(Graph, WingClass, NAME_None, RF_Transactional);
+		Graph->AddNode(WingNode, false, false);
+		WingNode->CreateNewGuid();
+		WingNode->PostPlacedNewNode();
+		WingNode->AllocateDefaultPins();
+		WingNode->NodePosX = LegGraphNode->NodePosX + 320;
+		WingNode->NodePosY = LegGraphNode->NodePosY;
+
+		UEdGraphPin* const WingIn = WingNode->FindPin(TEXT("ComponentPose"), EGPD_Input);
+		UEdGraphPin* const WingOut = WingNode->FindPin(TEXT("Pose"), EGPD_Output);
+		if (!WingIn || !WingOut)
+		{
+			Graph->RemoveNode(WingNode);
+			return nullptr;
+		}
+		const TArray<UEdGraphPin*> Targets = LegOut->LinkedTo;
+		LegOut->BreakAllPinLinks();
+		LegOut->MakeLinkTo(WingIn);
+		for (UEdGraphPin* const Target : Targets)
+		{
+			WingOut->MakeLinkTo(Target);
+		}
+		return WingNode;
+	}
+
 	UAnimBlueprint* BuildAnimBlueprint(FContext& Context)
 	{
 		const UknightMonsterRecipe& Recipe = *Context.Recipe;
@@ -734,6 +782,8 @@ namespace knightRecipe
 
 		bool bFoundBlendSpace = false;
 		bool bFoundLegs = false;
+		UEdGraphNode* LegGraphNode = nullptr;
+		UEdGraphNode* WingGraphNode = nullptr;
 		TArray<UEdGraph*> Graphs;
 		AnimBlueprint->GetAllGraphs(Graphs);
 		for (UEdGraph* const Graph : Graphs)
@@ -760,8 +810,52 @@ namespace knightRecipe
 						}
 						LegNode->PelvisBone.BoneName = Recipe.PelvisBone;
 						bFoundLegs = true;
+						LegGraphNode = Node;
 					}
 				}
+				else if (Node && Node->GetClass()->GetFName() == WingClearanceNodeClass)
+				{
+					WingGraphNode = Node;
+				}
+			}
+		}
+		if (!Recipe.HoverWings.IsEmpty())
+		{
+			if (!WingGraphNode)
+			{
+				WingGraphNode = InsertWingClearanceNode(LegGraphNode);
+				if (WingGraphNode)
+				{
+					Context.Log.Info(FString::Printf(TEXT("%s에 Knight Wing Clearance 노드를 넣었습니다."), *PackagePath));
+				}
+				else
+				{
+					Context.Log.Error(FString::Printf(TEXT("%s에 Knight Wing Clearance 노드를 넣지 못했습니다(Knight Leg Placement 노드 뒤에 넣습니다)."), *PackagePath));
+				}
+			}
+			if (FAnimNode_knightWingClearance* const WingNode = WingGraphNode
+				? ValuePtr<FAnimNode_knightWingClearance>(WingGraphNode->GetClass(), WingGraphNode, TEXT("Node"), &Context.Log) : nullptr)
+			{
+				WingGraphNode->Modify();
+				WingNode->Wings.Reset();
+				for (const FknightRecipeWing& RecipeWing : Recipe.HoverWings)
+				{
+					FknightWingClearanceWing& Wing = WingNode->Wings.AddDefaulted_GetRef();
+					Wing.RootBone.BoneName = RecipeWing.RootBone;
+					for (const FName Tip : RecipeWing.TipBones)
+					{
+						Wing.TipBones.AddDefaulted_GetRef().BoneName = Tip;
+					}
+				}
+				WingNode->Clearance = Recipe.HoverWingClearance;
+			}
+		}
+		else if (WingGraphNode)
+		{
+			if (FAnimNode_knightWingClearance* const WingNode = ValuePtr<FAnimNode_knightWingClearance>(WingGraphNode->GetClass(), WingGraphNode, TEXT("Node"), &Context.Log))
+			{
+				WingGraphNode->Modify();
+				WingNode->Wings.Reset();
 			}
 		}
 		if (!bFoundBlendSpace)
@@ -878,6 +972,13 @@ namespace knightRecipe
 			}
 			SetBool(PushOut, TEXT("bPushOutOfMesh"), Recipe.bPushOutOfMesh, Context.Log);
 		}
+		if (UknightMonsterHoverComponent* const Hover = GetObject<UknightMonsterHoverComponent>(CDO, TEXT("Hover")))
+		{
+			Hover->Modify();
+			SetValue<float>(Hover, TEXT("HoverDrop"), Recipe.HoverDrop, Context.Log);
+			SetValue<TArray<FName>>(Hover, TEXT("FootBones"), Recipe.HoverFootBones, Context.Log);
+			SetValue<float>(Hover, TEXT("FootGroundHeight"), Recipe.HoverFootHeight, Context.Log);
+		}
 		Context.Touch(Blueprint);
 		return Blueprint;
 	}
@@ -925,6 +1026,10 @@ TArray<FString> UknightMonsterRecipeLibrary::ValidateMonsterRecipe(const Uknight
 	{
 		Error(TEXT("Mesh가 없거나 스켈레톤이 없습니다."));
 	}
+	else if (!Mesh->GetPhysicsAsset())
+	{
+		Warning(TEXT("Mesh에 피직스 에셋이 없어 공격이 맞지 않습니다. CreateMonsterPhysicsAsset으로 만드세요."));
+	}
 	auto CheckSequence = [&](const UAnimationAsset* Sequence, const FString& Label, bool bRequired)
 	{
 		if (!Sequence)
@@ -946,6 +1051,17 @@ TArray<FString> UknightMonsterRecipeLibrary::ValidateMonsterRecipe(const Uknight
 		if (Mesh && Mesh->GetRefSkeleton().FindBoneIndex(Bone) == INDEX_NONE)
 		{
 			Error(FString::Printf(TEXT("FootBones: %s 뼈가 메시에 없습니다."), *Bone.ToString()));
+		}
+	}
+	if (Recipe->HoverDrop > 0.f && Recipe->HoverFootBones.IsEmpty())
+	{
+		Error(TEXT("HoverDrop을 쓰려면 HoverFootBones가 필요합니다."));
+	}
+	for (const FName Bone : Recipe->HoverFootBones)
+	{
+		if (Mesh && Mesh->GetRefSkeleton().FindBoneIndex(Bone) == INDEX_NONE)
+		{
+			Error(FString::Printf(TEXT("HoverFootBones: %s 뼈가 메시에 없습니다."), *Bone.ToString()));
 		}
 	}
 	if (!Recipe->FootBones.IsEmpty() && Mesh && Mesh->GetRefSkeleton().FindBoneIndex(Recipe->PelvisBone) == INDEX_NONE)
@@ -1439,6 +1555,12 @@ UknightMonsterRecipe* UknightMonsterRecipeLibrary::CreateRecipeFromMonster(TSubc
 		GetValue(PushOut, TEXT("BodyAxisHalfLength"), Recipe->PushOutBodyAxisHalfLength);
 		Recipe->bPushOutOfMesh = GetBool(PushOut, TEXT("bPushOutOfMesh"));
 	}
+	if (const UknightMonsterHoverComponent* const Hover = GetObject<UknightMonsterHoverComponent>(Monster, TEXT("Hover")))
+	{
+		GetValue(Hover, TEXT("HoverDrop"), Recipe->HoverDrop);
+		GetValue(Hover, TEXT("FootBones"), Recipe->HoverFootBones);
+		GetValue(Hover, TEXT("FootGroundHeight"), Recipe->HoverFootHeight);
+	}
 	if (const UBlueprint* const MonsterBlueprint = Cast<UBlueprint>(MonsterClass->ClassGeneratedBy))
 	{
 		const USCS_Node* const Blocker = MonsterBlueprint->SimpleConstructionScript ? MonsterBlueprint->SimpleConstructionScript->FindSCSNode(TEXT("BodyBlocker")) : nullptr;
@@ -1779,6 +1901,78 @@ bool UknightMonsterRecipeLibrary::SetMontagePlayRateWindow(UAnimMontage* Montage
 	Montage->PostEditChange();
 	Montage->MarkPackageDirty();
 	return true;
+}
+
+UPhysicsAsset* UknightMonsterRecipeLibrary::CreateMonsterPhysicsAsset(USkeletalMesh* Mesh, const FString& PackagePath,
+	const TArray<FName>& CapsuleBones, const TArray<FName>& BoxBones)
+{
+	if (!Mesh || (CapsuleBones.IsEmpty() && BoxBones.IsEmpty()))
+	{
+		UE_LOG(LogTemp, Error, TEXT("CreateMonsterPhysicsAsset %s: 메시와 뼈 목록이 필요합니다."), *PackagePath);
+		return nullptr;
+	}
+	const FReferenceSkeleton& RefSkeleton = Mesh->GetRefSkeleton();
+	TArray<TPair<int32, EPhysAssetFitGeomType>> Bodies;
+	for (const TPair<const TArray<FName>*, EPhysAssetFitGeomType> List : { TPair<const TArray<FName>*, EPhysAssetFitGeomType>(&CapsuleBones, EFG_Sphyl),
+		TPair<const TArray<FName>*, EPhysAssetFitGeomType>(&BoxBones, EFG_Box) })
+	{
+		for (const FName Bone : *List.Key)
+		{
+			const int32 BoneIndex = RefSkeleton.FindBoneIndex(Bone);
+			if (BoneIndex == INDEX_NONE)
+			{
+				UE_LOG(LogTemp, Error, TEXT("CreateMonsterPhysicsAsset %s: 뼈 %s가 메시에 없습니다."), *PackagePath, *Bone.ToString());
+				return nullptr;
+			}
+			Bodies.Emplace(BoneIndex, List.Value);
+		}
+	}
+
+	bool bCreated = false;
+	UPhysicsAsset* const PhysicsAsset = knightRecipe::FindOrCreateAsset<UPhysicsAsset>(PackagePath, bCreated);
+	PhysicsAsset->Modify();
+	PhysicsAsset->SkeletalBodySetups.Reset();
+	PhysicsAsset->ConstraintSetup.Reset();
+	PhysicsAsset->CollisionDisableTable.Reset();
+	PhysicsAsset->UpdateBodySetupIndexMap();
+
+	// 목록에 없는 자식 뼈의 정점은 가장 가까운 목록 조상 바디에 들어간다(BoneIndicesInCreation).
+	TArray<int32> BoneIndicesInCreation;
+	for (const TPair<int32, EPhysAssetFitGeomType>& Body : Bodies)
+	{
+		BoneIndicesInCreation.Add(Body.Key);
+	}
+	TArray<FBoneVertInfo> Infos;
+	FMeshUtilitiesEngine::CalcBoneVertInfos(Mesh, Infos, true, 0);
+
+	for (const TPair<int32, EPhysAssetFitGeomType>& Body : Bodies)
+	{
+		FPhysAssetCreateParams Params;
+		Params.GeomType = Body.Value;
+		Params.bCreateConstraints = false;
+		const FName BoneName = RefSkeleton.GetBoneName(Body.Key);
+		const int32 BodyIndex = FPhysicsAssetUtils::CreateNewBody(PhysicsAsset, BoneName, Params);
+		USkeletalBodySetup* const BodySetup = PhysicsAsset->SkeletalBodySetups[BodyIndex];
+		if (!FPhysicsAssetUtils::CreateCollisionFromBone(BodySetup, Mesh, Body.Key, Params, Infos[Body.Key], PhysicsAsset, BoneIndicesInCreation))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("CreateMonsterPhysicsAsset %s: 뼈 %s에 붙은 정점이 없어 바디를 만들지 못했습니다."), *PackagePath, *BoneName.ToString());
+		}
+		// 피격 판정만 받는다. 시뮬레이션하지 않고 애니메이션을 따라간다.
+		BodySetup->PhysicsType = PhysType_Kinematic;
+	}
+	PhysicsAsset->UpdateBodySetupIndexMap();
+	PhysicsAsset->UpdateBoundsBodiesArray();
+	PhysicsAsset->SetPreviewMesh(Mesh);
+	PhysicsAsset->PostEditChange();
+	PhysicsAsset->MarkPackageDirty();
+
+	if (Mesh->GetPhysicsAsset() != PhysicsAsset)
+	{
+		Mesh->Modify();
+		Mesh->SetPhysicsAsset(PhysicsAsset);
+		Mesh->MarkPackageDirty();
+	}
+	return PhysicsAsset;
 }
 
 #undef LOCTEXT_NAMESPACE

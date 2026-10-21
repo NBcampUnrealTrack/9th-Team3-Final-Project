@@ -9,6 +9,8 @@ class AknightMonsterCharacterBase;
 class UAnimMontage;
 class UAnimSequence;
 class UBlendSpace;
+class UPhysicsAsset;
+class USkeletalMesh;
 class USoundBase;
 class UknightMonsterRecipe;
 
@@ -94,4 +96,13 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
 	static bool SetMontagePlayRateWindow(UAnimMontage* Montage, float Start, float End, float PlayRate);
+
+	/**
+	 * 피격용 피직스 에셋을 만들거나 다시 만들고 메시에 연결한다. CapsuleBones·BoxBones의 뼈마다 바디 하나를 만들고, 그 뼈와
+	 * 목록에 없는 자식 뼈(발가락, 귀 등)에 붙은 정점에 맞춰 크기를 잡는다. 날개 막처럼 넓적한 곳은 BoxBones에 넣는다.
+	 * 바디는 모두 Kinematic(애니메이션을 따라감)이고 제약은 만들지 않는다. 기존 바디는 지운다. 저장은 호출한 쪽.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
+	static UPhysicsAsset* CreateMonsterPhysicsAsset(USkeletalMesh* Mesh, const FString& PackagePath, const TArray<FName>& CapsuleBones,
+		const TArray<FName>& BoxBones);
 };

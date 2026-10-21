@@ -116,6 +116,19 @@ struct FknightRecipeAttack
 	float StartTurnMaxTime = 0.5f;
 };
 
+/** 날개 하나. 어깨 뼈를 돌려 날개 끝들을 바닥 위에 둔다. */
+USTRUCT()
+struct FknightRecipeWing
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, Category="Wing")
+	FName RootBone;
+
+	UPROPERTY(EditAnywhere, Category="Wing")
+	TArray<FName> TipBones;
+};
+
 /** 공격이 아닌 반응. 비어 있는 애니메이션의 반응 어빌리티는 만들지 않는다. */
 USTRUCT()
 struct FknightRecipeReactions
@@ -200,6 +213,29 @@ public:
 	/** 메시가 정면(X)을 보도록 돌리는 yaw. 대부분의 캐릭터 메시는 -90. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Body")
 	float MeshYaw = -90.f;
+
+	/**
+	 * 늘 떠 있게 만든 애니메이션(날짐승)을 바닥 가까이 내리는 최대 높이(knightMonsterHoverComponent). 발 뼈가 디딘 높이
+	 * 아래로는 내리지 않으므로 쓰러지는 애니메이션은 원래 높이 그대로다. 0이면 내리지 않는다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Hover", meta=(ClampMin=0, Units="cm"))
+	float HoverDrop = 0.f;
+
+	/** 바닥 아래로 들어가면 안 되는 발 뼈. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Hover", meta=(EditCondition="HoverDrop > 0"))
+	TArray<FName> HoverFootBones;
+
+	/** 디뎠을 때 발 뼈의 바닥 위 높이(cm, 메시 배율 적용). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Hover", meta=(ClampMin=0, Units="cm", EditCondition="HoverDrop > 0"))
+	float HoverFootHeight = 0.f;
+
+	/** 바닥 가까이에서 날개 끝이 바닥을 뚫지 않게 들어 올린다(애님 그래프의 Knight Wing Clearance 노드). 비우면 노드를 넣지 않는다. */
+	UPROPERTY(EditAnywhere, Category="Hover", meta=(TitleProperty="RootBone"))
+	TArray<FknightRecipeWing> HoverWings;
+
+	/** 날개 끝 뼈를 바닥에서 띄우는 높이(cm). */
+	UPROPERTY(EditAnywhere, Category="Hover", meta=(ClampMin=0, Units="cm"))
+	float HoverWingClearance = 30.f;
 
 	/** 이동용 캡슐. 피격은 메시의 피직스 바디가 받으므로 몸보다 작게 둔다. 메시는 캡슐 바닥에 맞춘다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Body", meta=(ClampMin=1, Units="cm"))

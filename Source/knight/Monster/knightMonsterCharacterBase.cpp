@@ -17,6 +17,7 @@
 #include "Monster/knightMonsterDefinition.h"
 #include "Monster/knightMonsterMovementComponent.h"
 #include "Monster/knightMonsterPartComponent.h"
+#include "Monster/knightMonsterHoverComponent.h"
 #include "Monster/knightMonsterPushOutComponent.h"
 #include "Monster/knightMonsterTargetingComponent.h"
 #include "MotionWarpingComponent.h"
@@ -56,6 +57,7 @@ AknightMonsterCharacterBase::AknightMonsterCharacterBase(const FObjectInitialize
 	HitReaction = CreateDefaultSubobject<UknightHitReactionComponent>(TEXT("HitReaction"));
 	MotionWarping = CreateDefaultSubobject<UMotionWarpingComponent>(TEXT("MotionWarping"));
 	PushOut = CreateDefaultSubobject<UknightMonsterPushOutComponent>(TEXT("PushOut"));
+	Hover = CreateDefaultSubobject<UknightMonsterHoverComponent>(TEXT("Hover"));
 }
 
 UAbilitySystemComponent* AknightMonsterCharacterBase::GetAbilitySystemComponent() const
