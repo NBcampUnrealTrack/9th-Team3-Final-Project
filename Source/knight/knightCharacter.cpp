@@ -30,6 +30,7 @@
 #include "Input/knightInputComponent.h"
 #include "Settings/knightSettingsSubsystem.h"
 #include "Settings/knightSharedSettings.h"
+#include "Progression/knightProgressionSubsystem.h"
 #include "System/knightGameplayTags.h"
 #include "System/knightTeams.h"
 #include "knightGameMode.h"
@@ -109,6 +110,9 @@ FGenericTeamId AknightCharacter::GetGenericTeamId() const
 void AknightCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+	if (UGameInstance* const GI = GetGameInstance())
+		if (UknightProgressionSubsystem* const Progression = GI->GetSubsystem<UknightProgressionSubsystem>())
+			Progression->OnProgressionChanged.AddUniqueDynamic(this, &ThisClass::HandleSocketProgressionChanged);
 
 	CoreAttributeSet->OnOutOfHealth.AddUObject(this, &ThisClass::HandleOutOfHealth);
 
@@ -118,6 +122,18 @@ void AknightCharacter::BeginPlay()
 	{
 		Primitive->SetReceivesDecals(false);
 	}
+}
+
+void AknightCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (UGameInstance* const GI = GetGameInstance())
+		if (UknightProgressionSubsystem* const Progression = GI->GetSubsystem<UknightProgressionSubsystem>())
+			Progression->OnProgressionChanged.RemoveDynamic(this, &ThisClass::HandleSocketProgressionChanged);
+	if (AbilitySystemComponent && SocketRepairCapacityHandle.IsValid())
+		AbilitySystemComponent->RemoveActiveGameplayEffect(SocketRepairCapacityHandle);
+	SocketRepairCapacityHandle.Invalidate();
+	SocketRepairCapacityEffect = nullptr;
+	Super::EndPlay(EndPlayReason);
 }
 
 void AknightCharacter::PossessedBy(AController* NewController)
@@ -146,6 +162,7 @@ void AknightCharacter::InitializeAbilitySystem()
 
 	// 파츠는 ASC를 통해 스탯을 주므로, ASC가 준비된 뒤에 장착한다.
 	Parts->ApplyLoadout();
+	RefreshSocketEffects();
 
 	// 부위 체력은 파츠가 부위 최대 체력을 정한 뒤에 연결해서 MaxHealth 합산이 맞게 한다.
 	PartHealth->InitializeWithAbilitySystem(AbilitySystemComponent);
@@ -155,6 +172,9 @@ void AknightCharacter::InitializeAbilitySystem()
 	// 속성 세트의 규칙(전투 중 파츠 교체로 회복 방지)이라 그대로 두고, 출격 시점에만 채운다.
 	AbilitySystemComponent->SetNumericAttributeBase(UknightCoreAttributeSet::GetHealthAttribute(), CoreAttributeSet->GetMaxHealth());
 	AbilitySystemComponent->SetNumericAttributeBase(UknightCoreAttributeSet::GetPoiseAttribute(), CoreAttributeSet->GetMaxPoise());
+	// New raid pawn starts with its equipped repair capacity; a later socket toggle never refills it.
+	if (AppliedSocketRepairBonus > 0)
+		AbilitySystemComponent->SetNumericAttributeBase(UknightAttributeSet::GetRepairKitCountAttribute(), MechAttributeSet->GetMaxRepairKitCount());
 
 	// 수리 키트 게이지: 퍼펙트 가드 성공 이벤트(knightCombatLibrary::ApplyMeleeHit이 막은 쪽에 보냄)를 받는다. (2026-10-16)
 	static const FGameplayTag ParrySucceededTag = FGameplayTag::RequestGameplayTag(TEXT("Event.ParrySucceeded"), false);
@@ -162,6 +182,38 @@ void AknightCharacter::InitializeAbilitySystem()
 	{
 		AbilitySystemComponent->GenericGameplayEventCallbacks.FindOrAdd(ParrySucceededTag).AddUObject(this, &ThisClass::HandlePerfectGuard);
 	}
+}
+
+void AknightCharacter::HandleSocketProgressionChanged()
+{
+	RefreshSocketEffects();
+}
+
+void AknightCharacter::RefreshSocketEffects()
+{
+	if (!bAbilitySystemInitialized || !AbilitySystemComponent || !MechAttributeSet) return;
+	const UknightProgressionSubsystem* const Progression = GetGameInstance()
+		? GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>() : nullptr;
+	const int32 Bonus = Progression ? Progression->GetRepairKitCapacityBonus() : 0;
+	if (Bonus == AppliedSocketRepairBonus) return;
+	if (SocketRepairCapacityHandle.IsValid())
+		AbilitySystemComponent->RemoveActiveGameplayEffect(SocketRepairCapacityHandle);
+	SocketRepairCapacityHandle.Invalidate();
+	SocketRepairCapacityEffect = nullptr;
+	AppliedSocketRepairBonus = Bonus;
+	if (Bonus > 0)
+	{
+		SocketRepairCapacityEffect = NewObject<UGameplayEffect>(this, NAME_None, RF_Transient);
+		SocketRepairCapacityEffect->DurationPolicy = EGameplayEffectDurationType::Infinite;
+		FGameplayModifierInfo& Modifier = SocketRepairCapacityEffect->Modifiers.AddDefaulted_GetRef();
+		Modifier.Attribute = UknightAttributeSet::GetMaxRepairKitCountAttribute();
+		Modifier.ModifierOp = EGameplayModOp::AddBase;
+		Modifier.ModifierMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(Bonus));
+		SocketRepairCapacityHandle = AbilitySystemComponent->ApplyGameplayEffectToSelf(
+			SocketRepairCapacityEffect, 1.f, AbilitySystemComponent->MakeEffectContext());
+	}
+	if (MechAttributeSet->GetRepairKitCount() > MechAttributeSet->GetMaxRepairKitCount())
+		AbilitySystemComponent->SetNumericAttributeBase(UknightAttributeSet::GetRepairKitCountAttribute(), MechAttributeSet->GetMaxRepairKitCount());
 }
 
 void AknightCharacter::HandlePerfectGuard(const FGameplayEventData* Payload)

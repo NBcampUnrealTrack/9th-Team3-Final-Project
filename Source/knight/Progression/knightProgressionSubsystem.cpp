@@ -113,8 +113,93 @@ bool UknightProgressionSubsystem::SpendMoney(int64 Amount)
 
 int32 UknightProgressionSubsystem::GetUnlockedSharedSocketSlots() const
 {
-	const UknightSaveGame* const Save = GetSave();
+	const UknightSaveSubsystem* const Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	const UknightSaveGame* const Save = Saves && Saves->HasSelectedSlot() ? GetSave() : nullptr;
 	return Save ? Save->UnlockedSharedSocketSlots : 0;
+}
+
+const UknightSocketItemDefinition* UknightProgressionSubsystem::GetEquippedSocketItem(int32 SlotIndex) const
+{
+	const UknightSaveSubsystem* const Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	const UknightSaveGame* const Save = Saves && Saves->HasSelectedSlot() ? GetSave() : nullptr;
+	if (!Save || SlotIndex < 0 || SlotIndex >= Save->UnlockedSharedSocketSlots
+		|| !Save->EquippedSocketItems.IsValidIndex(SlotIndex)) return nullptr;
+	const FPrimaryAssetId Id = Save->EquippedSocketItems[SlotIndex];
+	if (!Id.IsValid() || Save->ItemCounts.FindRef(Id) <= 0) return nullptr;
+	const UknightSocketItemDefinition* const Item = Cast<UknightSocketItemDefinition>(UknightInventoryLibrary::LoadItemDefinition(Id));
+	return Item && Item->GetPrimaryAssetId() == Id && Item->ItemType == knightGameplayTags::Item_Type_Socket ? Item : nullptr;
+}
+
+int32 UknightProgressionSubsystem::GetAvailableSocketItemCount(const UknightSocketItemDefinition* Item) const
+{
+	const FPrimaryAssetId Id = Item ? Item->GetPrimaryAssetId() : FPrimaryAssetId();
+	const UknightSaveSubsystem* const Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	const UknightSaveGame* const Save = Saves && Saves->HasSelectedSlot() ? GetSave() : nullptr;
+	if (!Save || !Id.IsValid() || Item->ItemType != knightGameplayTags::Item_Type_Socket) return 0;
+	int32 Used = 0;
+	for (int32 Index = 0; Index < Save->UnlockedSharedSocketSlots && Index < Save->EquippedSocketItems.Num(); ++Index)
+		if (Save->EquippedSocketItems[Index] == Id) ++Used;
+	return FMath::Max(0, Save->ItemCounts.FindRef(Id) - Used);
+}
+
+bool UknightProgressionSubsystem::EquipSocketItem(int32 SlotIndex, const UknightSocketItemDefinition* Item)
+{
+	UknightSaveSubsystem* const Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	UknightSaveGame* const Save = Saves && Saves->CanStartAtomicTransaction() ? GetSave() : nullptr;
+	const FPrimaryAssetId Id = Item ? Item->GetPrimaryAssetId() : FPrimaryAssetId();
+	if (!Save || SlotIndex < 0 || SlotIndex >= Save->UnlockedSharedSocketSlots || !Item || !Id.IsValid()
+		|| Item->ItemType != knightGameplayTags::Item_Type_Socket || !FMath::IsFinite(Item->EffectValue)
+		|| Item->EffectValue < 0.f || Save->ItemCounts.FindRef(Id) <= 0) return false;
+	const FPrimaryAssetId Previous = Save->EquippedSocketItems.IsValidIndex(SlotIndex)
+		? Save->EquippedSocketItems[SlotIndex] : FPrimaryAssetId();
+	if (Previous == Id) return false;
+	int32 OtherUses = 0;
+	for (int32 Index = 0; Index < Save->UnlockedSharedSocketSlots && Index < Save->EquippedSocketItems.Num(); ++Index)
+		if (Index != SlotIndex && Save->EquippedSocketItems[Index] == Id) ++OtherUses;
+	if ((!Item->bAllowDuplicateEquip && OtherUses > 0) || OtherUses >= Save->ItemCounts.FindRef(Id)) return false;
+	Save->EquippedSocketItems.SetNum(Save->UnlockedSharedSocketSlots);
+	Save->EquippedSocketItems[SlotIndex] = Id;
+	CommitChange();
+	return true;
+}
+
+bool UknightProgressionSubsystem::UnequipSocketItem(int32 SlotIndex)
+{
+	UknightSaveSubsystem* const Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	UknightSaveGame* const Save = Saves && Saves->CanStartAtomicTransaction() ? GetSave() : nullptr;
+	if (!Save || SlotIndex < 0 || SlotIndex >= Save->UnlockedSharedSocketSlots
+		|| !Save->EquippedSocketItems.IsValidIndex(SlotIndex)
+		|| !Save->EquippedSocketItems[SlotIndex].IsValid()) return false;
+	Save->EquippedSocketItems[SlotIndex] = FPrimaryAssetId();
+	CommitChange();
+	return true;
+}
+
+float UknightProgressionSubsystem::GetSocketEffectTotal(EKnightSocketEffect Effect) const
+{
+	float Total = 0.f;
+	for (int32 Index = 0, Count = GetUnlockedSharedSocketSlots(); Index < Count; ++Index)
+	{
+		const UknightSocketItemDefinition* const Item = GetEquippedSocketItem(Index);
+		if (Item && Item->Effect == Effect && FMath::IsFinite(Item->EffectValue) && Item->EffectValue >= 0.f)
+			Total += Item->EffectValue;
+	}
+	return FMath::IsFinite(Total) ? Total : 0.f;
+}
+
+int32 UknightProgressionSubsystem::GetRepairKitCapacityBonus() const
+{
+	return FMath::Max(0, FMath::RoundToInt(GetSocketEffectTotal(EKnightSocketEffect::RepairKitCapacity)));
+}
+
+float UknightProgressionSubsystem::GetAttackStaminaCostMultiplier() const
+{
+	return 1.f - FMath::Clamp(GetSocketEffectTotal(EKnightSocketEffect::AttackStaminaCost), 0.f, 1.f);
+}
+
+float UknightProgressionSubsystem::GetSocketGaugeChargeMultiplier() const
+{
+	return 1.f + FMath::Max(0.f, GetSocketEffectTotal(EKnightSocketEffect::SocketGaugeCharge));
 }
 
 bool UknightProgressionSubsystem::HasFirstDefeatedBoss(FName BossId) const
@@ -326,6 +411,13 @@ bool UknightProgressionSubsystem::ConsumeItem(const UknightItemDefinition* Item,
 	if (!Owned || Count <= 0 || *Owned < Count)
 	{
 		return false;
+	}
+	if (Item->IsA<UknightSocketItemDefinition>())
+	{
+		int32 Equipped = 0;
+		for (int32 Index = 0; Index < Save->UnlockedSharedSocketSlots && Index < Save->EquippedSocketItems.Num(); ++Index)
+			if (Save->EquippedSocketItems[Index] == ItemId) ++Equipped;
+		if (*Owned - Count < Equipped) return false;
 	}
 	*Owned -= Count;
 	if (*Owned == 0)

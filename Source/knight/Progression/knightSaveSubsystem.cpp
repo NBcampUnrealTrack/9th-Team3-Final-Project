@@ -191,6 +191,14 @@ bool UknightSaveSubsystem::MigrateSave(UknightSaveGame& Save) const
 	Save.CompletedQuestIds.Remove(NAME_None);
 	Save.FirstDefeatedBossIds.Remove(NAME_None);
 	if (Save.Money < 0 || Save.UnlockedSharedSocketSlots < 0) return false;
+	if (Save.EquippedSocketItems.Num() > Save.UnlockedSharedSocketSlots) return false;
+	TMap<FPrimaryAssetId, int32> EquippedSocketCounts;
+	for (const FPrimaryAssetId& Id : Save.EquippedSocketItems)
+	{
+		if (!Id.IsValid()) continue; // Empty slot.
+		const int32 Used = ++EquippedSocketCounts.FindOrAdd(Id);
+		if (Save.ItemCounts.FindRef(Id) < Used) return false;
+	}
 	if (!FMath::IsFinite(Save.TotalPlayTime) || Save.TotalPlayTime < 0.f) return false;
 	Save.SaveVersion = UknightSaveGame::CurrentVersion;
 	return true;

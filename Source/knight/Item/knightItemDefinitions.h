@@ -101,13 +101,33 @@ public:
 	TObjectPtr<const UknightMonsterDefinition> SourceMonster;
 };
 
-/** Socket consumable/data item. Socket effects are intentionally outside the phase-one inventory. */
+/** Effects granted by an equipped shared socket item. */
+UENUM(BlueprintType)
+enum class EKnightSocketEffect : uint8
+{
+	RepairKitCapacity,
+	AttackStaminaCost,
+	SocketGaugeCharge
+};
+
+/** A socket item remains in the item box while equipped. */
 UCLASS(BlueprintType, Const)
 class KNIGHT_API UknightSocketItemDefinition : public UknightItemDefinition
 {
 	GENERATED_BODY()
 public:
 	UknightSocketItemDefinition();
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Socket")
+	EKnightSocketEffect Effect = EKnightSocketEffect::RepairKitCapacity;
+
+	/** Repair: flat kit capacity. Attack: fractional cost reduction. Gauge: fractional charge increase. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Socket", meta=(ClampMin=0))
+	float EffectValue = 0.f;
+
+	/** When enabled, each equipped copy still requires one owned copy. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Socket")
+	bool bAllowDuplicateEquip = false;
 };
 
 /**

@@ -374,7 +374,16 @@ void UKnightInventoryWidget::Refresh()
 		}
 		UKnightInventoryEntryWidget* Entry = CreateWidget<UKnightInventoryEntryWidget>(GetOwningPlayer(), UKnightInventoryEntryWidget::StaticClass());
 		if (!Entry) continue;
-		Entry->Configure(Item, Stack.Count, Equipped.Contains(Item->GetPrimaryAssetId()), NameColor);
+		bool bEquipped = Equipped.Contains(Item->GetPrimaryAssetId());
+		if (Category == 2 && Progression)
+		{
+			for (int32 SocketIndex = 0; SocketIndex < Progression->GetUnlockedSharedSocketSlots(); ++SocketIndex)
+			{
+				const UknightSocketItemDefinition* const Socket = Progression->GetEquippedSocketItem(SocketIndex);
+				if (Socket && Socket->GetPrimaryAssetId() == Item->GetPrimaryAssetId()) { bEquipped = true; break; }
+			}
+		}
+		Entry->Configure(Item, Stack.Count, bEquipped, NameColor);
 		Entry->OnSelected.AddUObject(this, &ThisClass::SelectItem);
 		ItemList->AddChild(Entry);
 		Entries.Add(Entry);
@@ -417,8 +426,22 @@ void UKnightInventoryWidget::RefreshDetail()
 		if (Entry && Entry->GetItem() && Entry->GetItem()->GetPrimaryAssetId() == SelectedItemId)
 		{ Item = Entry->GetItem(); break; }
 	if (DetailName) DetailName->SetText(Item ? ItemName(Item) : LOCTEXT("Select", "항목 선택"));
-	if (DetailDescription) DetailDescription->SetText(Item && !Item->Description.IsEmpty()
-		? Item->Description : Item ? LOCTEXT("NoDescription", "설명이 없습니다.") : FText::GetEmpty());
+	if (DetailDescription)
+	{
+		FText Description = Item && !Item->Description.IsEmpty() ? Item->Description
+			: Item ? LOCTEXT("NoDescription", "설명이 없습니다.") : FText::GetEmpty();
+		if (Category == 2)
+		{
+			const UknightSocketItemDefinition* const Socket = Cast<UknightSocketItemDefinition>(Item);
+			if (Socket)
+			{
+				const UknightProgressionSubsystem* const Progression = GetProgression();
+				const int32 Available = Progression ? Progression->GetAvailableSocketItemCount(Socket) : 0;
+				Description = FText::Format(LOCTEXT("SocketInventoryDetail", "{0}\n장착 가능한 남은 수량: {1}"), Description, Available);
+			}
+		}
+		DetailDescription->SetText(Description);
+	}
 	RefreshSale();
 }
 

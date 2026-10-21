@@ -460,3 +460,75 @@ void AKnightMenuPlayerController::KnightCoreUpgradeCompare(FName WeaponName)
 		Preview.Values.FindRef(Attack) - Current.Values.FindRef(Attack), Current.bComplete, Preview.bComplete);
 #endif
 }
+
+void AKnightMenuPlayerController::KnightCoreSocketUnlock(int32 Count)
+{
+#if WITH_EDITOR
+	if (!IsIsolatedRewardProbe() || Count <= 0 || Count > 3) return;
+	UknightSaveSubsystem* const Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	UknightProgressionSubsystem* const Progression = GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>();
+	UknightSaveGame* const Save = Saves && Saves->CanStartAtomicTransaction() ? Saves->GetSaveGame() : nullptr;
+	if (!Save || !Progression || Save->UnlockedSharedSocketSlots > 3 - Count) return;
+	Save->UnlockedSharedSocketSlots += Count;
+	Saves->RequestSave();
+	Progression->OnProgressionChanged.Broadcast();
+	UE_LOG(Logknight, Log, TEXT("KnightCoreSocketUnlock slot=%s slots=%d"), *Saves->GetActiveSlotId(), Save->UnlockedSharedSocketSlots);
+#endif
+}
+
+void AKnightMenuPlayerController::KnightCoreSocketEquip(int32 SlotIndex, FName ItemName)
+{
+#if WITH_EDITOR
+	if (!IsIsolatedRewardProbe()) return;
+	UknightProgressionSubsystem* const Progression = GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>();
+	const FPrimaryAssetId Id(UknightItemDefinition::ItemAssetType, ItemName);
+	const UknightSocketItemDefinition* const Item = Cast<UknightSocketItemDefinition>(UknightInventoryLibrary::LoadItemDefinition(Id));
+	const bool bAccepted = Progression && Progression->EquipSocketItem(SlotIndex, Item);
+	UE_LOG(Logknight, Log, TEXT("KnightCoreSocketEquip slot=%d item=%s accepted=%d owned=%d"), SlotIndex,
+		*Id.ToString(), bAccepted, Progression && Item ? Progression->GetItemCount(Item) : 0);
+#endif
+}
+
+void AKnightMenuPlayerController::KnightCoreSocketUnequip(int32 SlotIndex)
+{
+#if WITH_EDITOR
+	if (!IsIsolatedRewardProbe()) return;
+	UknightProgressionSubsystem* const Progression = GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>();
+	const bool bAccepted = Progression && Progression->UnequipSocketItem(SlotIndex);
+	UE_LOG(Logknight, Log, TEXT("KnightCoreSocketUnequip slot=%d accepted=%d"), SlotIndex, bAccepted);
+#endif
+}
+
+void AKnightMenuPlayerController::KnightCoreSocketConsume(FName ItemName, int32 Count)
+{
+#if WITH_EDITOR
+	if (!IsIsolatedRewardProbe()) return;
+	UknightProgressionSubsystem* const Progression = GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>();
+	const FPrimaryAssetId Id(UknightItemDefinition::ItemAssetType, ItemName);
+	const UknightSocketItemDefinition* const Item = Cast<UknightSocketItemDefinition>(UknightInventoryLibrary::LoadItemDefinition(Id));
+	const bool bAccepted = Progression && Progression->ConsumeItem(Item, Count);
+	UE_LOG(Logknight, Log, TEXT("KnightCoreSocketConsume item=%s count=%d accepted=%d owned=%d"), *Id.ToString(), Count,
+		bAccepted, Progression && Item ? Progression->GetItemCount(Item) : 0);
+#endif
+}
+
+void AKnightMenuPlayerController::KnightCoreSocketStatus()
+{
+#if WITH_EDITOR
+	if (!IsIsolatedRewardProbe()) return;
+	UknightSaveSubsystem* const Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	UknightProgressionSubsystem* const Progression = GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>();
+	if (!Saves || !Progression) return;
+	UE_LOG(Logknight, Log, TEXT("KnightCoreSocketStatus slot=%s unlocked=%d kitBonus=%d attackCost=%.3f gaugeCharge=%.3f busy=%d recovery=%d"),
+		*Saves->GetActiveSlotId(), Progression->GetUnlockedSharedSocketSlots(), Progression->GetRepairKitCapacityBonus(),
+		Progression->GetAttackStaminaCostMultiplier(), Progression->GetSocketGaugeChargeMultiplier(),
+		Saves->IsSaveInFlight(), Saves->IsSaveRecoveryPending());
+	for (int32 Index = 0; Index < Progression->GetUnlockedSharedSocketSlots(); ++Index)
+	{
+		const UknightSocketItemDefinition* const Item = Progression->GetEquippedSocketItem(Index);
+		UE_LOG(Logknight, Log, TEXT("KnightCoreSocketSlot index=%d item=%s owned=%d available=%d"), Index,
+			Item ? *Item->GetPrimaryAssetId().ToString() : TEXT("None"),
+			Item ? Progression->GetItemCount(Item) : 0, Item ? Progression->GetAvailableSocketItemCount(Item) : 0);
+	}
+#endif
+}

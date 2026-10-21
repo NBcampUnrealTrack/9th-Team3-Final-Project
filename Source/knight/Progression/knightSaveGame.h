@@ -38,8 +38,9 @@ public:
 	 * 5: confirmed quest IDs (older saves default to an empty set).
 	 * 6: money and first-boss shared socket awards (older saves default to zero/empty).
 	 * 7: per-weapon current-step failure counts (older saves default to zero).
+	 * 8: shared socket loadout (older saves default to empty slots).
 	 */
-	static constexpr int32 CurrentVersion = 7;
+	static constexpr int32 CurrentVersion = 8;
 
 	UPROPERTY(SaveGame)
 	int32 SaveVersion = CurrentVersion;
@@ -69,6 +70,10 @@ public:
 
 	UPROPERTY(SaveGame)
 	int32 UnlockedSharedSocketSlots = 0;
+
+	/** Index is the shared socket slot; an invalid ID means empty. Never changes ItemCounts. */
+	UPROPERTY(SaveGame)
+	TArray<FPrimaryAssetId> EquippedSocketItems;
 
 	/** The item box: owned count per item. */
 	UPROPERTY(SaveGame)

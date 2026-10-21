@@ -9,6 +9,7 @@
 #include "GenericTeamAgentInterface.h"
 #include "Interfaces/CombatInterface.h"
 #include "AbilitySystem/knightAbilitySet.h"
+#include "GameplayEffectTypes.h"
 #include "Logging/LogMacros.h"
 #include "knightCharacter.generated.h"
 
@@ -31,6 +32,7 @@ class UMotionWarpingComponent;
 class UknightDamageVisualComponent;
 class UknightPartsComponent;
 class UknightPartHealthComponent;
+class UGameplayEffect;
 struct FGameplayEffectSpec;
 struct FGameplayEventData;
 struct FInputActionValue;
@@ -124,6 +126,12 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|RepairKit", meta=(ClampMin=0))
 	float RepairKitGaugePerPerfectGuard = 20.f;
 
+	/** This socket bonus is a removable GE; kit count is never replenished by a loadout refresh. */
+	UPROPERTY(Transient) TObjectPtr<UGameplayEffect> SocketRepairCapacityEffect;
+	FActiveGameplayEffectHandle SocketRepairCapacityHandle;
+	int32 AppliedSocketRepairBonus = INDEX_NONE;
+	UFUNCTION() void HandleSocketProgressionChanged();
+
 	/** 템플릿 입력. InputConfig가 비어 있을 때만 쓴다. */
 	UPROPERTY(EditAnywhere, Category="Input")
 	UInputAction* JumpAction;
@@ -163,6 +171,8 @@ public:
 	UknightTargetLockComponent* GetTargetLock() const { return TargetLock; }
 	UknightPartHealthComponent* GetPartHealth() const { return PartHealth; }
 	UknightMovementComponent* GetKnightMovementComponent() const;
+	/** Recompute the equipped socket capacity without restoring spent repair kits. */
+	void RefreshSocketEffects();
 
 	/** Health가 0이 되면 한 번 발생한다. State.Dead가 붙고 Event.Death가 보내진 뒤다. */
 	UPROPERTY(BlueprintAssignable, Category="Knight|Health")
@@ -171,6 +181,7 @@ public:
 protected:
 
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void PossessedBy(AController* NewController) override;
 
 	/** 입력 액션 연결을 초기화한다 */

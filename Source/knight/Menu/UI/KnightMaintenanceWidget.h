@@ -15,6 +15,7 @@ class UWidgetSwitcher;
 class UknightCraftRecipeDefinition;
 class UknightPartItemDefinition;
 class UknightWeaponItemDefinition;
+class UknightSocketItemDefinition;
 class UKnightMaintenanceEntryWidget;
 class UknightProgressionSubsystem;
 
@@ -84,6 +85,7 @@ protected:
 private:
 	void ShowConfirm(bool bShow);
 	UFUNCTION() void HandleProgressionChanged();
+	UFUNCTION() void HandleActiveSlotChanged(const FString& SlotId);
 	void SetCategory(int32 NewCategory, bool bFromPlayer);
 	void SetSlot(FGameplayTag NewSlot, bool bFromPlayer);
 	void SetInfoTab(int32 NewTab);
@@ -92,6 +94,8 @@ private:
 	void RefreshDetails();
 	void RefreshMaterials(const UknightCraftRecipeDefinition* Recipe, UknightProgressionSubsystem* Progression);
 	void RefreshWeaponUpgradePanel();
+	void RebuildSocketList();
+	void RefreshSocketDetails();
 	void RequestWeaponUpgrade();
 	void RefreshTabButtons();
 	void SelectEntry(UKnightMaintenanceEntryWidget* Entry);
@@ -102,7 +106,7 @@ private:
 	void UnequipSelection();
 	UknightProgressionSubsystem* GetProgression() const;
 
-	int32 Category = 0; // 0 제작, 1 무기, 2 방어구
+	int32 Category = 0; // 0 제작, 1 무기, 2 방어구, 3 소켓
 	int32 InfoTab = 0;  // 0 스펙, 1 세트, 2 재료
 	FGameplayTag Slot;
 	bool bBusy = false;
@@ -117,6 +121,10 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> UpgradeChance;
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> UpgradeResult;
 	UPROPERTY(Transient) TObjectPtr<UCommonButtonBase> UpgradeButton;
+	UPROPERTY(Transient) TObjectPtr<UCommonButtonBase> SocketCategoryButton;
+	UPROPERTY(Transient) TArray<TObjectPtr<UCommonButtonBase>> SocketListButtons;
+	UPROPERTY(Transient) TObjectPtr<const UknightSocketItemDefinition> SelectedSocketItem;
+	int32 SelectedSocketSlot = INDEX_NONE;
 	UPROPERTY(Transient) TObjectPtr<const UknightPartItemDefinition> SelectedPart;
 	UPROPERTY(Transient) TObjectPtr<const UknightCraftRecipeDefinition> SelectedRecipe;
 	UPROPERTY(Transient) TArray<TObjectPtr<UKnightMaintenanceEntryWidget>> Entries;

@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameplayTagContainer.h"
+#include "Item/knightItemDefinitions.h"
 #include "Raid/knightRaidTypes.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "UObject/PrimaryAssetId.h"
@@ -13,6 +14,8 @@ class UknightSaveGame;
 class UknightCraftRecipeDefinition;
 class UknightWeaponItemDefinition;
 class UknightMaterialItemDefinition;
+class UknightSocketItemDefinition;
+enum class EKnightSocketEffect : uint8;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FknightProgressionChanged);
 
@@ -110,6 +113,33 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="Knight|Progression|Rewards")
 	int32 GetUnlockedSharedSocketSlots() const;
+
+	/** Null for an empty or locked slot. Uses saved item IDs; never grants or consumes inventory. */
+	UFUNCTION(BlueprintCallable, Category="Knight|Progression|Socket")
+	const UknightSocketItemDefinition* GetEquippedSocketItem(int32 SlotIndex) const;
+
+	UFUNCTION(BlueprintPure, Category="Knight|Progression|Socket")
+	int32 GetAvailableSocketItemCount(const UknightSocketItemDefinition* Item) const;
+
+	/** Replaces one slot atomically after checking unlock, ownership, duplicates and save readiness. */
+	UFUNCTION(BlueprintCallable, Category="Knight|Progression|Socket")
+	bool EquipSocketItem(int32 SlotIndex, const UknightSocketItemDefinition* Item);
+
+	UFUNCTION(BlueprintCallable, Category="Knight|Progression|Socket")
+	bool UnequipSocketItem(int32 SlotIndex);
+
+	/** Values are always recomputed from the equipped IDs; no accumulated modifier state is saved. */
+	UFUNCTION(BlueprintPure, Category="Knight|Progression|Socket")
+	float GetSocketEffectTotal(EKnightSocketEffect Effect) const;
+
+	UFUNCTION(BlueprintPure, Category="Knight|Progression|Socket")
+	int32 GetRepairKitCapacityBonus() const;
+
+	UFUNCTION(BlueprintPure, Category="Knight|Progression|Socket")
+	float GetAttackStaminaCostMultiplier() const;
+
+	UFUNCTION(BlueprintPure, Category="Knight|Progression|Socket")
+	float GetSocketGaugeChargeMultiplier() const;
 
 	UFUNCTION(BlueprintPure, Category="Knight|Progression|Rewards")
 	bool HasFirstDefeatedBoss(FName BossId) const;

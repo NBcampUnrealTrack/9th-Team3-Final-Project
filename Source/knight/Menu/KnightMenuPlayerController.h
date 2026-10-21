@@ -45,6 +45,12 @@ public:
 	UFUNCTION(Exec) void KnightCoreUpgradeStatus(FName WeaponName);
 	UFUNCTION(Exec) void KnightCoreUpgradeEquip(FName WeaponName);
 	UFUNCTION(Exec) void KnightCoreUpgradeCompare(FName WeaponName);
+	/** Isolated editor-only socket probes; item grant reuses KnightCoreUpgradeGrant. */
+	UFUNCTION(Exec) void KnightCoreSocketUnlock(int32 Count);
+	UFUNCTION(Exec) void KnightCoreSocketEquip(int32 SlotIndex, FName ItemName);
+	UFUNCTION(Exec) void KnightCoreSocketUnequip(int32 SlotIndex);
+	UFUNCTION(Exec) void KnightCoreSocketConsume(FName ItemName, int32 Count);
+	UFUNCTION(Exec) void KnightCoreSocketStatus();
 
 protected:
 	virtual void BeginPlay() override;
