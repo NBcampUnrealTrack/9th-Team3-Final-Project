@@ -25,8 +25,9 @@ UknightAttributeSet::UknightAttributeSet()
 	InitMaxLegsHealth(37.5f);
 
 	// 적재 한도는 임시값. 파츠 데이터가 정해지면 조정한다.
+	// (2026-10-21 사용자 결정) 100 → 70: 다리 장비가 한도를 올려 주고(잔열 +30), 무거운 무기·소켓을 쓰려면 다리부터 맞추게. 바뀔 수 있는 값.
 	InitWeight(0.f);
-	InitLoadCapacity(100.f);
+	InitLoadCapacity(70.f);
 
 	// 배율 스탯은 1.0으로 두어 기존 동작이 바뀌지 않게 한다.
 	// 퀵스텝 쿨타임은 0.5초 (2026-10-07, 연타 테스트 후 임시로 정한 값 — 이후 조정).

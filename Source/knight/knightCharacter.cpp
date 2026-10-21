@@ -140,6 +140,7 @@ void AknightCharacter::InitializeAbilitySystem()
 	// (2026-10-20) 기본 메카 스탯(속성 세트 기본값과 다른 것). 파츠 능력치는 이 위에 더해진다.
 	AbilitySystemComponent->SetNumericAttributeBase(UknightCoreAttributeSet::GetPoiseRecoveryRateAttribute(), BasePoiseRecoveryRate);
 	AbilitySystemComponent->SetNumericAttributeBase(UknightCoreAttributeSet::GetGuardEfficiencyAttribute(), BaseGuardEfficiency);
+	AbilitySystemComponent->SetNumericAttributeBase(UknightCoreAttributeSet::GetCriticalDamageMultiplierAttribute(), BaseCriticalDamageMultiplier);
 
 	// 파츠는 ASC를 통해 스탯을 주므로, ASC가 준비된 뒤에 장착한다.
 	Parts->ApplyLoadout();

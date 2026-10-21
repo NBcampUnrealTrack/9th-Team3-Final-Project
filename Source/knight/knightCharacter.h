@@ -141,6 +141,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|BaseStats", meta=(ClampMin=0))
 	float BaseGuardEfficiency = 0.8f;
 
+	/**
+	 * (2026-10-21 사용자 결정) 치명타 피해 배율 1.25 → 1.5. 치명타 확률은 파츠(머리)가 준다. 바뀔 수 있는 값.
+	 * (속성 세트 기본값 1.25는 몬스터도 같이 쓰므로 그대로 두고, 플레이어만 여기서 넣는다.)
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|BaseStats", meta=(ClampMin=1))
+	float BaseCriticalDamageMultiplier = 1.5f;
+
 	/** 템플릿 입력. InputConfig가 비어 있을 때만 쓴다. */
 	UPROPERTY(EditAnywhere, Category="Input")
 	UInputAction* JumpAction;
