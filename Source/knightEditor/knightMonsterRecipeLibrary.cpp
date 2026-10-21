@@ -11,6 +11,7 @@
 #include "AnimGraphNode_BlendSpacePlayer.h"
 #include "Animation/AnimBlueprint.h"
 #include "Animation/AnimMontage.h"
+#include "Animation/AnimNotifies/AnimNotify_PlaySound.h"
 #include "Animation/AnimSequence.h"
 #include "Animation/BlendSpace.h"
 #include "Animation/knightAnimNode_LegPlacement.h"
@@ -1713,6 +1714,35 @@ bool UknightMonsterRecipeLibrary::SetMontageSegmentSequence(UAnimMontage* Montag
 	Montage->Modify();
 	Montage->SlotAnimTracks[0].AnimTrack.AnimSegments[SegmentIndex].SetAnimReference(Sequence, true);
 	return SetMontageSegmentRange(Montage, SegmentIndex, 0.f, Sequence->GetPlayLength());
+}
+
+int32 UknightMonsterRecipeLibrary::SetMontageSoundTime(UAnimMontage* Montage, const USoundBase* Sound, float Time)
+{
+	if (!Montage || !Sound || Time < 0.f || Time > Montage->GetPlayLength())
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetMontageSoundTime %s: 몽타주나 소리가 없거나 시간 %.3f가 범위 밖입니다."), *GetNameSafe(Montage), Time);
+		return 0;
+	}
+	Montage->Modify();
+	int32 Moved = 0;
+	for (FAnimNotifyEvent& Event : Montage->Notifies)
+	{
+		const UAnimNotify_PlaySound* const PlaySound = Cast<UAnimNotify_PlaySound>(Event.Notify);
+		if (PlaySound && PlaySound->Sound == Sound)
+		{
+			Event.Link(Montage, Time);
+			Event.TriggerTimeOffset = GetTriggerTimeOffsetForType(Montage->CalculateOffsetForNotify(Time));
+			++Moved;
+		}
+	}
+	if (Moved > 0)
+	{
+		Montage->SortNotifies();
+		Montage->RefreshCacheData();
+		Montage->PostEditChange();
+		Montage->MarkPackageDirty();
+	}
+	return Moved;
 }
 
 #undef LOCTEXT_NAMESPACE

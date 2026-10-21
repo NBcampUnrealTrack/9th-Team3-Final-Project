@@ -13,6 +13,12 @@
 UAnimSequence* UknightAnimSpliceLibrary::BakeSplicedSequence(UAnimSequence* First, float FirstEndTime, UAnimSequence* Second, float SecondStartTime,
 	float BlendTime, const FString& PackagePath)
 {
+	return BakeAlignedSplicedSequence(First, FirstEndTime, Second, SecondStartTime, BlendTime, FTransform::Identity, PackagePath);
+}
+
+UAnimSequence* UknightAnimSpliceLibrary::BakeAlignedSplicedSequence(UAnimSequence* First, float FirstEndTime, UAnimSequence* Second,
+	float SecondStartTime, float BlendTime, const FTransform& SecondOffset, const FString& PackagePath)
+{
 	const USkeleton* const Skeleton = First ? First->GetSkeleton() : nullptr;
 	if (!Skeleton || !Second || Second->GetSkeleton() != Skeleton)
 	{
@@ -61,6 +67,7 @@ UAnimSequence* UknightAnimSpliceLibrary::BakeSplicedSequence(UAnimSequence* Firs
 	// 이음매부터의 루트: 앞 애니가 이음매에서 멈춘 자리를 기준으로, 뒤 애니의 루트가 시작점에서 움직인 만큼만 움직인다.
 	const FTransform SeamRoot = ReadLocal(FirstModel, 0, FirstEndTime);
 	const FTransform SecondStartRoot = ReadLocal(SecondModel, 0, SecondStartTime);
+	const bool bAligned = !SecondOffset.Equals(FTransform::Identity);
 
 	const FFrameRate FrameRate = FirstModel->GetFrameRate();
 	const double Length = FirstEndTime + (SecondLength - SecondStartTime);
@@ -80,7 +87,7 @@ UAnimSequence* UknightAnimSpliceLibrary::BakeSplicedSequence(UAnimSequence* Firs
 			: BlendTime <= 0.f ? 1.f
 			: FMath::SmoothStep(0.f, 1.f, static_cast<float>(SinceSeam / BlendTime));
 		const double FirstTime = FMath::Min(SinceSeam <= 0.0 ? Time : FirstEndTime + SinceSeam, FirstLength);
-		for (int32 BoneIndex = 0; BoneIndex < NumBones; ++BoneIndex)
+		auto BlendLocal = [&](int32 BoneIndex, const FTransform& RootOffset)
 		{
 			FTransform Transform = ReadLocal(FirstModel, BoneIndex, FirstTime);
 			if (Alpha > 0.f)
@@ -88,11 +95,32 @@ UAnimSequence* UknightAnimSpliceLibrary::BakeSplicedSequence(UAnimSequence* Firs
 				FTransform SecondTransform = ReadLocal(SecondModel, BoneIndex, SecondTime);
 				if (BoneIndex == 0)
 				{
-					SecondTransform = SecondTransform.GetRelativeTransform(SecondStartRoot) * SeamRoot;
+					SecondTransform = SecondTransform.GetRelativeTransform(SecondStartRoot) * RootOffset * SeamRoot;
 				}
 				Transform.SetTranslation(FMath::Lerp(Transform.GetTranslation(), SecondTransform.GetTranslation(), Alpha));
 				Transform.SetRotation(FQuat::Slerp(Transform.GetRotation(), SecondTransform.GetRotation(), Alpha).GetNormalized());
 				Transform.SetScale3D(FMath::Lerp(Transform.GetScale3D(), SecondTransform.GetScale3D(), Alpha));
+			}
+			return Transform;
+		};
+
+		// 보이는 루트는 맞춘 자리, 실제로 쓰는 루트는 맞추지 않은 자리에서 맞춘 자리로 끝까지 천천히 옮겨 간다.
+		// 그 차이만큼 루트 바로 아래 뼈를 되돌려 놓아 몸은 맞춘 자리에 그대로 보인다.
+		const FTransform VisualRoot = BlendLocal(0, SecondOffset);
+		FTransform Root = VisualRoot;
+		if (bAligned && SinceSeam > 0.0)
+		{
+			const FTransform PlainRoot = BlendLocal(0, FTransform::Identity);
+			const float Follow = FMath::SmoothStep(0.f, 1.f, static_cast<float>(SinceSeam / FMath::Max(Length - FirstEndTime, UE_KINDA_SMALL_NUMBER)));
+			Root.SetTranslation(FMath::Lerp(PlainRoot.GetTranslation(), VisualRoot.GetTranslation(), Follow));
+			Root.SetRotation(FQuat::Slerp(PlainRoot.GetRotation(), VisualRoot.GetRotation(), Follow).GetNormalized());
+		}
+		for (int32 BoneIndex = 0; BoneIndex < NumBones; ++BoneIndex)
+		{
+			FTransform Transform = BoneIndex == 0 ? Root : BlendLocal(BoneIndex, SecondOffset);
+			if (bAligned && BoneIndex > 0 && RefSkeleton.GetParentIndex(BoneIndex) == 0)
+			{
+				Transform = (Transform * VisualRoot).GetRelativeTransform(Root);
 			}
 			Positions[BoneIndex].Add(Transform.GetTranslation());
 			Rotations[BoneIndex].Add(Transform.GetRotation());
