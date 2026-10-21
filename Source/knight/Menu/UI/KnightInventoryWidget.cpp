@@ -28,7 +28,7 @@ namespace
 	const FLinearColor PanelColor(FColor(15, 25, 35, 242));
 	const FLinearColor RowColor(FColor(35, 52, 67, 230));
 	const FLinearColor InventorySelectedColor(FColor(176, 123, 55, 240));
-	const FLinearColor White(FColor(242, 244, 246));
+	const FLinearColor InventoryWhite(FColor(242, 244, 246));
 
 	UCommonTextBlock* MakeText(UWidgetTree* Tree, const FText& Value, const TCHAR* Style)
 	{
@@ -290,12 +290,12 @@ void UKnightInventoryWidget::Refresh()
 		const bool bMaterial = Item->IsA<UknightMaterialItemDefinition>() || Item->ItemType == knightGameplayTags::Item_Type_Material;
 		const bool bSocket = Item->IsA<UknightSocketItemDefinition>() || Item->ItemType == knightGameplayTags::Item_Type_Socket;
 		if (!(Category == 0 && bEquipment || Category == 1 && bMaterial || Category == 2 && bSocket)) continue;
-		FLinearColor NameColor = White;
+		FLinearColor NameColor = InventoryWhite;
 		if (Category == 1)
 		{
 			const UknightMaterialItemDefinition* Material = Cast<UknightMaterialItemDefinition>(Item);
 			NameColor = Material && Material->bHardModeExclusive ? FLinearColor(FColor(225, 93, 93))
-				: Item->Rarity > 1 ? FLinearColor(FColor(97, 166, 239)) : White;
+				: Item->Rarity > 1 ? FLinearColor(FColor(97, 166, 239)) : InventoryWhite;
 		}
 		UKnightInventoryEntryWidget* Entry = CreateWidget<UKnightInventoryEntryWidget>(GetOwningPlayer(), UKnightInventoryEntryWidget::StaticClass());
 		if (!Entry) continue;
