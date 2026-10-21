@@ -52,7 +52,7 @@ void UknightPartsComponent::ApplyLoadout()
 		const UknightPartItemDefinition* Part = Progression ? Progression->GetEquippedPart(Slot) : nullptr;
 		if (!Part && !(Progression && Progression->IsSlotExplicitlyEmpty(Slot)))
 		{
-			const TObjectPtr<const UknightPartItemDefinition>* const Default = DefaultLoadout.FindByPredicate(
+			const TObjectPtr<const UknightPartItemDefinition>* const Default = GetDefaultLoadout().FindByPredicate(
 				[&Slot](const UknightPartItemDefinition* Candidate) { return Candidate && Candidate->SlotTag == Slot; });
 			Part = Default ? Default->Get() : nullptr;
 		}
@@ -68,6 +68,11 @@ void UknightPartsComponent::ApplyLoadout()
 	{
 		UE_LOG(Logknight, Warning, TEXT("%s: loadout weight %.1f exceeds load capacity %.1f."), *GetNameSafe(GetOwner()), GetTotalWeight(), LoadCapacity);
 	}
+}
+
+const TArray<TObjectPtr<const UknightPartItemDefinition>>& UknightPartsComponent::GetDefaultLoadout() const
+{
+	return DefaultLoadoutAsset ? DefaultLoadoutAsset->Parts : DefaultLoadout;
 }
 
 bool UknightPartsComponent::EquipPart(const UknightPartItemDefinition* Part, int32 UpgradeLevel)

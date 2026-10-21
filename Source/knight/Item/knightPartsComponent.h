@@ -12,6 +12,7 @@ class UMeshComponent;
 class USkeletalMeshComponent;
 class UknightPartItemDefinition;
 class UknightWeaponItemDefinition;
+class UknightLoadoutDefinition;
 struct FknightPartStatModifier;
 
 /** Part is null when the slot was emptied. Item definitions are shared assets: listeners must not modify them. */
@@ -108,7 +109,9 @@ public:
 	float GetLoadCapacity() const;
 
 	const TArray<FGameplayTag>& GetLoadoutSlots() const { return LoadoutSlots; }
-	const TArray<TObjectPtr<const UknightPartItemDefinition>>& GetDefaultLoadout() const { return DefaultLoadout; }
+
+	/** 기본 장착. DefaultLoadoutAsset이 있으면 그 목록, 없으면 DefaultLoadout 배열. (2026-10-20) */
+	const TArray<TObjectPtr<const UknightPartItemDefinition>>& GetDefaultLoadout() const;
 
 	/**
 	 * Meshes of every equipped part (for damage visuals, dissolves, outlines). 스켈레탈·스태틱 메시 컴포넌트가 섞여 있다.
@@ -122,7 +125,17 @@ public:
 protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	/** Parts used for slots the save has nothing for (a new game's starter mech). */
+	/**
+	 * (2026-10-20) 기본 장착 에셋. 넣으면 아래 DefaultLoadout 배열 대신 이 목록을 입는다.
+	 * 정비 카탈로그(DA_MaintenanceCatalog의 Default Loadout)에도 같은 에셋을 넣어야 정비소 화면과 실제 장착이 같아진다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Parts")
+	TObjectPtr<const UknightLoadoutDefinition> DefaultLoadoutAsset;
+
+	/**
+	 * Parts used for slots the save has nothing for (a new game's starter mech).
+	 * (2026-10-20) DefaultLoadoutAsset이 비어 있을 때만 쓴다.
+	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Parts")
 	TArray<TObjectPtr<const UknightPartItemDefinition>> DefaultLoadout;
 

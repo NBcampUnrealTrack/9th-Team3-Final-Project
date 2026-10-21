@@ -45,9 +45,12 @@ namespace knightDamageMath
 			Out.GuardPoiseMultiplier = GetGuardedMultiplier(In.GuardPoiseDamageMultiplier, In.GuardEfficiency);
 		}
 
-		Out.Damage = FMath::Max(0.f, Out.RawDamage * FMath::Max(0.f, In.PartMultiplier) * Out.CriticalMultiplier
-			* Out.DefenseMultiplier * Out.GuardMultiplier * FMath::Max(0.f, In.DamageTakenMultiplier));
-		Out.PoiseDamage = FMath::Max(0.f, In.BasePoiseDamage * FMath::Max(0.f, In.StaggerPower) * Out.GuardPoiseMultiplier
+		const float UnguardedDamage = FMath::Max(0.f, Out.RawDamage * FMath::Max(0.f, In.PartMultiplier) * Out.CriticalMultiplier
+			* Out.DefenseMultiplier * FMath::Max(0.f, In.DamageTakenMultiplier));
+		Out.Damage = UnguardedDamage * Out.GuardMultiplier;
+		// (2026-10-20) 가드로 막아 줄어든 피해의 일부를 그로기로 더한다(GuardBlockedDamageToPoise).
+		const float BlockedPoise = In.bGuarded ? (UnguardedDamage - Out.Damage) * FMath::Max(0.f, In.GuardBlockedDamageToPoise) : 0.f;
+		Out.PoiseDamage = FMath::Max(0.f, (In.BasePoiseDamage * FMath::Max(0.f, In.StaggerPower) * Out.GuardPoiseMultiplier + BlockedPoise)
 			* FMath::Max(0.f, In.PoiseDamageTakenMultiplier));
 		return Out;
 	}
@@ -156,13 +159,16 @@ void UknightDamageExecution::Execute_Implementation(const FGameplayEffectCustomE
 	In.bGuarded = TargetTags && TargetTags->HasTag(knightGameplayTags::State_Guarding) && IsAttackerInGuardArc(TargetActor, AttackerActor, Hit);
 	In.GuardDamageMultiplier = GuardDamageMultiplier;
 	In.GuardPoiseDamageMultiplier = GuardPoiseDamageMultiplier;
+	In.GuardBlockedDamageToPoise = GuardBlockedDamageToPoise;
 
 	const knightDamageMath::FResult Out = knightDamageMath::Compute(In);
 
-	UE_LOG(LogknightCombat, Verbose, TEXT("Damage %s -> %s: raw %.1f part x%.2f crit x%.2f def x%.2f guard x%.2f (eff %.2f) taken x%.2f = %.1f, poise %.1f x stagger %.2f x guard %.2f x taken %.2f = %.1f"),
+	// (2026-10-20) 끝의 [ ]는 피해를 낸 어빌리티. 밸런스 측정 때 공격별로 나누려고 붙였다(모션값이 같은 공격끼리도 구분).
+	UE_LOG(LogknightCombat, Verbose, TEXT("Damage %s -> %s: raw %.1f part x%.2f crit x%.2f def x%.2f guard x%.2f (eff %.2f) taken x%.2f = %.1f, poise %.1f x stagger %.2f x guard %.2f x taken %.2f = %.1f [%s]"),
 		*GetNameSafe(AttackerActor), *GetNameSafe(TargetActor), Out.RawDamage, In.PartMultiplier, Out.CriticalMultiplier,
 		Out.DefenseMultiplier, Out.GuardMultiplier, In.GuardEfficiency, In.DamageTakenMultiplier, Out.Damage,
-		In.BasePoiseDamage, In.StaggerPower, Out.GuardPoiseMultiplier, In.PoiseDamageTakenMultiplier, Out.PoiseDamage);
+		In.BasePoiseDamage, In.StaggerPower, Out.GuardPoiseMultiplier, In.PoiseDamageTakenMultiplier, Out.PoiseDamage,
+		*GetNameSafe(Context.GetAbility()));
 
 	if (Out.Damage > 0.f)
 	{
@@ -176,7 +182,7 @@ void UknightDamageExecution::Execute_Implementation(const FGameplayEffectCustomE
 
 bool UknightDamageExecution::IsAttackerInGuardArc(const AActor* Target, const AActor* Attacker, const FHitResult* Hit) const
 {
-	if (!Target || !Attacker)
+	if (!Target || !Attacker || GuardArcDegrees <= 0.f)
 	{
 		return false;
 	}

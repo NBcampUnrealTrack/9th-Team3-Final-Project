@@ -68,6 +68,22 @@ void UknightGameplayAbility::ApplyCost(const FGameplayAbilitySpecHandle Handle, 
 	}
 }
 
+void UknightGameplayAbility::ApplyStaminaCost(float Amount) const
+{
+	const UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();
+	if (Amount <= 0.f || !ASC || !ASC->HasAttributeSetForAttribute(UknightAttributeSet::GetBoostGaugeAttribute()))
+	{
+		return;
+	}
+	const FGameplayEffectSpecHandle SpecHandle = MakeOutgoingGameplayEffectSpec(UknightGameplayEffect_StaminaCost::StaticClass());
+	if (SpecHandle.IsValid())
+	{
+		// 남은 양보다 많아도 그대로 뺀다. BoostGauge는 속성 세트에서 0 아래로 내려가지 않는다.
+		SpecHandle.Data->SetSetByCallerMagnitude(knightGameplayTags::SetByCaller_BoostCost, -Amount);
+		ApplyGameplayEffectSpecToOwner(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), SpecHandle);
+	}
+}
+
 float UknightGameplayAbility::GetActionSpeed() const
 {
 	const UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();
@@ -122,6 +138,11 @@ void UknightGameplayAbility::StartMechTiming(UAnimMontage* Montage, float BaseRa
 	// 행동 에너지 속성이 있는 나이트만(몬스터도 같은 ASC를 쓴다).
 	if (!bUseMechTiming || !ASC || !Anim || !ASC->HasAttributeSetForAttribute(UknightAttributeSet::GetBoostGaugeAttribute()))
 	{
+		// (2026-10-21) 소리 문제 확인용. 몬스터(행동 에너지 없음)는 로그를 남기지 않는다.
+		if (ASC && ASC->HasAttributeSetForAttribute(UknightAttributeSet::GetBoostGaugeAttribute()))
+		{
+			UE_LOG(LogTemp, Log, TEXT("MechTiming not used by %s (bUseMechTiming %d, anim %d)"), *GetName(), bUseMechTiming, Anim != nullptr);
+		}
 		return;
 	}
 	ActiveMechTiming = FknightMechAttackTiming::Start(Anim, Montage, BaseRate, ASC->GetMechTimingSettings(),

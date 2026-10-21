@@ -83,6 +83,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Reaction|Poise", meta=(EditCondition="bRestorePoise", ClampMin=0, ClampMax=2))
 	float MaxPoiseGrowth = 0.25f;
 
+	/**
+	 * (2026-10-20 한수현 결정) MaxPoise가 늘어나는 상한 = 처음 MaxPoise의 이 배수. 3이면 100 → 125 → … → 300에서 멈춘다.
+	 * 다운이 거듭될수록 그로기가 끝없이 어려워지지 않게 한다. 0이면 상한 없음. 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Reaction|Poise", meta=(EditCondition="bRestorePoise", ClampMin=0))
+	float MaxPoiseGrowthLimit = 3.f;
+
 private:
 	/** 끊긴 공격 몽타주를 찾아 되감기를 시작한다. 되감을 것이 없으면 false. */
 	bool TryStartRewind(ACharacter& Character);
@@ -103,6 +110,9 @@ private:
 	void HandleRecoverFinished();
 
 	void RestorePoise() const;
+
+	/** (2026-10-20) 처음 회복할 때의 MaxPoise(상한 기준). 어빌리티는 액터당 하나라 몬스터가 살아 있는 동안 유지된다. */
+	mutable float InitialMaxPoise = -1.f;
 
 	bool bStateTagApplied = false;
 	bool bHoldStarted = false;

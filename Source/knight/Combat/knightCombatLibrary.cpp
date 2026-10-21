@@ -92,6 +92,34 @@ namespace
 			FVector::Dist(Hit.ImpactPoint, PartLocation));
 		return Assisted;
 	}
+
+	/**
+	 * 공격 워프 계산(ComputeAttackWarp·ComputeAttackWarpToActor 공용). TargetLocation 쪽으로 수평 이동하되,
+	 * bSubtractRadius면 대상 반지름(ITargetableInterface)만큼 표면까지만, 거기서 StopDistance 앞에서 멈춘다. 이동량은 MaxDistance까지.
+	 */
+	bool ComputeWarpToPoint(const AActor* Attacker, AActor* TargetActor, const FVector& TargetLocation, bool bSubtractRadius,
+		float MaxDistance, float StopDistance, FVector& OutLocation, FRotator& OutRotation, float& OutTravel)
+	{
+		const FVector AttackerLocation = Attacker->GetActorLocation();
+		FVector ToTarget = TargetLocation - AttackerLocation;
+		ToTarget.Z = 0.f;
+		const float Distance = ToTarget.Size();
+		if (Distance < KINDA_SMALL_NUMBER)
+		{
+			return false;
+		}
+		const FVector Direction = ToTarget / Distance;
+		const float Radius = bSubtractRadius && TargetActor && TargetActor->GetClass()->ImplementsInterface(UTargetableInterface::StaticClass())
+			? ITargetableInterface::Execute_QueryTargetRadius(TargetActor) : 0.f;
+		OutTravel = FMath::Clamp(Distance - Radius - StopDistance, 0.f, MaxDistance);
+		OutLocation = AttackerLocation + Direction * OutTravel;
+		OutRotation = Direction.Rotation();
+		// (2026-10-19) Verbose: 락온 중 매 프레임 불려서(락온 컴포넌트의 '멀다' 판정) 로그가 한 판에 10만 줄 넘게 쌓이고 랙을 만들었다.
+		// (2026-10-20) VeryVerbose: 밸런스 측정 때 LogknightCombat을 Verbose로 켜도 이 줄은 나오지 않게(타격 로그만 남게).
+		UE_LOG(LogknightCombat, VeryVerbose, TEXT("Attack warp -> %s: distance %.0f, radius %.0f, travel %.0f"),
+			*GetNameSafe(TargetActor), Distance, Radius, OutTravel);
+		return true;
+	}
 }
 
 EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FHitResult& Hit, const FknightMeleeHitParams& Params)
@@ -146,6 +174,10 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 		Payload.EventTag = knightGameplayTags::Event_Parried;
 		Payload.Instigator = Target;
 		Payload.Target = Attacker;
+		if (!Params.bParryBuildsPoise)
+		{
+			Payload.InstigatorTags.AddTag(knightGameplayTags::Event_Parried_NoPoise);
+		}
 		SourceASC->HandleGameplayEvent(Payload.EventTag, &Payload);
 		// The defender learns about its own parry too (the guard ability opens the parry counter window).
 		static const FGameplayTag ParrySucceededTag = FGameplayTag::RequestGameplayTag(TEXT("Event.ParrySucceeded"), false);
@@ -173,6 +205,11 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 
 	FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
 	Context.AddHitResult(Hit, true);
+	// (2026-10-21) 어떤 공격의 피해인지 남긴다(피해 실행 로그의 [어빌리티], 밸런스 측정용).
+	if (SourceAbility)
+	{
+		Context.SetAbility(SourceAbility);
+	}
 	const FGameplayEffectSpecHandle SpecHandle = SourceASC->MakeOutgoingSpec(Params.DamageEffect, 1.f, Context);
 	if (!SpecHandle.IsValid())
 	{
@@ -211,6 +248,7 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 		if (const UknightAbilitySystemComponent* const KnightSourceASC = Cast<UknightAbilitySystemComponent>(SourceASC))
 		{
 			KnightSourceASC->PlayAttackImpactShake(Params.PoiseDamage, true);
+			KnightSourceASC->PlayAttackImpactEffects(Hit, true);
 		}
 		return EknightHitOutcome::Guarded;
 	}
@@ -227,12 +265,22 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 		? knightGameplayTags::GameplayCue_Hit_Weakpoint.GetTag()
 		: knightGameplayTags::GameplayCue_Hit_Melee.GetTag();
 	CueParams.RawMagnitude = PartMultiplier;
-	TargetASC->ExecuteGameplayCue(CueTag, CueParams);
+	// (2026-10-21) 나이트의 일반 타격은 공용 큐(반짝이·기존 소리) 대신 나이트 전용 타격(PlayAttackImpactEffects)만 쓴다. 약점 큐는 그대로.
+	const UknightAbilitySystemComponent* const KnightAttackerASC = Cast<UknightAbilitySystemComponent>(SourceASC);
+	const bool bWeakpointHit = CueTag == knightGameplayTags::GameplayCue_Hit_Weakpoint.GetTag();
+	// (2026-10-21) 약점 큐(번개)도 판타지 느낌이라 같이 대신한다. 약점은 나이트 타격을 더 크게(AttackImpactWeakpointScale).
+	const bool bKnightReplacesCue = KnightAttackerASC && KnightAttackerASC->ShouldReplaceSharedHitCue();
+	if (!bKnightReplacesCue)
+	{
+		TargetASC->ExecuteGameplayCue(CueTag, CueParams);
+	}
 	ApplyHitStopPair(Attacker, Target, Params.HitStopDuration);
 	// (2026-10-20) 공격 무게(그로기 피해)만큼 때린 쪽 화면을 더 흔든다. 양손·차지·내려찍기가 크게 흔들린다.
 	if (const UknightAbilitySystemComponent* const KnightSourceASC = Cast<UknightAbilitySystemComponent>(SourceASC))
 	{
 		KnightSourceASC->PlayAttackImpactShake(Params.PoiseDamage, false);
+		// (2026-10-21) 나이트 전용 타격 이펙트·소리(몬스터 ASC는 비어 있어 아무것도 안 한다).
+		KnightSourceASC->PlayAttackImpactEffects(Hit, false, bWeakpointHit);
 	}
 	// 전투는 소리가 난다. 아직 전투를 알아채지 못한 몬스터도 이 소리를 들을 수 있다.
 	UAISense_Hearing::ReportNoiseEvent(Attacker, Hit.ImpactPoint, 1.f, Attacker, 0.f, TEXT("Hit"));
@@ -338,25 +386,36 @@ bool UknightCombatLibrary::ComputeAttackWarp(AActor* Attacker, float MaxDistance
 	}
 	AActor* const TargetActor = TargetLock->GetLockedTarget();
 	const FGameplayTag PartTag = TargetLock->GetLockedPartTag();
+	// 부위 지점은 몸 표면 근처라 반지름을 빼지 않는다. 단일 지점(몬스터 중심)은 반지름만큼 표면까지.
+	return ComputeWarpToPoint(Attacker, TargetActor, TargetLocation, !PartTag.IsValid(), MaxDistance, StopDistance,
+		OutLocation, OutRotation, OutTravel);
+}
 
-	const FVector AttackerLocation = Attacker->GetActorLocation();
-	FVector ToTarget = TargetLocation - AttackerLocation;
-	ToTarget.Z = 0.f;
-	const float Distance = ToTarget.Size();
-	if (Distance < KINDA_SMALL_NUMBER)
+bool UknightCombatLibrary::ComputeAttackWarpToActor(AActor* Attacker, AActor* Target, float MaxDistance, float StopDistance,
+	FVector& OutLocation, FRotator& OutRotation, float& OutTravel)
+{
+	if (!Attacker || !Target)
 	{
 		return false;
 	}
-	const FVector Direction = ToTarget / Distance;
-	// 부위 지점은 몸 표면 근처라 반지름을 빼지 않는다. 단일 지점(몬스터 중심)은 반지름만큼 표면까지.
-	const float Radius = !PartTag.IsValid() && TargetActor && TargetActor->GetClass()->ImplementsInterface(UTargetableInterface::StaticClass())
-		? ITargetableInterface::Execute_QueryTargetRadius(TargetActor) : 0.f;
-	OutTravel = FMath::Clamp(Distance - Radius - StopDistance, 0.f, MaxDistance);
-	OutLocation = AttackerLocation + Direction * OutTravel;
-	OutRotation = Direction.Rotation();
-	// (2026-10-19) Verbose: 락온 중 매 프레임 불려서(락온 컴포넌트의 '멀다' 판정) 로그가 한 판에 10만 줄 넘게 쌓이고 랙을 만들었다.
-	UE_LOG(LogknightCombat, Verbose, TEXT("Attack warp -> %s: distance %.0f, radius %.0f, travel %.0f"),
-		*GetNameSafe(TargetActor), Distance, Radius, OutTravel);
+	// 대상 중심에서 반지름만큼 표면까지. 락온한 몬스터(부위 없음)와 같은 계산이다.
+	return ComputeWarpToPoint(Attacker, Target, Target->GetActorLocation(), true, MaxDistance, StopDistance, OutLocation, OutRotation, OutTravel);
+}
+
+bool UknightCombatLibrary::SetAttackWarpTargetToActor(AActor* Attacker, FName WarpTargetName, AActor* Target, float MaxDistance,
+	float StopDistance, FVector& OutLocation, FRotator& OutRotation, float& OutTravel)
+{
+	UMotionWarpingComponent* const MotionWarping = Attacker ? Attacker->FindComponentByClass<UMotionWarpingComponent>() : nullptr;
+	if (!MotionWarping)
+	{
+		return false;
+	}
+	if (!ComputeAttackWarpToActor(Attacker, Target, MaxDistance, StopDistance, OutLocation, OutRotation, OutTravel))
+	{
+		MotionWarping->RemoveWarpTarget(WarpTargetName);
+		return false;
+	}
+	MotionWarping->AddOrUpdateWarpTargetFromLocationAndRotation(WarpTargetName, OutLocation, OutRotation);
 	return true;
 }
 

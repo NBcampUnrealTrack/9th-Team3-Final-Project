@@ -213,3 +213,21 @@ public:
 	float GetUpgradeAttackBonus(int32 Level) const;
 	float GetWeaponAttackAtLevel(int32 Level) const;
 };
+
+/**
+ * (2026-10-20) 기본 장착 목록 = 새 게임의 시작 메카가 세이브에 없는 슬롯에 입는 파츠.
+ * 나이트(UknightPartsComponent::DefaultLoadoutAsset)와 정비 카탈로그(UknightMaintenanceCatalog::DefaultLoadout)가
+ * 같은 에셋을 가리켜서 한 곳에서만 고친다.
+ * 만든 이유: 정비소가 기본 장착을 알려고 BP_Knight 클래스를 통째로 읽었는데, 그때 딸려 오는 에셋이 1,000개(약 550MB)가 넘어
+ * 정비소에 처음 들어갈 때 4~5초 멈췄다. 이 에셋은 파츠 정의만 들고 있어 가볍다.
+ */
+UCLASS(BlueprintType, Const)
+class KNIGHT_API UknightLoadoutDefinition : public UDataAsset
+{
+	GENERATED_BODY()
+
+public:
+	/** 슬롯마다 하나씩. 같은 슬롯 파츠가 둘이면 나이트는 앞의 것을 입는다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Loadout")
+	TArray<TObjectPtr<const UknightPartItemDefinition>> Parts;
+};

@@ -64,6 +64,7 @@ void UknightGameplayAbility_PlungeAttack::ActivateAbility(const FGameplayAbility
 	const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
 {
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
+	HitActorsThisAttack.Reset();
 
 	ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
 	UCharacterMovementComponent* const Movement = Character ? Character->GetCharacterMovement() : nullptr;
@@ -151,7 +152,7 @@ void UknightGameplayAbility_PlungeAttack::PlayMontage(UAnimMontage* Montage, boo
 		{
 			if (UknightGroggyFeedbackComponent* const Feedback = Avatar->FindComponentByClass<UknightGroggyFeedbackComponent>())
 			{
-				Feedback->WatchAttack(this, Montage, GetStanceScaledHitParams(HitParams));
+				Feedback->WatchAttack(this, Montage, GetStanceScaledHitParams(HitParams), &HitActorsThisAttack);
 			}
 		}
 		return;
@@ -164,7 +165,7 @@ void UknightGameplayAbility_PlungeAttack::PlayMontage(UAnimMontage* Montage, boo
 		{
 			if (UknightGroggyFeedbackComponent* const Feedback = Avatar->FindComponentByClass<UknightGroggyFeedbackComponent>())
 			{
-				Feedback->WatchAttack(this, Montage, GetStanceScaledHitParams(HitParams));
+				Feedback->WatchAttack(this, Montage, GetStanceScaledHitParams(HitParams), &HitActorsThisAttack);
 			}
 		}
 	}
@@ -587,8 +588,10 @@ void UknightGameplayAbility_PlungeAttack::OnMontageInterrupted()
 void UknightGameplayAbility_PlungeAttack::OnMeleeHitEvent(FGameplayEventData Payload)
 {
 	const FHitResult* const Hit = Payload.TargetData.Num() > 0 && Payload.TargetData.Get(0) ? Payload.TargetData.Get(0)->GetHitResult() : nullptr;
-	if (Hit)
+	// (2026-10-20) 한 번 발동에 대상마다 한 번만(시작 베기와 착지 충격이 둘 다 맞히던 것).
+	if (Hit && Hit->GetActor() && !HitActorsThisAttack.Contains(Hit->GetActor()))
 	{
+		HitActorsThisAttack.Add(Hit->GetActor());
 		UknightCombatLibrary::ApplyMeleeHit(GetAvatarActorFromActorInfo(), *Hit, GetStanceScaledHitParams(HitParams), this);
 	}
 }

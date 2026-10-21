@@ -45,8 +45,13 @@ class KNIGHT_API UknightGroggyFeedbackComponent : public UActorComponent
 public:
 	UknightGroggyFeedbackComponent();
 
-	/** Watch an already playing attack montage; the trace notify's lead-in gates prediction. */
-	void WatchAttack(UGameplayAbility* Attack, UAnimMontage* Montage, const FknightMeleeHitParams& HitParams);
+	/**
+	 * Watch an already playing attack montage; the trace notify's lead-in gates prediction.
+	 * (2026-10-20) AlreadyHitTargets: 같은 어빌리티가 앞 몽타주에서 이미 맞혀 이번 몽타주에서는 맞지 않을 대상(점프 공격 1타 뒤 착지).
+	 * 이 대상들은 예측하지 않는다. 전에는 착지 때 슬로우만 걸리고 타격은 없었다.
+	 */
+	void WatchAttack(UGameplayAbility* Attack, UAnimMontage* Montage, const FknightMeleeHitParams& HitParams,
+		const TSet<TWeakObjectPtr<AActor>>* AlreadyHitTargets = nullptr);
 
 	/**
 	 * (2026-10-20) 락온 돌진 베기: 돌진(판정 없음) 중에도 예측 슬로를 시작할 수 있게 미리 알린다.

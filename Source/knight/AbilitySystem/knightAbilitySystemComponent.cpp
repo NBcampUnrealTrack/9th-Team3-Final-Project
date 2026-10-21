@@ -12,6 +12,12 @@
 #include "Camera/PlayerCameraManager.h"
 #include "GameFramework/PlayerController.h"
 #include "TimerManager.h"
+#include "Kismet/GameplayStatics.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
+#include "Particles/ParticleSystem.h"
+#include "Particles/ParticleSystemComponent.h"
+#include "Sound/SoundBase.h"
 #include "knight.h"
 
 namespace
@@ -457,6 +463,55 @@ void UknightAbilitySystemComponent::PlayAttackImpactShake(const float PoiseDamag
 		LastAttackShakeTime = Now;
 		// 화면 흔들림 설정(CameraShakeScale)은 AknightPlayerCameraManager::StartCameraShake가 곱한다.
 		PC->PlayerCameraManager->StartCameraShake(AttackImpactShake, Scale);
+	}
+}
+
+void UknightAbilitySystemComponent::PlayAttackImpactEffects(const FHitResult& Hit, const bool bGuarded, const bool bWeakpoint) const
+{
+	const float WeakScale = bWeakpoint && !bGuarded ? AttackImpactWeakpointScale : 1.f;
+	UWorld* const World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+	const FVector Location = Hit.ImpactPoint;
+	const float EffectScale = AttackImpactEffectScale * WeakScale * (bGuarded ? AttackImpactGuardedEffectRatio : 1.f);
+	if (EffectScale > KINDA_SMALL_NUMBER)
+	{
+		const FVector Normal = Hit.ImpactNormal.IsNearlyZero() ? FVector::UpVector : Hit.ImpactNormal;
+		const FRotator Facing = bAttackImpactEffectUpAlongNormal ? FRotationMatrix::MakeFromZ(Normal).Rotator() : Normal.Rotation();
+		for (UFXSystemAsset* const Effect : AttackImpactEffects)
+		{
+			if (UNiagaraSystem* const Niagara = Cast<UNiagaraSystem>(Effect))
+			{
+				UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, Niagara, Location, Facing, FVector(EffectScale),
+					true, true, ENCPoolMethod::AutoRelease);
+			}
+			else if (UParticleSystem* const Cascade = Cast<UParticleSystem>(Effect))
+			{
+				UGameplayStatics::SpawnEmitterAtLocation(World, Cascade, Location, Facing, FVector(EffectScale), true,
+					EPSCPoolMethod::AutoRelease);
+			}
+		}
+	}
+	// 공용 큐를 대신하면 큐의 기본 흔들림도 여기서 낸다(막혔을 때는 가드 큐가 따로 있다).
+	if (!bGuarded && ShouldReplaceSharedHitCue() && AttackImpactShake && AttackImpactBaseShakeScale > 0.f)
+	{
+		const APawn* const Pawn = Cast<APawn>(GetAvatarActor());
+		const APlayerController* const PC = Pawn && Pawn->IsLocallyControlled() ? Pawn->GetController<APlayerController>() : nullptr;
+		if (PC && PC->PlayerCameraManager)
+		{
+			PC->PlayerCameraManager->StartCameraShake(AttackImpactShake, AttackImpactBaseShakeScale * WeakScale);
+		}
+	}
+	const double Now = World->GetRealTimeSeconds();
+	if (!AttackImpactSounds.IsEmpty() && AttackImpactSoundVolume > 0.f && Now - LastAttackImpactSoundTime >= AttackImpactSoundCooldown)
+	{
+		if (USoundBase* const Sound = AttackImpactSounds[FMath::RandRange(0, AttackImpactSounds.Num() - 1)])
+		{
+			LastAttackImpactSoundTime = Now;
+			UGameplayStatics::PlaySoundAtLocation(World, Sound, Location, AttackImpactSoundVolume * (bGuarded ? 0.7f : 1.f) * FMath::Sqrt(WeakScale));
+		}
 	}
 }
 

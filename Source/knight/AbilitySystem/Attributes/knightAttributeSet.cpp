@@ -13,18 +13,23 @@ UknightAttributeSet::UknightAttributeSet()
 	InitBoostRecoveryDelay(1.2f);
 
 	// 부위 체력 기본값: 4부위 x 25 = 100으로, Core의 MaxHealth 기본값(100)과 맞춘다.
-	InitHeadHealth(25.f);
-	InitMaxHeadHealth(25.f);
-	InitTorsoHealth(25.f);
-	InitMaxTorsoHealth(25.f);
-	InitArmsHealth(25.f);
-	InitMaxArmsHealth(25.f);
-	InitLegsHealth(25.f);
-	InitMaxLegsHealth(25.f);
+	// (2026-10-21 사용자 결정) 기본 메카 총 체력 100 → 150: 4부위 x 37.5. 기본 메카로 잔열 3판 모두 쓰러져서(체력 + 수리 키트 250으로 약 12번).
+	// (2026-10-21 사용자 결정) 150 → 120: 4부위 x 30. main 병합 뒤 기본 메카 판(333초)에서 퍼펙트 가드 25번으로 여유가 있었다.
+	// 같은 피해로 계산하면 120은 키트를 더 자주 써야 버티는 정도(100이면 같은 키트 시점에서 쓰러짐).
+	// 출격 때 캐릭터가 MaxHealth를 부위 최대 체력의 합으로 맞추므로 여기만 바꾸면 된다. 바뀔 수 있는 값.
+	InitHeadHealth(30.f);
+	InitMaxHeadHealth(30.f);
+	InitTorsoHealth(30.f);
+	InitMaxTorsoHealth(30.f);
+	InitArmsHealth(30.f);
+	InitMaxArmsHealth(30.f);
+	InitLegsHealth(30.f);
+	InitMaxLegsHealth(30.f);
 
 	// 적재 한도는 임시값. 파츠 데이터가 정해지면 조정한다.
+	// (2026-10-21 사용자 결정) 100 → 70: 다리 장비가 한도를 올려 주고(잔열 +30), 무거운 무기·소켓을 쓰려면 다리부터 맞추게. 바뀔 수 있는 값.
 	InitWeight(0.f);
-	InitLoadCapacity(100.f);
+	InitLoadCapacity(70.f);
 
 	// 배율 스탯은 1.0으로 두어 기존 동작이 바뀌지 않게 한다.
 	// 퀵스텝 쿨타임은 0.5초 (2026-10-07, 연타 테스트 후 임시로 정한 값 — 이후 조정).

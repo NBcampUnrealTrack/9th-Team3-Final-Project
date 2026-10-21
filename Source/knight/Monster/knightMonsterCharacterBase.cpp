@@ -17,6 +17,8 @@
 #include "Monster/knightMonsterDefinition.h"
 #include "Monster/knightMonsterMovementComponent.h"
 #include "Monster/knightMonsterPartComponent.h"
+#include "Monster/knightMonsterAirTurnComponent.h"
+#include "Monster/knightMonsterHoverComponent.h"
 #include "Monster/knightMonsterPushOutComponent.h"
 #include "Monster/knightMonsterTargetingComponent.h"
 #include "MotionWarpingComponent.h"
@@ -56,6 +58,8 @@ AknightMonsterCharacterBase::AknightMonsterCharacterBase(const FObjectInitialize
 	HitReaction = CreateDefaultSubobject<UknightHitReactionComponent>(TEXT("HitReaction"));
 	MotionWarping = CreateDefaultSubobject<UMotionWarpingComponent>(TEXT("MotionWarping"));
 	PushOut = CreateDefaultSubobject<UknightMonsterPushOutComponent>(TEXT("PushOut"));
+	Hover = CreateDefaultSubobject<UknightMonsterHoverComponent>(TEXT("Hover"));
+	AirTurn = CreateDefaultSubobject<UknightMonsterAirTurnComponent>(TEXT("AirTurn"));
 }
 
 UAbilitySystemComponent* AknightMonsterCharacterBase::GetAbilitySystemComponent() const
@@ -85,6 +89,14 @@ void AknightMonsterCharacterBase::BeginPlay()
 	MonsterAttributeSet->OnStaminaDepleted.AddUObject(this, &ThisClass::HandleStaminaDepleted);
 	TargetingComponent->OnTargetChanged.AddUniqueDynamic(this, &ThisClass::HandleTargetChanged);
 	AbilitySystemComponent->GenericGameplayEventCallbacks.FindOrAdd(knightGameplayTags::Event_Parried).AddUObject(this, &ThisClass::HandleParried);
+	if (MonsterDefinition)
+	{
+		for (const FGameplayTag& BlockedTag : MonsterDefinition->ParriedPoiseBlockedTags)
+		{
+			AbilitySystemComponent->RegisterGameplayTagEvent(BlockedTag, EGameplayTagEventType::NewOrRemoved)
+				.AddUObject(this, &ThisClass::HandleParriedPoiseBlockedChanged);
+		}
+	}
 
 	// 배치된 몬스터는 빙의 전에 BeginPlay가 불릴 수 있다. 부위와 위협도는 어느 쪽이든 동작한다.
 	InitializeAbilitySystem();
@@ -364,6 +376,17 @@ void AknightMonsterCharacterBase::HandleParried(const FGameplayEventData* Payloa
 	{
 		return;
 	}
+	if (AbilitySystemComponent->HasAnyMatchingGameplayTags(MonsterDefinition->ParriedPoiseBlockedTags))
+	{
+		UE_LOG(LogknightAI, Log, TEXT("%s: parried, poise blocked by state."), *GetNameSafe(this));
+		return;
+	}
+	// 경직 반응이 같은 이벤트로 먼저 발동해 공격을 취소하므로, 공격 쪽 설정은 이벤트에 실려 온 태그로 본다.
+	if (Payload && Payload->InstigatorTags.HasTagExact(knightGameplayTags::Event_Parried_NoPoise))
+	{
+		UE_LOG(LogknightAI, Log, TEXT("%s: parried, the attack does not build poise."), *GetNameSafe(this));
+		return;
+	}
 	const float PoiseDamage = CoreAttributeSet->GetMaxPoise() * Ratio;
 	AActor* const Defender = Payload ? const_cast<AActor*>(Payload->Instigator.Get()) : nullptr;
 	FGameplayEffectContextHandle Context = AbilitySystemComponent->MakeEffectContext();
@@ -376,6 +399,17 @@ void AknightMonsterCharacterBase::HandleParried(const FGameplayEventData* Payloa
 	AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(Spec);
 	UE_LOG(LogknightAI, Log, TEXT("%s: parried by %s, poise -%.0f -> %.0f / %.0f."), *GetNameSafe(this), *GetNameSafe(Defender),
 		PoiseDamage, CoreAttributeSet->GetPoise(), CoreAttributeSet->GetMaxPoise());
+}
+
+void AknightMonsterCharacterBase::HandleParriedPoiseBlockedChanged(const FGameplayTag Tag, int32 NewCount)
+{
+	if (NewCount <= 0 || IsDead())
+	{
+		return;
+	}
+	const float MaxPoise = AbilitySystemComponent->GetNumericAttributeBase(UknightCoreAttributeSet::GetMaxPoiseAttribute());
+	AbilitySystemComponent->SetNumericAttributeBase(UknightCoreAttributeSet::GetPoiseAttribute(), MaxPoise);
+	UE_LOG(LogknightAI, Log, TEXT("%s: %s added, poise reset to %.0f."), *GetNameSafe(this), *Tag.ToString(), MaxPoise);
 }
 
 void AknightMonsterCharacterBase::HandleStaminaDepleted(AActor* EffectInstigator, AActor* EffectCauser, const FGameplayEffectSpec* EffectSpec,

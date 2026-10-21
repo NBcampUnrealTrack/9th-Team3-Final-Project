@@ -81,9 +81,12 @@ namespace
 					const int32 Count = Stats.SetCounts.FindRef(Part->SetTag);
 					const float Defense = Stats.Values.FindRef(UknightCoreAttributeSet::GetDefenseAttribute()) - BaseDefense;
 					const float Attack = Stats.Values.FindRef(UknightCoreAttributeSet::GetAttackPowerAttribute()) - BaseAttack;
-					const float ExpectedDefense = bJanyeol ? 5.f * (Index + 1 - (Index == 4 ? 1 : 0)) + (Index >= 3 ? 30.f : Index >= 1 ? 10.f : 0.f)
+					// Janyeol values follow the equipment/stat pass on main: the four-piece adds AttackPower, not Defense.
+					constexpr float JanyeolDefense[] = { 5.f, 23.f, 28.f, 34.f, 34.f };
+					constexpr float JanyeolAttack[] = { 0.f, 0.f, 10.f, 22.f, 142.f };
+					const float ExpectedDefense = bJanyeol ? JanyeolDefense[Index]
 						: 5.f * (Index + 1 - (Index == 4 ? 1 : 0));
-					const float ExpectedAttack = bJanyeol ? (Index == 4 ? 10.f : 0.f)
+					const float ExpectedAttack = bJanyeol ? JanyeolAttack[Index]
 						: (Index >= 3 ? 30.f : Index >= 1 ? 10.f : 0.f) + (Index == 4 ? 10.f : 0.f);
 					Check(Count == Index + 1 && FMath::IsNearlyEqual(Defense, ExpectedDefense)
 						&& FMath::IsNearlyEqual(Attack, ExpectedAttack),
@@ -101,7 +104,7 @@ namespace
 					const FknightEquipmentStats After = knightEquipmentStats::Calculate(Preview, Catalog, nullptr);
 					Check(After.SetCounts.FindRef(HeadB->SetTag) == 5 && Loadout.FindRef(HeadB->SlotTag) == Previous
 						&& FMath::IsNearlyEqual(After.Values.FindRef(UknightCoreAttributeSet::GetDefenseAttribute())
-							- Before.Values.FindRef(UknightCoreAttributeSet::GetDefenseAttribute()), 1.f),
+							- Before.Values.FindRef(UknightCoreAttributeSet::GetDefenseAttribute()), bJanyeol ? 2.f : 1.f),
 						FString::Printf(TEXT("%s HeadA/B preview replaces one slot without changing loadout"), SetName));
 				}
 				if (bJanyeol)
@@ -117,7 +120,7 @@ namespace
 						const FknightEquipmentStats After = knightEquipmentStats::Calculate(Preview, Catalog, nullptr);
 						Check(After.SetCounts.FindRef(BodyB->SetTag) == 5 && Loadout.FindRef(BodyB->SlotTag) == Previous
 							&& FMath::IsNearlyEqual(After.Values.FindRef(UknightCoreAttributeSet::GetDefenseAttribute())
-								- Before.Values.FindRef(UknightCoreAttributeSet::GetDefenseAttribute()), 1.f),
+								- Before.Values.FindRef(UknightCoreAttributeSet::GetDefenseAttribute()), 3.f),
 							TEXT("Janyeol BodyA/B preview replaces one slot without changing loadout"));
 					}
 				}
@@ -135,14 +138,17 @@ namespace
 				Loadout.Remove(Body->SlotTag);
 				const FknightEquipmentStats One = knightEquipmentStats::Calculate(Loadout, Catalog, nullptr);
 				const FGameplayTag SetTag = Body->SetTag;
-				const FGameplayAttribute BonusAttribute = bJanyeol
-					? UknightCoreAttributeSet::GetDefenseAttribute() : UknightCoreAttributeSet::GetAttackPowerAttribute();
-				const float FourBonus = Four.Values.FindRef(BonusAttribute) - (bJanyeol ? BaseDefense + 20.f : BaseAttack);
-				const float ThreeBonus = Three.Values.FindRef(BonusAttribute) - (bJanyeol ? BaseDefense + 15.f : BaseAttack);
-				const float OneBonus = One.Values.FindRef(BonusAttribute) - (bJanyeol ? BaseDefense + 5.f : BaseAttack);
+				const FGameplayAttribute BonusAttribute = UknightCoreAttributeSet::GetAttackPowerAttribute();
+				const float FourBonus = Four.Values.FindRef(BonusAttribute) - BaseAttack;
+				const float ThreeBonus = Three.Values.FindRef(BonusAttribute) - BaseAttack;
+				const float OneBonus = One.Values.FindRef(BonusAttribute) - BaseAttack;
 				Check(Four.SetCounts.FindRef(SetTag) == 4 && Three.SetCounts.FindRef(SetTag) == 3
-					&& One.SetCounts.FindRef(SetTag) == 1 && FMath::IsNearlyEqual(FourBonus, 30.f)
-					&& FMath::IsNearlyEqual(ThreeBonus, 10.f) && FMath::IsNearlyZero(OneBonus),
+				&& One.SetCounts.FindRef(SetTag) == 1
+				&& FMath::IsNearlyEqual(FourBonus, bJanyeol ? 22.f : 30.f)
+				&& FMath::IsNearlyEqual(ThreeBonus, 10.f) && FMath::IsNearlyZero(OneBonus)
+				&& (!bJanyeol || (FMath::IsNearlyEqual(Four.Values.FindRef(UknightCoreAttributeSet::GetDefenseAttribute()) - BaseDefense, 34.f)
+					&& FMath::IsNearlyEqual(Three.Values.FindRef(UknightCoreAttributeSet::GetDefenseAttribute()) - BaseDefense, 28.f)
+					&& FMath::IsNearlyEqual(One.Values.FindRef(UknightCoreAttributeSet::GetDefenseAttribute()) - BaseDefense, 5.f))),
 					FString::Printf(TEXT("%s unequip removes tier effects: 4=%.1f 3=%.1f 1=%.1f"),
 						SetName, FourBonus, ThreeBonus, OneBonus));
 			}

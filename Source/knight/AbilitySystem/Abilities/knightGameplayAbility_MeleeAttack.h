@@ -142,6 +142,16 @@ protected:
 	float SoftTargetAngle = 75.f;
 
 	/**
+	 * (2026-10-20 사용자 결정) 패링 반격용. 켜면 락온이 아닐 때 화면 정면 대신 방금 패링한 적(투사체면 쏜 쪽,
+	 * ASC GetParryCounterTarget)을 보고 그쪽으로 MaxWarpDistance까지 돌진한다. 락온 중이면 지금처럼 락온 지점으로.
+	 * 돌진하는 동안(모션 워핑 구간) 목표를 대상의 지금 위치로 계속 바꿔 굴러가는 적도 따라간다(UpdateTrackedWarpTarget).
+	 * 일반 공격은 끈 채로 둔다(락온 없이 주변 적 쪽으로 휘지 않게 한 10-16 설계 유지).
+	 * 전에는 락온 없이 패링하면 반격이 제자리 정면으로 나가, 패링으로 4~6m 밀려나 다운된 적에게 닿지 않았다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Motion Warping")
+	bool bWarpToParriedAttacker = false;
+
+	/**
 	 * Movement input during Window.Cancel stops the montage and ends the attack.
 	 * (2026-10-14) ASC의 bOnlyDashCancelsAttackRecovery가 켜져 있으면(공격 후딜은 퀵스텝만) 이동으로는 끊지 않는다.
 	 */
@@ -203,6 +213,8 @@ private:
 	void OnDrawInterrupted();
 
 	void StartAttack();
+	/** (2026-10-20) bWarpToParriedAttacker이고 락온이 아닐 때 돌진할 패링한 적. 없거나 죽었으면 null. */
+	AActor* GetParriedWarpTarget() const;
 	/** 지금 스탠스에 맞는 공격 몽타주. */
 	UAnimMontage* GetStanceAttackMontage() const;
 	void CheckDrawMoveCancel();
@@ -212,6 +224,17 @@ private:
 	FTimerHandle MoveCancelTimer;
 	FTimerHandle DrawTimer;
 	bool bAttackStarted = false;
+
+	/**
+	 * (2026-10-20 사용자 결정) 패링 반격 추적: bWarpToParriedAttacker 공격은 몽타주의 모션 워핑 구간이 끝날 때(휘두르기 직전)까지
+	 * 돌진 목표를 대상의 지금 위치로 계속 바꾼다. 패링으로 다운되며 옆으로 굴러가는 적에게 반격이 빗나가던 것.
+	 * 이동은 공격을 시작한 자리에서 MaxWarpDistance까지만.
+	 */
+	void UpdateTrackedWarpTarget();
+	FTimerHandle TrackWarpTimer;
+	TWeakObjectPtr<UAnimMontage> TrackWarpMontage;
+	FVector TrackWarpStart = FVector::ZeroVector;
+	float TrackWarpEndTime = -1.f;
 
 	/** 이 공격이 루트 모션 배율을 바꿨는지. 끝날 때 1로 되돌린다. */
 	bool bRootMotionScaleApplied = false;

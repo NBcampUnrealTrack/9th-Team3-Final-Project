@@ -28,6 +28,11 @@ void UknightMonsterRecipe::Resize()
 	}
 	Modify();
 	MeshScale *= Factor;
+	HoverDrop *= Factor;
+	HoverFootHeight *= Factor;
+	AirLift *= Factor;
+	AirKeepDistance *= Factor;
+	AirCeiling *= Factor;
 	CapsuleRadius *= Factor;
 	CapsuleHalfHeight *= Factor;
 	MaxWalkSpeed *= Factor;
@@ -36,6 +41,7 @@ void UknightMonsterRecipe::Resize()
 	PushOutBodyAxisHalfLength *= Factor;
 	TargetRadius *= Factor;
 	ChaseStopDistance *= Factor;
+	AirChaseStopDistance *= Factor;
 	RangedMinDistance *= Factor;
 	RangedMaxDistance *= Factor;
 	for (FknightRecipeAttack& Attack : Attacks)
@@ -44,6 +50,7 @@ void UknightMonsterRecipe::Resize()
 		Attack.Selection.MaxRange *= Factor;
 		Attack.AreaOffset *= Factor;
 		Attack.AreaRadius *= Factor;
+		Attack.LungeMaxDistance *= Factor;
 		for (FknightRecipeHitWindow& Hit : Attack.HitWindows)
 		{
 			Hit.Trace.Radius *= Factor;

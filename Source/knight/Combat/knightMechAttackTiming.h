@@ -103,12 +103,29 @@ struct KNIGHT_API FknightMechTimingSettings
 	UPROPERTY(EditAnywhere, Category="Mech Timing|Effects", meta=(ClampMin=0))
 	float StopEffectScale = 0.5f;
 
+	/**
+	 * (2026-10-21) 증기를 몇 초 뿜고 끌지. 증기 이펙트(GasEmitter 등)는 반복이라 정해진 시간 뒤 끈다(남은 입자는 자연스럽게 사라짐).
+	 * 0이면 예전처럼 스톱 구간(StopTime)이 끝날 때 끈다.
+	 */
+	UPROPERTY(EditAnywhere, Category="Mech Timing|Effects", meta=(ClampMin=0, Units="s"))
+	float StopEffectDuration = 0.4f;
+
+	/**
+	 * (2026-10-21 사용자 피드백 '안개가 따라온다') 끄면 증기를 그 자리(소켓 위치)에 남겨 두고, 켜면 팔에 붙여 같이 움직인다.
+	 */
+	UPROPERTY(EditAnywhere, Category="Mech Timing|Effects")
+	bool bAttachStopEffect = false;
+
 	/** 소리(서보 모음 / 모터 휘두름 / 유압 정지). 비우면 없음. VARCO 사운드가 나오면 연결. */
 	UPROPERTY(EditAnywhere, Category="Mech Timing|Sounds")
 	TObjectPtr<USoundBase> LockSound;
 
 	UPROPERTY(EditAnywhere, Category="Mech Timing|Sounds")
 	TObjectPtr<USoundBase> BurstSound;
+
+	/** (2026-10-21) 휘두르기 소리 후보. 채우면 매번 이 중 하나를 무작위로 쓰고 BurstSound는 무시한다(같은 소리 반복 방지). */
+	UPROPERTY(EditAnywhere, Category="Mech Timing|Sounds")
+	TArray<TObjectPtr<USoundBase>> BurstSoundVariants;
 
 	UPROPERTY(EditAnywhere, Category="Mech Timing|Sounds")
 	TObjectPtr<USoundBase> StopSound;
@@ -137,7 +154,8 @@ private:
 	void SetRate(float Factor) const;
 	void EnterPhase(EPhase NewPhase);
 	/** 붙인 이펙트를 OutSpawned에 담는다(반복 이펙트도 있어서 끝낼 때 꺼야 한다). */
-	void SpawnEffects(UNiagaraSystem* Effect, const TArray<FName>& Sockets, float Scale, TArray<TWeakObjectPtr<UNiagaraComponent>>& OutSpawned) const;
+	void SpawnEffects(UNiagaraSystem* Effect, const TArray<FName>& Sockets, float Scale, TArray<TWeakObjectPtr<UNiagaraComponent>>& OutSpawned,
+		bool bAttach = true) const;
 	/** (2026-10-20) 버스트 분사 끄기. NS_Knight_BackBoost 같은 추진기 이펙트는 반복이라 안 끄면 등에 계속 남았다. */
 	void StopEffects(TArray<TWeakObjectPtr<UNiagaraComponent>>& Spawned) const;
 	void PlaySound(USoundBase* Sound) const;
