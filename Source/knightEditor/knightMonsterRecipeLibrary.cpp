@@ -11,6 +11,7 @@
 #include "AnimGraphNode_BlendSpacePlayer.h"
 #include "Animation/AnimBlueprint.h"
 #include "Animation/AnimMontage.h"
+#include "Animation/AnimNotifies/AnimNotify_PlaySound.h"
 #include "Animation/AnimSequence.h"
 #include "Animation/BlendSpace.h"
 #include "Animation/knightAnimNode_LegPlacement.h"
@@ -1713,6 +1714,71 @@ bool UknightMonsterRecipeLibrary::SetMontageSegmentSequence(UAnimMontage* Montag
 	Montage->Modify();
 	Montage->SlotAnimTracks[0].AnimTrack.AnimSegments[SegmentIndex].SetAnimReference(Sequence, true);
 	return SetMontageSegmentRange(Montage, SegmentIndex, 0.f, Sequence->GetPlayLength());
+}
+
+int32 UknightMonsterRecipeLibrary::SetMontageSoundTime(UAnimMontage* Montage, const USoundBase* Sound, float Time)
+{
+	if (!Montage || !Sound || Time < 0.f || Time > Montage->GetPlayLength())
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetMontageSoundTime %s: 몽타주나 소리가 없거나 시간 %.3f가 범위 밖입니다."), *GetNameSafe(Montage), Time);
+		return 0;
+	}
+	Montage->Modify();
+	int32 Moved = 0;
+	for (FAnimNotifyEvent& Event : Montage->Notifies)
+	{
+		const UAnimNotify_PlaySound* const PlaySound = Cast<UAnimNotify_PlaySound>(Event.Notify);
+		if (PlaySound && PlaySound->Sound == Sound)
+		{
+			Event.Link(Montage, Time);
+			Event.TriggerTimeOffset = GetTriggerTimeOffsetForType(Montage->CalculateOffsetForNotify(Time));
+			++Moved;
+		}
+	}
+	if (Moved > 0)
+	{
+		Montage->SortNotifies();
+		Montage->RefreshCacheData();
+		Montage->PostEditChange();
+		Montage->MarkPackageDirty();
+	}
+	return Moved;
+}
+
+bool UknightMonsterRecipeLibrary::SetMontagePlayRateWindow(UAnimMontage* Montage, float Start, float End, float PlayRate)
+{
+	if (!Montage || Start < 0.f || End <= Start || End > Montage->GetPlayLength() || PlayRate <= 0.f)
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetMontagePlayRateWindow %s: 구간 %.3f~%.3f이나 속도 %.2f가 잘못됐습니다."), *GetNameSafe(Montage), Start, End, PlayRate);
+		return false;
+	}
+	Montage->Modify();
+	for (const FAnimNotifyEvent& Event : Montage->Notifies)
+	{
+		UknightAnimNotifyState_PlayRate* const Existing = Cast<UknightAnimNotifyState_PlayRate>(Event.NotifyStateClass);
+		if (Existing && FMath::IsNearlyEqual(Event.GetTime(), Start, 0.001f) && FMath::IsNearlyEqual(Event.GetEndTriggerTime(), End, 0.001f))
+		{
+			Existing->Modify();
+			if (float* const Rate = knightRecipe::ValuePtr<float>(Existing->GetClass(), Existing, TEXT("PlayRate"), nullptr))
+			{
+				*Rate = PlayRate;
+			}
+			Montage->PostEditChange();
+			Montage->MarkPackageDirty();
+			return true;
+		}
+	}
+	UknightAnimNotifyState_PlayRate* const NotifyState = NewObject<UknightAnimNotifyState_PlayRate>(Montage, NAME_None, RF_Transactional);
+	if (float* const Rate = knightRecipe::ValuePtr<float>(NotifyState->GetClass(), NotifyState, TEXT("PlayRate"), nullptr))
+	{
+		*Rate = PlayRate;
+	}
+	knightRecipe::AddNotifyState(Montage, NotifyState, Start, End, knightRecipe::FindOrAddNotifyTrack(Montage, TEXT("PlayRate")));
+	Montage->SortNotifies();
+	Montage->RefreshCacheData();
+	Montage->PostEditChange();
+	Montage->MarkPackageDirty();
+	return true;
 }
 
 #undef LOCTEXT_NAMESPACE

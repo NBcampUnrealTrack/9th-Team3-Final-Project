@@ -26,4 +26,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|Anim Splice")
 	static UAnimSequence* BakeSplicedSequence(UAnimSequence* First, float FirstEndTime, UAnimSequence* Second, float SecondStartTime,
 		float BlendTime, const FString& PackagePath);
+
+	/**
+	 * BakeSplicedSequence와 같되, 이음매에서 Second 전체를 SecondOffset(이음매 루트 기준 이동·회전)만큼 옮겨 두 자세를 맞춘다.
+	 * 예: 옆으로 쓰러진 위치가 일어나기 애니의 시작 위치와 다를 때, 몸이 블렌드 동안 옆으로 미끄러지지 않게 한다.
+	 * 몸은 맞춘 자리에 그대로 보이고, 루트만 이음매부터 끝까지 천천히 따라가 끝에서는 Second 원래 자세와 루트가 일치한다.
+	 * 루트 모션을 켜면 캡슐이 그만큼 따라 움직여 다음 애니로 넘어갈 때 몸이 끌려가지 않는다(켜는 것은 호출한 쪽).
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|Anim Splice")
+	static UAnimSequence* BakeAlignedSplicedSequence(UAnimSequence* First, float FirstEndTime, UAnimSequence* Second, float SecondStartTime,
+		float BlendTime, const FTransform& SecondOffset, const FString& PackagePath);
 };
