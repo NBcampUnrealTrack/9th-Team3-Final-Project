@@ -37,8 +37,9 @@ public:
 	 * 1: items keyed by FName. 2: primary asset IDs and equipment. 3: explicit unlocks and applied run IDs.
 	 * 5: confirmed quest IDs (older saves default to an empty set).
 	 * 6: money and first-boss shared socket awards (older saves default to zero/empty).
+	 * 7: per-weapon current-step failure counts (older saves default to zero).
 	 */
-	static constexpr int32 CurrentVersion = 6;
+	static constexpr int32 CurrentVersion = 7;
 
 	UPROPERTY(SaveGame)
 	int32 SaveVersion = CurrentVersion;
@@ -76,6 +77,10 @@ public:
 	/** Upgrade level per part or weapon. */
 	UPROPERTY(SaveGame)
 	TMap<FPrimaryAssetId, int32> ItemUpgradeLevels;
+
+	/** Failures against the next weapon level only; cleared after success. */
+	UPROPERTY(SaveGame)
+	TMap<FPrimaryAssetId, int32> WeaponUpgradeFailures;
 
 	/** Equipped part per Equipment.Slot tag. */
 	UPROPERTY(SaveGame)

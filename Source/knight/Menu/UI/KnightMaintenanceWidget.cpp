@@ -20,6 +20,7 @@
 #include "GameFlow/KnightGameFlowSubsystem.h"
 #include "GameFlow/KnightStageCatalog.h"
 #include "Item/knightEquipmentData.h"
+#include "Item/knightItemDefinitions.h"
 #include "Item/knightEquipmentStats.h"
 #include "Item/knightPartsComponent.h"
 #include "Menu/UI/KnightMaintenanceEntryWidget.h"
@@ -361,6 +362,7 @@ void UKnightMaintenanceWidget::Close()
 	ShowConfirm(false);
 	SelectedPart = nullptr;
 	SelectedRecipe = nullptr;
+	UpgradeResultMessage = FText::GetEmpty();
 }
 
 UWidget* UKnightMaintenanceWidget::GetFocusButton() const { return Btn_Craft; }
@@ -373,6 +375,7 @@ void UKnightMaintenanceWidget::SetCategory(int32 NewCategory, bool bFromPlayer)
 	else if (!Slot.IsValid() || (Category == 2 && Slot == knightGameplayTags::Equipment_Slot_Weapon)) Slot = knightGameplayTags::Equipment_Slot_Head;
 	SelectedPart = nullptr;
 	SelectedRecipe = nullptr;
+	UpgradeResultMessage = FText::GetEmpty();
 	if (Btn_SlotWeapon) Btn_SlotWeapon->SetVisibility(Category == 0 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	for (UCommonButtonBase* Button : { Btn_Head.Get(), Btn_Torso.Get(), Btn_Legs.Get(), Btn_Arms.Get() })
 		if (Button) Button->SetVisibility(Category == 1 ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
@@ -389,6 +392,7 @@ void UKnightMaintenanceWidget::SetSlot(FGameplayTag NewSlot, bool bFromPlayer)
 	Slot = NewSlot;
 	SelectedPart = nullptr;
 	SelectedRecipe = nullptr;
+	UpgradeResultMessage = FText::GetEmpty();
 	RebuildList();
 	if (bFromPlayer) OnSlotFocused.ExecuteIfBound(Slot);
 }
@@ -503,6 +507,7 @@ void UKnightMaintenanceWidget::RebuildList()
 
 void UKnightMaintenanceWidget::SelectEntry(UKnightMaintenanceEntryWidget* Entry)
 {
+	if (SelectedPart != (Entry ? Entry->GetPart() : nullptr)) UpgradeResultMessage = FText::GetEmpty();
 	SelectedPart = Entry ? Entry->GetPart() : nullptr;
 	SelectedRecipe = Entry ? Entry->GetRecipe() : nullptr;
 	for (UKnightMaintenanceEntryWidget* Candidate : Entries)
@@ -595,7 +600,7 @@ void UKnightMaintenanceWidget::EnsureStatRows()
 {
 	if (!Stats_Rows || !WidgetTree) return;
 	const int32 RowCount = StatRows().Num();
-	if (StatCurrentTexts.Num() == RowCount && Stats_Rows->GetChildrenCount() == RowCount) return;
+	if (StatCurrentTexts.Num() == RowCount && Stats_Rows->GetChildrenCount() == RowCount + 1) return;
 	Stats_Rows->ClearChildren();
 	StatLabelTexts.Reset();
 	StatCurrentTexts.Reset();
@@ -629,6 +634,91 @@ void UKnightMaintenanceWidget::EnsureStatRows()
 		StatAfterTexts.Add(AfterText);
 		StatDeltaTexts.Add(DeltaText);
 	}
+	UpgradePanel = WidgetTree->ConstructWidget<UVerticalBox>();
+	Stats_Rows->AddChildToVerticalBox(UpgradePanel)->SetPadding(FMargin(0.f, 18.f, 12.f, 6.f));
+	auto AddUpgradeText = [this, TextStyle](TObjectPtr<UCommonTextBlock>& Target)
+	{
+		Target = NewRowText(WidgetTree, TextStyle, ETextJustify::Left);
+		Target->SetAutoWrapText(true);
+		UpgradePanel->AddChildToVerticalBox(Target)->SetPadding(FMargin(0.f, 0.f, 0.f, 6.f));
+	};
+	AddUpgradeText(UpgradeHeading);
+	AddUpgradeText(UpgradeAttack);
+	AddUpgradeText(UpgradeMoney);
+	AddUpgradeText(UpgradeGate);
+	AddUpgradeText(UpgradeChance);
+	AddUpgradeText(UpgradeResult);
+	const TSubclassOf<UCommonButtonBase> ButtonClass = LoadClass<UCommonButtonBase>(nullptr,
+		TEXT("/Game/Knight/UI/Common/WBP_KnightButton.WBP_KnightButton_C"));
+	UpgradeButton = ButtonClass && GetOwningPlayer() ? CreateWidget<UCommonButtonBase>(GetOwningPlayer(), ButtonClass) : nullptr;
+	if (UpgradeButton)
+	{
+		SetButtonLabel(UpgradeButton, LOCTEXT("UpgradeAction", "무기 강화 시도"));
+		UpgradeButton->OnClicked().AddWeakLambda(this, [this]() { RequestWeaponUpgrade(); });
+		UpgradePanel->AddChildToVerticalBox(UpgradeButton)->SetPadding(FMargin(0.f, 8.f, 0.f, 0.f));
+	}
+}
+
+void UKnightMaintenanceWidget::RefreshWeaponUpgradePanel()
+{
+	if (!UpgradePanel) return;
+	const UknightWeaponItemDefinition* Weapon = Category == 1 ? Cast<UknightWeaponItemDefinition>(SelectedPart.Get()) : nullptr;
+	UpgradePanel->SetVisibility(Weapon ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	if (!Weapon) return;
+	UknightProgressionSubsystem* Progression = GetProgression();
+	FKnightWeaponUpgradeQuote Quote;
+	if (Progression) Progression->GetWeaponUpgradeQuote(Weapon, Quote);
+	if (UpgradeHeading) UpgradeHeading->SetText(FText::Format(LOCTEXT("UpgradeHeading", "{0}  +{1} / +15"), PartName(Weapon), Quote.CurrentLevel));
+	if (UpgradeAttack) UpgradeAttack->SetText(FText::Format(LOCTEXT("UpgradeAttack", "무기 공격력  {0} → {1}"),
+		FText::AsNumber(Quote.CurrentWeaponAttack), FText::AsNumber(Quote.NextWeaponAttack)));
+	if (UpgradeMoney) UpgradeMoney->SetText(FText::Format(LOCTEXT("UpgradeMoney", "보유 돈 {0} / 필요 돈 {1}"),
+		FText::AsNumber(Progression ? Progression->GetMoney() : 0), FText::AsNumber(Quote.MoneyCost)));
+	if (UpgradeGate)
+	{
+		const bool bHasGate = Quote.GateMaterial != nullptr;
+		UpgradeGate->SetVisibility(bHasGate ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+		if (bHasGate) UpgradeGate->SetText(FText::Format(LOCTEXT("UpgradeGate", "성공 시 소재: {0}  {1} / {2}"),
+			Quote.GateMaterial->DisplayName, Quote.GateMaterialOwned, Quote.GateMaterialNeeded));
+	}
+	if (UpgradeChance) UpgradeChance->SetText(Quote.TargetLevel > 0
+		? FText::Format(LOCTEXT("UpgradeBaseChance", "기본 성공률 {0}%"), FMath::RoundToInt(Quote.BaseSuccessChance * 100.f))
+		: FText::GetEmpty());
+	FText Reason;
+	switch (Quote.Availability)
+	{
+	case EKnightWeaponUpgradeAvailability::Ready: break;
+	case EKnightWeaponUpgradeAvailability::NotOwned: Reason = LOCTEXT("UpgradeNotOwned", "보유하지 않은 무기입니다."); break;
+	case EKnightWeaponUpgradeAvailability::MaxLevel: Reason = LOCTEXT("UpgradeMax", "최대 강화 단계입니다."); break;
+	case EKnightWeaponUpgradeAvailability::InsufficientMoney: Reason = LOCTEXT("UpgradeNoMoney", "돈이 부족합니다."); break;
+	case EKnightWeaponUpgradeAvailability::MissingMaterial: Reason = LOCTEXT("UpgradeNoGate", "관문 소재가 부족합니다."); break;
+	case EKnightWeaponUpgradeAvailability::SaveBlocked: Reason = LOCTEXT("UpgradeSaveBlocked", "저장 처리 중입니다. 잠시 후 다시 시도하세요."); break;
+	default: Reason = LOCTEXT("UpgradeInvalid", "강화 설정을 확인할 수 없습니다."); break;
+	}
+	if (UpgradeResult)
+	{
+		const FText Message = UpgradeResultMessage.IsEmpty() ? Reason : UpgradeResultMessage;
+		UpgradeResult->SetText(Message);
+		UpgradeResult->SetVisibility(Message.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+	}
+	SetButtonLocked(UpgradeButton, bBusy || Quote.Availability != EKnightWeaponUpgradeAvailability::Ready, Reason);
+}
+
+void UKnightMaintenanceWidget::RequestWeaponUpgrade()
+{
+	if (bBusy || Category != 1) return;
+	UknightProgressionSubsystem* Progression = GetProgression();
+	const UknightWeaponItemDefinition* Weapon = Cast<UknightWeaponItemDefinition>(SelectedPart.Get());
+	if (!Progression || !Weapon) return;
+	bBusy = true;
+	FKnightWeaponUpgradeReceipt Receipt;
+	const EKnightWeaponUpgradeOutcome Outcome = Progression->TryUpgradeWeapon(Weapon, Receipt);
+	bBusy = false;
+	UpgradeResultMessage = Outcome == EKnightWeaponUpgradeOutcome::Success
+		? FText::Format(LOCTEXT("UpgradeSucceeded", "강화 성공: +{0}"), Receipt.NewLevel)
+		: Outcome == EKnightWeaponUpgradeOutcome::ChanceFailed
+			? LOCTEXT("UpgradeChanceFailed", "강화 실패: 단계는 유지됩니다.")
+			: LOCTEXT("UpgradeRejected", "강화할 수 없습니다. 조건을 확인하세요.");
+	RefreshDetails();
 }
 
 void UKnightMaintenanceWidget::RefreshMaterials(const UknightCraftRecipeDefinition* Recipe, UknightProgressionSubsystem* Progression)
@@ -768,6 +858,7 @@ void UKnightMaintenanceWidget::RefreshDetails()
 	}
 	if (Txt_ActiveSets) Txt_ActiveSets->SetText(ActiveSetsText(Catalog, Current));
 	RefreshMaterials(Category == 0 ? SelectedRecipe.Get() : nullptr, Progression);
+	RefreshWeaponUpgradePanel();
 
 	// 비활성 대신 잠금: 흐리게 보이고, 누르면 이유 표시.
 	if (Btn_Execute)

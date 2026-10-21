@@ -1,6 +1,7 @@
 #include "Item/knightItemDefinitions.h"
 
 #include "AbilitySystem/knightAbilitySet.h"
+#include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
 #include "Engine/SkeletalMesh.h"
 #include "Monster/knightMonsterDefinition.h"
 #include "System/knightGameplayTags.h"
@@ -77,6 +78,23 @@ UknightWeaponItemDefinition::UknightWeaponItemDefinition()
 	MeshComponentTags.Add(TEXT("Weapon"));
 	Attachment.AttachMode = EMechPartAttachMode::Socket;
 	Attachment.AttachSocket = TEXT("hand_r_weapon");
+}
+
+float UknightWeaponItemDefinition::GetUpgradeAttackBonus(int32 Level) const
+{
+	float Bonus = 0.f;
+	for (int32 Index = 0; Index < FMath::Clamp(Level, 0, UpgradeSteps.Num()); ++Index)
+		Bonus += UpgradeSteps[Index].AttackIncrease;
+	return Bonus;
+}
+
+float UknightWeaponItemDefinition::GetWeaponAttackAtLevel(int32 Level) const
+{
+	float Attack = GetUpgradeAttackBonus(Level);
+	for (const FknightPartStatModifier& Mod : StatModifiers)
+		if (Mod.Attribute == UknightCoreAttributeSet::GetAttackPowerAttribute()
+			&& Mod.ModifierOp == EGameplayModOp::AddBase) Attack += Mod.Value;
+	return Attack;
 }
 
 #undef LOCTEXT_NAMESPACE

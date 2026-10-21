@@ -6,6 +6,7 @@
 #include "Item/knightItemDefinitions.h"
 #include "Item/knightEquipmentData.h"
 #include "Item/knightEquipmentStats.h"
+#include "Item/knightPartsComponent.h"
 #include "knightInventoryLibrary.h"
 #include "Quest/KnightQuestData.h"
 #include "Progression/knightSaveGame.h"
@@ -14,6 +15,7 @@
 #include "Raid/knightRaidDefinition.h"
 #include "System/knightGameplayTags.h"
 #include "knight.h"
+#include "Kismet/GameplayStatics.h"
 
 namespace
 {
@@ -396,9 +398,116 @@ int32 UknightProgressionSubsystem::GetUpgradeLevel(const UknightItemDefinition* 
 	return Level ? *Level : 0;
 }
 
+int32 UknightProgressionSubsystem::GetWeaponUpgradeFailures(const UknightWeaponItemDefinition* Weapon) const
+{
+	const UknightSaveSubsystem* const Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	const UknightSaveGame* const Save = Saves && Saves->HasSelectedSlot() ? GetSave() : nullptr;
+	return Save && Weapon ? Save->WeaponUpgradeFailures.FindRef(Weapon->GetPrimaryAssetId()) : 0;
+}
+
+void UknightProgressionSubsystem::GetWeaponUpgradeQuote(const UknightWeaponItemDefinition* Weapon,
+	FKnightWeaponUpgradeQuote& OutQuote) const
+{
+	OutQuote = FKnightWeaponUpgradeQuote();
+	const UknightSaveSubsystem* const Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	const UknightSaveGame* const Save = Saves && Saves->HasSelectedSlot() ? GetSave() : nullptr;
+	if (!Save) { OutQuote.Availability = EKnightWeaponUpgradeAvailability::NoSlot; return; }
+	if (!Weapon || Weapon->ItemType != knightGameplayTags::Item_Type_Weapon
+		|| Weapon->SlotTag != knightGameplayTags::Equipment_Slot_Weapon
+		|| !Weapon->GetPrimaryAssetId().IsValid()) return;
+	OutQuote.WeaponId = Weapon->GetPrimaryAssetId();
+	if (Save->ItemCounts.FindRef(OutQuote.WeaponId) <= 0)
+	{ OutQuote.Availability = EKnightWeaponUpgradeAvailability::NotOwned; return; }
+	const int32 Level = Save->ItemUpgradeLevels.FindRef(OutQuote.WeaponId);
+	if (Level < 0 || Level > 15 || Weapon->UpgradeSteps.Num() != 15) return;
+	OutQuote.CurrentLevel = Level;
+	OutQuote.CurrentWeaponAttack = Weapon->GetWeaponAttackAtLevel(Level);
+	OutQuote.NextWeaponAttack = OutQuote.CurrentWeaponAttack;
+	if (Level == 15)
+	{ OutQuote.Availability = EKnightWeaponUpgradeAvailability::MaxLevel; return; }
+	const FknightUpgradeStep& Step = Weapon->UpgradeSteps[Level];
+	if (Step.TargetLevel != Level + 1 || Step.MoneyCost <= 0
+		|| !FMath::IsFinite(Step.BaseSuccessChance) || Step.BaseSuccessChance < 0.f || Step.BaseSuccessChance > 1.f
+		|| !FMath::IsFinite(Step.FailureBonusPerAttempt) || Step.FailureBonusPerAttempt < 0.f || Step.FailureBonusPerAttempt > 1.f
+		|| !FMath::IsFinite(Step.AttackIncrease) || Step.AttackIncrease < 0.f
+		|| ((Level == 9 || Level == 14) ? Step.Costs.Num() != 1 : !Step.Costs.IsEmpty())) return;
+	OutQuote.TargetLevel = Level + 1;
+	OutQuote.MoneyCost = Step.MoneyCost;
+	OutQuote.BaseSuccessChance = Step.BaseSuccessChance;
+	OutQuote.NextWeaponAttack = Weapon->GetWeaponAttackAtLevel(Level + 1);
+	if (!Step.Costs.IsEmpty())
+	{
+		const FknightItemCost& Cost = Step.Costs[0];
+		const UknightMaterialItemDefinition* const Material = Cast<UknightMaterialItemDefinition>(Cost.Item.Get());
+		if (!Material || Material->ItemType != knightGameplayTags::Item_Type_Material || Cost.Count != 1
+			|| !Material->GetPrimaryAssetId().IsValid()) return;
+		OutQuote.GateMaterial = Material;
+		OutQuote.GateMaterialNeeded = Cost.Count;
+		OutQuote.GateMaterialOwned = Save->ItemCounts.FindRef(Material->GetPrimaryAssetId());
+	}
+	if (!Saves->CanStartAtomicTransaction()) OutQuote.Availability = EKnightWeaponUpgradeAvailability::SaveBlocked;
+	else if (Save->Money < Step.MoneyCost) OutQuote.Availability = EKnightWeaponUpgradeAvailability::InsufficientMoney;
+	else if (OutQuote.GateMaterial && OutQuote.GateMaterialOwned < OutQuote.GateMaterialNeeded)
+		OutQuote.Availability = EKnightWeaponUpgradeAvailability::MissingMaterial;
+	else OutQuote.Availability = EKnightWeaponUpgradeAvailability::Ready;
+}
+
+EKnightWeaponUpgradeOutcome UknightProgressionSubsystem::TryUpgradeWeapon(
+	const UknightWeaponItemDefinition* Weapon, FKnightWeaponUpgradeReceipt& OutReceipt)
+{
+	OutReceipt = FKnightWeaponUpgradeReceipt();
+	FKnightWeaponUpgradeQuote Quote;
+	GetWeaponUpgradeQuote(Weapon, Quote);
+	if (Quote.Availability != EKnightWeaponUpgradeAvailability::Ready) return OutReceipt.Outcome;
+	UknightSaveGame* const Save = GetSave();
+	const int32 Failures = Save->WeaponUpgradeFailures.FindRef(Quote.WeaponId);
+	const FknightUpgradeStep& Step = Weapon->UpgradeSteps[Quote.CurrentLevel];
+	const double Chance = FMath::Clamp(static_cast<double>(Step.BaseSuccessChance)
+		+ static_cast<double>(Failures) * Step.FailureBonusPerAttempt, 0.0, 1.0);
+	bool bSuccess = FMath::FRand() < Chance;
+#if WITH_EDITOR
+	if (DebugNextWeaponUpgradeOutcome >= 0)
+	{
+		bSuccess = DebugNextWeaponUpgradeOutcome == 1;
+		DebugNextWeaponUpgradeOutcome = -1;
+	}
+#endif
+	Save->Money -= Quote.MoneyCost;
+	OutReceipt.WeaponId = Quote.WeaponId;
+	OutReceipt.PreviousLevel = Quote.CurrentLevel;
+	OutReceipt.NewLevel = Quote.CurrentLevel;
+	OutReceipt.MoneySpent = Quote.MoneyCost;
+	if (bSuccess)
+	{
+		Save->ItemUpgradeLevels.Add(Quote.WeaponId, Quote.TargetLevel);
+		Save->WeaponUpgradeFailures.Remove(Quote.WeaponId);
+		OutReceipt.NewLevel = Quote.TargetLevel;
+		OutReceipt.Outcome = EKnightWeaponUpgradeOutcome::Success;
+		if (Quote.GateMaterial)
+		{
+			const FPrimaryAssetId MaterialId = Quote.GateMaterial->GetPrimaryAssetId();
+			int32& Owned = Save->ItemCounts.FindChecked(MaterialId);
+			Owned -= Quote.GateMaterialNeeded;
+			if (Owned == 0) Save->ItemCounts.Remove(MaterialId);
+			OutReceipt.MaterialConsumed = Quote.GateMaterialNeeded;
+		}
+		if (APlayerController* const PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr)
+			if (APawn* const Pawn = PC->GetPawn())
+				if (UknightPartsComponent* const Parts = Pawn->FindComponentByClass<UknightPartsComponent>())
+					Parts->RefreshWeaponUpgrade(Weapon, Quote.TargetLevel);
+	}
+	else
+	{
+		Save->WeaponUpgradeFailures.Add(Quote.WeaponId, Failures < MAX_int32 ? Failures + 1 : Failures);
+		OutReceipt.Outcome = EKnightWeaponUpgradeOutcome::ChanceFailed;
+	}
+	CommitChange();
+	return OutReceipt.Outcome;
+}
+
 bool UknightProgressionSubsystem::CanUpgradePart(const UknightPartItemDefinition* Part) const
 {
-	if (!Part || GetItemCount(Part) <= 0)
+	if (!Part || Part->IsA<UknightWeaponItemDefinition>() || GetItemCount(Part) <= 0)
 	{
 		return false;
 	}

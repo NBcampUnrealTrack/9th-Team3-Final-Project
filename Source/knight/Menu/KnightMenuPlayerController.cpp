@@ -13,6 +13,9 @@
 #include "knightItemDefinition.h"
 #include "knightInventoryLibrary.h"
 #include "Item/knightItemDefinitions.h"
+#include "Item/knightEquipmentData.h"
+#include "Item/knightEquipmentStats.h"
+#include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
 #include "Progression/knightProgressionSubsystem.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
@@ -345,5 +348,115 @@ void AKnightMenuPlayerController::KnightCoreSaleRetrySave()
 		UE_LOG(Logknight, Log, TEXT("KnightCoreSaleRetrySave slot=%s busy=%d recovery=%d"),
 			*Saves->GetActiveSlotId(), Saves->IsSaveInFlight(), Saves->IsSaveRecoveryPending());
 	}
+#endif
+}
+
+void AKnightMenuPlayerController::KnightCoreUpgradeGrant(FName ItemName, int32 Count)
+{
+#if WITH_EDITOR
+	if (!IsIsolatedRewardProbe() || Count <= 0) return;
+	UknightSaveSubsystem* Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	UknightProgressionSubsystem* Progression = GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>();
+	const FPrimaryAssetId Id(UknightItemDefinition::ItemAssetType, ItemName);
+	const UknightItemDefinition* Item = UknightInventoryLibrary::LoadItemDefinition(Id);
+	if (!Saves || !Saves->CanStartAtomicTransaction() || !Progression || !Item) return;
+	Progression->AddItem(Item, Count);
+	UE_LOG(Logknight, Log, TEXT("KnightCoreUpgradeGrant item=%s count=%d owned=%d"),
+		*Id.ToString(), Count, Progression->GetItemCount(Item));
+#endif
+}
+
+void AKnightMenuPlayerController::KnightCoreUpgradeMoney(int32 Amount)
+{
+#if WITH_EDITOR
+	if (!IsIsolatedRewardProbe() || Amount <= 0) return;
+	UknightSaveSubsystem* Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	UknightProgressionSubsystem* Progression = GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>();
+	const bool bAdded = Saves && Saves->CanStartAtomicTransaction() && Progression && Progression->AddMoney(Amount);
+	UE_LOG(Logknight, Log, TEXT("KnightCoreUpgradeMoney amount=%d added=%d money=%lld"), Amount, bAdded,
+		Progression ? Progression->GetMoney() : 0);
+#endif
+}
+
+void AKnightMenuPlayerController::KnightCoreUpgradeForceNext(int32 bSuccess)
+{
+#if WITH_EDITOR
+	if (!IsIsolatedRewardProbe()) return;
+	if (UknightProgressionSubsystem* Progression = GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>())
+		Progression->SetDebugNextWeaponUpgradeOutcome(bSuccess != 0 ? 1 : 0);
+#endif
+}
+
+void AKnightMenuPlayerController::KnightCoreUpgradeAttempt(FName WeaponName)
+{
+#if WITH_EDITOR
+	if (!IsIsolatedRewardProbe()) return;
+	UknightProgressionSubsystem* Progression = GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>();
+	const FPrimaryAssetId Id(UknightItemDefinition::ItemAssetType, WeaponName);
+	const UknightWeaponItemDefinition* Weapon = Cast<UknightWeaponItemDefinition>(UknightInventoryLibrary::LoadItemDefinition(Id));
+	FKnightWeaponUpgradeReceipt Receipt;
+	const EKnightWeaponUpgradeOutcome Outcome = Progression && Weapon
+		? Progression->TryUpgradeWeapon(Weapon, Receipt) : EKnightWeaponUpgradeOutcome::Rejected;
+	UE_LOG(Logknight, Log, TEXT("KnightCoreUpgradeAttempt item=%s outcome=%d level=%d->%d moneySpent=%lld materialSpent=%d money=%lld failures=%d"),
+		*Id.ToString(), static_cast<int32>(Outcome), Receipt.PreviousLevel, Receipt.NewLevel, Receipt.MoneySpent,
+		Receipt.MaterialConsumed, Progression ? Progression->GetMoney() : 0,
+		Progression && Weapon ? Progression->GetWeaponUpgradeFailures(Weapon) : -1);
+#endif
+}
+
+void AKnightMenuPlayerController::KnightCoreUpgradeStatus(FName WeaponName)
+{
+#if WITH_EDITOR
+	if (!IsIsolatedRewardProbe()) return;
+	UknightSaveSubsystem* Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	UknightProgressionSubsystem* Progression = GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>();
+	const FPrimaryAssetId Id(UknightItemDefinition::ItemAssetType, WeaponName);
+	const UknightWeaponItemDefinition* Weapon = Cast<UknightWeaponItemDefinition>(UknightInventoryLibrary::LoadItemDefinition(Id));
+	FKnightWeaponUpgradeQuote Quote;
+	if (Progression && Weapon) Progression->GetWeaponUpgradeQuote(Weapon, Quote);
+	UE_LOG(Logknight, Log, TEXT("KnightCoreUpgradeStatus slot=%s item=%s owned=%d level=%d failures=%d available=%d target=%d cost=%lld gate=%s %d/%d money=%lld attack=%.1f->%.1f busy=%d recovery=%d"),
+		Saves ? *Saves->GetActiveSlotId() : TEXT("None"), *Id.ToString(),
+		Progression && Weapon ? Progression->GetItemCount(Weapon) : 0,
+		Progression && Weapon ? Progression->GetUpgradeLevel(Weapon) : 0,
+		Progression && Weapon ? Progression->GetWeaponUpgradeFailures(Weapon) : 0,
+		static_cast<int32>(Quote.Availability), Quote.TargetLevel, Quote.MoneyCost,
+		Quote.GateMaterial ? *Quote.GateMaterial->GetPrimaryAssetId().ToString() : TEXT("None"),
+		Quote.GateMaterialOwned, Quote.GateMaterialNeeded, Progression ? Progression->GetMoney() : 0,
+		Quote.CurrentWeaponAttack, Quote.NextWeaponAttack,
+		Saves ? Saves->IsSaveInFlight() : 0, Saves ? Saves->IsSaveRecoveryPending() : 0);
+#endif
+}
+
+void AKnightMenuPlayerController::KnightCoreUpgradeEquip(FName WeaponName)
+{
+#if WITH_EDITOR
+	if (!IsIsolatedRewardProbe()) return;
+	UknightProgressionSubsystem* Progression = GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>();
+	const FPrimaryAssetId Id(UknightItemDefinition::ItemAssetType, WeaponName);
+	const UknightWeaponItemDefinition* Weapon = Cast<UknightWeaponItemDefinition>(UknightInventoryLibrary::LoadItemDefinition(Id));
+	const bool bEquipped = Progression && Weapon && Progression->SetEquippedPart(Weapon);
+	UE_LOG(Logknight, Log, TEXT("KnightCoreUpgradeEquip item=%s equipped=%d level=%d"),
+		*Id.ToString(), bEquipped, Progression && Weapon ? Progression->GetUpgradeLevel(Weapon) : 0);
+#endif
+}
+
+void AKnightMenuPlayerController::KnightCoreUpgradeCompare(FName WeaponName)
+{
+#if WITH_EDITOR
+	if (!IsIsolatedRewardProbe()) return;
+	const UknightProgressionSubsystem* Progression = GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>();
+	const UknightMaintenanceCatalog* Catalog = UknightEquipmentSettings::LoadCatalog();
+	const FPrimaryAssetId Id(UknightItemDefinition::ItemAssetType, WeaponName);
+	const UknightWeaponItemDefinition* Weapon = Cast<UknightWeaponItemDefinition>(UknightInventoryLibrary::LoadItemDefinition(Id));
+	if (!Progression || !Catalog || !Weapon) return;
+	const auto CurrentLoadout = knightEquipmentStats::ReadLoadout(Progression, Catalog);
+	const FknightEquipmentStats Current = knightEquipmentStats::Calculate(CurrentLoadout, Catalog, Progression);
+	auto CandidateLoadout = CurrentLoadout;
+	CandidateLoadout.Add(Weapon->SlotTag, Weapon);
+	const FknightEquipmentStats Preview = knightEquipmentStats::Calculate(CandidateLoadout, Catalog, Progression);
+	const FGameplayAttribute Attack = UknightCoreAttributeSet::GetAttackPowerAttribute();
+	UE_LOG(Logknight, Log, TEXT("KnightCoreUpgradeCompare item=%s current=%.1f preview=%.1f delta=%.1f complete=%d/%d"),
+		*Id.ToString(), Current.Values.FindRef(Attack), Preview.Values.FindRef(Attack),
+		Preview.Values.FindRef(Attack) - Current.Values.FindRef(Attack), Current.bComplete, Preview.bComplete);
 #endif
 }

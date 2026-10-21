@@ -11,6 +11,7 @@ class UMechBodyRegionSet;
 class UMeshComponent;
 class USkeletalMeshComponent;
 class UknightPartItemDefinition;
+class UknightWeaponItemDefinition;
 struct FknightPartStatModifier;
 
 /** Part is null when the slot was emptied. Item definitions are shared assets: listeners must not modify them. */
@@ -47,6 +48,9 @@ struct FknightEquippedPart
 
 	/** 파츠 능력치(StatModifiers)로 만든 GE를 적용한 핸들. 해제할 때 이걸로 회수한다. */
 	FActiveGameplayEffectHandle StatEffectHandle;
+	FActiveGameplayEffectHandle UpgradeAttackEffectHandle;
+	UPROPERTY(Transient)
+	TObjectPtr<UGameplayEffect> UpgradeAttackEffect;
 };
 
 /**
@@ -86,6 +90,8 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category="Knight|Parts")
 	void UnequipSlot(UPARAM(meta=(Categories="Equipment.Slot")) FGameplayTag SlotTag);
+	/** Refresh only the attack granted by the currently equipped weapon after an upgrade transaction. */
+	void RefreshWeaponUpgrade(const UknightWeaponItemDefinition* Weapon, int32 NewLevel);
 
 	const UknightPartItemDefinition* GetEquippedPart(FGameplayTag SlotTag) const;
 
@@ -150,6 +156,7 @@ private:
 
 	/** 파츠 능력치 GE. 파츠마다 처음 한 번 만들고 재사용한다. 능력치가 없는 파츠는 null. */
 	const UGameplayEffect* GetStatEffect(const UknightPartItemDefinition* Part);
+	void ApplyWeaponUpgradeAttack(FknightEquippedPart& Part, const UknightWeaponItemDefinition* Weapon);
 
 	void RemovePart(FknightEquippedPart& Part);
 	void RefreshSetBonuses();

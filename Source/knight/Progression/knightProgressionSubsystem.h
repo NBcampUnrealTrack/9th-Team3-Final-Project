@@ -11,6 +11,8 @@ class UknightItemDefinition;
 class UknightPartItemDefinition;
 class UknightSaveGame;
 class UknightCraftRecipeDefinition;
+class UknightWeaponItemDefinition;
+class UknightMaterialItemDefinition;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FknightProgressionChanged);
 
@@ -24,6 +26,44 @@ struct KNIGHT_API FKnightMaterialSaleReceipt
 	UPROPERTY(BlueprintReadOnly, Category="Sale") int32 Count = 0;
 	UPROPERTY(BlueprintReadOnly, Category="Sale") int32 UnitPrice = 0;
 	UPROPERTY(BlueprintReadOnly, Category="Sale") int64 TotalMoney = 0;
+};
+
+UENUM(BlueprintType)
+enum class EKnightWeaponUpgradeAvailability : uint8
+{
+	Ready, NoSlot, NotOwned, InvalidSettings, MaxLevel, InsufficientMoney, MissingMaterial, SaveBlocked
+};
+
+USTRUCT(BlueprintType)
+struct KNIGHT_API FKnightWeaponUpgradeQuote
+{
+	GENERATED_BODY()
+	UPROPERTY(BlueprintReadOnly, Category="Upgrade") EKnightWeaponUpgradeAvailability Availability = EKnightWeaponUpgradeAvailability::InvalidSettings;
+	UPROPERTY(BlueprintReadOnly, Category="Upgrade") FPrimaryAssetId WeaponId;
+	UPROPERTY(BlueprintReadOnly, Category="Upgrade") int32 CurrentLevel = 0;
+	UPROPERTY(BlueprintReadOnly, Category="Upgrade") int32 TargetLevel = 0;
+	UPROPERTY(BlueprintReadOnly, Category="Upgrade") int64 MoneyCost = 0;
+	UPROPERTY(BlueprintReadOnly, Category="Upgrade") float BaseSuccessChance = 0.f;
+	UPROPERTY(BlueprintReadOnly, Category="Upgrade") float CurrentWeaponAttack = 0.f;
+	UPROPERTY(BlueprintReadOnly, Category="Upgrade") float NextWeaponAttack = 0.f;
+	UPROPERTY(BlueprintReadOnly, Category="Upgrade") TObjectPtr<const UknightMaterialItemDefinition> GateMaterial;
+	UPROPERTY(BlueprintReadOnly, Category="Upgrade") int32 GateMaterialNeeded = 0;
+	UPROPERTY(BlueprintReadOnly, Category="Upgrade") int32 GateMaterialOwned = 0;
+};
+
+UENUM(BlueprintType)
+enum class EKnightWeaponUpgradeOutcome : uint8 { Rejected, Success, ChanceFailed };
+
+USTRUCT(BlueprintType)
+struct KNIGHT_API FKnightWeaponUpgradeReceipt
+{
+	GENERATED_BODY()
+	UPROPERTY(BlueprintReadOnly, Category="Upgrade") EKnightWeaponUpgradeOutcome Outcome = EKnightWeaponUpgradeOutcome::Rejected;
+	UPROPERTY(BlueprintReadOnly, Category="Upgrade") FPrimaryAssetId WeaponId;
+	UPROPERTY(BlueprintReadOnly, Category="Upgrade") int32 PreviousLevel = 0;
+	UPROPERTY(BlueprintReadOnly, Category="Upgrade") int32 NewLevel = 0;
+	UPROPERTY(BlueprintReadOnly, Category="Upgrade") int64 MoneySpent = 0;
+	UPROPERTY(BlueprintReadOnly, Category="Upgrade") int32 MaterialConsumed = 0;
 };
 
 /**
@@ -113,6 +153,21 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|Progression")
 	bool UpgradePart(const UknightPartItemDefinition* Part);
 
+	/** Read-only next-step quote. Failure correction is intentionally absent from player-facing data. */
+	UFUNCTION(BlueprintCallable, Category="Knight|Progression|Weapon Upgrade")
+	void GetWeaponUpgradeQuote(const UknightWeaponItemDefinition* Weapon, FKnightWeaponUpgradeQuote& OutQuote) const;
+
+	/** One roll and one save snapshot; rejected requests consume neither money nor RNG. */
+	UFUNCTION(BlueprintCallable, Category="Knight|Progression|Weapon Upgrade")
+	EKnightWeaponUpgradeOutcome TryUpgradeWeapon(const UknightWeaponItemDefinition* Weapon, FKnightWeaponUpgradeReceipt& OutReceipt);
+
+	/** Internal progression state, never shown as an effective chance in the maintenance UI. */
+	int32 GetWeaponUpgradeFailures(const UknightWeaponItemDefinition* Weapon) const;
+
+#if WITH_EDITOR
+	void SetDebugNextWeaponUpgradeOutcome(int32 Outcome) { DebugNextWeaponUpgradeOutcome = FMath::Clamp(Outcome, -1, 1); }
+#endif
+
 	/** Validates ownership, ingredients and stage unlocks without changing the save. */
 	UFUNCTION(BlueprintPure, Category="Knight|Progression")
 	bool CanCraftPart(const UknightCraftRecipeDefinition* Recipe) const;
@@ -143,4 +198,7 @@ private:
 
 	UknightSaveGame* GetSave() const;
 	void CommitChange();
+#if WITH_EDITOR
+	int32 DebugNextWeaponUpgradeOutcome = -1;
+#endif
 };

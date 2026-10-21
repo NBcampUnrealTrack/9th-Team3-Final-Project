@@ -31,6 +31,25 @@ struct KNIGHT_API FknightUpgradeStep
 {
 	GENERATED_BODY()
 
+	/** Target level must equal this step's one-based index. Weapon upgrades use all 15 steps. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Upgrade", meta=(ClampMin=1, ClampMax=15))
+	int32 TargetLevel = 0;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Upgrade", meta=(ClampMin=0))
+	int64 MoneyCost = 0;
+
+	/** 0..1; only this base rate is shown to players. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Upgrade", meta=(ClampMin=0, ClampMax=1))
+	float BaseSuccessChance = 1.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Upgrade", meta=(ClampMin=0, ClampMax=1))
+	float FailureBonusPerAttempt = 0.05f;
+
+	/** Flat weapon AttackPower added on success; accumulated through the current level. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Upgrade", meta=(ClampMin=0))
+	float AttackIncrease = 0.f;
+
+	/** Success-only gate materials. Empty for ordinary levels. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Upgrade", meta=(TitleProperty="Item"))
 	TArray<FknightItemCost> Costs;
 };
@@ -149,7 +168,7 @@ public:
 
 	/**
 	 * 장착하는 동안의 능력치 (2026-10-07). 능력치는 여기에 적고, 아래 AbilitySet은 스킬·특수 효과가 있는 파츠만 쓴다.
-	 * 강화 레벨은 아직 반영하지 않는다(강화 규칙이 정해지면 추가). AbilitySet로 스탯을 주는 기존 파츠(무기 등)도 그대로 동작한다.
+	 * 무기 강화 공격력은 이 기본 목록과 별도로 장착·미리보기 양쪽에 합성한다.
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Part", meta=(TitleProperty="Attribute"))
 	TArray<FknightPartStatModifier> StatModifiers;
@@ -171,4 +190,6 @@ class KNIGHT_API UknightWeaponItemDefinition : public UknightPartItemDefinition
 
 public:
 	UknightWeaponItemDefinition();
+	float GetUpgradeAttackBonus(int32 Level) const;
+	float GetWeaponAttackAtLevel(int32 Level) const;
 };

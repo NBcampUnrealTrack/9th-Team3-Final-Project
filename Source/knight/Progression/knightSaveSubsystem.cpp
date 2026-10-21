@@ -184,6 +184,10 @@ bool UknightSaveSubsystem::MigrateSave(UknightSaveGame& Save) const
 	{
 		if (!Entry.Key.IsValid() || Entry.Value < 0) return false;
 	}
+	for (const TPair<FPrimaryAssetId, int32>& Entry : Save.WeaponUpgradeFailures)
+	{
+		if (!Entry.Key.IsValid() || Entry.Value < 0) return false;
+	}
 	Save.CompletedQuestIds.Remove(NAME_None);
 	Save.FirstDefeatedBossIds.Remove(NAME_None);
 	if (Save.Money < 0 || Save.UnlockedSharedSocketSlots < 0) return false;

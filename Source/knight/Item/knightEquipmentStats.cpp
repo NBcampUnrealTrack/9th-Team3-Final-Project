@@ -7,6 +7,7 @@
 #include "GameplayEffect.h"
 #include "GameplayEffectAggregator.h"
 #include "Item/knightEquipmentData.h"
+#include "Item/knightItemDefinitions.h"
 #include "Item/knightPartsComponent.h"
 #include "Progression/knightProgressionSubsystem.h"
 #include "System/knightGameplayTags.h"
@@ -96,6 +97,14 @@ FknightEquipmentStats knightEquipmentStats::Calculate(const FLoadout& Loadout, c
 		for (const FknightPartStatModifier& Mod : Part->StatModifiers)
 		{
 			AddMod(Aggregators, Mod.Attribute, Mod.ModifierOp, Mod.Value);
+		}
+		if (Entry.Key == knightGameplayTags::Equipment_Slot_Weapon)
+		{
+			if (const UknightWeaponItemDefinition* Weapon = Cast<UknightWeaponItemDefinition>(Part))
+			{
+				AddMod(Aggregators, UknightCoreAttributeSet::GetAttackPowerAttribute(), EGameplayModOp::AddBase,
+					Weapon->GetUpgradeAttackBonus(Progression ? Progression->GetUpgradeLevel(Weapon) : 0));
+			}
 		}
 		if (Part->AbilitySet)
 		{

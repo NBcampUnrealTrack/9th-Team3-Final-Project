@@ -14,6 +14,7 @@ class UVerticalBox;
 class UWidgetSwitcher;
 class UknightCraftRecipeDefinition;
 class UknightPartItemDefinition;
+class UknightWeaponItemDefinition;
 class UKnightMaintenanceEntryWidget;
 class UknightProgressionSubsystem;
 
@@ -90,6 +91,8 @@ private:
 	void EnsureStatRows();
 	void RefreshDetails();
 	void RefreshMaterials(const UknightCraftRecipeDefinition* Recipe, UknightProgressionSubsystem* Progression);
+	void RefreshWeaponUpgradePanel();
+	void RequestWeaponUpgrade();
 	void RefreshTabButtons();
 	void SelectEntry(UKnightMaintenanceEntryWidget* Entry);
 	void HandleEntryClicked(UKnightMaintenanceEntryWidget* Entry);
@@ -105,6 +108,15 @@ private:
 	bool bBusy = false;
 	FText ExecuteLockReason;
 	FText UnequipLockReason;
+	FText UpgradeResultMessage;
+	UPROPERTY(Transient) TObjectPtr<UVerticalBox> UpgradePanel;
+	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> UpgradeHeading;
+	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> UpgradeAttack;
+	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> UpgradeMoney;
+	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> UpgradeGate;
+	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> UpgradeChance;
+	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> UpgradeResult;
+	UPROPERTY(Transient) TObjectPtr<UCommonButtonBase> UpgradeButton;
 	UPROPERTY(Transient) TObjectPtr<const UknightPartItemDefinition> SelectedPart;
 	UPROPERTY(Transient) TObjectPtr<const UknightCraftRecipeDefinition> SelectedRecipe;
 	UPROPERTY(Transient) TArray<TObjectPtr<UKnightMaintenanceEntryWidget>> Entries;

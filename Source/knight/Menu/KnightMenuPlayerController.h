@@ -37,6 +37,14 @@ public:
 	UFUNCTION(Exec) void KnightCoreSaleGrant(FName ItemName, int32 Count);
 	UFUNCTION(Exec) void KnightCoreSaleAttempt(FName ItemName, int32 Count);
 	UFUNCTION(Exec) void KnightCoreSaleRetrySave();
+	/** Isolated editor-only weapon-upgrade probes. */
+	UFUNCTION(Exec) void KnightCoreUpgradeGrant(FName ItemName, int32 Count);
+	UFUNCTION(Exec) void KnightCoreUpgradeMoney(int32 Amount);
+	UFUNCTION(Exec) void KnightCoreUpgradeForceNext(int32 bSuccess);
+	UFUNCTION(Exec) void KnightCoreUpgradeAttempt(FName WeaponName);
+	UFUNCTION(Exec) void KnightCoreUpgradeStatus(FName WeaponName);
+	UFUNCTION(Exec) void KnightCoreUpgradeEquip(FName WeaponName);
+	UFUNCTION(Exec) void KnightCoreUpgradeCompare(FName WeaponName);
 
 protected:
 	virtual void BeginPlay() override;
