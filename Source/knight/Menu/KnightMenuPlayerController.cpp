@@ -8,6 +8,7 @@
 #include "GameFlow/KnightGameFlowSubsystem.h"
 #include "Progression/knightSaveGame.h"
 #include "Progression/knightSaveSubsystem.h"
+#include "Raid/knightRaidSubsystem.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
@@ -130,6 +131,45 @@ void AKnightMenuPlayerController::KnightCoreLaunch(FName StageId)
 	UKnightGameFlowSubsystem* const Flow = GetGameInstance()->GetSubsystem<UKnightGameFlowSubsystem>();
 	UE_LOG(Logknight, Log, TEXT("KnightCoreLaunch stage=%s accepted=%d"),
 		*StageId.ToString(), Flow && Flow->RequestStartStage(StageId));
+#endif
+}
+
+void AKnightMenuPlayerController::KnightCoreLaunchQuestTwice(FName QuestId)
+{
+#if WITH_EDITOR
+	UKnightGameFlowSubsystem* const Flow = GetGameInstance()->GetSubsystem<UKnightGameFlowSubsystem>();
+	FText FirstReason;
+	FText SecondReason;
+	const bool bFirst = Flow && Flow->RequestStartQuest(QuestId, FirstReason);
+	const bool bSecond = Flow && Flow->RequestStartQuest(QuestId, SecondReason);
+	UE_LOG(Logknight, Log, TEXT("KnightCoreLaunchQuestTwice quest=%s first=%d second=%d pending=%d firstReason=%s secondReason=%s"),
+		*QuestId.ToString(), bFirst, bSecond, Flow && Flow->IsTravelPending(),
+		*FirstReason.ToString(), *SecondReason.ToString());
+#endif
+}
+
+void AKnightMenuPlayerController::KnightCoreLaunchQuest(FName QuestId)
+{
+#if WITH_EDITOR
+	UKnightGameFlowSubsystem* const Flow = GetGameInstance()->GetSubsystem<UKnightGameFlowSubsystem>();
+	FText Reason;
+	const bool bAccepted = Flow && Flow->RequestStartQuest(QuestId, Reason);
+	UE_LOG(Logknight, Log, TEXT("KnightCoreLaunchQuest quest=%s accepted=%d pending=%d reason=%s"),
+		*QuestId.ToString(), bAccepted, Flow && Flow->IsTravelPending(), *Reason.ToString());
+#endif
+}
+
+void AKnightMenuPlayerController::KnightCoreQuestStatus()
+{
+#if WITH_EDITOR
+	const UKnightGameFlowSubsystem* const Flow = GetGameInstance()->GetSubsystem<UKnightGameFlowSubsystem>();
+	const UknightRaidSubsystem* const Raid = GetGameInstance()->GetSubsystem<UknightRaidSubsystem>();
+	FKnightQuestRunContext Context;
+	const bool bHasContext = Raid && Raid->GetActiveQuestRunContext(Context);
+	UE_LOG(Logknight, Log, TEXT("KnightCoreQuestStatus flow=%d pending=%d hasContext=%d quest=%s stage=%s boss=%s difficulty=%d run=%s"),
+		Flow ? static_cast<int32>(Flow->GetCurrentFlowState()) : -1, Flow && Flow->IsTravelPending(), bHasContext,
+		*Context.QuestId.ToString(), *Context.StageId.ToString(), *Context.BossId.ToString(),
+		static_cast<int32>(Context.Difficulty), *Context.RunId.ToString());
 #endif
 }
 

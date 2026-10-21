@@ -5,10 +5,12 @@
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "KnightFlowTypes.h"
 #include "KnightStageCatalog.h"
+#include "Quest/KnightQuestTypes.h"
 #include "KnightGameFlowSubsystem.generated.h"
 
 class UWorld;
 class AKnightMenuGameMode;
+class UKnightQuestDefinition;
 struct FStreamableHandle;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FKnightFlowStateChanged, EKnightFlowState, PreviousState, EKnightFlowState, NewState);
@@ -58,6 +60,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|Flow")
 	bool RequestStartStage(FName StageId);
 
+	/** Validates the quest and then uses the same stage travel and asynchronous raid load path. */
+	UFUNCTION(BlueprintCallable, Category="Knight|Quest")
+	bool RequestStartQuest(FName QuestId, FText& OutReason);
+
 #if WITH_EDITOR
 	/** Test hook consumed by the next asynchronous raid-definition completion. */
 	void DebugFailNextRaidLoad() { bDebugFailNextRaidLoad = true; }
@@ -87,6 +93,7 @@ private:
 	/** Called only by the active menu GameMode during InitGame, before controllers initialize. */
 	void RegisterEnteredMenu(EKnightFlowState MenuState, UWorld* EnteredWorld);
 	bool RequestOpenMenu(EKnightFlowState Destination);
+	bool RequestStartStageInternal(FName StageId, const UKnightQuestDefinition* Quest, FText& OutReason);
 	bool BeginTravel(EKnightFlowState Destination, const FString& MapPackage, UWorld* SourceWorld, FName StageId = NAME_None);
 	bool ResolveMapPackage(const TSoftObjectPtr<UWorld>& Map, FString& OutPackage) const;
 	const UKnightStageCatalog* GetStageCatalog() const;
@@ -108,6 +115,7 @@ private:
 	FSoftObjectPath PendingRaidDefinitionPath;
 	TSharedPtr<FStreamableHandle> PendingLoadHandle;
 	FGuid PendingRunId;
+	FKnightQuestRunContext PendingQuestContext;
 	TWeakObjectPtr<UWorld> PendingSourceWorld;
 	TWeakObjectPtr<UWorld> RegisteredWorld;
 	FDelegateHandle TravelFailureHandle;

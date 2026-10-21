@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
 #include "Engine/DeveloperSettings.h"
+#include "Quest/KnightQuestTypes.h"
 #include "Raid/knightRaidDefinition.h"
 #include "KnightQuestData.generated.h"
 
@@ -10,13 +11,6 @@ class AknightMonsterCharacterBase;
 class UGameInstance;
 class UknightMonsterDefinition;
 class UKnightCodexData;
-
-UENUM(BlueprintType)
-enum class EKnightQuestDifficulty : uint8
-{
-	Normal,
-	Hard
-};
 
 UENUM(BlueprintType)
 enum class EKnightQuestObjective : uint8

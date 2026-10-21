@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameplayTagContainer.h"
+#include "Quest/KnightQuestTypes.h"
 #include "knightInventoryTypes.h"
 #include "knightRaidTypes.generated.h"
 
@@ -44,6 +45,10 @@ struct KNIGHT_API FknightRaidResult
 
 	UPROPERTY(BlueprintReadOnly, Category="Raid")
 	FName StageId;
+
+	/** Captured at launch, empty for direct stage PIE and development-stage runs. */
+	UPROPERTY(BlueprintReadOnly, Category="Raid")
+	FKnightQuestRunContext QuestContext;
 
 	UPROPERTY(BlueprintReadOnly, Category="Raid")
 	bool bSuccess = false;

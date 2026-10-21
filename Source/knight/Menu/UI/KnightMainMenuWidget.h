@@ -13,6 +13,7 @@ class UKnightSettingsWidget;
 class UKnightCodexWidget;
 class UKnightMaintenanceWidget;
 class UKnightInventoryWidget;
+class UKnightQuestMenuWidget;
 class UCanvasPanel;
 class AKnightMaintenanceCameraRig;
 struct FStreamableHandle;
@@ -29,8 +30,8 @@ enum class EKnightMainMenuPage : uint8
 };
 
 /**
- * C++ parent for the main-menu root WBP. The stage page is a flat map: clicking a region (or Left/Right) selects it,
- * the info panel shows it to the right of the map, and the launch button unlocks when the stage can be played.
+ * C++ parent for the main-menu root WBP. The stage page shows QuestCatalog entries and retains the map as a
+ * fallback if the quest view cannot be created.
  */
 UCLASS()
 class KNIGHT_API UKnightMainMenuWidget : public UKnightMenuWidgetBase
@@ -51,6 +52,9 @@ public:
 	UFUNCTION(BlueprintPure, Category="Knight|Stage")
 	FName GetSelectedStageId() const { return SelectedStageId; }
 
+	UFUNCTION(BlueprintCallable, Category="Knight|Quest")
+	bool SelectQuest(FName QuestId);
+
 protected:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeConstruct() override;
@@ -66,6 +70,10 @@ protected:
 
 	UPROPERTY(meta=(BindWidget))
 	TObjectPtr<UPanelWidget> Panel_Stage;
+
+	/** Responsive host added to the existing stage page in WBP_KnightMainMenu. */
+	UPROPERTY(meta=(BindWidgetOptional))
+	TObjectPtr<UCanvasPanel> Panel_QuestHost;
 
 	UPROPERTY(meta=(BindWidget))
 	TObjectPtr<UKnightStageMapWidget> Map_Stages;
@@ -159,6 +167,7 @@ private:
 
 	UFUNCTION()
 	void HandleLaunchStageClicked();
+	void HandleQuestLaunchRequested(FName QuestId);
 
 	bool ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDuringTravel);
 	bool RebuildMapMarkers();
@@ -170,6 +179,7 @@ private:
 	void EnsureCodexWidget();
 	void EnsureMaintenanceWidget();
 	void EnsureInventoryWidget();
+	void EnsureQuestWidget();
 
 	UPROPERTY(Transient)
 	TObjectPtr<UKnightSettingsWidget> SettingsWidget;
@@ -179,6 +189,8 @@ private:
 	TObjectPtr<UKnightMaintenanceWidget> MaintenanceWidget;
 	UPROPERTY(Transient)
 	TObjectPtr<UKnightInventoryWidget> InventoryWidget;
+	UPROPERTY(Transient)
+	TObjectPtr<UKnightQuestMenuWidget> QuestWidget;
 	UPROPERTY(Transient)
 	TObjectPtr<UCanvasPanel> InventoryPanel;
 	TWeakObjectPtr<UWidget> FocusBeforeInventory;
@@ -191,6 +203,7 @@ private:
 	TArray<FName> StageOrder;
 	FName SelectedStageId;
 	bool bStageLaunchAvailable = false;
+	bool bQuestMode = false;
 
 	/** Raid rules load in the background: the target monster's definition can pull in large assets. */
 	TSharedPtr<FStreamableHandle> RaidDefinitionHandle;

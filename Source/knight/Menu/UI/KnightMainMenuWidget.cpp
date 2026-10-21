@@ -24,6 +24,7 @@
 #include "Menu/KnightMaintenanceCameraRig.h"
 #include "Menu/UI/KnightMaintenanceWidget.h"
 #include "Menu/UI/KnightInventoryWidget.h"
+#include "Menu/UI/KnightQuestMenuWidget.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/CanvasPanel.h"
 #include "Components/Button.h"
@@ -109,6 +110,7 @@ void UKnightMainMenuWidget::NativeDestruct()
 		RaidDefinitionHandle->CancelHandle();
 		RaidDefinitionHandle.Reset();
 	}
+	if (QuestWidget) QuestWidget->OnLaunchRequested.RemoveAll(this);
 	Super::NativeDestruct();
 }
 
@@ -162,12 +164,29 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 	bool bHasStages = true;
 	if (bEnteringStage)
 	{
-		// Unlocks can change between visits (a clear unlocks the next stage), so rebuild every time.
 		SelectedStageId = NAME_None;
 		if (Map_Stages) Map_Stages->SetSelectedStage(NAME_None);
-		bHasStages = RebuildMapMarkers();
-		RefreshStageDetails();
-		PlaceStageInfo();
+		EnsureQuestWidget();
+		bQuestMode = QuestWidget != nullptr;
+		if (Panel_QuestHost) Panel_QuestHost->SetVisibility(bQuestMode ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+		if (Map_Stages) Map_Stages->SetVisibility(bQuestMode ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+		if (UWidget* const Header = WidgetTree ? WidgetTree->FindWidget(TEXT("VerticalBox_StageHeader")) : nullptr)
+			Header->SetVisibility(bQuestMode ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+		if (UWidget* const Hints = WidgetTree ? WidgetTree->FindWidget(TEXT("Panel_StageHints")) : nullptr)
+			Hints->SetVisibility(bQuestMode ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+		if (bQuestMode)
+		{
+			bStageLaunchAvailable = false;
+			if (Panel_StageInfo) Panel_StageInfo->SetVisibility(ESlateVisibility::Collapsed);
+			QuestWidget->RefreshQuests();
+		}
+		else
+		{
+			// Legacy map remains available if the quest view cannot be created.
+			bHasStages = RebuildMapMarkers();
+			RefreshStageDetails();
+			PlaceStageInfo();
+		}
 	}
 	if (NewPage == EKnightMainMenuPage::Settings)
 	{
@@ -230,6 +249,8 @@ bool UKnightMainMenuWidget::HandleBackRequested()
 	if (CurrentPage == EKnightMainMenuPage::Settings && SettingsWidget) { SettingsWidget->RequestClose(); return true; }
 	if (CurrentPage == EKnightMainMenuPage::Codex) { HandleCodexClosed(); return true; }
 	if (CurrentPage == EKnightMainMenuPage::Maintenance && MaintenanceWidget && MaintenanceWidget->HandleBack()) return true;
+	if (CurrentPage == EKnightMainMenuPage::Stage && bQuestMode && QuestWidget
+		&& !QuestWidget->GetSelectedQuestId().IsNone()) return QuestWidget->SelectQuest(NAME_None);
 	// First Esc clears the selected region, the next one leaves the map.
 	if (CurrentPage == EKnightMainMenuPage::Stage && !SelectedStageId.IsNone())
 	{
@@ -275,7 +296,8 @@ FReply UKnightMainMenuWidget::NativeOnPreviewKeyDown(const FGeometry& InGeometry
 		const FKey Key = InKeyEvent.GetKey();
 		if (Key == EKeys::Left || Key == EKeys::A || Key == EKeys::Right || Key == EKeys::D)
 		{
-			CycleStage(Key == EKeys::Left || Key == EKeys::A ? -1 : 1);
+			if (bQuestMode && QuestWidget) QuestWidget->CycleQuest(Key == EKeys::Left || Key == EKeys::A ? -1 : 1);
+			else CycleStage(Key == EKeys::Left || Key == EKeys::A ? -1 : 1);
 			return FReply::Handled();
 		}
 	}
@@ -349,6 +371,24 @@ void UKnightMainMenuWidget::EnsureInventoryWidget()
 	InventoryCanvasSlot->SetOffsets(FMargin(0));
 }
 
+void UKnightMainMenuWidget::EnsureQuestWidget()
+{
+	if (QuestWidget || !Panel_QuestHost || !GetOwningPlayer()) return;
+	QuestWidget = CreateWidget<UKnightQuestMenuWidget>(GetOwningPlayer(), UKnightQuestMenuWidget::StaticClass());
+	if (!QuestWidget) return;
+	UCanvasPanelSlot* const QuestSlot = Panel_QuestHost->AddChildToCanvas(QuestWidget);
+	QuestSlot->SetAnchors(FAnchors(0, 0, 1, 1));
+	QuestSlot->SetOffsets(FMargin(0));
+	QuestWidget->OnLaunchRequested.AddUObject(this, &ThisClass::HandleQuestLaunchRequested);
+}
+
+bool UKnightMainMenuWidget::SelectQuest(FName QuestId)
+{
+	if (IsTravelPending()) return false;
+	if (CurrentPage != EKnightMainMenuPage::Stage && !ShowPage(EKnightMainMenuPage::Stage)) return false;
+	return bQuestMode && QuestWidget && QuestWidget->SelectQuest(QuestId);
+}
+
 void UKnightMainMenuWidget::HandleCodexClosed()
 {
 	bRestoreCodexFocus = true;
@@ -370,6 +410,8 @@ UWidget* UKnightMainMenuWidget::GetPreferredFocusTarget() const
 	{
 		return CodexWidget->GetFocusButton();
 	}
+	if (CurrentPage == EKnightMainMenuPage::Stage && bQuestMode && QuestWidget)
+		return QuestWidget->GetFocusButton();
 	if (CurrentPage == EKnightMainMenuPage::Stage && !SelectedStageId.IsNone() && CanFocusButton(Button_LaunchStage))
 	{
 		return Button_LaunchStage;
@@ -398,6 +440,7 @@ void UKnightMainMenuWidget::SetTravelControlsEnabled(bool bEnabled)
 	if (Button_Codex) Button_Codex->SetIsEnabled(bEnabled);
 	if (Button_LaunchStage) Button_LaunchStage->SetIsEnabled(bEnabled && bStageLaunchAvailable && !SelectedStageId.IsNone());
 	if (Map_Stages) Map_Stages->SetIsEnabled(bEnabled);
+	if (QuestWidget) QuestWidget->SetIsEnabled(bEnabled);
 }
 
 void UKnightMainMenuWidget::HandleStageClicked()
@@ -597,11 +640,12 @@ void UKnightMainMenuWidget::RefreshRaidDetails()
 
 void UKnightMainMenuWidget::HandleMapStageClicked(FName StageId)
 {
-	SelectStage(StageId);
+	if (!bQuestMode) SelectStage(StageId);
 }
 
 void UKnightMainMenuWidget::HandleLaunchStageClicked()
 {
+	if (bQuestMode) return;
 	UKnightGameFlowSubsystem* const Flow = GetFlow();
 	if (!Flow || IsTravelPending() || !bStageLaunchAvailable || SelectedStageId.IsNone())
 	{
@@ -613,6 +657,17 @@ void UKnightMainMenuWidget::HandleLaunchStageClicked()
 	{
 		SetStatusText(LOCTEXT("LaunchingStage", "스테이지로 이동 중입니다."));
 	}
+}
+
+void UKnightMainMenuWidget::HandleQuestLaunchRequested(FName QuestId)
+{
+	UKnightGameFlowSubsystem* const Flow = GetFlow();
+	if (!Flow) return;
+	FText Reason;
+	const bool bAccepted = Flow->RequestStartQuest(QuestId, Reason);
+	RefreshTravelControls();
+	if (bAccepted) SetStatusText(LOCTEXT("LaunchingQuest", "퀘스트 출격 준비 중입니다."));
+	else if (!Reason.IsEmpty()) SetStatusText(Reason);
 }
 
 #undef LOCTEXT_NAMESPACE

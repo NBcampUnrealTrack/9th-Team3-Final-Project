@@ -21,6 +21,9 @@ public:
 	/** Editor validation commands; the retail menu uses the widget buttons. */
 	UFUNCTION(Exec) void KnightCoreLaunchTwice(FName StageId);
 	UFUNCTION(Exec) void KnightCoreLaunch(FName StageId);
+	UFUNCTION(Exec) void KnightCoreLaunchQuestTwice(FName QuestId);
+	UFUNCTION(Exec) void KnightCoreLaunchQuest(FName QuestId);
+	UFUNCTION(Exec) void KnightCoreQuestStatus();
 	UFUNCTION(Exec) void KnightCoreFailNextRaidLoad();
 	UFUNCTION(Exec) void KnightCoreProfileStatus();
 	UFUNCTION(Exec) void KnightCoreUseFixedSlot(int32 SlotNumber);
