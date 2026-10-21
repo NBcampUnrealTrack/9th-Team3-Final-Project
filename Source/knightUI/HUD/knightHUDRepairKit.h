@@ -10,9 +10,9 @@ class UProgressBar;
 class UknightVM_PlayerStatus;
 
 /**
- * Repair kits at the bottom right of the HUD: a wrench in a faint frame with the number of kits beside it. The wrench fills
- * from the bottom as perfect guards charge the next kit; the charge hides while the kits are full (it cannot grow then),
- * and the whole widget dims at 0 kits.
+ * Repair kits next to the mech frame (the Knight's groggy gauge): a large wrench in a faint frame with the number of kits on
+ * its bottom-right corner. The wrench is fully lit while any kit is left. At 0 kits the whole widget dims and the wrench
+ * fills from the bottom as perfect guards charge the next kit.
  *
  * Widgets are found by name: Bar_RepairGauge (bottom-to-top bar, fill image = the wrench) and Txt_RepairKitCount.
  */

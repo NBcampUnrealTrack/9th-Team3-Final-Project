@@ -51,10 +51,10 @@ void UknightHUDRepairKit::Refresh()
 		return;
 	}
 	const int32 Count = VM->GetRepairKitCount();
-	const bool bFull = VM->GetMaxRepairKitCount() > 0 && Count >= VM->GetMaxRepairKitCount();
 	if (Bar_RepairGauge)
 	{
-		Bar_RepairGauge->SetPercent(bFull ? 0.f : VM->GetRepairKitGaugePercent());
+		// Lit whenever a kit is ready to use; the charge only shows while there is none.
+		Bar_RepairGauge->SetPercent(Count > 0 ? 1.f : VM->GetRepairKitGaugePercent());
 		Bar_RepairGauge->SetFillColorAndOpacity(GaugeColor);
 	}
 	if (Txt_RepairKitCount)

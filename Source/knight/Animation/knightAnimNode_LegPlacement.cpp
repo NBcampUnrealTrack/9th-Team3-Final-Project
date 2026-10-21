@@ -80,6 +80,17 @@ void FAnimNode_knightLegPlacement::InitializeBoneReferences(const FBoneContainer
 			return Result.GetLocation();
 		};
 		Leg.LengthCS = (RefComponentLocation(Foot) - RefComponentLocation(Root)).Size();
+
+		// 발 뼈의 자손(발가락·발톱). 기준 스켈레톤은 부모가 자식보다 앞에 있으니 뒤쪽만 훑는다.
+		Leg.ContactBones.Reset();
+		for (int32 Bone = Foot + 1; Bone < RefSkeleton.GetNum(); ++Bone)
+		{
+			if (RefSkeleton.BoneIsChildOf(Bone, Foot))
+			{
+				FBoneReference& Contact = Leg.ContactBones.Add_GetRef(FBoneReference(RefSkeleton.GetBoneName(Bone)));
+				Contact.Initialize(RequiredBones);
+			}
+		}
 	}
 }
 
@@ -109,6 +120,7 @@ void FAnimNode_knightLegPlacement::PreUpdate(const UAnimInstance* InAnimInstance
 	const bool bActive = knightLegPlacement::CVarEnabled.GetValueOnGameThread() != 0 && (!Movement || Movement->IsMovingOnGround());
 	const bool bDraw = knightLegPlacement::CVarDraw.GetValueOnGameThread() != 0;
 	bFootLockActive = bActive && bEnableFootLock && knightLegPlacement::CVarFootLock.GetValueOnGameThread() != 0;
+	GroundSnapAlpha = FMath::FInterpTo(GroundSnapAlpha, bActive ? 1.f : 0.f, DeltaTime, InterpSpeed);
 
 	// 메시 원점 = 캡슐 바닥 = 애니메이션이 가정한 평지 높이.
 	const float BaseZ = Mesh->GetComponentLocation().Z;
@@ -295,6 +307,9 @@ void FAnimNode_knightLegPlacement::EvaluateSkeletalControl_AnyThread(FComponentS
 		FTransform FootCS;
 		/** 컴포넌트 공간 단위의 지면 높이 차. */
 		double Offset;
+		/** 골반을 옮기기 전 애니메이션의 발 높이와, 접지 붙이기로 내릴(음수면 올릴) 높이. */
+		double AnimFootZ;
+		double GroundSnap;
 		FknightLegPlacementLeg* Leg;
 	};
 
@@ -316,8 +331,26 @@ void FAnimNode_knightLegPlacement::EvaluateSkeletalControl_AnyThread(FComponentS
 		const FCompactPoseBoneIndex Root = Leg.RootBone.GetCompactPoseIndex(BoneContainer);
 		const FCompactPoseBoneIndex Joint = Leg.JointBone.GetCompactPoseIndex(BoneContainer);
 		const FCompactPoseBoneIndex Foot = Leg.FootBone.GetCompactPoseIndex(BoneContainer);
+		const FTransform FootCS = Output.Pose.GetComponentSpaceTransform(Foot);
+
+		// 접지 붙이기: 애니메이션이 가정한 땅은 컴포넌트 Z = 0. 접지점이 그 근처면 땅에 붙이고, 높을수록 덜 붙여 든 발은 그대로 둔다.
+		double GroundSnap = 0.0;
+		const double SnapRange = Leg.LengthCS * GroundSnapRatio;
+		if (SnapRange > UE_KINDA_SMALL_NUMBER && GroundSnapAlpha > 0.f)
+		{
+			double ContactZ = FootCS.GetLocation().Z;
+			for (const FBoneReference& Contact : Leg.ContactBones)
+			{
+				if (Contact.IsValidToEvaluate(BoneContainer))
+				{
+					ContactZ = FMath::Min(ContactZ, Output.Pose.GetComponentSpaceTransform(Contact.GetCompactPoseIndex(BoneContainer)).GetLocation().Z);
+				}
+			}
+			const double Clearance = ContactZ - Leg.SoleOffset;
+			GroundSnap = Clearance * (1.0 - FMath::SmoothStep(SnapRange, SnapRange * 2.0, FMath::Abs(Clearance))) * GroundSnapAlpha;
+		}
 		Poses.Add({ Root, Joint, Foot, Output.Pose.GetComponentSpaceTransform(Root), Output.Pose.GetComponentSpaceTransform(Joint),
-			Output.Pose.GetComponentSpaceTransform(Foot), Leg.Offset * WorldToComponent, &Leg });
+			FootCS, Leg.Offset * WorldToComponent, FootCS.GetLocation().Z, GroundSnap, &Leg });
 	}
 	if (Poses.IsEmpty())
 	{
@@ -470,7 +503,8 @@ void FAnimNode_knightLegPlacement::EvaluateSkeletalControl_AnyThread(FComponentS
 	for (int32 PoseIndex = 0; PoseIndex < Poses.Num(); ++PoseIndex)
 	{
 		FLegPose& Pose = Poses[PoseIndex];
-		const double DesiredFootZ = Pose.FootCS.GetLocation().Z + Pose.Offset;
+		// 목표 = 애니메이션 높이 + 지면 높이 차. 골반이 옮긴 발 높이에는 이미 지면 평면 몫이 들어 있어 기준으로 쓰면 두 번 더해진다.
+		const double DesiredFootZ = Pose.AnimFootZ - Pose.GroundSnap + Pose.Offset;
 		FTransform RootCS = Pose.RootCS;
 		FTransform JointCS = Pose.JointCS;
 		FTransform FootCS = Pose.FootCS;

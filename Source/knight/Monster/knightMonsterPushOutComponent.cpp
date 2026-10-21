@@ -16,6 +16,8 @@ namespace knightMonsterPushOut
 {
 	// 플레이어 캡슐을 조금 줄여서 검사한다. 몸에 맞닿아 서 있는 것(겹침 0)까지 밀어내지 않게.
 	constexpr float Skin = 2.f;
+	// 발밑을 이만큼 쓸어 몸 윗면에 서 있거나 걸쳐 있는지 본다.
+	constexpr float StandProbe = 5.f;
 }
 
 UknightMonsterPushOutComponent::UknightMonsterPushOutComponent()
@@ -23,7 +25,8 @@ UknightMonsterPushOutComponent::UknightMonsterPushOutComponent()
 	PrimaryComponentTick.bCanEverTick = true;
 	// 몬스터와 플레이어가 이번 프레임 이동을 마친 뒤에 겹침을 본다.
 	PrimaryComponentTick.TickGroup = TG_PostPhysics;
-	MeshPushOutPauseTags.AddTag(knightGameplayTags::State_HitReact_Knockdown);
+	ShallowMeshPushOutTags.AddTag(knightGameplayTags::State_HitReact_Knockdown);
+	PassThroughPawnTags.AddTag(knightGameplayTags::State_Monster_PassThroughPawns);
 }
 
 void UknightMonsterPushOutComponent::BeginPlay()
@@ -36,7 +39,14 @@ void UknightMonsterPushOutComponent::BeginPlay()
 		TArray<UknightMonsterBodyBlockerComponent*> Blockers;
 		Owner->GetComponents<UknightMonsterBodyBlockerComponent>(Blockers);
 		BodyPrimitives.Append(Blockers);
+		TopPrimitives.Append(Blockers);
 		const ACharacter* const Character = Cast<ACharacter>(Owner);
+		MovementCapsule = Character ? Character->GetCapsuleComponent() : nullptr;
+		// 이동 캡슐이 플레이어를 막으면 그 윗면에도 올라설 수 있다.
+		if (MovementCapsule && MovementCapsule->GetCollisionResponseToChannel(ECC_Pawn) == ECR_Block)
+		{
+			TopPrimitives.Add(MovementCapsule);
+		}
 		if (bPushOutOfMesh && Character && Character->GetMesh())
 		{
 			MeshPrimitive = Character->GetMesh();
@@ -61,14 +71,27 @@ void UknightMonsterPushOutComponent::TickComponent(float DeltaTime, ELevelTick T
 		return;
 	}
 
-	const bool bIncludeMesh = !IsMeshPushOutPaused();
+	const float MeshPenetration = IsShallowMeshPushOut() ? ShallowMeshPenetration : 0.f;
+	const bool bWantPassThrough = WantsPassThroughPawns();
+	if (bWantPassThrough && !bCapsulePassingThrough)
+	{
+		SetCapsulePassThrough(true);
+	}
+	bool bAnyInsideCapsule = false;
 	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
 	{
 		const APlayerController* const PlayerController = It->Get();
 		ACharacter* const Character = PlayerController ? Cast<ACharacter>(PlayerController->GetPawn()) : nullptr;
 		UCharacterMovementComponent* const Movement = Character ? Character->GetCharacterMovement() : nullptr;
 		UCapsuleComponent* const Capsule = Character ? Character->GetCapsuleComponent() : nullptr;
-		if (!Movement || !Capsule || !IsOverlappingBody(Character, bIncludeMesh))
+		if (!Movement || !Capsule)
+		{
+			continue;
+		}
+		// 캡슐이 플레이어를 통과시키는 동안에는 캡슐 안에 들어온 플레이어도 밀어낸다. 다시 막을 때 겹쳐 있으면 엔진이 한 번에 튕겨 내기 때문이다.
+		const bool bInsideCapsule = bCapsulePassingThrough && IsOverlappingPrimitive(Character, MovementCapsule, 0.f);
+		bAnyInsideCapsule |= bInsideCapsule;
+		if (!bInsideCapsule && !IsOverlappingBody(Character, MeshPenetration) && !IsStandingOnBody(Character))
 		{
 			continue;
 		}
@@ -90,43 +113,109 @@ void UknightMonsterPushOutComponent::TickComponent(float DeltaTime, ELevelTick T
 		}
 		UE_LOG(LogknightAI, VeryVerbose, TEXT("%s pushed %s out of its body (%.0f cm)."), *GetNameSafe(Owner), *GetNameSafe(Character), Delta.Size());
 	}
+
+	// 태그가 빠져도 플레이어가 캡슐 밖으로 나갈 때까지 기다렸다가 다시 막는다.
+	if (!bWantPassThrough && bCapsulePassingThrough && !bAnyInsideCapsule)
+	{
+		SetCapsulePassThrough(false);
+	}
 }
 
-bool UknightMonsterPushOutComponent::IsMeshPushOutPaused() const
+bool UknightMonsterPushOutComponent::WantsPassThroughPawns() const
 {
-	if (!MeshPrimitive || MeshPushOutPauseTags.IsEmpty())
+	if (!MovementCapsule || PassThroughPawnTags.IsEmpty())
 	{
 		return false;
 	}
 	const UAbilitySystemComponent* const ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner());
-	return ASC && ASC->HasAnyMatchingGameplayTags(MeshPushOutPauseTags);
+	return ASC && ASC->HasAnyMatchingGameplayTags(PassThroughPawnTags);
 }
 
-bool UknightMonsterPushOutComponent::IsOverlappingBody(const ACharacter* Character, bool bIncludeMesh) const
+void UknightMonsterPushOutComponent::SetCapsulePassThrough(bool bPassThrough)
 {
-	const UCapsuleComponent* const Capsule = Character->GetCapsuleComponent();
-	const float Radius = Capsule->GetScaledCapsuleRadius() - knightMonsterPushOut::Skin;
-	const float HalfHeight = Capsule->GetScaledCapsuleHalfHeight() - knightMonsterPushOut::Skin;
-	if (Radius <= 0.f)
+	if (bPassThrough)
+	{
+		SavedCapsulePawnResponse = MovementCapsule->GetCollisionResponseToChannel(ECC_Pawn);
+		MovementCapsule->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+	}
+	else
+	{
+		MovementCapsule->SetCollisionResponseToChannel(ECC_Pawn, SavedCapsulePawnResponse);
+	}
+	bCapsulePassingThrough = bPassThrough;
+	UE_LOG(LogknightAI, Verbose, TEXT("%s movement capsule %s pawns."), *GetNameSafe(GetOwner()), bPassThrough ? TEXT("passes through") : TEXT("blocks"));
+}
+
+bool UknightMonsterPushOutComponent::IsShallowMeshPushOut() const
+{
+	if (!MeshPrimitive || ShallowMeshPushOutTags.IsEmpty())
 	{
 		return false;
 	}
-	const FCollisionShape Shape = FCollisionShape::MakeCapsule(Radius, HalfHeight);
-	const FVector Location = Capsule->GetComponentLocation();
-	const FQuat Rotation = Capsule->GetComponentQuat();
+	const UAbilitySystemComponent* const ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner());
+	return ASC && ASC->HasAnyMatchingGameplayTags(ShallowMeshPushOutTags);
+}
 
+bool UknightMonsterPushOutComponent::IsOverlappingBody(const ACharacter* Character, float MeshPenetration) const
+{
 	for (const UPrimitiveComponent* const Primitive : BodyPrimitives)
 	{
-		// 죽으면 차단 상자 충돌이 꺼지는 등 도중에 바뀔 수 있어 매번 확인한다.
-		if (!Primitive || !Primitive->IsQueryCollisionEnabled() || (!bIncludeMesh && Primitive == MeshPrimitive))
+		if (IsOverlappingPrimitive(Character, Primitive, Primitive == MeshPrimitive ? MeshPenetration : 0.f))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+bool UknightMonsterPushOutComponent::IsOverlappingPrimitive(const ACharacter* Character, const UPrimitiveComponent* Primitive, float Penetration) const
+{
+	// 죽으면 차단 상자 충돌이 꺼지는 등 도중에 바뀔 수 있어 매번 확인한다.
+	if (!Primitive || !Primitive->IsQueryCollisionEnabled())
+	{
+		return false;
+	}
+	const UCapsuleComponent* const Capsule = Character->GetCapsuleComponent();
+	const float Radius = Capsule->GetScaledCapsuleRadius() - knightMonsterPushOut::Skin;
+	const float HalfHeight = Capsule->GetScaledCapsuleHalfHeight() - knightMonsterPushOut::Skin;
+	// 허용 깊이만큼 캡슐을 더 줄여서 본다. 캡슐 중심선 둘레는 남겨 깊이 들어온 것은 계속 잡는다.
+	const float Shrink = FMath::Clamp(Penetration, 0.f, Radius - knightMonsterPushOut::Skin);
+	if (Radius - Shrink <= 0.f)
+	{
+		return false;
+	}
+	const FVector Location = Capsule->GetComponentLocation();
+	if (FVector::DistSquared(Primitive->Bounds.Origin, Location) > FMath::Square(Primitive->Bounds.SphereRadius + Radius + HalfHeight))
+	{
+		return false;
+	}
+	return Primitive->OverlapComponent(Location, Capsule->GetComponentQuat(), FCollisionShape::MakeCapsule(Radius - Shrink, HalfHeight - Shrink));
+}
+
+bool UknightMonsterPushOutComponent::IsStandingOnBody(const ACharacter* Character) const
+{
+	const AActor* const Owner = GetOwner();
+	const UPrimitiveComponent* const Base = Cast<UPrimitiveComponent>(Character->GetMovementBaseObject());
+	if (Base && Base->GetOwner() == Owner)
+	{
+		return true;
+	}
+	// 떨어지는 중에 모서리에 걸치면 바닥(MovementBase)이 없어서, 발밑을 조금 쓸어 받치는 것이 몸인지 본다.
+	const UCapsuleComponent* const Capsule = Character->GetCapsuleComponent();
+	const FCollisionShape Shape = FCollisionShape::MakeCapsule(Capsule->GetScaledCapsuleRadius(), Capsule->GetScaledCapsuleHalfHeight());
+	const FVector Start = Capsule->GetComponentLocation();
+	const FVector End = Start - FVector(0.f, 0.f, knightMonsterPushOut::StandProbe);
+	const FQuat Rotation = Capsule->GetComponentQuat();
+	for (UPrimitiveComponent* const Primitive : TopPrimitives)
+	{
+		if (!Primitive || !Primitive->IsQueryCollisionEnabled())
 		{
 			continue;
 		}
-		if (FVector::DistSquared(Primitive->Bounds.Origin, Location) > FMath::Square(Primitive->Bounds.SphereRadius + Radius + HalfHeight))
-		{
-			continue;
-		}
-		if (Primitive->OverlapComponent(Location, Rotation, Shape))
+		FHitResult Hit;
+		// 옆면에 닿아 있는 것(처음부터 겹침)은 서 있는 것이 아니다. 아래쪽에서 받치는 면만 센다.
+		if (Primitive->SweepComponent(Hit, Start, End, Rotation, Shape) && !Hit.bStartPenetrating
+			&& Hit.ImpactNormal.Z > UE_KINDA_SMALL_NUMBER)
 		{
 			return true;
 		}

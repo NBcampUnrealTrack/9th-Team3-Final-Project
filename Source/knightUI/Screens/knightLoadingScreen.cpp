@@ -1,6 +1,8 @@
 #include "Screens/knightLoadingScreen.h"
 
 #include "CommonTextBlock.h"
+#include "Engine/World.h"
+#include "Raid/knightRaidGameState.h"
 
 #define LOCTEXT_NAMESPACE "knightUI"
 
@@ -22,7 +24,8 @@ void UknightLoadingScreen::NativeConstruct()
 	Super::NativeConstruct();
 	if (Txt_Tip)
 	{
-		Txt_Tip->SetText(Tips.Num() > 0 ? Tips[FMath::RandRange(0, Tips.Num() - 1)] : FText::GetEmpty());
+		SelectedTip = Tips.Num() > 0 ? Tips[FMath::RandRange(0, Tips.Num() - 1)] : FText::GetEmpty();
+		Txt_Tip->SetText(SelectedTip);
 	}
 	DotTime = 0.f;
 	LitDot = -1;
@@ -35,6 +38,22 @@ void UknightLoadingScreen::NativeTick(const FGeometry& MyGeometry, float InDelta
 	// The first frame after a map load carries the whole load as its delta; wrapping keeps the dots in step anyway.
 	DotTime = FMath::Fmod(DotTime + InDeltaTime, DotInterval * 3.f);
 	ShowDots(FMath::FloorToInt(DotTime / DotInterval));
+	if (Txt_Tip)
+	{
+		FText DisplayText = SelectedTip;
+		if (const UWorld* const World = GetWorld(); World && World->IsGameWorld())
+		{
+			if (const AknightRaidGameState* const RaidState = World->GetGameState<AknightRaidGameState>();
+				RaidState && RaidState->GetRaidPhase() == EknightRaidPhase::None && !RaidState->GetLoadingStatus().IsEmpty())
+			{
+				DisplayText = RaidState->GetLoadingStatus();
+			}
+		}
+		if (!Txt_Tip->GetText().EqualTo(DisplayText))
+		{
+			Txt_Tip->SetText(DisplayText);
+		}
+	}
 }
 
 void UknightLoadingScreen::ShowDots(int32 LitIndex)

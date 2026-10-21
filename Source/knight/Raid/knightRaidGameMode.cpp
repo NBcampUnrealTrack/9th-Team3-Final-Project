@@ -4,6 +4,8 @@
 #include "AbilitySystemGlobals.h"
 #include "ContentStreaming.h"
 #include "Kismet/GameplayStatics.h"
+#include "PipelineStateCache.h"
+#include "ShaderPipelineCache.h"
 #if WITH_EDITOR
 #include "ShaderCompiler.h"
 #endif
@@ -94,6 +96,10 @@ void AknightRaidGameMode::StartPlay()
 	if (bHoldLoadingUntilReady)
 	{
 		LoadingHoldStartTime = FPlatformTime::Seconds();
+		if (AknightRaidGameState* const RaidState = GetRaidGameState())
+		{
+			RaidState->SetLoadingStatus(NSLOCTEXT("knight", "RaidLoadingPreparing", "레이드 준비 중"));
+		}
 		bPausedForLoading = !UGameplayStatics::IsGamePaused(this) && UGameplayStatics::SetGamePaused(this, true);
 		LoadingHoldTicker = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateUObject(this, &ThisClass::TickLoadingHold), 0.1f);
 	}
@@ -107,24 +113,56 @@ bool AknightRaidGameMode::TickLoadingHold(float DeltaTime)
 {
 	const double Elapsed = FPlatformTime::Seconds() - LoadingHoldStartTime;
 	const int32 StreamingResources = IStreamingManager::Get().GetNumWantingResources();
+	const uint32 BundledPSOs = FShaderPipelineCache::NumPrecompilesRemaining();
+	const uint32 PrecacheRequests = PipelineStateCache::NumActivePrecacheRequests();
+	const int32 ActivePSOTasks = PipelineStateCache::GetNumActivePipelinePrecompileTasks();
 	int32 ShaderJobs = 0;
 #if WITH_EDITOR
 	ShaderJobs = GShaderCompilingManager ? GShaderCompilingManager->GetNumRemainingJobs() : 0;
 #endif
-	const bool bReady = Elapsed >= MinLoadingHoldTime && StreamingResources <= MaxStreamingResources && ShaderJobs == 0;
-	if (!bReady && Elapsed < MaxLoadingHoldTime)
+	const bool bReady = Elapsed >= MinLoadingHoldTime && StreamingResources <= MaxStreamingResources
+		&& ShaderJobs == 0 && BundledPSOs == 0 && PrecacheRequests == 0 && ActivePSOTasks == 0;
+	if (!bReady)
 	{
-		return true;
+		if (AknightRaidGameState* const RaidState = GetRaidGameState())
+		{
+			// These counters can describe the same compile, so do not add them into a misleading job count.
+			const FText PSOStatus = (BundledPSOs > 0 || PrecacheRequests > 0 || ActivePSOTasks > 0)
+				? NSLOCTEXT("knight", "RaidLoadingPSOActive", "일반 PSO 준비 중")
+				: NSLOCTEXT("knight", "RaidLoadingPSOReady", "일반 PSO 준비 완료");
+			RaidState->SetLoadingStatus(FText::Format(NSLOCTEXT("knight", "RaidLoadingProgress", "레이드 준비 중 · 스트리밍 {0} · 셰이더 {1} · {2}"),
+				FText::AsNumber(StreamingResources), FText::AsNumber(ShaderJobs), PSOStatus));
+		}
+		if (Elapsed < FMath::Max<double>(MaxLoadingHoldTime, MinLoadingHoldTime))
+		{
+			return true;
+		}
 	}
-	UE_LOG(Logknight, Log, TEXT("%s: raid loading hold %.2fs (%s, streaming %d, shader jobs %d)."), *GetNameSafe(this), Elapsed,
-		bReady ? TEXT("ready") : TEXT("timed out"), StreamingResources, ShaderJobs);
+	if (bReady)
+	{
+		UE_LOG(Logknight, Log, TEXT("%s: raid loading hold %.2fs (tracked tasks ready, streaming %d, shader jobs %d, bundled PSOs %u, precache requests %u, active PSO tasks %d; RTPSOs untracked)."),
+			*GetNameSafe(this), Elapsed, StreamingResources, ShaderJobs, BundledPSOs, PrecacheRequests, ActivePSOTasks);
+	}
+	else
+	{
+		UE_LOG(Logknight, Error, TEXT("%s: raid loading hold %.2fs (tracked preparation timed out, streaming %d, shader jobs %d, bundled PSOs %u, precache requests %u, active PSO tasks %d; RTPSOs untracked)."),
+			*GetNameSafe(this), Elapsed, StreamingResources, ShaderJobs, BundledPSOs, PrecacheRequests, ActivePSOTasks);
+	}
 	LoadingHoldTicker.Reset();
 	if (bPausedForLoading)
 	{
 		bPausedForLoading = false;
 		UGameplayStatics::SetGamePaused(this, false);
 	}
-	BeginDeploy();
+	if (bReady)
+	{
+		BeginDeploy();
+	}
+	else
+	{
+		// Never begin the raid while tracked preparation is incomplete. Keep phase None visible until travel starts.
+		Super::ReturnToMainMenu();
+	}
 	return false;
 }
 
@@ -300,6 +338,11 @@ void AknightRaidGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{
 		FTSTicker::GetCoreTicker().RemoveTicker(LoadingHoldTicker);
 		LoadingHoldTicker.Reset();
+	}
+	if (bPausedForLoading)
+	{
+		bPausedForLoading = false;
+		UGameplayStatics::SetGamePaused(this, false);
 	}
 	if (UknightGameplayCueManager* const CueManager = UknightGameplayCueManager::Get())
 	{

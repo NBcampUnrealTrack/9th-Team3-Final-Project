@@ -2,13 +2,18 @@
 
 #include "GameFlow/KnightGameFlowSubsystem.h"
 #include "CommonButtonBase.h"
+#include "Components/CanvasPanel.h"
+#include "Components/CanvasPanelSlot.h"
 #include "Components/PanelWidget.h"
+#include "Blueprint/WidgetTree.h"
 #include "HAL/FileManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "KnightSaveSlotCard.h"
+#include "KnightMenuVideoBackgroundWidget.h"
 #include "LoadingScreenManager.h"
 #include "Misc/Paths.h"
+#include "Materials/MaterialInterface.h"
 #include "Progression/knightSaveGame.h"
 #include "Progression/knightSaveSubsystem.h"
 #include "knight.h"
@@ -54,6 +59,7 @@ void UKnightTitleMenuWidget::NativeConstruct()
 		EnterIntroPhase(bCanWaitForKey ? EKnightTitleIntroPhase::PressKey : EKnightTitleIntroPhase::Menu);
 	}
 	ApplyPage(EKnightTitlePage::Home, true);
+	UpdateVideoBackground();
 	if (UknightSaveSubsystem* const Save = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr)
 	{
 		Save->OnSaveFinished.AddUniqueDynamic(this, &ThisClass::HandleSaveFinished);
@@ -67,6 +73,7 @@ void UKnightTitleMenuWidget::NativeConstruct()
 
 void UKnightTitleMenuWidget::NativeDestruct()
 {
+	if (VideoBackgroundWidget) VideoBackgroundWidget->Stop();
 	if (SettingsWidget)
 	{
 		SettingsWidget->OnClosed.RemoveDynamic(this, &ThisClass::HandleSettingsClosed);
@@ -294,6 +301,42 @@ bool UKnightTitleMenuWidget::ShouldAllowEscapeToChild() const
 	return CurrentPage == EKnightTitlePage::Settings && SettingsWidget && SettingsWidget->IsCapturingKey();
 }
 
+void UKnightTitleMenuWidget::EnsureVideoBackground()
+{
+	if (VideoBackgroundWidget || !bUseVideoBackground || !GetOwningPlayer()) return;
+	UCanvasPanel* const Root = WidgetTree ? Cast<UCanvasPanel>(WidgetTree->RootWidget) : nullptr;
+	if (!Root)
+	{
+		UE_LOG(Logknight, Warning, TEXT("Title video requires a CanvasPanel root; leaving the existing background unchanged."));
+		return;
+	}
+	VideoBackgroundWidget = CreateWidget<UKnightMenuVideoBackgroundWidget>(
+		GetOwningPlayer(), UKnightMenuVideoBackgroundWidget::StaticClass());
+	if (!VideoBackgroundWidget) return;
+	UCanvasPanelSlot* const BackgroundSlot = Root->AddChildToCanvas(VideoBackgroundWidget);
+	BackgroundSlot->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f));
+	BackgroundSlot->SetOffsets(FMargin(0.f));
+	BackgroundSlot->SetAlignment(FVector2D::ZeroVector);
+	BackgroundSlot->SetZOrder(-1000); // Below the intro, title pages, buttons and focus targets.
+	UMaterialInterface* const Material = BackgroundVideoMaterial
+		? BackgroundVideoMaterial.Get()
+		: LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Knight/UI/Menu/M_UI_MenuVideo.M_UI_MenuVideo"));
+	VideoBackgroundWidget->Configure(bUseVideoBackground, BackgroundMediaSource, bLoopBackgroundVideo,
+		FallbackBackgroundImage, BackgroundDimOpacity, Material);
+}
+
+void UKnightTitleMenuWidget::UpdateVideoBackground()
+{
+	const UKnightGameFlowSubsystem* const Flow = GetFlow();
+	if (!bUseVideoBackground || IsTravelPending() || !Flow || Flow->GetCurrentFlowState() != EKnightFlowState::Title)
+	{
+		if (VideoBackgroundWidget) VideoBackgroundWidget->Stop();
+		return;
+	}
+	EnsureVideoBackground();
+	if (VideoBackgroundWidget) VideoBackgroundWidget->Start();
+}
+
 void UKnightTitleMenuWidget::EnsureSettingsWidget()
 {
 	if (SettingsWidget || !Panel_Settings || !GetOwningPlayer()) return;
@@ -339,6 +382,7 @@ UWidget* UKnightTitleMenuWidget::GetPreferredFocusTarget() const
 void UKnightTitleMenuWidget::SetTravelControlsEnabled(bool bEnabled)
 {
 	Super::SetTravelControlsEnabled(bEnabled);
+	UpdateVideoBackground();
 	const UknightSaveSubsystem* const Save = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
 	const bool bReady = bEnabled && !bAwaitingInitialSave && !(Save && Save->IsSaveInFlight());
 	if (Button_StartGame) Button_StartGame->SetIsEnabled(bReady && GetFlow() != nullptr);
@@ -516,6 +560,7 @@ void UKnightTitleMenuWidget::OpenLobby()
 		SetStatusText(LOCTEXT("LobbyOpenFailed", "로비를 열지 못했습니다. 다시 시도해 주세요."));
 		return;
 	}
+	if (VideoBackgroundWidget) VideoBackgroundWidget->Stop();
 	RefreshTravelControls();
 	SetStatusText(LOCTEXT("OpeningMainMenu", "메인메뉴로 이동 중입니다."));
 }

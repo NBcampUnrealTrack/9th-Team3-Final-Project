@@ -7,6 +7,8 @@
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "Modules/ModuleManager.h"
+#include "DLSSLibrary.h"
 #include "knight.h"
 #if PLATFORM_WINDOWS
 #include "Windows/WindowsHWrapper.h"
@@ -19,6 +21,25 @@ namespace
 		if (IConsoleVariable* const Variable = IConsoleManager::Get().FindConsoleVariable(Name))
 		{
 			Variable->Set(Value, ECVF_SetByGameSetting);
+		}
+	}
+
+	void SetConsoleFloat(const TCHAR* Name, float Value)
+	{
+		if (IConsoleVariable* const Variable = IConsoleManager::Get().FindConsoleVariable(Name))
+		{
+			Variable->Set(Value, ECVF_SetByGameSetting);
+		}
+	}
+
+	UDLSSMode ToVendorMode(EknightDLSSMode Mode)
+	{
+		switch (Mode)
+		{
+		case EknightDLSSMode::Quality: return UDLSSMode::Quality;
+		case EknightDLSSMode::Balanced: return UDLSSMode::Balanced;
+		case EknightDLSSMode::Performance: return UDLSSMode::Performance;
+		default: return UDLSSMode::Off;
 		}
 	}
 
@@ -47,7 +68,7 @@ bool FKnightGraphicsChoice::operator==(const FKnightGraphicsChoice& Other) const
 		&& AntiAliasing == Other.AntiAliasing && Shadows == Other.Shadows
 		&& Textures == Other.Textures && Effects == Other.Effects
 		&& PostProcess == Other.PostProcess && ViewDistance == Other.ViewDistance
-		&& bMotionBlur == Other.bMotionBlur;
+		&& bMotionBlur == Other.bMotionBlur && DLSSMode == Other.DLSSMode;
 }
 
 UknightGameUserSettings* UknightGameUserSettings::Get()
@@ -61,6 +82,8 @@ void UknightGameUserSettings::SetToDefaults()
 	SetFrameRateLimit(60.f);
 	Upscaler = EknightUpscaler::TSR;
 	bMotionBlurEnabled = true;
+	DLSSMode = EknightDLSSMode::Off;
+	bHasPreDLSSScreenPercentage = false;
 }
 
 void UknightGameUserSettings::GetSupportedResolutions(TArray<FIntPoint>& OutResolutions)
@@ -257,6 +280,11 @@ bool UknightGameUserSettings::ValidateGraphics(const FKnightGraphicsChoice& Choi
 		Error = NSLOCTEXT("KnightSettings", "InvalidResolution", "지원하지 않는 해상도입니다.");
 		return false;
 	}
+	if (Choice.DLSSMode != EknightDLSSMode::Off && !IsDLSSModeSupported(Choice.DLSSMode, Choice.Resolution))
+	{
+		Error = NSLOCTEXT("KnightSettings", "UnsupportedDLSSMode", "선택한 DLSS 모드는 현재 환경에서 지원하지 않습니다.");
+		return false;
+	}
 	return true;
 }
 
@@ -294,6 +322,7 @@ FKnightGraphicsChoice UknightGameUserSettings::GetActiveGraphics() const
 	Result.PostProcess = GetPostProcessingQuality();
 	Result.ViewDistance = GetViewDistanceQuality();
 	Result.bMotionBlur = bMotionBlurEnabled;
+	Result.DLSSMode = DLSSMode;
 	return Result;
 }
 
@@ -349,6 +378,7 @@ void UknightGameUserSettings::SetGraphics(const FKnightGraphicsChoice& Choice)
 	SetPostProcessingQuality(Choice.PostProcess);
 	SetViewDistanceQuality(Choice.ViewDistance);
 	bMotionBlurEnabled = Choice.bMotionBlur;
+	DLSSMode = Choice.DLSSMode;
 }
 
 bool UknightGameUserSettings::ApplyPendingGraphicsAtStartup()
@@ -461,4 +491,108 @@ void UknightGameUserSettings::ApplyNonResolutionSettings()
 		break;
 	}
 	SetConsoleInt(TEXT("r.MotionBlurQuality"), bMotionBlurEnabled ? 4 : 0);
+	ApplyDLSSRendering();
+}
+
+bool UknightGameUserSettings::IsDLSSModeSupported(EknightDLSSMode Mode, FIntPoint OutputResolution)
+{
+	if (Mode == EknightDLSSMode::Off)
+	{
+		return true;
+	}
+	if (!FModuleManager::Get().IsModuleLoaded(TEXT("DLSS"))
+		|| UDLSSLibrary::QueryDLSSSupport() != UDLSSSupport::Supported)
+	{
+		return false;
+	}
+	const UDLSSMode VendorMode = ToVendorMode(Mode);
+	if (VendorMode == UDLSSMode::Off || !UDLSSLibrary::IsDLSSModeSupported(VendorMode))
+	{
+		return false;
+	}
+	bool bSupported = false;
+	bool bFixed = false;
+	float Optimal = 0.f, Min = 0.f, Max = 0.f, Sharpness = 0.f;
+	UDLSSLibrary::GetDLSSModeInformation(VendorMode, FVector2D(OutputResolution.X, OutputResolution.Y),
+		bSupported, Optimal, bFixed, Min, Max, Sharpness);
+	return bSupported && Optimal > 0.f && Optimal < 100.f;
+}
+
+void UknightGameUserSettings::ApplyDLSSRendering()
+{
+	// The vendor module initializes at PostEngineInit. GameInstance::OnStart retries saved settings after that point.
+	if (!FModuleManager::Get().IsModuleLoaded(TEXT("DLSS")))
+	{
+		return;
+	}
+	IConsoleVariable* const ScreenPercentage = IConsoleManager::Get().FindConsoleVariable(TEXT("r.ScreenPercentage"));
+	IConsoleVariable* const TemporalUpscaler = IConsoleManager::Get().FindConsoleVariable(TEXT("r.TemporalAA.Upscaler"));
+	IConsoleVariable* const TemporalUpsampling = IConsoleManager::Get().FindConsoleVariable(TEXT("r.TemporalAA.Upsampling"));
+	const UDLSSMode VendorMode = ToVendorMode(DLSSMode);
+	bool bModeSupported = IsDLSSModeSupported(DLSSMode, GetScreenResolution());
+	float Optimal = 0.f;
+	if (DLSSMode != EknightDLSSMode::Off && bModeSupported)
+	{
+		bool bFixed = false;
+		float Min = 0.f, Max = 0.f, Sharpness = 0.f;
+		UDLSSLibrary::GetDLSSModeInformation(VendorMode,
+			FVector2D(GetScreenResolution().X, GetScreenResolution().Y), bModeSupported, Optimal,
+			bFixed, Min, Max, Sharpness);
+	}
+	if (DLSSMode != EknightDLSSMode::Off && bModeSupported && ScreenPercentage && Optimal > 0.f)
+	{
+		if (!bHasPreDLSSScreenPercentage)
+		{
+			PreDLSSScreenPercentage = ScreenPercentage->GetFloat();
+			PreDLSSTemporalAAUpscaler = TemporalUpscaler ? TemporalUpscaler->GetInt() : 1;
+			PreDLSSTemporalAAUpsampling = TemporalUpsampling ? TemporalUpsampling->GetInt() : 1;
+			bHasPreDLSSScreenPercentage = true;
+		}
+		// DLSS replaces the temporal upscaler but requires the engine's temporal-AA pipeline.
+		SetConsoleInt(TEXT("r.AntiAliasingMethod"), 4);
+		if (GEngine) GEngine->SetDynamicResolutionUserSetting(false);
+		UDLSSLibrary::EnableDLSSRR(false);
+		SetConsoleFloat(TEXT("r.ScreenPercentage"), Optimal);
+		if (FMath::IsNearlyEqual(ScreenPercentage->GetFloat(), Optimal, 0.1f))
+		{
+			UDLSSLibrary::EnableDLSS(true);
+			bDLSSRuntimeActive = UDLSSLibrary::IsDLSSEnabled();
+			if (bDLSSRuntimeActive)
+			{
+				return;
+			}
+		}
+		UE_LOG(Logknight, Warning, TEXT("DLSS mode %d could not be applied; restoring the existing upscaler."), int32(DLSSMode));
+	}
+	else if (DLSSMode != EknightDLSSMode::Off)
+	{
+		UE_LOG(Logknight, Log, TEXT("Saved DLSS mode %d is unavailable in this rendering environment; using the existing upscaler."), int32(DLSSMode));
+	}
+
+	UDLSSLibrary::EnableDLSS(false);
+	bDLSSRuntimeActive = false;
+	if (bHasPreDLSSScreenPercentage)
+	{
+		SetConsoleFloat(TEXT("r.ScreenPercentage"), PreDLSSScreenPercentage);
+		SetConsoleInt(TEXT("r.TemporalAA.Upscaler"), PreDLSSTemporalAAUpscaler);
+		SetConsoleInt(TEXT("r.TemporalAA.Upsampling"), PreDLSSTemporalAAUpsampling);
+		if (DLSSMode == EknightDLSSMode::Off)
+		{
+			bHasPreDLSSScreenPercentage = false;
+		}
+	}
+	if (GEngine) GEngine->SetDynamicResolutionUserSetting(IsDynamicResolutionEnabled());
+	// Preserve the pre-existing user choice, including TSR/TAA. Off never means no anti-aliasing.
+	SetConsoleInt(TEXT("r.AntiAliasingMethod"), Upscaler == EknightUpscaler::TSR ? 4
+		: Upscaler == EknightUpscaler::TAA ? 2 : 0);
+}
+
+void UknightGameUserSettings::ApplyDLSSAtStartup()
+{
+	const bool bHadBaseline = bHasPreDLSSScreenPercentage;
+	ApplyDLSSRendering();
+	if (bHadBaseline != bHasPreDLSSScreenPercentage)
+	{
+		SaveSettings();
+	}
 }

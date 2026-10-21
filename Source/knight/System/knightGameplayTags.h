@@ -81,6 +81,8 @@ namespace knightGameplayTags
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Monster_Exhausted);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Monster_Reacting);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Monster_Phase2);
+	// (2026-10-20) 구르기·몸통박치기처럼 몸으로 덮치는 동안 이동 캡슐이 플레이어에 막히지 않는다(UknightMonsterPushOutComponent).
+	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Monster_PassThroughPawns);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_PartBroken);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_PartBroken_Head);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_PartBroken_Torso);
@@ -124,6 +126,7 @@ namespace knightGameplayTags
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Boost_Dash);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Repair_Loop);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Repair_Finish);
+	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Burn);
 
 	// 메시지 채널
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Message_Combat_Hit);

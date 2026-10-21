@@ -215,6 +215,18 @@ namespace knightMonsterStateTree
 	/** 타깃이 반대편으로 넘어가도 회전 몽타주가 이 각도보다 덜 돌지는 않는다(발 디딤과 회전이 크게 어긋나지 않게). */
 	constexpr float TurnWarpMinAngle = 30.f;
 
+	/** 회전 몽타주 재생 속도. 회전 구간 동안 Turn(도)을 돌 때 TurnMontageMaxSpeed를 넘지 않게 늦추고, TurnScale(탈진)을 곱한다. */
+	static float GetTurnPlayRate(const UknightMonsterDefinition& Definition, float Turn, float TurnScale)
+	{
+		const float WarpDuration = Definition.TurnWarpEndTime - Definition.TurnWarpStartTime;
+		float Rate = 1.f;
+		if (Definition.TurnMontageMaxSpeed > 0.f && WarpDuration > 0.f && !FMath::IsNearlyZero(Turn))
+		{
+			Rate = FMath::Min(1.f, Definition.TurnMontageMaxSpeed * WarpDuration / FMath::Abs(Turn));
+		}
+		return Rate * TurnScale;
+	}
+
 	/**
 	 * 지금 각도에서 고를 수 있는 옆·뒤 공격이 있는가. 옆·뒤 전용(MinAngle > 0)과 둘레 전체를 덮는 공격(MaxAngle 180, 예: 주변 범위)을
 	 * 센다. 둘레 전체 공격은 타깃이 회전 몽타주가 필요할 만큼(TurnMontageMinAngle) 벗어났을 때만 센다. 조금 벗어났을 때는 짧게
@@ -291,7 +303,9 @@ EStateTreeRunStatus FknightStateTreeFaceTargetTask::Tick(FStateTreeExecutionCont
 			return EStateTreeRunStatus::Running;
 		}
 	}
-	if (Movement->TurnTowards(InstanceData.Target->GetActorLocation(), DeltaTime, InstanceData.TurnRate, InstanceData.Tolerance))
+	// 허용 각도에 들어와도 관성 회전이 다 멈춘 뒤에 끝낸다. 남은 회전이 다음 공격 첫머리까지 이어지면 공격 중에 몸이 돌며 발이 미끄러진다.
+	if (Movement->TurnTowards(InstanceData.Target->GetActorLocation(), DeltaTime, InstanceData.TurnRate, InstanceData.Tolerance)
+		&& !Movement->IsTurning())
 	{
 		return EStateTreeRunStatus::Succeeded;
 	}
@@ -336,8 +350,9 @@ bool FknightStateTreeFaceTargetTask::TryStartTurnMontage(FInstanceDataType& Inst
 	{
 		return false;
 	}
-	// 탈진처럼 느려진 상태면 보간 회전과 같은 비율로 천천히 돈다.
-	const float PlayRate = Movement->GetTurnScale();
+	// 큰 각도는 최대 회전 속도에 맞춰 천천히, 탈진처럼 느려진 상태면 보간 회전과 같은 비율로 더 천천히 돈다.
+	const float FirstTurn = FMath::Clamp(FMath::Abs(Delta), knightMonsterStateTree::TurnWarpMinAngle, Definition->TurnMontageMaxAngle);
+	const float PlayRate = knightMonsterStateTree::GetTurnPlayRate(*Definition, FirstTurn, Movement->GetTurnScale());
 	if (PlayRate <= UE_KINDA_SMALL_NUMBER || AnimInstance->Montage_Play(Montage, PlayRate) <= 0.f)
 	{
 		return false;
@@ -384,6 +399,14 @@ void FknightStateTreeFaceTargetTask::UpdateTurnWarpTarget(FInstanceDataType& Ins
 	InstanceData.TurnAmount = Turn;
 	MotionWarping->AddOrUpdateWarpTargetFromLocationAndRotation(knightMonsterStateTree::TurnWarpTargetName, Monster->GetActorLocation(),
 		FRotator(0.f, InstanceData.TurnStartYaw + Turn, 0.f));
+
+	// 타깃이 움직여 돌 각도가 바뀌면 재생 속도도 다시 맞춘다.
+	UAnimInstance* const AnimInstance = Monster->GetMesh() ? Monster->GetMesh()->GetAnimInstance() : nullptr;
+	const UknightMonsterMovementComponent* const Movement = Monster->GetMonsterMovementComponent();
+	if (AnimInstance && Movement && InstanceData.TurnMontage.IsValid())
+	{
+		AnimInstance->Montage_SetPlayRate(InstanceData.TurnMontage.Get(), knightMonsterStateTree::GetTurnPlayRate(*Definition, Turn, Movement->GetTurnScale()));
+	}
 }
 
 // Knight Has Gameplay Tag

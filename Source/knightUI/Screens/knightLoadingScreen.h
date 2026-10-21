@@ -56,4 +56,5 @@ private:
 
 	float DotTime = 0.f;
 	int32 LitDot = -1;
+	FText SelectedTip;
 };

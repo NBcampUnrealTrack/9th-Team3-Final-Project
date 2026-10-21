@@ -6,7 +6,7 @@
 #include "Engine/GameInstance.h"
 #include "Engine/Texture2D.h"
 #include "InputCoreTypes.h"
-#include "KnightStageGlobeWidget.h"
+#include "KnightStageMapWidget.h"
 #include "Monster/knightMonsterDefinition.h"
 #include "Progression/knightProgressionSubsystem.h"
 #include "Raid/knightRaidDefinition.h"
@@ -32,7 +32,7 @@ void UKnightMainMenuWidget::NativeOnInitialized()
 	Super::NativeOnInitialized();
 	ValidateRequiredWidget(Panel_Home, TEXT("Panel_Home"));
 	ValidateRequiredWidget(Panel_Stage, TEXT("Panel_Stage"));
-	ValidateRequiredWidget(Globe_Stages, TEXT("Globe_Stages"));
+	ValidateRequiredWidget(Map_Stages, TEXT("Map_Stages"));
 	ValidateRequiredWidget(Panel_StageInfo, TEXT("Panel_StageInfo"));
 	ValidateRequiredWidget(Text_StageTitle, TEXT("Text_StageTitle"));
 	ValidateRequiredWidget(Text_StageDescription, TEXT("Text_StageDescription"));
@@ -52,10 +52,10 @@ void UKnightMainMenuWidget::NativeOnInitialized()
 	if (Button_Settings) Button_Settings->OnClicked().AddUObject(this, &ThisClass::HandleSettingsClicked);
 	if (Button_Codex) Button_Codex->OnClicked().AddUObject(this, &ThisClass::HandleCodexClicked);
 	if (Button_LaunchStage) Button_LaunchStage->OnClicked().AddUObject(this, &ThisClass::HandleLaunchStageClicked);
-	if (Globe_Stages)
+	if (Map_Stages)
 	{
-		Globe_Stages->OnStageClicked.AddUniqueDynamic(this, &ThisClass::HandleGlobeStageClicked);
-		Globe_Stages->SetLeaderTarget(Panel_StageInfo);
+		Map_Stages->OnStageClicked.AddUniqueDynamic(this, &ThisClass::HandleMapStageClicked);
+		Map_Stages->SetLeaderTarget(Panel_StageInfo);
 	}
 }
 
@@ -149,8 +149,8 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 	{
 		// Unlocks can change between visits (a clear unlocks the next stage), so rebuild every time.
 		SelectedStageId = NAME_None;
-		if (Globe_Stages) Globe_Stages->SetSelectedStage(NAME_None);
-		bHasStages = RebuildGlobeMarkers();
+		if (Map_Stages) Map_Stages->SetSelectedStage(NAME_None);
+		bHasStages = RebuildMapMarkers();
 		RefreshStageDetails();
 		PlaceStageInfo();
 	}
@@ -211,7 +211,7 @@ bool UKnightMainMenuWidget::HandleBackRequested()
 	if (CurrentPage == EKnightMainMenuPage::Settings && SettingsWidget) { SettingsWidget->RequestClose(); return true; }
 	if (CurrentPage == EKnightMainMenuPage::Codex) { HandleCodexClosed(); return true; }
 	if (CurrentPage == EKnightMainMenuPage::Maintenance && MaintenanceWidget && MaintenanceWidget->HandleBack()) return true;
-	// First Esc clears the selected region, the next one leaves the globe.
+	// First Esc clears the selected region, the next one leaves the map.
 	if (CurrentPage == EKnightMainMenuPage::Stage && !SelectedStageId.IsNone())
 	{
 		return SelectStage(NAME_None);
@@ -235,7 +235,7 @@ FReply UKnightMainMenuWidget::NativeOnPreviewKeyDown(const FGeometry& InGeometry
 			return FReply::Handled();
 		}
 	}
-	// Left / Right walk the regions on the globe.
+	// Left / Right walk the regions on the map.
 	if (CurrentPage == EKnightMainMenuPage::Stage && !IsTravelPending())
 	{
 		const FKey Key = InKeyEvent.GetKey();
@@ -348,7 +348,7 @@ void UKnightMainMenuWidget::SetTravelControlsEnabled(bool bEnabled)
 	if (Button_Settings) Button_Settings->SetIsEnabled(bEnabled);
 	if (Button_Codex) Button_Codex->SetIsEnabled(bEnabled);
 	if (Button_LaunchStage) Button_LaunchStage->SetIsEnabled(bEnabled && bStageLaunchAvailable && !SelectedStageId.IsNone());
-	if (Globe_Stages) Globe_Stages->SetIsEnabled(bEnabled);
+	if (Map_Stages) Map_Stages->SetIsEnabled(bEnabled);
 }
 
 void UKnightMainMenuWidget::HandleStageClicked()
@@ -376,22 +376,22 @@ void UKnightMainMenuWidget::HandleCodexClicked()
 	ShowPage(EKnightMainMenuPage::Codex);
 }
 
-bool UKnightMainMenuWidget::RebuildGlobeMarkers()
+bool UKnightMainMenuWidget::RebuildMapMarkers()
 {
 	StageOrder.Reset();
 	UKnightGameFlowSubsystem* const Flow = GetFlow();
 	TArray<FKnightStageDefinition> Stages;
-	if (!Globe_Stages || !Flow || !Flow->GetStageDefinitions(Stages))
+	if (!Map_Stages || !Flow || !Flow->GetStageDefinitions(Stages))
 	{
-		if (Globe_Stages) Globe_Stages->SetMarkers({});
+		if (Map_Stages) Map_Stages->SetMarkers({});
 		return false;
 	}
-	TArray<FKnightGlobeMarker> Markers;
+	TArray<FKnightMapMarker> Markers;
 	for (const FKnightStageDefinition& Stage : Stages)
 	{
-		FKnightGlobeMarker& Marker = Markers.AddDefaulted_GetRef();
+		FKnightMapMarker& Marker = Markers.AddDefaulted_GetRef();
 		Marker.StageId = Stage.StageId;
-		// The globe names the region; the stage name is in the info panel.
+		// The map names the region; the stage name is in the info panel.
 		const FText& Name = Stage.RegionName.IsEmpty() ? Stage.DisplayName : Stage.RegionName;
 		Marker.Label = Stage.bDevelopmentOnly ? FText::Format(LOCTEXT("DevStageName", "[DEV] {0}"), Name) : Name;
 		Marker.Location = Stage.GlobeLocation;
@@ -400,7 +400,7 @@ bool UKnightMainMenuWidget::RebuildGlobeMarkers()
 		Marker.bLocked = !Flow->CanLaunchStage(Stage.StageId, Reason);
 		StageOrder.Add(Stage.StageId);
 	}
-	Globe_Stages->SetMarkers(Markers);
+	Map_Stages->SetMarkers(Markers);
 	return !StageOrder.IsEmpty();
 }
 
@@ -423,16 +423,8 @@ bool UKnightMainMenuWidget::SelectStage(FName StageId)
 		return false;
 	}
 	SelectedStageId = StageId;
-	if (Globe_Stages) Globe_Stages->SetSelectedStage(StageId);
+	if (Map_Stages) Map_Stages->SetSelectedStage(StageId);
 	ClearStatus();
-
-	// The panel goes to the side the region is on, so the leader line stays short.
-	FVector2D MarkerPosition;
-	bool bFront = false;
-	if (Globe_Stages && Globe_Stages->GetMarkerLocalPosition(StageId, MarkerPosition, bFront) && bFront)
-	{
-		bStageInfoOnRight = MarkerPosition.X >= Globe_Stages->GetCachedGeometry().GetLocalSize().X * 0.5f;
-	}
 	RefreshStageDetails();
 	PlaceStageInfo();
 	FocusCurrentPage();
@@ -447,7 +439,7 @@ bool UKnightMainMenuWidget::CycleStage(int32 Direction)
 	}
 	const int32 Current = StageOrder.IndexOfByKey(SelectedStageId);
 	const int32 Next = Current == INDEX_NONE ? (Direction > 0 ? 0 : StageOrder.Num() - 1) : (Current + Direction + StageOrder.Num()) % StageOrder.Num();
-	if (Globe_Stages) Globe_Stages->FocusStage(StageOrder[Next]);
+	if (Map_Stages) Map_Stages->FocusStage(StageOrder[Next]);
 	return SelectStage(StageOrder[Next]);
 }
 
@@ -459,17 +451,15 @@ void UKnightMainMenuWidget::PlaceStageInfo()
 	}
 	Panel_StageInfo->SetVisibility(SelectedStageId.IsNone() ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
 	UCanvasPanelSlot* const InfoSlot = Cast<UCanvasPanelSlot>(Panel_StageInfo->Slot);
-	const UCanvasPanelSlot* const GlobeSlot = Globe_Stages ? Cast<UCanvasPanelSlot>(Globe_Stages->Slot) : nullptr;
-	if (!InfoSlot || !GlobeSlot)
+	const UCanvasPanelSlot* const MapSlot = Map_Stages ? Cast<UCanvasPanelSlot>(Map_Stages->Slot) : nullptr;
+	if (!InfoSlot || !MapSlot)
 	{
 		return;
 	}
-	// Both are anchored to the screen centre; the panel hangs off the globe's left or right edge.
-	const float GlobeHalfWidth = GlobeSlot->GetSize().X * 0.5f;
-	const float Offset = GlobeHalfWidth + StageInfoGap;
+	// Both are anchored to the screen centre; the panel hangs off the map's right edge.
 	InfoSlot->SetAnchors(FAnchors(0.5f, 0.5f));
-	InfoSlot->SetAlignment(FVector2D(bStageInfoOnRight ? 0.f : 1.f, 0.5f));
-	InfoSlot->SetPosition(FVector2D(GlobeSlot->GetPosition().X + (bStageInfoOnRight ? Offset : -Offset), GlobeSlot->GetPosition().Y));
+	InfoSlot->SetAlignment(FVector2D(0.f, 0.5f));
+	InfoSlot->SetPosition(FVector2D(MapSlot->GetPosition().X + MapSlot->GetSize().X * 0.5f + StageInfoGap, MapSlot->GetPosition().Y));
 }
 
 namespace
@@ -556,7 +546,7 @@ void UKnightMainMenuWidget::RefreshRaidDetails()
 	}
 }
 
-void UKnightMainMenuWidget::HandleGlobeStageClicked(FName StageId)
+void UKnightMainMenuWidget::HandleMapStageClicked(FName StageId)
 {
 	SelectStage(StageId);
 }

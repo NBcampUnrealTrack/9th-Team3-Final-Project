@@ -4,6 +4,9 @@
 #include "AbilitySystem/Attributes/knightAttributeSet.h"
 #include "AbilitySystem/Effects/knightGameplayEffect_StaminaCost.h"
 #include "AbilitySystemGlobals.h"
+#include "Animation/AnimInstance.h"
+#include "Combat/knightMechAttackTiming.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "System/knightGameplayTags.h"
@@ -28,12 +31,13 @@ bool UknightGameplayAbility::CheckCost(const FGameplayAbilitySpecHandle Handle, 
 	}
 	const UAbilitySystemComponent* const ASC = ActorInfo ? ActorInfo->AbilitySystemComponent.Get() : nullptr;
 	const FGameplayAttribute Attribute = UknightAttributeSet::GetBoostGaugeAttribute();
-	if (StaminaCost <= 0.f || !ASC || !ASC->HasAttributeSetForAttribute(Attribute))
+	const float Cost = GetEffectiveStaminaCost(ASC);
+	if (Cost <= 0.f || !ASC || !ASC->HasAttributeSetForAttribute(Attribute))
 	{
 		return true;
 	}
 	const float Stamina = ASC->GetNumericAttribute(Attribute);
-	const bool bEnough = bRequireFullStaminaCost ? Stamina >= StaminaCost : Stamina > 0.f;
+	const bool bEnough = bRequireFullStaminaCost ? Stamina >= Cost : Stamina > 0.f;
 	if (!bEnough && OptionalRelevantTags)
 	{
 		OptionalRelevantTags->AddTag(knightGameplayTags::Ability_ActivateFail_Cost);
@@ -46,7 +50,8 @@ void UknightGameplayAbility::ApplyCost(const FGameplayAbilitySpecHandle Handle, 
 {
 	Super::ApplyCost(Handle, ActorInfo, ActivationInfo);
 	const UAbilitySystemComponent* const ASC = ActorInfo ? ActorInfo->AbilitySystemComponent.Get() : nullptr;
-	if (StaminaCost <= 0.f || !ASC || !ASC->HasAttributeSetForAttribute(UknightAttributeSet::GetBoostGaugeAttribute()))
+	const float Cost = GetEffectiveStaminaCost(ASC);
+	if (Cost <= 0.f || !ASC || !ASC->HasAttributeSetForAttribute(UknightAttributeSet::GetBoostGaugeAttribute()))
 	{
 		return;
 	}
@@ -55,7 +60,7 @@ void UknightGameplayAbility::ApplyCost(const FGameplayAbilitySpecHandle Handle, 
 	if (SpecHandle.IsValid())
 	{
 		// 남은 양보다 많아도 그대로 뺀다. BoostGauge는 속성 세트에서 0 아래로 내려가지 않는다.
-		SpecHandle.Data->SetSetByCallerMagnitude(knightGameplayTags::SetByCaller_BoostCost, -StaminaCost);
+		SpecHandle.Data->SetSetByCallerMagnitude(knightGameplayTags::SetByCaller_BoostCost, -Cost);
 		ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, SpecHandle);
 	}
 }
@@ -86,7 +91,62 @@ float UknightGameplayAbility::GetActionSpeed() const
 float UknightGameplayAbility::GetAttackSpeed() const
 {
 	const UknightAbilitySystemComponent* const ASC = GetKnightAbilitySystemComponentFromActorInfo();
-	return GetActionSpeed() * (ASC ? ASC->GetAttackAnimationSpeed() : 1.f);
+	// (2026-10-20) x 스탠스 공격 속도(한손은 빠르고 양손은 느리다).
+	return GetActionSpeed() * (ASC ? ASC->GetAttackAnimationSpeed() * ASC->GetStanceModifiers().AttackSpeedScale : 1.f);
+}
+
+FknightMeleeHitParams UknightGameplayAbility::GetStanceScaledHitParams(const FknightMeleeHitParams& Params) const
+{
+	FknightMeleeHitParams Scaled = Params;
+	if (const UknightAbilitySystemComponent* const ASC = GetKnightAbilitySystemComponentFromActorInfo())
+	{
+		const FknightStanceModifiers& Modifiers = ASC->GetStanceModifiers();
+		Scaled.BaseDamage *= Modifiers.DamageScale;
+		Scaled.MotionValue *= Modifiers.DamageScale;
+		Scaled.PoiseDamage *= Modifiers.PoiseDamageScale;
+	}
+	return Scaled;
+}
+
+float UknightGameplayAbility::GetEffectiveStaminaCost(const UAbilitySystemComponent* ASC) const
+{
+	const UknightAbilitySystemComponent* const KnightASC = Cast<UknightAbilitySystemComponent>(ASC);
+	if (StaminaCost <= 0.f || !KnightASC || !GetAssetTags().HasTag(knightGameplayTags::Ability_Attack))
+	{
+		return StaminaCost;
+	}
+	return StaminaCost * KnightASC->GetStanceModifiers().StaminaCostScale;
+}
+
+void UknightGameplayAbility::StartMechTiming(UAnimMontage* Montage, float BaseRate)
+{
+	StopMechTiming();
+	const UknightAbilitySystemComponent* const ASC = GetKnightAbilitySystemComponentFromActorInfo();
+	const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	UAnimInstance* const Anim = Character && Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr;
+	// 행동 에너지 속성이 있는 나이트만(몬스터도 같은 ASC를 쓴다).
+	if (!bUseMechTiming || !ASC || !Anim || !ASC->HasAttributeSetForAttribute(UknightAttributeSet::GetBoostGaugeAttribute()))
+	{
+		return;
+	}
+	ActiveMechTiming = FknightMechAttackTiming::Start(Anim, Montage, BaseRate, ASC->GetMechTimingSettings(),
+		ASC->HasMatchingGameplayTag(knightGameplayTags::State_Stance_TwoHanded));
+}
+
+void UknightGameplayAbility::StopMechTiming()
+{
+	if (ActiveMechTiming.IsValid())
+	{
+		ActiveMechTiming->Stop();
+		ActiveMechTiming.Reset();
+	}
+}
+
+void UknightGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
+{
+	StopMechTiming();
+	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
 
 bool UknightGameplayAbility::FaceMoveInputDirection() const

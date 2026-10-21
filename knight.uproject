@@ -104,12 +104,10 @@
 			"Enabled": true
 		},
 		{
-
 			"Name": "knightMonsterAnimDebug",
 			"Enabled": true
 		},
 		{
-
 			"Name": "ModelContextProtocol",
 			"Enabled": true
 		},
@@ -120,6 +118,16 @@
 		{
 			"Name": "Water",
 			"Enabled": true
+		},
+		{
+			"Name": "DLSS",
+			"Enabled": true,
+			"MarketplaceURL": "https://www.unrealengine.com/marketplace/en-US/product/nvidia-dlss"
+		},
+		{
+			"Name": "StreamlineNGXCommon",
+			"Enabled": true,
+			"MarketplaceURL": "https://www.unrealengine.com/marketplace/en-US/product/nvidia-dlss"
 		}
 	]
 }

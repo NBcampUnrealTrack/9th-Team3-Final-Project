@@ -9,6 +9,7 @@ class AknightMonsterCharacterBase;
 class UAnimMontage;
 class UAnimSequence;
 class UBlendSpace;
+class USoundBase;
 class UknightMonsterRecipe;
 
 /**
@@ -72,4 +73,25 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
 	static bool SetMontageSegmentRange(UAnimMontage* Montage, int32 SegmentIndex, float StartTime, float EndTime);
+
+	/**
+	 * 몽타주 첫 슬롯의 SegmentIndex번 구간을 Sequence 전체로 바꾸고, 뒤 구간과 섹션 위치를 다시 맞춘다(SetMontageSegmentRange와 같음).
+	 * 노티파이는 몽타주 시간 그대로 남는다. 저장은 호출한 쪽.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
+	static bool SetMontageSegmentSequence(UAnimMontage* Montage, int32 SegmentIndex, UAnimSequenceBase* Sequence);
+
+	/**
+	 * 몽타주에서 Sound를 재생하는 PlaySound 노티파이를 모두 Time(몽타주 시간)으로 옮긴다. 애니를 바꿔 소리가 동작과 어긋났을 때 쓴다.
+	 * 옮긴 개수를 돌려준다. 저장은 호출한 쪽.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
+	static int32 SetMontageSoundTime(UAnimMontage* Montage, const USoundBase* Sound, float Time);
+
+	/**
+	 * 몽타주의 Start~End(몽타주 시간)에 재생 속도(Knight Play Rate) 노티파이를 넣는다. 같은 구간에 이미 있으면 속도만 바꾼다.
+	 * 예비 동작을 늘이거나 도약 직전에 멈칫하게 할 때 쓴다. 어빌리티가 몽타주 위치로 재는 타이밍은 그대로다. 저장은 호출한 쪽.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
+	static bool SetMontagePlayRateWindow(UAnimMontage* Montage, float Start, float End, float PlayRate);
 };

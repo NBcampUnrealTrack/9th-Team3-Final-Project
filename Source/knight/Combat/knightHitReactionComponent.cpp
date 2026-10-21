@@ -51,6 +51,11 @@ void UknightHitReactionComponent::EndPlay(const EEndPlayReason::Type EndPlayReas
 void UknightHitReactionComponent::HandleDamaged(AActor* DamageInstigator, AActor* DamageCauser, const FGameplayEffectSpec* EffectSpec,
 	float Magnitude, float OldValue, float NewValue)
 {
+	// 지속 효과(화상 같은 주기 피해)는 체력만 깎고 움찔하지 않는다. 주기마다 피격 반응이 나가면 조작이 끊긴다.
+	if (EffectSpec && EffectSpec->Def && EffectSpec->Def->DurationPolicy != EGameplayEffectDurationType::Instant)
+	{
+		return;
+	}
 	RecordPending(DamageInstigator, EffectSpec);
 	PendingDamage += Magnitude;
 }

@@ -10,8 +10,15 @@ class UNiagaraSystem;
 class UStaticMesh;
 class UStaticMeshComponent;
 
-/** 한 번의 가시 비에서 이미 맞은 대상. 같은 발사에서 나온 가시들이 나눠 써서 대상마다 한 번만 맞게 한다. */
-using FknightSpikeVolleyHits = TSet<TWeakObjectPtr<AActor>>;
+/**
+ * 한 번의 가시 비에서 대상마다 마지막으로 맞은 시각. 같은 발사에서 나온 가시들이 나눠 쓴다.
+ * RehitInterval이 0보다 작으면 대상마다 한 번만 맞고, 0 이상이면 마지막으로 맞은 뒤 그 시간이 지나야 다시 맞는다.
+ */
+struct FknightSpikeVolleyHits
+{
+	TMap<TWeakObjectPtr<AActor>, double> LastHitTime;
+	float RehitInterval = -1.f;
+};
 
 /** 가시 외형. 원뿔 메시 두 개를 밑면끼리 붙여 가운데가 두껍고 양끝이 뾰족한 가시를 만든다. */
 struct FknightSpikeLook
@@ -21,6 +28,8 @@ struct FknightSpikeLook
 	TObjectPtr<UMaterialInterface> Material;
 	/** 원뿔 하나의 스케일. 가시 전체 길이는 원뿔 높이 x Z x 2다. */
 	FVector Scale = FVector::OneVector;
+	/** 떨어지는 가시에 붙여 꽂혀 있는 동안까지 재생하는 효과(뜨거운 가시의 불길). 위가 +Z인 채로 붙는다. */
+	TObjectPtr<UNiagaraSystem> Effect;
 };
 
 /** 떨어지는 가시의 착탄 설정. */
@@ -74,6 +83,7 @@ private:
 	TWeakObjectPtr<AActor> Attacker;
 	FknightMeleeHitParams HitParams;
 	FknightSpikeImpact Impact;
+	TObjectPtr<UNiagaraSystem> SpikeEffect;
 	TSharedPtr<FknightSpikeVolleyHits> VolleyHits;
 	FVector Velocity = FVector::ZeroVector;
 	float Remaining = 0.f;

@@ -199,7 +199,7 @@ struct FknightFaceTargetTaskInstanceData
 /**
  * 몬스터를 제자리에서 타깃 쪽으로 돌리고, 타깃을 바라보면 성공한다.
  * 몬스터 정의에 회전 몽타주가 있고 타깃이 TurnMontageMinAngle 이상 벗어나 있으면 몽타주로 돌고(발을 디디며 돈다),
- * 남은 작은 각도는 이동 컴포넌트의 보간 회전으로 맞춘다. MaxTime은 몽타주가 끝난 뒤부터 센다.
+ * 남은 작은 각도는 이동 컴포넌트의 보간 회전으로 맞추고, 관성 회전까지 멈춘 뒤에 성공한다. MaxTime은 몽타주가 끝난 뒤부터 센다.
  */
 USTRUCT(meta=(DisplayName="Knight Face Target", Category="Knight"))
 struct KNIGHT_API FknightStateTreeFaceTargetTask : public FStateTreeTaskCommonBase

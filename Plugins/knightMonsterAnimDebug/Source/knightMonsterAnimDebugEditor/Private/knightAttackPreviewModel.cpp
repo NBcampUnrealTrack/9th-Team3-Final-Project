@@ -867,16 +867,22 @@ void FknightAttackPreviewModel::Draw(FPrimitiveDrawInterface* PDI) const
 		const float HalfAngle = FMath::Clamp(Shape.MaxAngle, 0.f, 180.f);
 		const float InnerAngle = FMath::Clamp(Shape.MinAngle, 0.f, HalfAngle);
 		auto ArcPoint = [](float Radius, float Angle) { return FRotator(0.f, Angle, 0.f).RotateVector(FVector::ForwardVector) * Radius + FVector(0.f, 0.f, 3.f); };
-		// 허용 각도 구간: MinAngle이 0이면 [-Max, Max] 하나, 아니면 좌우 [Min, Max] 두 개.
+		// 허용 각도 구간: MinAngle이 0이면 [-Max, Max] 하나, 아니면 좌우 [Min, Max] 두 개. 한쪽 전용이면 그쪽만 남긴다.
 		TArray<TPair<float, float>> Spans;
-		if (InnerAngle <= 0.f)
+		if (InnerAngle <= 0.f && Shape.Side == 0)
 		{
 			Spans.Emplace(-HalfAngle, HalfAngle);
 		}
 		else
 		{
-			Spans.Emplace(-HalfAngle, -InnerAngle);
-			Spans.Emplace(InnerAngle, HalfAngle);
+			if (Shape.Side <= 0)
+			{
+				Spans.Emplace(-HalfAngle, -InnerAngle);
+			}
+			if (Shape.Side >= 0)
+			{
+				Spans.Emplace(InnerAngle, HalfAngle);
+			}
 		}
 		for (const TPair<float, float>& Span : Spans)
 		{

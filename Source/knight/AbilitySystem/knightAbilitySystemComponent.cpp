@@ -7,8 +7,21 @@
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "System/knightGameplayTags.h"
+#include "HAL/IConsoleManager.h"
+#include "Camera/CameraShakeBase.h"
+#include "Camera/PlayerCameraManager.h"
+#include "GameFramework/PlayerController.h"
 #include "TimerManager.h"
 #include "knight.h"
+
+namespace
+{
+	// (2026-10-20) 스탠스별 공격 차이 비교용. 0이면 한손·양손 수치가 같다(모션만 다름).
+	TAutoConsoleVariable<int32> CVarStanceModifiers(
+		TEXT("knight.Player.StanceModifiers"), 1,
+		TEXT("1: one/two-handed stance attack modifiers on (damage, poise, attack speed, stamina). 0: off."),
+		ECVF_Cheat);
+}
 
 // ---- 그로기 자연 회복: 순수 계산 (테스트 대상) ----
 
@@ -408,6 +421,42 @@ bool UknightAbilitySystemComponent::IsActivationGroupBlocked(EknightAbilityActiv
 	default:
 		checkf(false, TEXT("Invalid activation group %d"), static_cast<int32>(Group));
 		return true;
+	}
+}
+
+const FknightStanceModifiers& UknightAbilitySystemComponent::GetStanceModifiers() const
+{
+	static const FknightStanceModifiers Neutral;
+	// 행동 에너지 속성(메카 속성 세트)이 있는 나이트만. 몬스터도 이 ASC를 쓰지만 스탠스가 없다.
+	if (!bApplyStanceModifiers || CVarStanceModifiers.GetValueOnGameThread() == 0
+		|| !HasAttributeSetForAttribute(UknightAttributeSet::GetBoostGaugeAttribute()))
+	{
+		return Neutral;
+	}
+	return HasMatchingGameplayTag(knightGameplayTags::State_Stance_TwoHanded) ? TwoHandedModifiers : OneHandedModifiers;
+}
+
+void UknightAbilitySystemComponent::PlayAttackImpactShake(const float PoiseDamage, const bool bGuarded) const
+{
+	if (!AttackImpactShake || AttackShakeMaxScale <= 0.f || AttackShakeFullPoise <= AttackShakeMinPoise)
+	{
+		return;
+	}
+	const APawn* const Pawn = Cast<APawn>(GetAvatarActor());
+	const APlayerController* const PC = Pawn && Pawn->IsLocallyControlled() ? Pawn->GetController<APlayerController>() : nullptr;
+	if (!PC || !PC->PlayerCameraManager)
+	{
+		return;
+	}
+	const float Alpha = FMath::Clamp((PoiseDamage - AttackShakeMinPoise) / (AttackShakeFullPoise - AttackShakeMinPoise), 0.f, 1.f);
+	const float Scale = Alpha * AttackShakeMaxScale * (bGuarded ? AttackShakeGuardedRatio : 1.f);
+	const UWorld* const World = GetWorld();
+	const double Now = World ? World->GetRealTimeSeconds() : 0.0;
+	if (Scale > KINDA_SMALL_NUMBER && Now - LastAttackShakeTime >= AttackShakeCooldown)
+	{
+		LastAttackShakeTime = Now;
+		// 화면 흔들림 설정(CameraShakeScale)은 AknightPlayerCameraManager::StartCameraShake가 곱한다.
+		PC->PlayerCameraManager->StartCameraShake(AttackImpactShake, Scale);
 	}
 }
 

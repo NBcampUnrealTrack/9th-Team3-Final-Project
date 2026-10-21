@@ -28,6 +28,7 @@ public:
 	EknightRaidPhase GetRaidPhase() const { return RaidPhase; }
 
 	const UknightRaidDefinition* GetRaidDefinition() const { return RaidDefinition; }
+	const FText& GetLoadingStatus() const { return LoadingStatus; }
 
 	/** Seconds since exploration began. Zero before that. */
 	UFUNCTION(BlueprintPure, Category="Knight|Raid")
@@ -44,12 +45,14 @@ private:
 	friend class AknightRaidGameMode;
 
 	void SetRaidDefinition(const UknightRaidDefinition* InDefinition) { RaidDefinition = InDefinition; }
+	void SetLoadingStatus(const FText& InStatus) { LoadingStatus = InStatus; }
 	void SetRaidPhase(EknightRaidPhase NewPhase);
 	void StartRaidClock();
 	void StopRaidClock();
 
 	UPROPERTY()
 	TObjectPtr<const UknightRaidDefinition> RaidDefinition;
+	FText LoadingStatus;
 
 	EknightRaidPhase RaidPhase = EknightRaidPhase::None;
 	double RaidClockStartTime = -1.0;

@@ -24,6 +24,7 @@
 #include "System/knightGameplayTags.h"
 #include "AbilitySystem/Executions/knightDamageExecution.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
+#include "AbilitySystem/knightAbilitySystemComponent.h"
 #include "knight.h"
 #include "knightCharacter.h"
 #include "Monster/knightMonsterCharacterBase.h"
@@ -239,6 +240,11 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 		TargetASC->HandleGameplayEvent(Payload.EventTag, &Payload);
 		TargetASC->ExecuteGameplayCue(knightGameplayTags::GameplayCue_Guard, CueParams);
 		ApplyHitStopPair(Attacker, Target, Params.HitStopDuration * 0.5f);
+		// (2026-10-20) 큰 공격은 막혀도 때린 쪽 화면이 조금 흔들린다.
+		if (const UknightAbilitySystemComponent* const KnightSourceASC = Cast<UknightAbilitySystemComponent>(SourceASC))
+		{
+			KnightSourceASC->PlayAttackImpactShake(Params.PoiseDamage, true);
+		}
 		return EknightHitOutcome::Guarded;
 	}
 
@@ -256,6 +262,11 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 	CueParams.RawMagnitude = PartMultiplier;
 	TargetASC->ExecuteGameplayCue(CueTag, CueParams);
 	ApplyHitStopPair(Attacker, Target, Params.HitStopDuration);
+	// (2026-10-20) 공격 무게(그로기 피해)만큼 때린 쪽 화면을 더 흔든다. 양손·차지·내려찍기가 크게 흔들린다.
+	if (const UknightAbilitySystemComponent* const KnightSourceASC = Cast<UknightAbilitySystemComponent>(SourceASC))
+	{
+		KnightSourceASC->PlayAttackImpactShake(Params.PoiseDamage, false);
+	}
 	// 전투는 소리가 난다. 아직 전투를 알아채지 못한 몬스터도 이 소리를 들을 수 있다.
 	UAISense_Hearing::ReportNoiseEvent(Attacker, Hit.ImpactPoint, 1.f, Attacker, 0.f, TEXT("Hit"));
 	return EknightHitOutcome::Hit;

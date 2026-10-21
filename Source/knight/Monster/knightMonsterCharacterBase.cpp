@@ -72,6 +72,13 @@ void AknightMonsterCharacterBase::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// 바닥 데칼(잔열 자국 등)이 위에 선 몸과 무기에 덧씌워지지 않게 한다.
+	TInlineComponentArray<UPrimitiveComponent*> Primitives(this);
+	for (UPrimitiveComponent* const Primitive : Primitives)
+	{
+		Primitive->SetReceivesDecals(false);
+	}
+
 	CoreAttributeSet->OnOutOfHealth.AddUObject(this, &ThisClass::HandleOutOfHealth);
 	CoreAttributeSet->OnDamaged.AddUObject(this, &ThisClass::HandleDamaged);
 	MonsterAttributeSet->OnRageMaxed.AddUObject(this, &ThisClass::HandleRageMaxed);

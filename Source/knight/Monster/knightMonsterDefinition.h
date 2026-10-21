@@ -101,6 +101,13 @@ public:
 	float TurnWarpEndTime = 1.45f;
 
 	/**
+	 * 회전 몽타주로 도는 최대 속도(도/초). 회전 구간 길이는 같으므로 큰 각도일수록 빨리 돌게 되는데, 이 속도를 넘으면 몽타주를
+	 * 느리게 재생해 발 디딤이 회전을 따라가게 한다(빨리 재생하지는 않는다). 0이면 제한하지 않는다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI|Turn", meta=(ClampMin=0, Units="DegreesPerSecond"))
+	float TurnMontageMaxSpeed = 0.f;
+
+	/**
 	 * 등장할 때 셰이더 파이프라인(PSO)을 미리 준비해 둘 이펙트(브레스, 땅울림 먼지). 처음 쓰일 때 셰이더를 즉석에서 만드느라
 	 * 한 프레임이 튀는 것을 막는다. 몽타주 노티파이로 처음 등장하는 Niagara를 넣는다.
 	 */

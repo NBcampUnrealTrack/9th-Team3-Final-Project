@@ -6,6 +6,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
+#include "System/knightGameplayTags.h"
 #include "TimerManager.h"
 
 UknightGameplayAbility_CombatStance::UknightGameplayAbility_CombatStance(const FObjectInitializer& ObjectInitializer)
@@ -146,6 +147,19 @@ void UknightGameplayAbility_CombatStance::StartSheathe()
 {
 	if (HasAnyTriggerTag())
 	{
+		return;
+	}
+
+	// (2026-10-20) 락온 중에는 칼을 넣지 않는다. 멈춰 서서 적을 보다가 칼이 등으로 들어가면 비전투 자세로 인해
+	// 락온 옆걸음이 풀린다. 락온이 풀리면 이동 중과 같이 다시 멈춘 시간부터 새로 잰다.
+	if (const UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();
+		ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_LockedOn))
+	{
+		StillSince = -1.0;
+		if (UWorld* const World = GetWorld())
+		{
+			World->GetTimerManager().SetTimer(SheatheTimer, this, &ThisClass::StartSheathe, 0.2f, false);
+		}
 		return;
 	}
 

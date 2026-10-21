@@ -58,6 +58,7 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Monster_Exhausted, "State.Monster.Exhausted", "Monster fatigue state.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Monster_Reacting, "State.Monster.Reacting", "Monster is in a down, flinch or roar; its StateTree waits instead of acting.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Monster_Phase2, "State.Monster.Phase2", "Monster health fell below its Phase2HealthRatio (once per life; never removed).");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Monster_PassThroughPawns, "State.Monster.PassThroughPawns", "Monster's movement capsule ignores pawns (body attacks roll or charge through the player; push-out moves the player aside).");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_PartBroken, "State.PartBroken", "Root for broken Knight parts (part health at or below zero).");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_PartBroken_Head, "State.PartBroken.Head", "Head broken: takes more damage.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_PartBroken_Torso, "State.PartBroken.Torso", "Torso broken: lower MaxPoise.");
@@ -96,6 +97,7 @@ UE_DEFINE_GAMEPLAY_TAG_COMMENT(GameplayCue_Hit_Groggy_Release, "GameplayCue.Hit.
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(GameplayCue_Boost_Dash, "GameplayCue.Boost.Dash", "Boost dash thrusters.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(GameplayCue_Repair_Loop, "GameplayCue.Repair.Loop", "Repair kit in use (looping, removed when the repair ends).");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(GameplayCue_Repair_Finish, "GameplayCue.Repair.Finish", "Repair kit finished and healed (one shot).");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(GameplayCue_Burn, "GameplayCue.Burn", "Burning from a fire attack (looping while the burn effect lasts).");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Message_Combat_Hit, "Message.Combat.Hit", "Broadcast after a hit resolves.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Message_Combat_PartBroken, "Message.Combat.PartBroken", "Broadcast when a monster part breaks.");

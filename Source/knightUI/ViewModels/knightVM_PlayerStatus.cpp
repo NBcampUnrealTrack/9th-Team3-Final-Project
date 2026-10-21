@@ -1,7 +1,6 @@
 #include "ViewModels/knightVM_PlayerStatus.h"
 
 #include "AbilitySystemComponent.h"
-#include "AbilitySystemGlobals.h"
 #include "AbilitySystem/Attributes/knightAttributeSet.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
 #include "Combat/knightGroggyFeedbackComponent.h"
@@ -96,7 +95,6 @@ void UknightVM_PlayerStatus::Unbind()
 	GroggyPresentationHandle.Reset();
 	KnockdownHandle.Reset();
 	BindParts(nullptr);
-	BindTargetPoise(nullptr);
 	AttributeHandles.Reset();
 	OverheatedHandle.Reset();
 	GroggyHandle.Reset();
@@ -264,7 +262,6 @@ void UknightVM_PlayerStatus::HandleLockOnChanged(AActor* NewTarget, FGameplayTag
 	UknightMonsterPartComponent* const Parts = Monster && PartTag.IsValid() ? Monster->FindComponentByClass<UknightMonsterPartComponent>() : nullptr;
 	BindParts(Parts);
 	LockedPartTag = Parts ? PartTag : FGameplayTag();
-	BindTargetPoise(UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(NewTarget));
 
 	// Part fields first: widgets refresh on bLockedOn and should already see the new part.
 	UE_MVVM_SET_PROPERTY_VALUE(LockedPartCondition, Parts ? Parts->GetPartCondition(PartTag) : EknightPartCondition::Unbreakable);
@@ -289,53 +286,6 @@ void UknightVM_PlayerStatus::BindParts(UknightMonsterPartComponent* InParts)
 	{
 		InParts->OnPartConditionChanged.AddUniqueDynamic(this, &ThisClass::HandlePartConditionChanged);
 	}
-}
-
-void UknightVM_PlayerStatus::BindTargetPoise(UAbilitySystemComponent* InTargetASC)
-{
-	// Only targets with the core attribute set have poise; the player's own ASC is never a lock target.
-	if (InTargetASC && !InTargetASC->HasAttributeSetForAttribute(UknightCoreAttributeSet::GetPoiseAttribute()))
-	{
-		InTargetASC = nullptr;
-	}
-	if (BoundTargetASC.Get() != InTargetASC)
-	{
-		if (UAbilitySystemComponent* const Old = BoundTargetASC.Get())
-		{
-			Old->GetGameplayAttributeValueChangeDelegate(UknightCoreAttributeSet::GetPoiseAttribute()).Remove(TargetPoiseHandle);
-			Old->GetGameplayAttributeValueChangeDelegate(UknightCoreAttributeSet::GetMaxPoiseAttribute()).Remove(TargetMaxPoiseHandle);
-		}
-		TargetPoiseHandle.Reset();
-		TargetMaxPoiseHandle.Reset();
-		BoundTargetASC = InTargetASC;
-		if (InTargetASC)
-		{
-			TargetPoiseHandle = InTargetASC->GetGameplayAttributeValueChangeDelegate(UknightCoreAttributeSet::GetPoiseAttribute()).AddUObject(this, &ThisClass::HandleTargetPoiseChanged);
-			TargetMaxPoiseHandle = InTargetASC->GetGameplayAttributeValueChangeDelegate(UknightCoreAttributeSet::GetMaxPoiseAttribute()).AddUObject(this, &ThisClass::HandleTargetPoiseChanged);
-		}
-	}
-	RefreshTargetStagger();
-}
-
-void UknightVM_PlayerStatus::HandleTargetPoiseChanged(const FOnAttributeChangeData& Data)
-{
-	RefreshTargetStagger();
-}
-
-void UknightVM_PlayerStatus::RefreshTargetStagger()
-{
-	const UAbilitySystemComponent* const ASC = BoundTargetASC.Get();
-	float TargetStagger = 0.f;
-	if (ASC)
-	{
-		bool bFound = false;
-		const float Poise = ASC->GetGameplayAttributeValue(UknightCoreAttributeSet::GetPoiseAttribute(), bFound);
-		const float MaxPoise = ASC->GetGameplayAttributeValue(UknightCoreAttributeSet::GetMaxPoiseAttribute(), bFound);
-		// Poise counts down to the stagger; the gauge shows how much has been taken.
-		TargetStagger = MaxPoise > 0.f ? FMath::Clamp(1.f - Poise / MaxPoise, 0.f, 1.f) : 0.f;
-	}
-	UE_MVVM_SET_PROPERTY_VALUE(LockedTargetStagger, TargetStagger);
-	UE_MVVM_SET_PROPERTY_VALUE(bLockedTargetHasStagger, ASC != nullptr);
 }
 
 void UknightVM_PlayerStatus::HandlePartConditionChanged(FGameplayTag PartTag, EknightPartCondition NewCondition)

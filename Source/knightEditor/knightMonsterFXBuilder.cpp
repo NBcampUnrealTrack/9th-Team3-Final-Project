@@ -3,15 +3,19 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Materials/MaterialInterface.h"
 #include "Misc/PackageName.h"
+#include "NiagaraDecalRendererProperties.h"
 #include "NiagaraSpriteRendererProperties.h"
 #include "NiagaraSystem.h"
 #include "Stateless/Modules/NiagaraStatelessModule_AccelerationForce.h"
 #include "Stateless/Modules/NiagaraStatelessModule_AddVelocity.h"
+#include "Stateless/Modules/NiagaraStatelessModule_CurlNoiseForce.h"
+#include "Stateless/Modules/NiagaraStatelessModule_DecalAttributes.h"
 #include "Stateless/Modules/NiagaraStatelessModule_Drag.h"
 #include "Stateless/Modules/NiagaraStatelessModule_InitializeParticle.h"
 #include "Stateless/Modules/NiagaraStatelessModule_ScaleColor.h"
 #include "Stateless/Modules/NiagaraStatelessModule_ScaleSpriteSize.h"
 #include "Stateless/Modules/NiagaraStatelessModule_ShapeLocation.h"
+#include "Stateless/Modules/NiagaraStatelessModule_SpriteFacingAndAlignment.h"
 #include "Stateless/Modules/NiagaraStatelessModule_SpriteRotationRate.h"
 #include "Stateless/NiagaraStatelessEmitter.h"
 
@@ -157,108 +161,509 @@ namespace knightMonsterFX
 	}
 }
 
-UNiagaraSystem* UknightMonsterFXBuilder::BuildBreathSystem(const FString& PackagePath, UMaterialInterface* Material, float Reach, float OwnerScale)
+namespace knightMonsterFX
 {
-	using namespace knightMonsterFX;
-	bool bCreated = false;
-	UNiagaraSystem* const System = Material ? LoadOrDuplicateTemplate(PackagePath, bCreated) : nullptr;
-	if (!System)
+	/**
+	 * 스프라이트 레이어 하나(경량 이미터 하나)의 설정. 거리·속도·힘은 월드 cm(빌더가 OwnerScale로 나눈다), 크기는 cm,
+	 * 곡선은 수명 비율(0..1). 속도는 기본으로 로컬 +X 방향(기준 속도 x SpeedScale, 옆 퍼짐 Spread)이고, bUseVelocity면
+	 * VelocityMin~Max(월드 cm/s)를 그대로 쓴다. BoxSize가 0이 아니면 그 크기의 상자 안에서 생긴다.
+	 */
+	struct FSpriteLayer
 	{
-		return nullptr;
+		FName Name;
+		UMaterialInterface* Material = nullptr;
+		float Rate = 0.f;
+		FVector2f Life;
+		FVector2f SizeMin, SizeMax;
+		FVector2f SpeedScale;
+		float Spread = 0.f;
+		float Rise = 0.f;
+		float Drag = 0.f;
+		float CurlStrength = 0.f;
+		float CurlFrequency = 0.f;
+		TArray<TPair<float, float>> ColorKeys;
+		TArray<TPair<float, float>> AlphaKeys;
+		TArray<TPair<float, float>> SizeKeys;
+		ENiagaraSpriteAlignment Alignment = ENiagaraSpriteAlignment::Unaligned;
+		int32 SortOrder = 0;
+		FVector3f BoxSize = FVector3f::ZeroVector;
+		bool bUseVelocity = false;
+		FVector3f VelocityMin = FVector3f::ZeroVector;
+		FVector3f VelocityMax = FVector3f::ZeroVector;
+		/** 바닥에 눕힌다(로컬 +Z를 바라봄, 돌지 않음). */
+		bool bFaceUp = false;
+		float SpawnRadius = 40.f;
+		/** 스프라이트 대신 데칼로 바닥(로컬 -Z)에 투영한다. 지형 높낮이를 따라 붙는다. 크기는 DecalSizeMin~Max(월드 cm, 투영 깊이 x 가로 x 세로). */
+		bool bDecal = false;
+		FVector3f DecalSizeMin = FVector3f::ZeroVector;
+		FVector3f DecalSizeMax = FVector3f::ZeroVector;
+		/** 데칼 회전 범위(투영 축 기준, 도). 0이면 몬스터 방향으로 정렬한다. */
+		float DecalRollRange = 360.f;
+		/** 입자 색 RGB를 0~1 무작위로 둔다(머티리얼이 무늬 위치를 고르는 씨앗으로 쓴다). 알파 곡선은 그대로다. */
+		bool bRandomColorSeed = false;
+	};
+
+	void SetCurve(FRichCurve& Curve, const TArray<TPair<float, float>>& Keys)
+	{
+		Curve.Reset();
+		for (const TPair<float, float>& Key : Keys)
+		{
+			Curve.AddKey(Key.Key, Key.Value);
+		}
 	}
 
-	// 위치와 속도는 메시 스케일을 받으므로 로컬 단위로 나눠 넣는다.
-	const float ToLocal = 1.f / FMath::Max(OwnerScale, KINDA_SMALL_NUMBER);
-	const float Lifetime = 1.f;
-	const float Speed = Reach / Lifetime * ToLocal;
-
-	for (const FNiagaraEmitterHandle& Handle : System->GetEmitterHandles())
+	void SetVectorRange(FNiagaraDistributionRangeVector3& Distribution, const FVector3f& Min, const FVector3f& Max)
 	{
-		UNiagaraStatelessEmitter* const Emitter = Handle.GetStatelessEmitter();
-		if (!Emitter)
-		{
-			continue;
-		}
-		EnableOnly(*Emitter, { UNiagaraStatelessModule_InitializeParticle::StaticClass(), UNiagaraStatelessModule_ShapeLocation::StaticClass(),
-			UNiagaraStatelessModule_AddVelocity::StaticClass(), UNiagaraStatelessModule_AccelerationForce::StaticClass(),
-			UNiagaraStatelessModule_SpriteRotationRate::StaticClass(), UNiagaraStatelessModule_ScaleColor::StaticClass(),
-			UNiagaraStatelessModule_ScaleSpriteSize::StaticClass() });
+		Distribution.Mode = ENiagaraDistributionMode::NonUniformRange;
+		Distribution.Min = Min;
+		Distribution.Max = Max;
+		Distribution.ChannelConstantsAndRanges = { Min.X, Min.Y, Min.Z, Max.X, Max.Y, Max.Z };
+	}
 
-		for (int32 Index = 0; Index < Emitter->GetNumSpawnInfos(); ++Index)
+	void ApplySpriteLayer(UNiagaraStatelessEmitter& Emitter, const FSpriteLayer& Layer, float Speed, float ToLocal)
+	{
+		EnableOnly(Emitter, { UNiagaraStatelessModule_InitializeParticle::StaticClass(), UNiagaraStatelessModule_ShapeLocation::StaticClass(),
+			UNiagaraStatelessModule_AddVelocity::StaticClass(), UNiagaraStatelessModule_AccelerationForce::StaticClass(),
+			UNiagaraStatelessModule_Drag::StaticClass(), UNiagaraStatelessModule_CurlNoiseForce::StaticClass(),
+			UNiagaraStatelessModule_SpriteRotationRate::StaticClass(), UNiagaraStatelessModule_ScaleColor::StaticClass(),
+			UNiagaraStatelessModule_ScaleSpriteSize::StaticClass(), UNiagaraStatelessModule_SpriteFacingAndAlignment::StaticClass(),
+			UNiagaraStatelessModule_DecalAttributes::StaticClass() });
+
+		for (int32 Index = 0; Index < Emitter.GetNumSpawnInfos(); ++Index)
 		{
-			Emitter->GetSpawnInfoByIndex(Index)->bEnabled = false;
+			Emitter.GetSpawnInfoByIndex(Index)->bEnabled = false;
 		}
-		FNiagaraStatelessSpawnInfo& Spawn = *Emitter->GetSpawnInfoByIndex(0);
+		FNiagaraStatelessSpawnInfo& Spawn = *Emitter.GetSpawnInfoByIndex(0);
 		Spawn.bEnabled = true;
 		Spawn.Type = ENiagaraStatelessSpawnInfoType::Rate;
-		Spawn.Rate.InitConstant(160.f);
+		Spawn.Rate.InitConstant(Layer.Rate);
 
-		if (UNiagaraStatelessModule_InitializeParticle* const Init = Get<UNiagaraStatelessModule_InitializeParticle>(*Emitter))
+		if (UNiagaraStatelessModule_DecalAttributes* const Decal = Get<UNiagaraStatelessModule_DecalAttributes>(Emitter))
 		{
-			Init->LifetimeDistribution.InitRange(Lifetime * 0.8f, Lifetime);
-			SetUniformRange(Init->SpriteSizeDistribution, 150.f, 250.f);
+			Decal->SetIsModuleEnabled(Layer.bDecal);
+			// 데칼은 로컬 X 방향으로 투영하므로 아래(-Z)를 보게 세우고, 투영 축으로 무작위로 돌린다. 크기는 메시 스케일을 받지 않아 월드 cm 그대로 넣는다.
+			Decal->bApplyOrientation = true;
+			Decal->OrientationCoordinateSpace = ENiagaraCoordinateSpace::Local;
+			Decal->Orientation.Mode = ENiagaraDistributionMode::NonUniformRange;
+			Decal->Orientation.ChannelConstantsAndRanges = { -90.f, 0.f, -Layer.DecalRollRange * 0.5f, -90.f, 0.f, Layer.DecalRollRange * 0.5f };
+			Decal->Orientation.UpdateValuesFromDistribution();
+			Decal->bApplySize = true;
+			const FVector3f SizeMin = Layer.DecalSizeMin;
+			const FVector3f SizeMax = Layer.DecalSizeMax;
+			Decal->Size.Mode = ENiagaraDistributionMode::NonUniformRange;
+			Decal->Size.ChannelConstantsAndRanges = { SizeMin.X, SizeMin.Y, SizeMin.Z, SizeMax.X, SizeMax.Y, SizeMax.Z };
+			Decal->Size.UpdateValuesFromDistribution();
+			Decal->bApplyFade = false;
+		}
+
+		if (UNiagaraStatelessModule_InitializeParticle* const Init = Get<UNiagaraStatelessModule_InitializeParticle>(Emitter))
+		{
+			Init->LifetimeDistribution.InitRange(Layer.Life.X, Layer.Life.Y);
+			FNiagaraDistributionRangeVector2& Size = Init->SpriteSizeDistribution;
+			const bool bSquare = Layer.SizeMin.X == Layer.SizeMin.Y && Layer.SizeMax.X == Layer.SizeMax.Y;
+			Size.Mode = bSquare ? ENiagaraDistributionMode::UniformRange : ENiagaraDistributionMode::NonUniformRange;
+			Size.Min = Layer.SizeMin;
+			Size.Max = Layer.SizeMax;
+			Size.ChannelConstantsAndRanges = bSquare ? TArray<float>{ Layer.SizeMin.X, Layer.SizeMax.X }
+				: TArray<float>{ Layer.SizeMin.X, Layer.SizeMin.Y, Layer.SizeMax.X, Layer.SizeMax.Y };
 			Init->SpriteRotationDistribution.InitRange(-180.f, 180.f);
 			Init->ColorDistribution = FNiagaraDistributionColor(FLinearColor::White);
+			if (Layer.bRandomColorSeed)
+			{
+				Init->ColorDistribution.Mode = ENiagaraDistributionMode::NonUniformRange;
+				Init->ColorDistribution.ChannelConstantsAndRanges = { 0.f, 0.f, 0.f, 1.f, 1.f, 1.f, 1.f, 1.f };
+				Init->ColorDistribution.UpdateValuesFromDistribution();
+			}
 		}
-		if (UNiagaraStatelessModule_ShapeLocation* const Shape = Get<UNiagaraStatelessModule_ShapeLocation>(*Emitter))
+		if (UNiagaraStatelessModule_ShapeLocation* const Shape = Get<UNiagaraStatelessModule_ShapeLocation>(Emitter))
 		{
-			Shape->ShapePrimitive = ENSM_ShapePrimitive::Sphere;
-			Shape->SphereRadius.InitConstant(40.f * ToLocal);
+			if (Layer.BoxSize.IsNearlyZero())
+			{
+				Shape->ShapePrimitive = ENSM_ShapePrimitive::Sphere;
+				Shape->SphereRadius.InitConstant(Layer.SpawnRadius * ToLocal);
+			}
+			else
+			{
+				Shape->ShapePrimitive = ENSM_ShapePrimitive::Box;
+				Shape->BoxSize.InitConstant(Layer.BoxSize * ToLocal);
+			}
 		}
-		if (UNiagaraStatelessModule_AddVelocity* const Velocity = Get<UNiagaraStatelessModule_AddVelocity>(*Emitter))
+		if (UNiagaraStatelessModule_AddVelocity* const Velocity = Get<UNiagaraStatelessModule_AddVelocity>(Emitter))
 		{
-			// 로컬 X로 나가는 직선 속도에 옆 퍼짐을 범위로 준다.
-			const FVector3f Min(Speed * 0.8f, -Speed * 0.12f, -Speed * 0.12f);
-			const FVector3f Max(Speed, Speed * 0.12f, Speed * 0.12f);
+			FVector3f Min, Max;
+			if (Layer.bUseVelocity)
+			{
+				Min = Layer.VelocityMin * ToLocal;
+				Max = Layer.VelocityMax * ToLocal;
+			}
+			else
+			{
+				// 로컬 X로 나가는 직선 속도에 옆 퍼짐을 범위로 준다.
+				const float Forward = Speed * Layer.SpeedScale.Y;
+				Min = FVector3f(Speed * Layer.SpeedScale.X, -Forward * Layer.Spread, -Forward * Layer.Spread);
+				Max = FVector3f(Forward, Forward * Layer.Spread, Forward * Layer.Spread);
+			}
 			Velocity->VelocityType = ENSM_VelocityType::Linear;
 			Velocity->CoordinateSpace = ENiagaraCoordinateSpace::Local;
-			Velocity->LinearVelocityDistribution.Mode = ENiagaraDistributionMode::NonUniformRange;
-			Velocity->LinearVelocityDistribution.Min = Min;
-			Velocity->LinearVelocityDistribution.Max = Max;
-			Velocity->LinearVelocityDistribution.ChannelConstantsAndRanges = { Min.X, Min.Y, Min.Z, Max.X, Max.Y, Max.Z };
+			SetVectorRange(Velocity->LinearVelocityDistribution, Min, Max);
 			Velocity->LinearVelocityScale.InitConstant(1.f);
 		}
-		// 뜨거운 불꽃은 끝으로 갈수록 위로 말려 올라간다. 월드 방향 힘도 메시 스케일을 받으므로 로컬 단위로 나눈다.
-		if (UNiagaraStatelessModule_AccelerationForce* const Rise = Get<UNiagaraStatelessModule_AccelerationForce>(*Emitter))
+		// 뜨거운 것은 위로 말려 올라간다. 월드 방향 힘도 메시 스케일을 받으므로 로컬 단위로 나눈다.
+		if (UNiagaraStatelessModule_AccelerationForce* const Rise = Get<UNiagaraStatelessModule_AccelerationForce>(Emitter))
 		{
+			Rise->SetIsModuleEnabled(Layer.Rise != 0.f);
 			Rise->CoordinateSpace = ENiagaraCoordinateSpace::World;
-			Rise->AccelerationDistribution.InitConstant(FVector3f(0.f, 0.f, 600.f * ToLocal));
+			Rise->AccelerationDistribution.InitConstant(FVector3f(0.f, 0.f, Layer.Rise * ToLocal));
 		}
-		if (UNiagaraStatelessModule_SpriteRotationRate* const Spin = Get<UNiagaraStatelessModule_SpriteRotationRate>(*Emitter))
+		if (UNiagaraStatelessModule_Drag* const Drag = Get<UNiagaraStatelessModule_Drag>(Emitter))
 		{
+			Drag->SetIsModuleEnabled(Layer.Drag > 0.f);
+			Drag->DragDistribution.InitConstant(Layer.Drag);
+		}
+		// 난류: 힘은 로컬 단위로 나누고, 주파수는 로컬 공간 기준이라 메시 스케일을 곱한다(월드에서 같은 크기의 소용돌이).
+		if (UNiagaraStatelessModule_CurlNoiseForce* const Curl = Get<UNiagaraStatelessModule_CurlNoiseForce>(Emitter))
+		{
+			Curl->SetIsModuleEnabled(Layer.CurlStrength > 0.f);
+			Curl->NoiseStrength = Layer.CurlStrength * ToLocal;
+			Curl->NoiseFrequency = Layer.CurlFrequency / FMath::Max(ToLocal, KINDA_SMALL_NUMBER);
+		}
+		if (UNiagaraStatelessModule_SpriteRotationRate* const Spin = Get<UNiagaraStatelessModule_SpriteRotationRate>(Emitter))
+		{
+			Spin->SetIsModuleEnabled(!Layer.bFaceUp);
 			Spin->RotationRateDistribution.InitRange(-90.f, 90.f);
 		}
-		if (UNiagaraStatelessModule_ScaleColor* const Color = Get<UNiagaraStatelessModule_ScaleColor>(*Emitter))
+		if (UNiagaraStatelessModule_SpriteFacingAndAlignment* const Facing = Get<UNiagaraStatelessModule_SpriteFacingAndAlignment>(Emitter))
+		{
+			Facing->SetIsModuleEnabled(Layer.bFaceUp);
+			Facing->bSpriteFacingEnabled = true;
+			Facing->bSpriteAlignmentEnabled = false;
+			Facing->SpriteFacing.InitConstant(FVector3f::ZAxisVector);
+		}
+		if (UNiagaraStatelessModule_ScaleColor* const Color = Get<UNiagaraStatelessModule_ScaleColor>(Emitter))
 		{
 			FNiagaraDistributionColor& Curve = Color->ScaleDistribution;
 			Curve.Mode = ENiagaraDistributionMode::NonUniformCurve;
 			Curve.ChannelCurves.SetNum(4);
 			for (int32 Channel = 0; Channel < 3; ++Channel)
 			{
-				SetCurve(Curve.ChannelCurves[Channel], { {0.f, 1.f}, {0.5f, 0.75f}, {1.f, 0.25f} });
+				SetCurve(Curve.ChannelCurves[Channel], Layer.ColorKeys);
 			}
-			SetCurve(Curve.ChannelCurves[3], { {0.f, 0.f}, {0.06f, 1.f}, {0.55f, 0.85f}, {1.f, 0.f} });
+			SetCurve(Curve.ChannelCurves[3], Layer.AlphaKeys);
 			Curve.UpdateValuesFromDistribution();
 		}
-		if (UNiagaraStatelessModule_ScaleSpriteSize* const Size = Get<UNiagaraStatelessModule_ScaleSpriteSize>(*Emitter))
+		if (UNiagaraStatelessModule_ScaleSpriteSize* const Size = Get<UNiagaraStatelessModule_ScaleSpriteSize>(Emitter))
 		{
 			FNiagaraDistributionVector2& Curve = Size->ScaleDistribution;
 			Curve.Mode = ENiagaraDistributionMode::NonUniformCurve;
 			Curve.ChannelCurves.SetNum(2);
 			for (int32 Channel = 0; Channel < 2; ++Channel)
 			{
-				SetCurve(Curve.ChannelCurves[Channel], { {0.f, 0.4f}, {0.25f, 1.f}, {1.f, 3.f} });
+				SetCurve(Curve.ChannelCurves[Channel], Layer.SizeKeys);
 			}
 			Curve.UpdateValuesFromDistribution();
 		}
-		SetSprite(*Emitter, Material);
-
-		const float Margin = 900.f * ToLocal;
-		if (FBox* const Bounds = GetProtected<FBox>(*Emitter, TEXT("FixedBounds"))) *Bounds = FBox(FVector(-Margin, -Reach * 0.4f * ToLocal - Margin, -Reach * 0.4f * ToLocal - Margin),
-			FVector(Reach * 1.2f * ToLocal + Margin, Reach * 0.4f * ToLocal + Margin, Reach * 0.6f * ToLocal + Margin));
-		Emitter->PostEditChange();
+		if (Layer.bDecal)
+		{
+			// 스프라이트 렌더러를 데칼 렌더러로 바꾼다(다시 구울 때는 있는 데칼 렌더러를 그대로 쓴다).
+			UNiagaraDecalRendererProperties* DecalRenderer = nullptr;
+			for (UNiagaraRendererProperties* const Renderer : TArray<UNiagaraRendererProperties*>(Emitter.GetRenderers()))
+			{
+				if (UNiagaraDecalRendererProperties* const Existing = Cast<UNiagaraDecalRendererProperties>(Renderer))
+				{
+					DecalRenderer = Existing;
+				}
+				else if (Renderer)
+				{
+					Emitter.RemoveRenderer(Renderer, FGuid());
+				}
+			}
+			if (!DecalRenderer)
+			{
+				DecalRenderer = NewObject<UNiagaraDecalRendererProperties>(&Emitter, NAME_None, RF_Transactional);
+				Emitter.AddRenderer(DecalRenderer, FGuid());
+			}
+			DecalRenderer->Material = Layer.Material;
+			DecalRenderer->SortOrderHint = Layer.SortOrder;
+			return;
+		}
+		SetSprite(Emitter, Layer.Material, Layer.Alignment);
+		for (UNiagaraRendererProperties* const Renderer : Emitter.GetRenderers())
+		{
+			if (UNiagaraSpriteRendererProperties* const Sprite = Cast<UNiagaraSpriteRendererProperties>(Renderer))
+			{
+				Sprite->SortOrderHint = Layer.SortOrder;
+				if (Layer.bFaceUp)
+				{
+					Sprite->FacingMode = ENiagaraSpriteFacingMode::CustomFacingVector;
+				}
+			}
+		}
 	}
-	return Finish(System, bCreated);
+
+	/**
+	 * 레이어마다 이미터 하나인 경량 시스템을 PackagePath에 만든다(모자란 이미터는 첫 이미터를 복제). 머티리얼이 없는 레이어는 끈다.
+	 * Speed는 로컬 +X 기준 속도(월드 cm/s), BoundsMin/Max는 월드 cm의 고정 바운드.
+	 */
+	UNiagaraSystem* BuildLayeredSystem(const FString& PackagePath, TArrayView<const FSpriteLayer> Layers, float Speed, float OwnerScale,
+		const FVector& BoundsMin, const FVector& BoundsMax, float OnceDuration = 0.f)
+	{
+		bool bCreated = false;
+		UNiagaraSystem* const System = LoadOrDuplicateTemplate(PackagePath, bCreated);
+		if (!System)
+		{
+			return nullptr;
+		}
+		// 위치와 속도는 메시 스케일을 받으므로 로컬 단위로 나눠 넣는다.
+		const float ToLocal = 1.f / FMath::Max(OwnerScale, KINDA_SMALL_NUMBER);
+		while (System->GetEmitterHandles().Num() < Layers.Num())
+		{
+			System->DuplicateEmitterHandle(System->GetEmitterHandles()[0], Layers[System->GetEmitterHandles().Num()].Name);
+		}
+		for (int32 Index = 0; Index < System->GetEmitterHandles().Num(); ++Index)
+		{
+			FNiagaraEmitterHandle& Handle = System->GetEmitterHandle(Index);
+			const FSpriteLayer* const Layer = Layers.IsValidIndex(Index) ? &Layers[Index] : nullptr;
+			Handle.SetIsEnabled(Layer && Layer->Material, *System, false);
+			UNiagaraStatelessEmitter* const Emitter = Handle.GetStatelessEmitter();
+			if (!Layer || !Emitter || !Layer->Material)
+			{
+				continue;
+			}
+			Handle.SetName(Layer->Name, *System);
+			ApplySpriteLayer(*Emitter, *Layer, Speed * ToLocal, ToLocal);
+			// 일회성: OnceDuration 동안만 생성하고 남은 입자가 수명을 다하면 끝난다. 0이면 컴포넌트가 멈출 때까지 계속 생성한다.
+			if (FNiagaraEmitterStateData* const State = GetProtected<FNiagaraEmitterStateData>(*Emitter, TEXT("EmitterState")))
+			{
+				State->LoopBehavior = OnceDuration > 0.f ? ENiagaraLoopBehavior::Once : ENiagaraLoopBehavior::Infinite;
+				State->LoopDuration.InitConstant(OnceDuration > 0.f ? OnceDuration : 1.f);
+				State->InactiveResponse = ENiagaraEmitterInactiveResponse::Complete;
+			}
+			if (FBox* const Bounds = GetProtected<FBox>(*Emitter, TEXT("FixedBounds")))
+			{
+				*Bounds = FBox(BoundsMin * ToLocal, BoundsMax * ToLocal);
+			}
+			Emitter->PostEditChange();
+		}
+		return Finish(System, bCreated);
+	}
+}
+
+UNiagaraSystem* UknightMonsterFXBuilder::BuildBreathSystem(const FString& PackagePath, UMaterialInterface* FireMaterial, UMaterialInterface* CoreMaterial,
+	UMaterialInterface* SmokeMaterial, UMaterialInterface* EmberMaterial, float Reach, float OwnerScale)
+{
+	using namespace knightMonsterFX;
+	if (!FireMaterial)
+	{
+		return nullptr;
+	}
+	const FSpriteLayer Layers[] = {
+		// 연기: 불줄기를 따라 나가다 끝쯤에서 짙어지고, 넓게 퍼지며 천천히 오른다. 쏘기가 끝난 뒤에도 1~2초 남는다.
+		// 불 바로 뒤라 처음엔 붉게 달아 있고, 완전한 검정이 아니라 짙은 회갈색이다.
+		{ TEXT("Smoke"), SmokeMaterial, 45.f, {1.4f, 2.f}, {250.f, 250.f}, {400.f, 400.f}, {0.75f, 0.95f}, 0.2f, 350.f, 0.6f, 500.f, 0.002f,
+			{ {0.f, 10.f}, {0.35f, 5.f}, {0.6f, 4.f}, {1.f, 4.f} }, { {0.f, 0.f}, {0.35f, 0.f}, {0.5f, 0.5f}, {0.8f, 0.3f}, {1.f, 0.f} },
+			{ {0.f, 0.5f}, {0.4f, 1.f}, {1.f, 2.5f} }, ENiagaraSpriteAlignment::Unaligned, 0 },
+		// 화염: 불줄기 몸통.
+		{ TEXT("Fire"), FireMaterial, 160.f, {0.8f, 1.f}, {150.f, 150.f}, {250.f, 250.f}, {0.8f, 1.f}, 0.12f, 500.f, 0.f, 250.f, 0.003f,
+			{ {0.f, 1.f}, {0.5f, 0.75f}, {1.f, 0.25f} }, { {0.f, 0.f}, {0.06f, 1.f}, {0.55f, 0.85f}, {1.f, 0.f} },
+			{ {0.f, 0.4f}, {0.25f, 1.f}, {1.f, 3.f} }, ENiagaraSpriteAlignment::Unaligned, 1 },
+		// 심지: 입 앞 40%쯤까지 가는 흰빛 불. 짧고 밝다.
+		{ TEXT("Core"), CoreMaterial, 140.f, {0.3f, 0.45f}, {90.f, 90.f}, {150.f, 150.f}, {0.7f, 0.9f}, 0.06f, 0.f, 0.f, 0.f, 0.f,
+			{ {0.f, 1.6f}, {0.5f, 1.2f}, {1.f, 0.6f} }, { {0.f, 0.f}, {0.05f, 1.f}, {0.6f, 0.8f}, {1.f, 0.f} },
+			{ {0.f, 0.5f}, {0.3f, 1.f}, {1.f, 1.8f} }, ENiagaraSpriteAlignment::Unaligned, 2 },
+		// 불씨: 넓게 튀어 흩날리는 작은 불똥. 속도 방향으로 늘인다.
+		{ TEXT("Embers"), EmberMaterial, 70.f, {0.8f, 1.4f}, {8.f, 30.f}, {14.f, 60.f}, {0.6f, 1.1f}, 0.35f, 300.f, 0.5f, 600.f, 0.004f,
+			{ {0.f, 1.f}, {1.f, 0.6f} }, { {0.f, 0.f}, {0.05f, 1.f}, {0.7f, 1.f}, {1.f, 0.f} },
+			{ {0.f, 1.f}, {1.f, 0.6f} }, ENiagaraSpriteAlignment::VelocityAligned, 3 },
+	};
+	const float Margin = 900.f;
+	return BuildLayeredSystem(PackagePath, Layers, Reach, OwnerScale, FVector(-Margin, -Reach * 0.4f - Margin, -Reach * 0.4f - Margin),
+		FVector(Reach * 1.2f + Margin, Reach * 0.4f + Margin, Reach * 0.8f + Margin));
+}
+
+UNiagaraSystem* UknightMonsterFXBuilder::BuildBreathChargeSystem(const FString& PackagePath, UMaterialInterface* GlowMaterial,
+	UMaterialInterface* SmokeMaterial, UMaterialInterface* EmberMaterial, float OwnerScale)
+{
+	using namespace knightMonsterFX;
+	if (!GlowMaterial)
+	{
+		return nullptr;
+	}
+	// 입 안에서 달아오르는 빛, 콧김처럼 새어 나와 오르는 연기, 입가에서 튀는 작은 불씨. 로컬 +X가 입 앞이다.
+	FSpriteLayer Glow{ TEXT("Glow"), GlowMaterial, 60.f, {0.25f, 0.4f}, {140.f, 140.f}, {220.f, 220.f}, {0.f, 0.f}, 0.f, 0.f, 0.f, 0.f, 0.f,
+		{ {0.f, 0.6f}, {0.5f, 1.f}, {1.f, 0.5f} }, { {0.f, 0.f}, {0.2f, 0.8f}, {1.f, 0.f} }, { {0.f, 0.6f}, {1.f, 1.3f} },
+		ENiagaraSpriteAlignment::Unaligned, 1 };
+	Glow.bUseVelocity = true;
+	Glow.VelocityMin = FVector3f(20.f, -20.f, -10.f);
+	Glow.VelocityMax = FVector3f(80.f, 20.f, 20.f);
+	Glow.SpawnRadius = 30.f;
+
+	FSpriteLayer Smoke{ TEXT("Smoke"), SmokeMaterial, 25.f, {1.f, 1.5f}, {150.f, 150.f}, {260.f, 260.f}, {0.f, 0.f}, 0.f, 250.f, 0.8f, 120.f, 0.01f,
+		{ {0.f, 8.f}, {0.4f, 4.f}, {1.f, 4.f} }, { {0.f, 0.f}, {0.2f, 0.55f}, {1.f, 0.f} }, { {0.f, 0.5f}, {1.f, 2.5f} },
+		ENiagaraSpriteAlignment::Unaligned, 0 };
+	Smoke.bUseVelocity = true;
+	Smoke.VelocityMin = FVector3f(40.f, -60.f, 0.f);
+	Smoke.VelocityMax = FVector3f(120.f, 60.f, 60.f);
+	Smoke.SpawnRadius = 50.f;
+
+	FSpriteLayer Embers{ TEXT("Embers"), EmberMaterial, 40.f, {0.5f, 0.9f}, {5.f, 14.f}, {9.f, 26.f}, {0.f, 0.f}, 0.f, 200.f, 0.6f, 200.f, 0.01f,
+		{ {0.f, 1.f}, {1.f, 0.6f} }, { {0.f, 0.f}, {0.1f, 1.f}, {0.7f, 1.f}, {1.f, 0.f} }, { {0.f, 1.f}, {1.f, 0.5f} },
+		ENiagaraSpriteAlignment::VelocityAligned, 2 };
+	Embers.bUseVelocity = true;
+	Embers.VelocityMin = FVector3f(50.f, -150.f, -50.f);
+	Embers.VelocityMax = FVector3f(250.f, 150.f, 200.f);
+	Embers.SpawnRadius = 40.f;
+
+	const FSpriteLayer Layers[] = { Smoke, Glow, Embers };
+	return BuildLayeredSystem(PackagePath, Layers, 0.f, OwnerScale, FVector(-600.f, -600.f, -400.f), FVector(800.f, 600.f, 900.f));
+}
+
+UNiagaraSystem* UknightMonsterFXBuilder::BuildBreathGroundSystem(const FString& PackagePath, UMaterialInterface* FlameMaterial,
+	UMaterialInterface* ScorchMaterial, float Length, float Width, float ActiveTime)
+{
+	using namespace knightMonsterFX;
+	if (!FlameMaterial)
+	{
+		return nullptr;
+	}
+	// 불줄기가 바닥에 닿는 띠(로컬 X가 앞, Length x Width)에서 짧게 솟는 불길.
+	FSpriteLayer Flames{ TEXT("GroundFlames"), FlameMaterial, 70.f, {0.5f, 0.8f}, {160.f, 160.f}, {300.f, 300.f}, {0.f, 0.f}, 0.f, 300.f, 0.f, 200.f, 0.004f,
+		{ {0.f, 1.2f}, {0.5f, 0.8f}, {1.f, 0.3f} }, { {0.f, 0.f}, {0.1f, 1.f}, {0.5f, 0.8f}, {1.f, 0.f} }, { {0.f, 0.5f}, {0.3f, 1.f}, {1.f, 2.f} },
+		ENiagaraSpriteAlignment::Unaligned, 1 };
+	Flames.BoxSize = FVector3f(Length, Width, 20.f);
+	Flames.bUseVelocity = true;
+	Flames.VelocityMin = FVector3f(-80.f, -120.f, 150.f);
+	Flames.VelocityMax = FVector3f(200.f, 120.f, 400.f);
+
+	// 빛나는 잔열 자국: 바닥에 투영한 데칼. 불이 지나간 뒤 5초쯤 남아 노란빛 균열이 붉게 식으며 사라진다.
+	FSpriteLayer Scorch{ TEXT("Scorch"), ScorchMaterial, 14.f, {4.5f, 6.f}, {350.f, 350.f}, {600.f, 600.f}, {0.f, 0.f}, 0.f, 0.f, 0.f, 0.f, 0.f,
+		{ {0.f, 1.f}, {1.f, 1.f} }, { {0.f, 0.f}, {0.04f, 1.f}, {0.5f, 0.8f}, {1.f, 0.f} }, { {0.f, 0.9f}, {0.1f, 1.f}, {1.f, 1.f} },
+		ENiagaraSpriteAlignment::Unaligned, 0 };
+	Scorch.BoxSize = FVector3f(Length, Width * 0.8f, 0.f);
+	Scorch.bUseVelocity = true;
+	Scorch.bDecal = true;
+	// 균열 줄무늬가 브레스 방향(로컬 X)을 따라 눕도록 크게 돌리지 않는다.
+	Scorch.DecalRollRange = 30.f;
+	Scorch.bRandomColorSeed = true;
+	Scorch.DecalSizeMin = FVector3f(400.f, 500.f, 500.f);
+	Scorch.DecalSizeMax = FVector3f(400.f, 850.f, 850.f);
+
+	const FSpriteLayer Layers[] = { Scorch, Flames };
+	const float Margin = 600.f;
+	// 몸에 붙이지 않고 바닥에 스폰하므로 스케일 1(cm 그대로)이고, ActiveTime 동안만 생성하고 스스로 끝난다.
+	return BuildLayeredSystem(PackagePath, Layers, 0.f, 1.f, FVector(-Length * 0.5f - Margin, -Width * 0.5f - Margin, -300.f),
+		FVector(Length * 0.5f + Margin, Width * 0.5f + Margin, 1200.f), ActiveTime);
+}
+
+UNiagaraSystem* UknightMonsterFXBuilder::BuildFireEruptionSystem(const FString& PackagePath, UMaterialInterface* FireMaterial,
+	UMaterialInterface* CoreMaterial, UMaterialInterface* SmokeMaterial, UMaterialInterface* EmberMaterial, UMaterialInterface* ScorchMaterial,
+	float Height, float Radius)
+{
+	using namespace knightMonsterFX;
+	if (!FireMaterial)
+	{
+		return nullptr;
+	}
+	// 0.35초 동안 한꺼번에 솟고 끝난다. 속도는 수명 동안 Height까지 오르도록 잡는다.
+	const float Burst = 0.35f;
+	const float RiseSpeed = Height / 0.8f;
+	const FVector3f Base(Radius * 2.f, Radius * 2.f, 20.f);
+
+	// 밑동의 흰빛 심지: 짧고 밝게 터진다.
+	FSpriteLayer Core{ TEXT("Core"), CoreMaterial, 90.f, {0.25f, 0.4f}, {140.f, 140.f}, {240.f, 240.f}, {0.f, 0.f}, 0.f, 0.f, 0.f, 0.f, 0.f,
+		{ {0.f, 1.6f}, {0.5f, 1.1f}, {1.f, 0.5f} }, { {0.f, 0.f}, {0.05f, 1.f}, {0.6f, 0.8f}, {1.f, 0.f} }, { {0.f, 0.5f}, {0.3f, 1.f}, {1.f, 1.8f} },
+		ENiagaraSpriteAlignment::Unaligned, 2 };
+	Core.BoxSize = Base;
+	Core.bUseVelocity = true;
+	Core.VelocityMin = FVector3f(-100.f, -100.f, RiseSpeed * 0.2f);
+	Core.VelocityMax = FVector3f(100.f, 100.f, RiseSpeed * 0.5f);
+
+	// 불기둥: 위로 솟으며 커지고, 위쪽은 노이즈로 흔들리며 깎인다.
+	FSpriteLayer Fire{ TEXT("Fire"), FireMaterial, 130.f, {0.6f, 0.9f}, {150.f, 150.f}, {260.f, 260.f}, {0.f, 0.f}, 0.f, 300.f, 0.8f, 300.f, 0.003f,
+		{ {0.f, 1.f}, {0.5f, 0.75f}, {1.f, 0.25f} }, { {0.f, 0.f}, {0.06f, 1.f}, {0.55f, 0.85f}, {1.f, 0.f} }, { {0.f, 0.4f}, {0.25f, 1.f}, {1.f, 2.4f} },
+		ENiagaraSpriteAlignment::Unaligned, 1 };
+	Fire.BoxSize = Base;
+	Fire.bUseVelocity = true;
+	Fire.VelocityMin = FVector3f(-150.f, -150.f, RiseSpeed * 0.6f);
+	Fire.VelocityMax = FVector3f(150.f, 150.f, RiseSpeed * 1.3f);
+
+	// 불이 꺼진 뒤 피어오르는 짙은 연기.
+	FSpriteLayer Smoke{ TEXT("Smoke"), SmokeMaterial, 30.f, {1.4f, 2.f}, {250.f, 250.f}, {400.f, 400.f}, {0.f, 0.f}, 0.f, 200.f, 0.8f, 300.f, 0.002f,
+		{ {0.f, 8.f}, {0.35f, 4.f}, {1.f, 4.f} }, { {0.f, 0.f}, {0.3f, 0.f}, {0.45f, 0.45f}, {0.8f, 0.25f}, {1.f, 0.f} }, { {0.f, 0.5f}, {0.4f, 1.f}, {1.f, 2.5f} },
+		ENiagaraSpriteAlignment::Unaligned, 0 };
+	Smoke.BoxSize = Base;
+	Smoke.bUseVelocity = true;
+	Smoke.VelocityMin = FVector3f(-100.f, -100.f, RiseSpeed * 0.5f);
+	Smoke.VelocityMax = FVector3f(100.f, 100.f, RiseSpeed * 0.9f);
+
+	FSpriteLayer Embers{ TEXT("Embers"), EmberMaterial, 80.f, {0.8f, 1.4f}, {8.f, 30.f}, {14.f, 60.f}, {0.f, 0.f}, 0.f, 200.f, 0.6f, 500.f, 0.004f,
+		{ {0.f, 1.f}, {1.f, 0.6f} }, { {0.f, 0.f}, {0.05f, 1.f}, {0.7f, 1.f}, {1.f, 0.f} }, { {0.f, 1.f}, {1.f, 0.6f} },
+		ENiagaraSpriteAlignment::VelocityAligned, 3 };
+	Embers.BoxSize = Base;
+	Embers.bUseVelocity = true;
+	Embers.VelocityMin = FVector3f(-500.f, -500.f, RiseSpeed * 0.6f);
+	Embers.VelocityMax = FVector3f(500.f, 500.f, RiseSpeed * 1.6f);
+
+	// 불기둥이 솟은 자리에 남는 잔열 자국. 몇 장을 겹쳐 아무 방향으로 돌린다.
+	FSpriteLayer Scorch{ TEXT("Scorch"), ScorchMaterial, 14.f, {5.f, 7.f}, {350.f, 350.f}, {600.f, 600.f}, {0.f, 0.f}, 0.f, 0.f, 0.f, 0.f, 0.f,
+		{ {0.f, 1.f}, {1.f, 1.f} }, { {0.f, 0.f}, {0.04f, 1.f}, {0.5f, 0.8f}, {1.f, 0.f} }, { {0.f, 0.9f}, {0.1f, 1.f}, {1.f, 1.f} },
+		ENiagaraSpriteAlignment::Unaligned, 0 };
+	Scorch.BoxSize = FVector3f(Radius * 2.f, Radius * 2.f, 0.f);
+	Scorch.bUseVelocity = true;
+	Scorch.bDecal = true;
+	Scorch.bRandomColorSeed = true;
+	Scorch.DecalSizeMin = FVector3f(400.f, Radius * 4.f, Radius * 4.f);
+	Scorch.DecalSizeMax = FVector3f(400.f, Radius * 7.f, Radius * 7.f);
+
+	const FSpriteLayer Layers[] = { Scorch, Smoke, Fire, Core, Embers };
+	const float Spread = Radius + 900.f;
+	return BuildLayeredSystem(PackagePath, Layers, 0.f, 1.f, FVector(-Spread, -Spread, -300.f), FVector(Spread, Spread, Height * 2.f + 600.f), Burst);
+}
+
+UNiagaraSystem* UknightMonsterFXBuilder::BuildBurnSystem(const FString& PackagePath, UMaterialInterface* FireMaterial,
+	UMaterialInterface* SmokeMaterial, UMaterialInterface* EmberMaterial, FVector BodyExtent, float FlameScale)
+{
+	using namespace knightMonsterFX;
+	if (!FireMaterial)
+	{
+		return nullptr;
+	}
+	const FVector3f Box = FVector3f(BodyExtent) * 2.f;
+	// 몸 곳곳에서 붙었다 꺼지는 작은 불꽃. 위로 날리며 금방 사라진다.
+	FSpriteLayer Flames{ TEXT("Flames"), FireMaterial, 45.f, {0.35f, 0.6f}, {50.f, 50.f}, {95.f, 95.f}, {0.f, 0.f}, 0.f, 250.f, 0.f, 150.f, 0.02f,
+		{ {0.f, 1.2f}, {0.5f, 0.8f}, {1.f, 0.3f} }, { {0.f, 0.f}, {0.1f, 1.f}, {0.6f, 0.8f}, {1.f, 0.f} }, { {0.f, 0.5f}, {0.3f, 1.f}, {1.f, 1.6f} },
+		ENiagaraSpriteAlignment::Unaligned, 1 };
+	Flames.BoxSize = Box;
+	Flames.bUseVelocity = true;
+	Flames.VelocityMin = FVector3f(-30.f, -30.f, 60.f);
+	Flames.VelocityMax = FVector3f(30.f, 30.f, 160.f);
+
+	// 그을린 연기: 몸 위쪽에서 가늘게 피어오른다.
+	FSpriteLayer Smoke{ TEXT("Smoke"), SmokeMaterial, 8.f, {0.9f, 1.4f}, {50.f, 50.f}, {90.f, 90.f}, {0.f, 0.f}, 0.f, 120.f, 0.5f, 60.f, 0.02f,
+		{ {0.f, 3.f}, {0.4f, 1.5f}, {1.f, 1.5f} }, { {0.f, 0.f}, {0.2f, 0.35f}, {1.f, 0.f} }, { {0.f, 0.6f}, {1.f, 2.2f} },
+		ENiagaraSpriteAlignment::Unaligned, 0 };
+	Smoke.BoxSize = FVector3f(Box.X, Box.Y, Box.Z * 0.5f);
+	Smoke.bUseVelocity = true;
+	Smoke.VelocityMin = FVector3f(-20.f, -20.f, 80.f);
+	Smoke.VelocityMax = FVector3f(20.f, 20.f, 160.f);
+
+	FSpriteLayer Embers{ TEXT("Embers"), EmberMaterial, 18.f, {0.5f, 0.9f}, {3.f, 8.f}, {5.f, 14.f}, {0.f, 0.f}, 0.f, 150.f, 0.5f, 150.f, 0.02f,
+		{ {0.f, 1.f}, {1.f, 0.6f} }, { {0.f, 0.f}, {0.1f, 1.f}, {0.7f, 1.f}, {1.f, 0.f} }, { {0.f, 1.f}, {1.f, 0.5f} },
+		ENiagaraSpriteAlignment::VelocityAligned, 2 };
+	Embers.BoxSize = Box;
+	Embers.bUseVelocity = true;
+	Embers.VelocityMin = FVector3f(-120.f, -120.f, 50.f);
+	Embers.VelocityMax = FVector3f(120.f, 120.f, 250.f);
+
+	for (FSpriteLayer* const Layer : { &Flames, &Smoke })
+	{
+		Layer->SizeMin *= FlameScale;
+		Layer->SizeMax *= FlameScale;
+		Layer->Rate *= FlameScale;
+	}
+
+	const FSpriteLayer Layers[] = { Smoke, Flames, Embers };
+	const FVector Margin(200.f, 200.f, 400.f);
+	return BuildLayeredSystem(PackagePath, Layers, 0.f, 1.f, -BodyExtent - Margin, BodyExtent + Margin);
 }
 
 UNiagaraSystem* UknightMonsterFXBuilder::BuildGroundDustSystem(const FString& PackagePath, UMaterialInterface* Material, float Radius)

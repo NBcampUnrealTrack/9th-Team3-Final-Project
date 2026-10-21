@@ -65,8 +65,12 @@ float UknightGameplayAbility_MonsterAttack::GetSelectionWeight(const FknightMons
 		return Selection.MinRange <= 0.f && Selection.MaxAngle >= 180.f ? Selection.Weight : 0.f;
 	}
 	const float AbsAngle = FMath::Abs(Context.AngleToTarget);
+	const bool bCheckAngle = !Context.bIgnoreAngle || Selection.TargetSide != EknightTargetSide::Any;
+	// AngleToTarget은 오른쪽이 +다.
+	const bool bWrongSide = (Selection.TargetSide == EknightTargetSide::Left && Context.AngleToTarget > 0.f)
+		|| (Selection.TargetSide == EknightTargetSide::Right && Context.AngleToTarget < 0.f);
 	if (Context.Distance < Selection.MinRange || Context.Distance > Selection.MaxRange
-		|| (!Context.bIgnoreAngle && (AbsAngle > Selection.MaxAngle || AbsAngle < Selection.MinAngle)))
+		|| (bCheckAngle && (AbsAngle > Selection.MaxAngle || AbsAngle < Selection.MinAngle || bWrongSide)))
 	{
 		return 0.f;
 	}

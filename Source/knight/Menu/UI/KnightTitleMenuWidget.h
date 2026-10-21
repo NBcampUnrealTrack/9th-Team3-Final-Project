@@ -8,7 +8,11 @@ class UCommonButtonBase;
 class UPanelWidget;
 class UKnightSaveSlotCard;
 class UKnightSettingsWidget;
+class UKnightMenuVideoBackgroundWidget;
 class USoundBase;
+class UMediaSource;
+class UMaterialInterface;
+class UTexture2D;
 
 UENUM(BlueprintType)
 enum class EKnightTitlePage : uint8
@@ -144,6 +148,27 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Knight|Title Intro")
 	TObjectPtr<USoundBase> PressKeySound;
 
+	/** The video stays behind every title page and is disabled until a valid source is assigned. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Menu|Video Background")
+	bool bUseVideoBackground = false;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Menu|Video Background", meta=(EditCondition="bUseVideoBackground"))
+	TObjectPtr<UMediaSource> BackgroundMediaSource;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Menu|Video Background", meta=(EditCondition="bUseVideoBackground"))
+	bool bLoopBackgroundVideo = true;
+
+	/** Shown while opening and after an open failure; empty keeps the title's original background. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Menu|Video Background", meta=(EditCondition="bUseVideoBackground"))
+	TObjectPtr<UTexture2D> FallbackBackgroundImage;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Menu|Video Background", meta=(ClampMin="0.0", ClampMax="1.0", EditCondition="bUseVideoBackground"))
+	float BackgroundDimOpacity = 0.0f;
+
+	/** UI-domain material with a VideoTexture parameter. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Menu|Video Background|Advanced", meta=(EditCondition="bUseVideoBackground"))
+	TObjectPtr<UMaterialInterface> BackgroundVideoMaterial;
+
 private:
 	UFUNCTION()
 	void HandleStartGameClicked();
@@ -176,6 +201,8 @@ private:
 	int32 FindLatestSlot() const;
 	void OpenLobby();
 	void EnsureSettingsWidget();
+	void EnsureVideoBackground();
+	void UpdateVideoBackground();
 
 	void EnterIntroPhase(EKnightTitleIntroPhase NewPhase);
 	/** A key or click before the menu: skips the logos, or answers "press any key". */
@@ -187,6 +214,8 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UKnightSettingsWidget> SettingsWidget;
+	UPROPERTY(Transient)
+	TObjectPtr<UKnightMenuVideoBackgroundWidget> VideoBackgroundWidget;
 
 	EKnightTitleIntroPhase IntroPhase = EKnightTitleIntroPhase::Menu;
 	float IntroPhaseTime = 0.f;

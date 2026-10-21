@@ -69,6 +69,13 @@ bool FJanyeolFireIntegrationTest::RunTest(const FString& Parameters)
     Fire->SetFireHeat(0.f);
     for (int32 I = 0; I < 60; ++I) Fire->TickComponent(1.f / 30.f, LEVELTICK_All, nullptr);
     TestTrue(TEXT("Manual heat returns to calm"), Fire->GetCurrentHeat() < .02f);
+    TestEqual(TEXT("Manual strength defaults to full"), Fire->Strength, 1.f);
+    Fire->SetFireStrength(.3f);
+    for (int32 I = 0; I < 60; ++I) Fire->TickComponent(1.f / 30.f, LEVELTICK_All, nullptr);
+    TestTrue(TEXT("Manual strength smoothly dims the fire"), FMath::IsNearlyEqual(Fire->GetCurrentStrength(), .3f, .02f));
+    Fire->SetFireStrength(1.f);
+    for (int32 I = 0; I < 60; ++I) Fire->TickComponent(1.f / 30.f, LEVELTICK_All, nullptr);
+    TestTrue(TEXT("Manual strength returns to full"), Fire->GetCurrentStrength() > .98f);
 
     if (Mantles.Num() == 1)
     {

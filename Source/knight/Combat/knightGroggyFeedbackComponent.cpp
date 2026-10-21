@@ -25,6 +25,10 @@
 #include "Interfaces/TargetableInterface.h"
 #include "Monster/knightMonsterCharacterBase.h"
 #include "PhysicsEngine/BodyInstance.h"
+#include "Kismet/GameplayStatics.h"
+#include "MotionWarpingComponent.h"
+#include "Sound/SoundClass.h"
+#include "Sound/SoundMix.h"
 #include "Raid/knightRaidGameState.h"
 #include "knightCharacter.h"
 #include "System/knightGameplayTags.h"
@@ -33,16 +37,34 @@
 
 namespace
 {
+	// 공격이 돌진할 자리(모션 워핑 목표). MeleeAttack·강공격이 WatchAttack 전에 정한다(락온 중일 때만).
+	const FName PredictionWarpTargetName(TEXT("AttackTarget"));
+
+	/** Position 뒤에 오는 첫 판정(근접 트레이스 시작 또는 범위 판정) 시각. 없으면 MAX_FLT. */
+	float FindNextHitTime(const UAnimMontage* Montage, float Position)
+	{
+		float Best = MAX_FLT;
+		if (!Montage)
+		{
+			return Best;
+		}
+		for (const FAnimNotifyEvent& Event : Montage->Notifies)
+		{
+			const bool bIsMeleeTrace = Event.NotifyStateClass && Event.NotifyStateClass->IsA<UknightAnimNotifyState_MeleeTrace>();
+			const bool bIsMeleeArea = Event.Notify && Event.Notify->IsA<UknightAnimNotify_MeleeArea>();
+			const float Trigger = Event.GetTriggerTime();
+			if ((bIsMeleeTrace || bIsMeleeArea) && Trigger > Position)
+			{
+				Best = FMath::Min(Best, Trigger);
+			}
+		}
+		return Best;
+	}
+
 	bool IsInHitStop(const AActor* Actor)
 	{
 		const UknightHitStopComponent* const HitStop = Actor ? Actor->FindComponentByClass<UknightHitStopComponent>() : nullptr;
 		return HitStop && HitStop->IsInHitStop();
-	}
-
-	float EaseInOut(float Alpha)
-	{
-		const float T = FMath::Clamp(Alpha, 0.f, 1.f);
-		return T * T * (3.f - 2.f * T);
 	}
 
 	void RestoreAppliedSpeed(AActor* Actor, float AppliedSpeed, float BaseSpeed, bool bApplied)
@@ -114,6 +136,7 @@ void UknightGroggyFeedbackComponent::EndPlay(const EEndPlayReason::Type EndPlayR
 	UknightHitReactionComponent::OnAnyPoiseBroken.Remove(PoiseBrokenHandle);
 	PoiseBrokenHandle.Reset();
 	CancelKnockdownPresentation();
+	SetPredictionAudio(false);
 	if (UWorld* const World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(ReleaseDelayTimer);
@@ -134,6 +157,21 @@ void UknightGroggyFeedbackComponent::WatchAttack(UGameplayAbility* Attack, UAnim
 	{
 		return;
 	}
+	// (2026-10-20) 돌진 중에 시작한 예측 슬로를 베기 모션이 이어받는다. 슬로는 유지한 채 진행률만 베기 기준으로 바꾼다.
+	if (bPredictionActive && bPredictionLead && PredictionAttack.Get() == Attack)
+	{
+		bLungeWatch = false;
+		bPredictionLead = false;
+		WatchedAttack = Attack;
+		WatchedMontage = Montage;
+		WatchedHitParams = HitParams;
+		bWatchedPredictionAttempted = true;
+		PredictionStartPosition = 0.f;
+		PredictionHitTime = FindNextHitTime(Montage, 0.f);
+		EnsureFeedbackTicker();
+		return;
+	}
+	bLungeWatch = false;
 	if (WatchedAttack.IsValid() && WatchedAttack.Get() != Attack)
 	{
 		EndPredictionForAttack(WatchedAttack.Get());
@@ -155,8 +193,63 @@ void UknightGroggyFeedbackComponent::WatchAttack(UGameplayAbility* Attack, UAnim
 	EnsureFeedbackTicker();
 }
 
-bool UknightGroggyFeedbackComponent::TryStartPredictedKnockdown(UGameplayAbility* Attack, const FknightMeleeHitParams& HitParams)
+void UknightGroggyFeedbackComponent::WatchLungeDash(UGameplayAbility* Attack, UAnimMontage* StrikeMontage, float StrikePlayRate,
+	const FknightMeleeHitParams& HitParams, const FVector& Destination, float DashDuration)
 {
+	if (!Attack || !Attack->IsActive() || !StrikeMontage || StrikePlayRate <= 0.f)
+	{
+		return;
+	}
+	if (WatchedAttack.IsValid() && WatchedAttack.Get() != Attack)
+	{
+		EndPredictionForAttack(WatchedAttack.Get());
+	}
+	const float StrikeHitTime = FindNextHitTime(StrikeMontage, 0.f);
+	if (StrikeHitTime == MAX_FLT)
+	{
+		return;
+	}
+	PredictedTargetsThisAttack.Reset();
+	LungeAttack = Attack;
+	LungeHitParams = HitParams;
+	LungeDestination = Destination;
+	LungeDashRemaining = FMath::Max(DashDuration, 0.f);
+	LungeStrikeLead = StrikeHitTime / StrikePlayRate;
+	bLungeWatch = true;
+	EnsureFeedbackTicker();
+	TickLungeWatch(0.f);
+}
+
+void UknightGroggyFeedbackComponent::TickLungeWatch(float DeltaRealTime)
+{
+	UGameplayAbility* const Attack = LungeAttack.Get();
+	const AActor* const Owner = GetOwner();
+	if (!bLungeWatch || !Attack || !Attack->IsActive() || !Owner)
+	{
+		bLungeWatch = false;
+		return;
+	}
+	// 돌진은 루트 모션 힘이라 액터 시간(CustomTimeDilation)을 따른다.
+	LungeDashRemaining = FMath::Max(0.f, LungeDashRemaining - DeltaRealTime * FMath::Max(Owner->CustomTimeDilation, 0.f));
+	if (bCameraBeatActive || bReleasing)
+	{
+		return;
+	}
+	const float Remaining = LungeDashRemaining + LungeStrikeLead;
+	// (2026-10-20 사용자 요청) 돌진 시작부터 슬로: 남은 시간 제한 없이 조건이 맞으면 바로 시작한다.
+	const bool bInLeadWindow = bLungeSlowFromDashStart || Remaining <= FMath::Max(LungePredictionLeadTime, 0.1f);
+	if (bInLeadWindow && Remaining > 0.08f
+		&& TryStartPredictedKnockdown(Attack, LungeHitParams, Remaining, &LungeDestination))
+	{
+		bPredictionLead = true;
+		bLungeWatch = false;
+	}
+}
+
+bool UknightGroggyFeedbackComponent::TryStartPredictedKnockdown(UGameplayAbility* Attack, const FknightMeleeHitParams& HitParams,
+	float LeadRemaining, const FVector* LeadDestination)
+{
+	const bool bLeadMode = LeadRemaining >= 0.f;
 	AknightCharacter* const Player = Cast<AknightCharacter>(GetOwner());
 	APlayerController* const PC = Player ? Cast<APlayerController>(Player->GetController()) : nullptr;
 	UWorld* const World = GetWorld();
@@ -231,16 +324,71 @@ bool UknightGroggyFeedbackComponent::TryStartPredictedKnockdown(UGameplayAbility
 		return false;
 	}
 
-	const FVector PlayerLoc = Player->GetActorLocation();
+	// (2026-10-20) 슬로는 첫 판정 PredictionLeadTime초(정상 속도 기준) 전부터만 시작한다. 더 일찍 시작하면 슬로가 길어져
+	// 안전 제한(최대 시간)에 걸려 맞기 전에 풀렸고, 그러면 타격은 일반 그로기 연출(끝에만 슬로)으로 처리됐다.
+	float MontagePosition = 0.f;
+	float NextHitTime = MAX_FLT;
+	float RemainingToHit = LeadRemaining;
+	if (!bLeadMode)
+	{
+		UAnimInstance* const PlayerAnim = Player->GetMesh() ? Player->GetMesh()->GetAnimInstance() : nullptr;
+		UAnimMontage* const AttackMontage = WatchedMontage.Get();
+		if (!PlayerAnim || !AttackMontage || !PlayerAnim->Montage_IsPlaying(AttackMontage))
+		{
+			return false;
+		}
+		MontagePosition = PlayerAnim->Montage_GetPosition(AttackMontage);
+		const float MontageRate = PlayerAnim->Montage_GetPlayRate(AttackMontage) * FMath::Max(Player->CustomTimeDilation, 0.01f);
+		NextHitTime = FindNextHitTime(AttackMontage, MontagePosition);
+		if (NextHitTime == MAX_FLT || MontageRate <= 0.f)
+		{
+			return false;
+		}
+		RemainingToHit = (NextHitTime - MontagePosition) / MontageRate;
+		if (RemainingToHit > FMath::Max(PredictionLeadTime, 0.1f) || RemainingToHit < 0.08f)
+		{
+			return false;
+		}
+	}
+
+	// (2026-10-20) 락온 공격은 모션 워핑으로 대상 앞까지 다가간다. 거리는 지금 자리 대신 도착할 자리(워핑 목표)에서 재고,
+	// 그 자리는 대상 표면에서 WarpStopDistance(기본 150cm) 떨어져 있으니 표면 거리 허용치를 그만큼 늘린다.
+	// 예전에는 현재 자리 기준 70cm라, 다가가는 동안에는 실패하다가 늦게(휘두르기 끝무렵) 시작하거나 아예 시작 못 했다.
+	FVector PlayerLoc = Player->GetActorLocation();
+	bool bUsingWarpTarget = false;
+	if (LeadDestination)
+	{
+		// 돌진 베기: 도착 자리(대상 표면에서 StopDistance 앞)에서 잰다.
+		PlayerLoc = FVector(LeadDestination->X, LeadDestination->Y, PlayerLoc.Z);
+		bUsingWarpTarget = true;
+	}
+	else if (bLocked)
+	{
+		if (const UMotionWarpingComponent* const Warping = Player->FindComponentByClass<UMotionWarpingComponent>())
+		{
+			if (const FMotionWarpingTarget* const Warp = Warping->FindWarpTarget(PredictionWarpTargetName))
+			{
+				const FVector WarpLoc = Warp->GetLocation();
+				if (FVector::Dist2D(WarpLoc, PlayerLoc) <= 700.f)
+				{
+					PlayerLoc = FVector(WarpLoc.X, WarpLoc.Y, PlayerLoc.Z);
+					bUsingWarpTarget = true;
+				}
+			}
+		}
+	}
 	const FVector PlayerForward2D = Player->GetActorForwardVector().GetSafeNormal2D();
 	const FVector ViewForward2D = PC->GetControlRotation().Vector().GetSafeNormal2D();
 
 	FVector ClosestBodyPoint = TargetPoint;
+	// (돌진 베기는 StopDistance가 더 길 수 있어 아래 표면 허용치에 더해 준다.)
+	const float LeadSlack = bLeadMode ? 100.f : 0.f;
 	const float PointDistance2D = FVector::Dist2D(PlayerLoc, TargetPoint);
 	const float SurfaceDistance2D = FindClosestMonsterBodyDistance2D(Boss, PlayerLoc, TargetPoint, &ClosestBodyPoint);
 	const bool bIsLungingOrHeavyAttack = HitParams.PoiseDamage >= 20.f;
-	const float MaxSurfaceRange = bIsLungingOrHeavyAttack ? 140.f : 70.f;
-	const float MaxPointRange = bIsLungingOrHeavyAttack ? 440.f : 310.f;
+	const float WarpSlack = bUsingWarpTarget ? 150.f : 0.f;
+	const float MaxSurfaceRange = (bIsLungingOrHeavyAttack ? 140.f : 70.f) + WarpSlack + LeadSlack;
+	const float MaxPointRange = (bIsLungingOrHeavyAttack ? 440.f : 310.f) + LeadSlack;
 	if (SurfaceDistance2D > MaxSurfaceRange || PointDistance2D > MaxPointRange)
 	{
 		return false;
@@ -281,6 +429,12 @@ bool UknightGroggyFeedbackComponent::TryStartPredictedKnockdown(UGameplayAbility
 	OwnerBaseSpeed = Player->CustomTimeDilation;
 	VictimBaseSpeed = Boss->CustomTimeDilation;
 	PredictionStartTime = FPlatformTime::Seconds();
+	PredictionStartPosition = MontagePosition;
+	PredictionHitTime = NextHitTime;
+	bPredictionLead = bLeadMode;
+	// (2026-10-20) 배속과 안전 제한을 이번 슬로에 맞게 정한다. 제한 = 맞기까지 슬로로 늘어난 시간 + 여유.
+	ActivePredictionSlowSpeed = FMath::Clamp(bLeadMode ? LungeSlowSpeed : PredictionSlowSpeed, 0.02f, 1.f);
+	ActivePredictionMaxDuration = FMath::Max<double>(PredictionMaxTime, RemainingToHit / FMath::Max(ActivePredictionSlowSpeed, 0.1f) + 0.6);
 	Player->OnDeathStarted.AddUniqueDynamic(this, &ThisClass::HandlePlayerDied);
 	Boss->OnMonsterDefeated.AddUniqueDynamic(this, &ThisClass::HandleBossDefeated);
 	ZoomCameraManager = Cast<AknightPlayerCameraManager>(PC->PlayerCameraManager);
@@ -288,9 +442,12 @@ bool UknightGroggyFeedbackComponent::TryStartPredictedKnockdown(UGameplayAbility
 	{
 		CameraManager->StartKnockdownZoom(Player, PredictionZoomDegrees, FMath::Min(PredictionZoomEnterTime, 0.22f), PredictionStartTime);
 	}
+	// (2026-10-20) 슬로 동안 소리를 먹먹하게. 맞는 순간(ResolvePredictedMeleeContact) 바로 되돌린다.
+	SetPredictionAudio(true);
 	EnsureFeedbackTicker();
-	UE_LOG(LogknightCombat, Log, TEXT("Predicted knockdown %s -> %s: poise %.1f, expected %.1f (surfaceDist %.0f, pointDist %.0f)"),
-		*GetNameSafe(Player), *GetNameSafe(Boss), TargetCore->GetPoise(), ExpectedPoiseDamage, SurfaceDistance2D, PointDistance2D);
+	UE_LOG(LogknightCombat, Log, TEXT("Predicted knockdown %s -> %s: poise %.1f, expected %.1f (surfaceDist %.0f, pointDist %.0f, %s, %.2fs to hit)"),
+		*GetNameSafe(Player), *GetNameSafe(Boss), TargetCore->GetPoise(), ExpectedPoiseDamage, SurfaceDistance2D, PointDistance2D,
+		bLeadMode ? TEXT("lunge dash") : (bUsingWarpTarget ? TEXT("from warp target") : TEXT("from player")), RemainingToHit);
 	OnPresentationEvent.Broadcast(false);
 	UE_LOG(LogknightCombat, Verbose, TEXT("Predicted knockdown %s -> %s: poise %.1f, expected %.1f"),
 		*GetNameSafe(Player), *GetNameSafe(Boss), TargetCore->GetPoise(), ExpectedPoiseDamage);
@@ -299,6 +456,11 @@ bool UknightGroggyFeedbackComponent::TryStartPredictedKnockdown(UGameplayAbility
 
 void UknightGroggyFeedbackComponent::EndPredictionForAttack(const UGameplayAbility* Attack)
 {
+	if (LungeAttack.Get() == Attack)
+	{
+		bLungeWatch = false;
+		LungeAttack.Reset();
+	}
 	if (WatchedAttack.Get() == Attack)
 	{
 		WatchedAttack.Reset();
@@ -323,10 +485,16 @@ void UknightGroggyFeedbackComponent::ResolvePredictedMeleeContact(AActor* HitTar
 		// End pre-hit local slow before the damage effect / hit-stop snapshots CustomTimeDilation,
 		// but keep the camera zoom held through FreezeTime so the impact freezes at peak close-up.
 		FinishPredictionSlow();
+		SetPredictionAudio(false);
 		bPredictionActive = false;
 		PredictionAttack.Reset();
 		bPredictionHitPending = true;
-		PresentationEndTime = FPlatformTime::Seconds() + FMath::Max(FreezeTime, 0.f) + FMath::Max(PredictionZoomReturnTime, 0.f) + 0.5;
+		// (2026-10-20) 맞는 순간 줌을 한 번 더 당긴다(멈춤 동안 유지, 풀릴 때 함께 돌아감).
+		if (AknightPlayerCameraManager* const CameraManager = ZoomCameraManager.Get())
+		{
+			CameraManager->PunchKnockdownZoom(ImpactZoomPunchDegrees, ImpactZoomPunchTime);
+		}
+		PresentationEndTime = FPlatformTime::Seconds() + FMath::Max(PredictedImpactFreezeTime, 0.f) + FMath::Max(PredictionZoomReturnTime, 0.f) + 0.5;
 		return;
 	}
 	BeginPredictionReturn();
@@ -366,7 +534,9 @@ void UknightGroggyFeedbackComponent::BeginPredictionReturn()
 	{
 		return;
 	}
+	bPredictionLead = false;
 	FinishPredictionSlow();
+	SetPredictionAudio(false);
 	bPredictionActive = false;
 	PredictionAttack.Reset();
 	if (AknightPlayerCameraManager* const CameraManager = ZoomCameraManager.Get())
@@ -376,6 +546,51 @@ void UknightGroggyFeedbackComponent::BeginPredictionReturn()
 	PresentationEndTime = FPlatformTime::Seconds() + FMath::Max(PredictionZoomReturnTime, 0.f);
 }
 
+void UknightGroggyFeedbackComponent::SetPredictionAudio(const bool bMuffled)
+{
+	if (bMuffled == bPredictionAudioPushed)
+	{
+		return;
+	}
+	if (bMuffled && PredictionMuffledClasses.IsEmpty())
+	{
+		return;
+	}
+	if (bMuffled && !PredictionSoundMix)
+	{
+		// 튜닝값(클래스·주파수·볼륨)만 컴포넌트에 두고, 믹스는 처음 쓸 때 런타임에 만든다.
+		PredictionSoundMix = NewObject<USoundMix>(this, TEXT("GroggyPredictionMix"));
+		PredictionSoundMix->FadeInTime = FMath::Max(PredictionSlowEnterTime, 0.02f);
+		PredictionSoundMix->FadeOutTime = 0.03f;
+		for (USoundClass* const SoundClass : PredictionMuffledClasses)
+		{
+			if (!SoundClass)
+			{
+				continue;
+			}
+			FSoundClassAdjuster Adjuster;
+			Adjuster.SoundClassObject = SoundClass;
+			Adjuster.VolumeAdjuster = PredictionVolumeScale;
+			Adjuster.LowPassFilterFrequency = PredictionLowPassFrequency;
+			Adjuster.bApplyToChildren = true;
+			PredictionSoundMix->SoundClassEffects.Add(Adjuster);
+		}
+	}
+	if (!PredictionSoundMix)
+	{
+		return;
+	}
+	if (bMuffled)
+	{
+		UGameplayStatics::PushSoundMixModifier(this, PredictionSoundMix);
+	}
+	else
+	{
+		UGameplayStatics::PopSoundMixModifier(this, PredictionSoundMix);
+	}
+	bPredictionAudioPushed = bMuffled;
+}
+
 void UknightGroggyFeedbackComponent::FinishPredictionVisual()
 {
 	if (!bCameraBeatActive)
@@ -383,6 +598,7 @@ void UknightGroggyFeedbackComponent::FinishPredictionVisual()
 		return;
 	}
 	FinishPredictionSlow();
+	SetPredictionAudio(false);
 	if (AknightCharacter* const Player = Cast<AknightCharacter>(GetOwner()))
 	{
 		Player->OnDeathStarted.RemoveDynamic(this, &ThisClass::HandlePlayerDied);
@@ -405,6 +621,9 @@ void UknightGroggyFeedbackComponent::FinishPredictionVisual()
 
 void UknightGroggyFeedbackComponent::CancelKnockdownPresentation()
 {
+	bLungeWatch = false;
+	bPredictionLead = false;
+	LungeAttack.Reset();
 	WatchedAttack.Reset();
 	WatchedMontage.Reset();
 	PredictedTargetsThisAttack.Reset();
@@ -449,7 +668,8 @@ void UknightGroggyFeedbackComponent::HandleAnyPoiseBroken(AActor* InVictim, AAct
 	// When the groggy attack already played slow-motion from the start of the attack and released at impact,
 	// skip the post-hit slow-motion so the enemy collapses into groggy cleanly right after impact.
 	bSkipGenericReleaseSlow = bPredictedContact;
-	const float EffectiveFreezeTime = bPredictedContact ? FMath::Min(FreezeTime, 0.08f) : FreezeTime;
+	// (2026-10-20) 예측 슬로로 들어온 타격은 멈춤을 PredictedImpactFreezeTime(기본 0.14초)만큼. 예전엔 0.08초 고정.
+	const float EffectiveFreezeTime = bPredictedContact ? PredictedImpactFreezeTime : FreezeTime;
 	// 앞 그로기의 슬로모션이 아직 진행 중이면 정리하고 새로 시작한다.
 	World->GetTimerManager().ClearTimer(ReleaseDelayTimer);
 	FinishRelease();
@@ -534,10 +754,20 @@ void UknightGroggyFeedbackComponent::StartRelease()
 			VictimASC->ExecuteGameplayCue(ReleaseCueTag, CueParams);
 		}
 	}
+	bReleaseVictimOnly = false;
+	ActiveReleaseTime = SlowReleaseTime;
+	ActiveReleaseStartSpeed = SlowReleaseStartSpeed;
 	if (bSkipGenericReleaseSlow)
 	{
 		bSkipGenericReleaseSlow = false;
-		return;
+		// (2026-10-20) 예측 슬로 뒤에는 나이트는 바로 정상 속도, 보스만 잠깐 느리게 쓰러지는 여운.
+		if (VictimFollowThroughTime <= 0.f || !VictimActor)
+		{
+			return;
+		}
+		bReleaseVictimOnly = true;
+		ActiveReleaseTime = VictimFollowThroughTime;
+		ActiveReleaseStartSpeed = VictimFollowThroughStartSpeed;
 	}
 
 	// 원래 속도: 히트스탑이 아직 걸려 있으면(같은 순간에 끝나는 타이머) 그쪽이 1배속으로 돌려놓으므로 1로 본다.
@@ -557,10 +787,10 @@ void UknightGroggyFeedbackComponent::TickRelease()
 	{
 		return;
 	}
-	const float Duration = SlowReleaseTime;
+	const float Duration = ActiveReleaseTime;
 	const float Alpha = Duration > 0.f
 		? FMath::Clamp(static_cast<float>(FPlatformTime::Seconds() - ReleaseStartTime) / Duration, 0.f, 1.f) : 1.f;
-	const float Speed = FMath::Lerp(SlowReleaseStartSpeed, 1.f, Alpha * Alpha);
+	const float Speed = FMath::Lerp(ActiveReleaseStartSpeed, 1.f, Alpha * Alpha);
 
 	bool bWaitingForHitStop = false;
 	auto ApplySpeed = [Speed, &bWaitingForHitStop](AActor* Actor, float BaseSpeed, float& LastApplied, bool& bApplied)
@@ -579,7 +809,10 @@ void UknightGroggyFeedbackComponent::TickRelease()
 		Actor->CustomTimeDilation = LastApplied;
 		bApplied = true;
 	};
-	ApplySpeed(GetOwner(), OwnerBaseSpeed, OwnerAppliedSpeed, bOwnerSpeedApplied);
+	if (!bReleaseVictimOnly)
+	{
+		ApplySpeed(GetOwner(), OwnerBaseSpeed, OwnerAppliedSpeed, bOwnerSpeedApplied);
+	}
 	ApplySpeed(Victim.Get(), VictimBaseSpeed, VictimAppliedSpeed, bVictimSpeedApplied);
 	if (Alpha >= 1.f && !bWaitingForHitStop)
 	{
@@ -616,8 +849,8 @@ void UknightGroggyFeedbackComponent::TickWatchedAttack()
 	{
 		return;
 	}
-	// Allow starting early in the attack motion if AttackWarp brings the player into range right after WatchAttack.
-	constexpr float SwingLeadTime = 1.2f;
+	// (2026-10-20) 예전에는 1.2초 전부터 시작해서 슬로가 안전 제한에 걸려 맞기 전에 풀렸다. 시작 시점은 TryStartPredictedKnockdown이 PredictionLeadTime으로 거른다.
+	const float SwingLeadTime = FMath::Max(PredictionLeadTime, 0.1f);
 
 	for (const FAnimNotifyEvent& Event : Montage->Notifies)
 	{
@@ -647,8 +880,10 @@ void UknightGroggyFeedbackComponent::TickPrediction()
 	UknightTargetLockComponent* const Lock = Player ? Player->FindComponentByClass<UknightTargetLockComponent>() : nullptr;
 	UAbilitySystemComponent* const SourceASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Player);
 	UAbilitySystemComponent* const TargetASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Boss);
-	const double MaxPredictionDuration = FMath::Max<double>(PredictionMaxTime, 1.5);
-	if (!Player || !Boss || !Attack || !Attack->IsActive() || !Montage || !Anim || !Anim->Montage_IsPlaying(Montage)
+	// (2026-10-20) 안전 제한: 맞기까지 슬로로 걸리는 시간 + 여유. 예전 1.5초 고정은 슬로가 길어지면 맞기 전에 풀려 버렸다.
+	const double MaxPredictionDuration = ActivePredictionMaxDuration;
+	const bool bMontageMissing = !bPredictionLead && (!Montage || !Anim || !Anim->Montage_IsPlaying(Montage));
+	if (!Player || !Boss || !Attack || !Attack->IsActive() || bMontageMissing
 		|| !Lock || !SourceASC || !TargetASC
 		|| IsInHitStop(Player) || IsInHitStop(Boss)
 		|| SourceASC->HasMatchingGameplayTag(knightGameplayTags::State_Dead)
@@ -662,6 +897,37 @@ void UknightGroggyFeedbackComponent::TickPrediction()
 		|| FPlatformTime::Seconds() - PredictionStartTime >= MaxPredictionDuration)
 	{
 		BeginPredictionReturn();
+		return;
+	}
+
+	// (2026-10-20) 돌진 중(아직 베기 전): 슬로로 들어가서 유지만 한다. 베기가 시작되면 WatchAttack이 모션 기준으로 바꾼다.
+	if (bPredictionLead)
+	{
+		if (bPredictionWasLocked && Lock->IsLockedOn() && Lock->GetLockedTarget() != Boss)
+		{
+			BeginPredictionReturn();
+			return;
+		}
+		const double LeadElapsed = FPlatformTime::Seconds() - PredictionStartTime;
+		const float LeadEnter = FMath::Clamp(static_cast<float>(LeadElapsed / FMath::Max(PredictionSlowEnterTime, 0.01f)), 0.f, 1.f);
+		const float LeadSpeed = FMath::Lerp(1.f, ActivePredictionSlowSpeed, 1.f - FMath::Square(1.f - LeadEnter));
+		auto ApplyLeadSpeed = [LeadSpeed](AActor* Actor, float BaseSpeed, float& LastApplied, bool& bApplied)
+		{
+			if (bApplied && !FMath::IsNearlyEqual(Actor->CustomTimeDilation, LastApplied))
+			{
+				bApplied = false;
+				return;
+			}
+			if (!bApplied && !FMath::IsNearlyEqual(Actor->CustomTimeDilation, BaseSpeed))
+			{
+				return;
+			}
+			LastApplied = BaseSpeed * LeadSpeed;
+			Actor->CustomTimeDilation = LastApplied;
+			bApplied = true;
+		};
+		ApplyLeadSpeed(Player, OwnerBaseSpeed, OwnerAppliedSpeed, bOwnerSpeedApplied);
+		ApplyLeadSpeed(Boss, VictimBaseSpeed, VictimAppliedSpeed, bVictimSpeedApplied);
 		return;
 	}
 
@@ -704,16 +970,24 @@ void UknightGroggyFeedbackComponent::TickPrediction()
 
 	// Start in slow-motion right when the attack begins, then smoothly accelerate/release back to 1.0x speed
 	// as the montage reaches the hit moment (FirstHitTriggerTime), so the slow-motion releases right as the enemy is hit.
+	// (2026-10-20) 들어갈 때: PredictionSlowEnterTime 동안 감속 곡선(처음 빠르고 끝에 부드럽게). 예전에는 0.04초에 뚝.
+	// 풀 때: 첫 판정까지 PredictionWhipStartProgress만큼은 슬로를 유지하고, 남은 구간에서 가속 곡선으로 확 빨라져 정상 속도로 맞힌다(채찍).
 	const double Elapsed = FPlatformTime::Seconds() - PredictionStartTime;
-	const float FastEnterDuration = 0.04f;
-	const float EnterAlpha = FMath::Clamp(static_cast<float>(Elapsed / FastEnterDuration), 0.f, 1.f);
-	const float SlowSpeed = FMath::Clamp(PredictionSlowSpeed, 0.02f, 1.f);
-	const float EnteredSpeed = FMath::Lerp(1.f, SlowSpeed, EaseInOut(EnterAlpha));
+	const float EnterDuration = FMath::Max(PredictionSlowEnterTime, 0.01f);
+	const float EnterAlpha = FMath::Clamp(static_cast<float>(Elapsed / EnterDuration), 0.f, 1.f);
+	const float EnterEase = 1.f - FMath::Square(1.f - EnterAlpha);
+	const float SlowSpeed = ActivePredictionSlowSpeed;
+	const float EnteredSpeed = FMath::Lerp(1.f, SlowSpeed, EnterEase);
 
-	const float HitTime = (FirstHitTriggerTime < MAX_FLT && FirstHitTriggerTime > 0.05f) ? FirstHitTriggerTime : 0.30f;
-	const float AttackProgress = FMath::Clamp(Position / HitTime, 0.f, 1.f);
-	const float ReleaseAlpha = FMath::Clamp((AttackProgress - 0.50f) / 0.48f, 0.f, 1.f);
-	const float Speed = FMath::Lerp(EnteredSpeed, 1.f, EaseInOut(ReleaseAlpha));
+	// (2026-10-20) 진행률은 모션 처음이 아니라 슬로가 시작된 자리에서 맞는 자리(그때 잰 다음 판정)까지로 잰다.
+	// 그래야 늦게 시작해도 들어가기 → 유지 → 채찍이 다 나온다(예전에는 모션 처음 기준이라 늦게 시작하면 바로 풀렸다).
+	const float HitTime = PredictionHitTime < MAX_FLT ? PredictionHitTime
+		: ((FirstHitTriggerTime < MAX_FLT && FirstHitTriggerTime > 0.05f) ? FirstHitTriggerTime : 0.30f);
+	const float Span = FMath::Max(HitTime - PredictionStartPosition, 0.01f);
+	const float AttackProgress = FMath::Clamp((Position - PredictionStartPosition) / Span, 0.f, 1.f);
+	const float WhipStart = FMath::Clamp(PredictionWhipStartProgress, 0.f, 0.98f);
+	const float ReleaseAlpha = FMath::Clamp((AttackProgress - WhipStart) / FMath::Max(0.99f - WhipStart, 0.01f), 0.f, 1.f);
+	const float Speed = FMath::Lerp(EnteredSpeed, 1.f, ReleaseAlpha * ReleaseAlpha);
 
 	auto ApplySpeed = [Speed](AActor* Actor, float BaseSpeed, float& LastApplied, bool& bApplied)
 	{
@@ -737,6 +1011,10 @@ void UknightGroggyFeedbackComponent::TickPrediction()
 
 bool UknightGroggyFeedbackComponent::TickFeedback(float DeltaRealTime)
 {
+	if (bLungeWatch)
+	{
+		TickLungeWatch(DeltaRealTime);
+	}
 	if (WatchedAttack.IsValid())
 	{
 		TickWatchedAttack();
@@ -768,7 +1046,7 @@ bool UknightGroggyFeedbackComponent::TickFeedback(float DeltaRealTime)
 	{
 		FinishPredictionVisual();
 	}
-	if (!bReleasing && !bCameraBeatActive && !WatchedAttack.IsValid())
+	if (!bReleasing && !bCameraBeatActive && !WatchedAttack.IsValid() && !bLungeWatch)
 	{
 		FeedbackTicker.Reset();
 		return false;
