@@ -44,6 +44,7 @@
 #include "Monster/knightMonsterCharacterBase.h"
 #include "Monster/knightMonsterDefinition.h"
 #include "AbilitySystem/Abilities/knightGameplayAbility_MonsterDiveAttack.h"
+#include "AbilitySystem/Abilities/knightGameplayAbility_MonsterGlideAttack.h"
 #include "AbilitySystem/Abilities/knightGameplayAbility_MonsterProjectileAttack.h"
 #include "Monster/knightMonsterAirTurnComponent.h"
 #include "Monster/knightMonsterHoverComponent.h"
@@ -1763,7 +1764,8 @@ UknightMonsterRecipe* UknightMonsterRecipeLibrary::CreateRecipeFromMonster(TSubc
 			ShortName.RemoveFromStart(AbilityPrefix);
 
 			// 레시피 항목(근접·범위 공격)으로 만들 수 없는 전용 공격은 추가 어빌리티로 그대로 둔다.
-			if (CDO->IsA<UknightGameplayAbility_MonsterDiveAttack>() || CDO->IsA<UknightGameplayAbility_MonsterProjectileAttack>())
+			if (CDO->IsA<UknightGameplayAbility_MonsterDiveAttack>() || CDO->IsA<UknightGameplayAbility_MonsterProjectileAttack>()
+				|| CDO->IsA<UknightGameplayAbility_MonsterGlideAttack>())
 			{
 				Recipe->ExtraAbilities.Add(Entry.Ability.Get());
 				continue;

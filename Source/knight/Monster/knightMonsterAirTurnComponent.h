@@ -42,8 +42,17 @@ public:
 	bool IsAirborne() const { return bAirborne; }
 
 	/** 지금 턴 조건과 상관없이 이륙하거나 착지한다(테스트·연출용). */
+	UFUNCTION(BlueprintCallable, Category="Knight|Monster")
 	void TakeOff();
+
+	UFUNCTION(BlueprintCallable, Category="Knight|Monster")
 	void Land();
+
+	/** 공격이 스스로 땅에 내려앉을 때(탈진 착지): 착지 애니메이션 없이 공중 턴을 끝내고 BlendTime 동안 지상 높이로 내린다. */
+	void EndAirTurnNow(float BlendTime) { if (bAirborne) { EndAirTurn(BlendTime, false); } }
+
+	/** 지상 턴 시간을 처음부터 센다(탈진 착지 같은 딜 타임이 끝난 뒤). */
+	void RestartGroundTurn() { GroundTime = 0.f; }
 
 protected:
 	/** 타깃을 잡은 뒤 지상 턴이 이어지는 시간. 반응(다운·포효) 중에는 흐르지 않는다. 0이면 공중 턴을 쓰지 않는다. */
