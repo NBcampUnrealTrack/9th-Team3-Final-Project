@@ -65,6 +65,22 @@ void UknightGameplayAbility::ApplyCost(const FGameplayAbilitySpecHandle Handle, 
 	}
 }
 
+void UknightGameplayAbility::ApplyStaminaCost(float Amount) const
+{
+	const UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();
+	if (Amount <= 0.f || !ASC || !ASC->HasAttributeSetForAttribute(UknightAttributeSet::GetBoostGaugeAttribute()))
+	{
+		return;
+	}
+	const FGameplayEffectSpecHandle SpecHandle = MakeOutgoingGameplayEffectSpec(UknightGameplayEffect_StaminaCost::StaticClass());
+	if (SpecHandle.IsValid())
+	{
+		// 남은 양보다 많아도 그대로 뺀다. BoostGauge는 속성 세트에서 0 아래로 내려가지 않는다.
+		SpecHandle.Data->SetSetByCallerMagnitude(knightGameplayTags::SetByCaller_BoostCost, -Amount);
+		ApplyGameplayEffectSpecToOwner(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), SpecHandle);
+	}
+}
+
 float UknightGameplayAbility::GetActionSpeed() const
 {
 	const UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();

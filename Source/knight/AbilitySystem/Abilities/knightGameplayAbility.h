@@ -92,6 +92,12 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Knight|Cost")
 	bool bRequireFullStaminaCost = false;
 
+	/**
+	 * (2026-10-20) 행동 에너지를 Amount만큼 쓴다(ApplyCost와 같은 GE, 회복 대기도 같다). 발동 뒤 조건에 따라 따로 쓰는 비용용
+	 * (점프: 땅에서 실제로 뛸 때만). 행동 에너지가 없는 액터는 무시한다.
+	 */
+	void ApplyStaminaCost(float Amount) const;
+
 	virtual void OnGiveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec) override;
 
 	/** (2026-10-20) 기계식 타이밍이 남아 있으면 끝낸다. */

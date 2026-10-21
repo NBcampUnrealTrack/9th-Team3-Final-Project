@@ -4,6 +4,7 @@
 #include "AbilitySystemGlobals.h"
 #include "AbilitySystem/Attributes/knightAttributeSet.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
+#include "AbilitySystem/knightAbilitySystemComponent.h"
 #include "AbilitySystem/Effects/knightGameplayEffect_Damage.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
@@ -154,6 +155,18 @@ void UknightGameplayAbility_Guard::OnParrySucceeded(FGameplayEventData Payload)
 
 	if (UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo())
 	{
+		// (2026-10-20 사용자 결정) 패링 반격이 락온 없이도 패링한 적에게 돌진하도록 기억해 둔다.
+		// 지금 투사체(가시 비)는 쏜 몬스터를 공격자로 넘기지만, 투사체 자신이 오면 쏜 쪽(Instigator, 없으면 Owner)으로 바꾼다.
+		if (UknightAbilitySystemComponent* const KnightASC = Cast<UknightAbilitySystemComponent>(ASC))
+		{
+			AActor* CounterTarget = const_cast<AActor*>(Payload.Instigator.Get());
+			if (CounterTarget && !CounterTarget->IsA<APawn>())
+			{
+				AActor* const Shooter = CounterTarget->GetInstigator() ? CounterTarget->GetInstigator() : CounterTarget->GetOwner();
+				CounterTarget = Shooter ? Shooter : CounterTarget;
+			}
+			KnightASC->SetParryCounterTarget(CounterTarget);
+		}
 		UWorld* const World = GetWorld();
 		if (ParryCounterTag.IsValid() && ParryCounterWindow > 0.f && World)
 		{

@@ -145,6 +145,13 @@ public:
 	void SetAttackAnimationSpeed(float NewSpeed) { AttackAnimationSpeed = FMath::Max(0.1f, NewSpeed); }
 
 	/**
+	 * (2026-10-20) 마지막으로 패링한 공격의 주인(투사체면 쏜 쪽). 가드가 패링에 성공하면 넣는다.
+	 * 패링 반격(근접 공격 bWarpToParriedAttacker)이 락온이 아닐 때 이 대상에게 돌진한다.
+	 */
+	void SetParryCounterTarget(AActor* Target) { ParryCounterTarget = Target; }
+	AActor* GetParryCounterTarget() const { return ParryCounterTarget.Get(); }
+
+	/**
 	 * (2026-10-20) 지금 스탠스의 공격 보정(한손 OneHandedModifiers / 양손 TwoHandedModifiers).
 	 * 행동 에너지 속성이 없는 액터(몬스터)나 bApplyStanceModifiers가 꺼져 있으면 모두 1.
 	 */
@@ -172,6 +179,7 @@ public:
 
 	/** (2026-10-20) 기계식 공격 타이밍 설정(락 → 버스트 → 스톱). 공격 어빌리티가 모션을 재생할 때 읽는다. */
 	const FknightMechTimingSettings& GetMechTimingSettings() const { return MechTiming; }
+
 	void CancelActivationGroupAbilities(EknightAbilityActivationGroup Group, const UknightGameplayAbility* IgnoreAbility);
 
 	// 태그 관계
@@ -257,9 +265,11 @@ protected:
 	 * (2026-10-14 사용자 결정) 후딜 길이 = 공격의 캔슬 창이 열린 뒤 퀵스텝만 끊을 수 있는 시간(초, 실제 시간). 바뀔 수 있는 값.
 	 * 공격 몽타주의 캔슬 창은 타격 직후부터 몽타주 끝(검을 등 쪽으로 들어 올리는 동작)까지라, 창 전체를 후딜로 잡으면
 	 * 0.7배속에서 1타 기준 2.5초 동안 아무것도 못 했다. 공격 배속과 상관없이 이 시간만큼만 묶인다.
+	 * (2026-10-21 사용자 결정) 0.5 → 0.25: 기계식 타이밍·양손 배속이 들어온 뒤 판정 끝에서 가드·이동까지 약 0.72초라
+	 * 반응이 너무 늦었다(특히 콤보 창이 없는 4타·대쉬공격·돌진 베기·패링 반격). 0.25면 약 0.47초.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack", meta=(ClampMin=0, Units="s", EditCondition="bOnlyDashCancelsAttackRecovery"))
-	float AttackRecoveryDashOnlyTime = 0.5f;
+	float AttackRecoveryDashOnlyTime = 0.25f;
 
 	/** (2026-10-14) Window.Cancel 태그 수가 늘 때(창이 열릴 때) 시각을 기록한다. */
 	void HandleCancelWindowChanged(const FGameplayTag Tag, int32 NewCount);
@@ -383,6 +393,9 @@ protected:
 
 	/** ProcessAbilityInput이 마지막으로 실행된 뒤 발동한 어빌리티들의 입력 태그. */
 	FGameplayTagContainer RecentlyActivatedInputTags;
+
+	/** (2026-10-20) SetParryCounterTarget 참고. */
+	TWeakObjectPtr<AActor> ParryCounterTarget;
 
 	int32 ActivationGroupCounts[static_cast<uint8>(EknightAbilityActivationGroup::MAX)];
 };

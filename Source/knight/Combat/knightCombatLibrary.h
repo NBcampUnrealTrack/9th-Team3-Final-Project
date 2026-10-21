@@ -69,6 +69,17 @@ public:
 		float SoftTargetRange, float SoftTargetAngle, FVector& OutLocation, FRotator& OutRotation, float& OutTravel);
 
 	/**
+	 * (2026-10-20) ComputeAttackWarp와 같은 계산을 락온 대신 정해 준 대상으로 한다(대상 중심에서 반지름만큼 표면까지).
+	 * 패링 반격이 락온 없이 패링한 적에게 돌진할 때 쓴다.
+	 */
+	static bool ComputeAttackWarpToActor(AActor* Attacker, AActor* Target, float MaxDistance, float StopDistance,
+		FVector& OutLocation, FRotator& OutRotation, float& OutTravel);
+
+	/** (2026-10-20) ComputeAttackWarpToActor로 모션 워프 타깃을 맞춘다. 못 하면 워프 타깃을 지우고 false. */
+	static bool SetAttackWarpTargetToActor(AActor* Attacker, FName WarpTargetName, AActor* Target, float MaxDistance,
+		float StopDistance, FVector& OutLocation, FRotator& OutRotation, float& OutTravel);
+
+	/**
 	 * 대검 공격 애니메이션은 거의 제자리(루트 모션 수 cm)라 Skew Warp가 거리를 만들지 못한다. 그래서 몽타주의
 	 * Motion Warping 구간이 끝날 때 Location에 도착하도록, 구간 끝 MaxLungeTime 동안 루트 모션 힘으로 이동시킨다.
 	 * 회전은 몽타주의 워프 구간이 맡는다. Travel이 MinTravel보다 짧으면 아무것도 하지 않는다.

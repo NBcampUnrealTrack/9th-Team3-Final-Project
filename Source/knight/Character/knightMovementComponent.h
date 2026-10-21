@@ -84,6 +84,13 @@ public:
 	float GetWeightSpeedFactor() const;
 
 	/**
+	 * 퀵스텝 거리용 중량 계수 (2026-10-21). 적재율이 DodgeWeightStartRatio 이하면 1.0이고,
+	 * 그 뒤 적재율 1에서 MinDodgeWeightFactor가 되도록 직선으로 줄어든다. 이동용 GetWeightSpeedFactor보다 늦게·약하게 걸린다.
+	 */
+	UFUNCTION(BlueprintPure, Category="Knight|Movement")
+	float GetDodgeWeightFactor() const;
+
+	/**
 	 * 이동 입력으로 가속하지 못하게 막는다. 입력 값은 그대로 들어오므로 방향은 읽을 수 있고,
 	 * 가속이 0이라 지금 속도에서 제동으로 미끄러지며 멈춘다(이동 방향으로 몸도 돌지 않는다). 퀵스텝 경직·가드에서 쓴다.
 	 * (2026-10-08) 잠금 요청 수를 센다: true로 켠 쪽이 반드시 false로 한 번 끈다. 퀵스텝 경직 중 가드를 올리는 것처럼
@@ -152,6 +159,9 @@ protected:
 	/** 메카 속성 값을 읽는다. 소유자에게 ASC나 해당 속성 세트가 없으면 Fallback을 돌려준다. */
 	float GetMechAttributeValue(const FGameplayAttribute& Attribute, float Fallback) const;
 
+	/** 적재율 = 중량 / 적재 한도 (0~1로 자름). 중량 계수 두 개가 같이 쓴다. */
+	float GetLoadRatio() const;
+
 	/**
 	 * 배율 1.0일 때의 걷기 속도. 바뀔 수 있는 값.
 	 * (2026-10-14) 600 → 540 (-10%): '게임이 너무 스피디하다'는 의견으로 시험. MaxAcceleration도 같이 낮춤(생성자, 1200 → 1100).
@@ -177,6 +187,18 @@ protected:
 	/** 선택 사항. X = 적재율(0~1), Y = 중량 계수. 비워 두면 1.0 → MinWeightSpeedFactor 직선. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Weight")
 	TObjectPtr<UCurveFloat> WeightSpeedCurve;
+
+	/**
+	 * (2026-10-21 사용자 결정) 퀵스텝 거리는 이동보다 늦게·약하게 무게를 탄다. 적재율이 이 값 이하면 퀵스텝 거리가 줄지 않는다.
+	 * 이동과 같은 계수(0%부터 최대 30%)를 쓸 때 잔열 보통 풀세트(적재율 43%)로 2페이즈에 맞은 횟수가 기본 메카의 두 배였다.
+	 * 50%면 보통 풀세트는 영향이 없고, 소켓까지 끼운 무거운 조합(67%)부터 조금 짧아진다. 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Weight", meta=(ClampMin=0, ClampMax=0.99))
+	float DodgeWeightStartRatio = 0.5f;
+
+	/** 적재 한도까지 꽉 채웠을 때의 퀵스텝 거리 계수(0.85 = 15% 짧아짐). 바뀔 수 있는 값. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Weight", meta=(ClampMin=0, ClampMax=1))
+	float MinDodgeWeightFactor = 0.85f;
 
 	/**
 	 * 출발 곡선. X = 지금 속도 / 최고 속도(0~1), Y = 가속 배율(MaxAcceleration에 곱함). 땅 위에서만 쓴다.

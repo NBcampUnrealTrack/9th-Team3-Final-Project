@@ -89,6 +89,22 @@ bool FknightDamageMathTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("피해 = 60 x 0.6 = 36"), R.Damage, 36.f, Tolerance);
 	}
 
+	// ---- (2026-10-20) 막은 피해를 그로기로 더하기 ----
+	{
+		FInputs In = Base;
+		In.bGuarded = true;
+		In.GuardEfficiency = 0.8f;
+		In.GuardBlockedDamageToPoise = 1.f;
+		const FResult R = Compute(In);
+		TestEqual(TEXT("가드(효율 0.8) 피해 = 60 x 0.36 = 21.6"), R.Damage, 21.6f, Tolerance);
+		TestEqual(TEXT("그로기 = 20 x 0.6 + 막은 피해 (60 - 21.6) x 1.0 = 50.4"), R.PoiseDamage, 50.4f, Tolerance);
+	}
+	{
+		FInputs In = Base;
+		In.GuardBlockedDamageToPoise = 1.f;
+		TestEqual(TEXT("가드하지 않았으면 막은 피해 변환 없음"), Compute(In).PoiseDamage, 20.f, Tolerance);
+	}
+
 	// ---- 나머지 배율 ----
 	{
 		FInputs In = Base;

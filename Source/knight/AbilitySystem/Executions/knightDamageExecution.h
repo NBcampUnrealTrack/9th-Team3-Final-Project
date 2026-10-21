@@ -27,6 +27,7 @@ namespace knightDamageMath
 		float GuardEfficiency = 1.f;      // 맞는 쪽 가드 효율 (배율)
 		float GuardDamageMultiplier = 0.2f;      // 가드 효율 1.0일 때 남는 피해 비율
 		float GuardPoiseDamageMultiplier = 0.5f; // 가드 효율 1.0일 때 남는 그로기 비율
+		float GuardBlockedDamageToPoise = 0.f;   // (2026-10-20) 가드로 막아 줄어든 피해의 이 비율만큼 그로기를 더한다
 		float DamageTakenMultiplier = 1.f;       // 맞는 쪽 받는 피해 배율 (2026-10-10, 마지막에 곱함)
 		float PoiseDamageTakenMultiplier = 1.f;  // 맞는 쪽 받는 그로기 배율 = 그로기 저항 (2026-10-10, 마지막에 곱함)
 	};
@@ -116,6 +117,14 @@ protected:
 	/** 가드한 피격의 그로기 피해 배율. 맞는 쪽 가드 효율이 1.0일 때의 기준값이다. */
 	UPROPERTY(EditDefaultsOnly, Category="Guard", meta=(ClampMin=0, ClampMax=1))
 	float GuardPoiseDamageMultiplier = 0.5f;
+
+	/**
+	 * (2026-10-20 사용자 결정) 가드로 막아 줄어든 피해(막지 않았을 때 피해 - 막은 뒤 피해)의 이 비율만큼 그로기를 더한다.
+	 * 1.0 = 막은 피해를 그대로 그로기로. 막으면 피해는 덜 받는 대신 그냥 맞을 때보다 그로기가 더 쌓이게 하려는 것.
+	 * 예) 잔열 한 방(방어 21 기준 16.5)을 가드 효율 0.8로 막으면 피해 5.9, 그로기 10 x 0.6 + 막은 피해 10.6 = 16.6. 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Guard", meta=(ClampMin=0))
+	float GuardBlockedDamageToPoise = 1.f;
 
 	/** 가드 범위의 전체 각도(도). 맞는 쪽의 정면을 중심으로 한다. 0이면 가드·퍼펙트 가드가 모두 안 되는 공격(회피만)이다. */
 	UPROPERTY(EditDefaultsOnly, Category="Guard", meta=(ClampMin=0, ClampMax=360))

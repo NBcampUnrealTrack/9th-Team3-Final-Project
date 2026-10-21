@@ -55,6 +55,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Hover|Cost", meta=(ClampMin=0))
 	float MinGaugeToHover = 5.f;
 
+	/**
+	 * (2026-10-20 사용자 결정) 땅에서 실제로 점프할 때 쓰는 행동 에너지. 체공 시작에는 쓰지 않는다. 바뀔 수 있는 값.
+	 * 0보다 크면 행동 에너지가 조금이라도 남아 있어야 뛴다(공격·가드와 같은 규칙). 0이면 소모 없음.
+	 * (어빌리티의 StaminaCost는 체공에도 같이 빠져서 쓰지 않는다.)
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Hover|Cost", meta=(ClampMin=0))
+	float JumpStaminaCost = 10.f;
+
 	/** 떨어지는 중에 체공을 켜면 낙하 속도를 여기까지만 남긴다(가라앉는 깊이). 그다음은 아래 스프링이 되돌린다. (2026-10-13) */
 	UPROPERTY(EditDefaultsOnly, Category="Hover|Vertical", meta=(ClampMin=0, Units="CentimetersPerSecond"))
 	float HoverCatchMaxFallSpeed = 250.f;

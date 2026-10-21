@@ -39,7 +39,15 @@ knightEquipmentStats::FLoadout knightEquipmentStats::ReadLoadout(
 	const UknightProgressionSubsystem* Progression, const UknightMaintenanceCatalog* Catalog)
 {
 	FLoadout Result;
-	if (Catalog && !Catalog->PlayerCharacterClass.IsNull())
+	// (2026-10-20) 기본 장착 에셋이 있으면 그것만 읽는다. 아래 캐릭터 클래스 로드는 BP_Knight 전체를 읽어 정비소 첫 진입이 멈췄다.
+	if (Catalog && Catalog->DefaultLoadout)
+	{
+		for (const UknightPartItemDefinition* Part : Catalog->DefaultLoadout->Parts)
+		{
+			if (Part && Part->SlotTag.IsValid()) Result.Add(Part->SlotTag, Part);
+		}
+	}
+	else if (Catalog && !Catalog->PlayerCharacterClass.IsNull())
 	{
 		if (const UClass* Class = Catalog->PlayerCharacterClass.LoadSynchronous())
 		{
