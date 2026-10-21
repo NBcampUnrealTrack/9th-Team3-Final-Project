@@ -5,6 +5,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/Character.h"
 #include "HAL/IConsoleManager.h"
+#include "Algo/MinElement.h"
 
 namespace knightWingClearance
 {
@@ -21,7 +22,7 @@ void FAnimNode_knightWingClearance::InitializeBoneReferences(const FBoneContaine
 		{
 			Tip.Initialize(RequiredBones);
 		}
-		Wing.LiftAngle = 0.f;
+		Wing.LiftRotation = FQuat::Identity;
 	}
 }
 
@@ -89,7 +90,7 @@ void FAnimNode_knightWingClearance::EvaluateSkeletalControl_AnyThread(FComponent
 			continue;
 		}
 
-		TArray<FVector, TInlineAllocator<8>> TipOffsets;
+		TArray<FVector, TInlineAllocator<16>> TipOffsets;
 		for (const FBoneReference& Tip : Wing.TipBones)
 		{
 			if (Tip.IsValidToEvaluate(BoneContainer))
@@ -97,26 +98,60 @@ void FAnimNode_knightWingClearance::EvaluateSkeletalControl_AnyThread(FComponent
 				TipOffsets.Add(Output.Pose.GetComponentSpaceTransform(Tip.GetCompactPoseIndex(BoneContainer)).GetLocation() - Pivot);
 			}
 		}
-		// 모든 끝이 바닥 위에 오는 가장 작은 각도(1도 단위).
-		auto AllClear = [&](float Angle)
+		if (TipOffsets.IsEmpty())
 		{
-			const FQuat Rotation(Axis, FMath::DegreesToRadians(Angle));
-			return !TipOffsets.ContainsByPredicate([&](const FVector& Offset) { return Pivot.Z + Rotation.RotateVector(Offset).Z < MinTipZ; });
+			continue;
+		}
+		auto LowestTipZ = [&](const FQuat& Rotation)
+		{
+			double Lowest = TNumericLimits<double>::Max();
+			for (const FVector& Offset : TipOffsets)
+			{
+				Lowest = FMath::Min(Lowest, Pivot.Z + Rotation.RotateVector(Offset).Z);
+			}
+			return Lowest;
 		};
-		float NeededAngle = 0.f;
-		while (NeededAngle < MaxLiftAngle && !AllClear(NeededAngle))
+		// 이 축으로 모든 끝이 바닥 위에 오는 가장 작은 각도(1도 단위). 못 찾으면 최대 각도.
+		auto FindLift = [&](const FVector& LiftAxis, bool& bOutClear)
 		{
-			NeededAngle = FMath::Min(NeededAngle + 1.f, MaxLiftAngle);
+			for (float Angle = 0.f; ; Angle = FMath::Min(Angle + 1.f, MaxLiftAngle))
+			{
+				const FQuat Rotation(LiftAxis, FMath::DegreesToRadians(Angle));
+				bOutClear = LowestTipZ(Rotation) >= MinTipZ;
+				if (bOutClear || Angle >= MaxLiftAngle)
+				{
+					return Rotation;
+				}
+			}
+		};
+		bool bClear = true;
+		FQuat Needed = FindLift(Axis, bClear);
+		if (!bClear)
+		{
+			// 앞뒤 축으로는 안 올라간다. 가장 낮은 끝을 바로 위로 드는 축(끝의 수평 방향 x 수직축)으로 돌린다.
+			const FVector* const LowestOffset = Algo::MinElementBy(TipOffsets, [](const FVector& Offset) { return Offset.Z; });
+			const FVector TipAxis = FVector::CrossProduct(FVector(LowestOffset->X, LowestOffset->Y, 0.0), FVector::UpVector).GetSafeNormal();
+			bool bTipClear = false;
+			const FQuat TipNeeded = TipAxis.IsNearlyZero() ? Needed : FindLift(TipAxis, bTipClear);
+			if (bTipClear || LowestTipZ(TipNeeded) > LowestTipZ(Needed))
+			{
+				Needed = TipNeeded;
+			}
 		}
 
 		// 바로 올리고 천천히 내린다. 다음 날갯짓에서도 든 채로 시작해 날갯짓이 작아진다.
-		Wing.LiftAngle = NeededAngle >= Wing.LiftAngle ? NeededAngle : FMath::Max(NeededAngle, Wing.LiftAngle - ReleaseSpeed * DeltaTime);
-		if (Wing.LiftAngle <= KINDA_SMALL_NUMBER)
+		// 지금 든 회전에서 필요한 회전 쪽으로 ReleaseSpeed만큼 옮겨 보고, 그래도 끝이 바닥 위면 그만큼만 내린다.
+		const float Gap = FMath::RadiansToDegrees(static_cast<float>(Wing.LiftRotation.AngularDistance(Needed)));
+		const FQuat Released = Gap > KINDA_SMALL_NUMBER
+			? FQuat::Slerp(Wing.LiftRotation, Needed, FMath::Min(1.f, ReleaseSpeed * DeltaTime / Gap)) : Needed;
+		Wing.LiftRotation = LowestTipZ(Released) >= FMath::Min(MinTipZ, LowestTipZ(Needed)) ? Released : Needed;
+		Wing.LiftRotation.Normalize();
+		if (Wing.LiftRotation.GetAngle() <= KINDA_SMALL_NUMBER)
 		{
 			continue;
 		}
 		FTransform Lifted = RootCS;
-		Lifted.SetRotation(FQuat(Axis, FMath::DegreesToRadians(Wing.LiftAngle)) * RootCS.GetRotation());
+		Lifted.SetRotation(Wing.LiftRotation * RootCS.GetRotation());
 		OutBoneTransforms.Add(FBoneTransform(RootIndex, Lifted));
 	}
 	OutBoneTransforms.Sort(FCompareBoneTransformIndex());

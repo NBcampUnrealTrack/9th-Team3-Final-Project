@@ -243,6 +243,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Hover", meta=(ClampMin=0, Units="cm", EditCondition="HoverDrop > 0"))
 	float HoverFootHeight = 0.f;
 
+	/** 바닥 아래로 들어가면 안 되는 몸 뼈. 쓰러질 때 몸이 바닥에 처박히면 그만큼 메시를 올린다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Hover")
+	TArray<FName> HoverBodyBones;
+
+	/** 몸 뼈의 바닥 위 최소 높이(cm, 메시 배율 적용). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Hover", meta=(ClampMin=0, Units="cm"))
+	float HoverBodyClearance = 0.f;
+
 	/**
 	 * 레시피 항목으로 만들지 않는 어빌리티(공중 패턴처럼 전용 클래스로 직접 만든 공격). Build가 어빌리티 세트에 그대로 넣고 건드리지 않는다.
 	 * 공중 턴 공격이면 그 어빌리티의 Selection에 State.Monster.Airborne 필요 태그를 직접 둔다.

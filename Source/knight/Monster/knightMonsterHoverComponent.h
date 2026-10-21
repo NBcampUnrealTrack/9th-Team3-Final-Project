@@ -14,7 +14,9 @@ class USkeletalMeshComponent;
  * 애니메이션이 끝난 뒤(TG_PostUpdateWork) 그 프레임의 포즈로 메시 높이만 바꾼다. 캡슐과 이동은 그대로다.
  * 공중 턴(SetAirborne)에는 내리지 않고 AirLift만큼 더 띄운다. 바뀌는 높이는 BlendTime 동안 이어서 옮긴다.
  *
- * HoverDrop과 AirLift가 모두 0이면 틱을 끈다(대부분의 몬스터).
+ * BodyBones가 있으면 몸 뼈가 바닥 아래로 들어가지 않게 메시를 올린다.
+ *
+ * HoverDrop·AirLift가 0이고 BodyBones가 비어 있으면 틱을 끈다(대부분의 몬스터).
  */
 UCLASS(ClassGroup=(Knight), meta=(BlueprintSpawnableComponent))
 class KNIGHT_API UknightMonsterHoverComponent : public UActorComponent
@@ -45,6 +47,17 @@ protected:
 	/** 발로 디뎠을 때 발 뼈의 바닥 위 높이(cm, 메시 배율 적용). 뼈는 발 속에 있어서 바닥보다 조금 위다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Hover", meta=(ClampMin=0, Units="Centimeters"))
 	float FootGroundHeight = 0.f;
+
+	/**
+	 * 바닥(캡슐 바닥) 위 BodyClearance 아래로 들어가면 안 되는 몸 뼈(골반·가슴·머리·날개 어깨 등). 들어가는 프레임에는 그만큼 메시를 올린다.
+	 * 떠 있게 만든 애니메이션이 쓰러질 때 발은 바닥 위인데 몸이 바닥 아래로 처박히는 것을 막는다(잔향 사망).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Hover")
+	TArray<FName> BodyBones;
+
+	/** 몸 뼈의 바닥 위 최소 높이(cm, 메시 배율 적용). 뼈는 몸 속에 있으니 몸 두께만큼 띄운다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Hover", meta=(ClampMin=0, Units="Centimeters"))
+	float BodyClearance = 0.f;
 
 	/** 공중 턴에 애니메이션 원래 높이보다 더 띄우는 높이(cm). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Hover", meta=(ClampMin=0, Units="Centimeters"))
