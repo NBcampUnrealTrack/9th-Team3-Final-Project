@@ -3,10 +3,12 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "UObject/PrimaryAssetId.h"
+#include "Types/SlateEnums.h"
 #include "KnightInventoryWidget.generated.h"
 
 class UButton;
 class UCommonTextBlock;
+class UEditableTextBox;
 class UknightItemDefinition;
 class UknightProgressionSubsystem;
 class UScrollBox;
@@ -62,7 +64,15 @@ private:
 	UFUNCTION() void ShowSockets();
 	UFUNCTION() void HandleProgressionChanged();
 	UFUNCTION() void HandleActiveSlotChanged(const FString& SlotId);
+	UFUNCTION() void HandleSaveFinished(bool bSuccess);
+	UFUNCTION() void HandleQuantityChanged(const FText& Text);
+	UFUNCTION() void DecreaseSaleQuantity();
+	UFUNCTION() void IncreaseSaleQuantity();
+	UFUNCTION() void MaxSaleQuantity();
+	UFUNCTION() void SellSelectedMaterial();
 	void SetCategory(int32 NewCategory);
+	void SetSaleQuantity(int32 Quantity);
+	void RefreshSale();
 	void Refresh();
 	void SelectItem(const UknightItemDefinition* Item);
 	void RefreshDetail();
@@ -74,7 +84,22 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> DetailName;
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> DetailDescription;
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> ProfileText;
+	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> MoneyText;
+	UPROPERTY(Transient) TObjectPtr<UVerticalBox> SalePanel;
+	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> SaleSelectionText;
+	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> UnitPriceText;
+	UPROPERTY(Transient) TObjectPtr<UEditableTextBox> SaleQuantityInput;
+	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> TotalPriceText;
+	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> SaleFeedbackText;
+	UPROPERTY(Transient) TObjectPtr<UButton> DecreaseButton;
+	UPROPERTY(Transient) TObjectPtr<UButton> IncreaseButton;
+	UPROPERTY(Transient) TObjectPtr<UButton> MaxButton;
+	UPROPERTY(Transient) TObjectPtr<UButton> SellButton;
 	UPROPERTY(Transient) TArray<TObjectPtr<UKnightInventoryEntryWidget>> Entries;
 	FPrimaryAssetId SelectedItemId;
 	int32 Category = 0;
+	int32 SaleQuantity = 1;
+	bool bSaleRequestInProgress = false;
+	bool bSaleSaveFailureShown = false;
+	FText SaleFeedback;
 };

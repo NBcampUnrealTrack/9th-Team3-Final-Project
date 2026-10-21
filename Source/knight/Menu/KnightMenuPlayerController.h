@@ -33,6 +33,10 @@ public:
 	UFUNCTION(Exec) void KnightCoreRewardFailNextSaves(int32 Count);
 	UFUNCTION(Exec) void KnightCoreRewardResult(FName QuestId, int32 bSuccess, int32 bHead, int32 bTail);
 	UFUNCTION(Exec) void KnightCoreRewardStatus();
+	/** Editor-only sale probes require -KnightSaveTestNamespace and never touch user slots. */
+	UFUNCTION(Exec) void KnightCoreSaleGrant(FName ItemName, int32 Count);
+	UFUNCTION(Exec) void KnightCoreSaleAttempt(FName ItemName, int32 Count);
+	UFUNCTION(Exec) void KnightCoreSaleRetrySave();
 
 protected:
 	virtual void BeginPlay() override;

@@ -11,6 +11,9 @@
 #include "Quest/KnightQuestData.h"
 #include "Raid/knightRaidSubsystem.h"
 #include "knightItemDefinition.h"
+#include "knightInventoryLibrary.h"
+#include "Item/knightItemDefinitions.h"
+#include "Progression/knightProgressionSubsystem.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "Misc/CommandLine.h"
@@ -298,6 +301,49 @@ void AKnightMenuPlayerController::KnightCoreRewardStatus()
 	for (const TPair<FPrimaryAssetId, int32>& Entry : Save->ItemCounts)
 	{
 		UE_LOG(Logknight, Log, TEXT("KnightCoreRewardOwned item=%s count=%d"), *Entry.Key.ToString(), Entry.Value);
+	}
+#endif
+}
+
+void AKnightMenuPlayerController::KnightCoreSaleGrant(FName ItemName, int32 Count)
+{
+#if WITH_EDITOR
+	if (!IsIsolatedRewardProbe() || Count <= 0) return;
+	const FPrimaryAssetId ItemId(UknightItemDefinition::ItemAssetType, ItemName);
+	const UknightMaterialItemDefinition* const Material = Cast<UknightMaterialItemDefinition>(
+		UknightInventoryLibrary::LoadItemDefinition(ItemId));
+	UknightSaveSubsystem* const Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	UknightProgressionSubsystem* const Progression = GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>();
+	if (!Material || !Saves || !Saves->CanStartAtomicTransaction() || !Progression) return;
+	Progression->AddItem(Material, Count);
+	UE_LOG(Logknight, Log, TEXT("KnightCoreSaleGrant item=%s count=%d owned=%d"),
+		*ItemId.ToString(), Count, Progression->GetItemCount(Material));
+#endif
+}
+
+void AKnightMenuPlayerController::KnightCoreSaleAttempt(FName ItemName, int32 Count)
+{
+#if WITH_EDITOR
+	if (!IsIsolatedRewardProbe()) return;
+	UknightProgressionSubsystem* const Progression = GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>();
+	FKnightMaterialSaleReceipt Receipt;
+	const FPrimaryAssetId ItemId(UknightItemDefinition::ItemAssetType, ItemName);
+	const bool bSold = Progression && Progression->SellMaterial(ItemId, Count, Receipt);
+	UE_LOG(Logknight, Log, TEXT("KnightCoreSaleAttempt item=%s requested=%d accepted=%d count=%d unit=%d total=%lld money=%lld"),
+		*ItemId.ToString(), Count, bSold, Receipt.Count, Receipt.UnitPrice, Receipt.TotalMoney,
+		Progression ? Progression->GetMoney() : 0);
+#endif
+}
+
+void AKnightMenuPlayerController::KnightCoreSaleRetrySave()
+{
+#if WITH_EDITOR
+	if (!IsIsolatedRewardProbe()) return;
+	if (UknightSaveSubsystem* const Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>())
+	{
+		Saves->RequestSave();
+		UE_LOG(Logknight, Log, TEXT("KnightCoreSaleRetrySave slot=%s busy=%d recovery=%d"),
+			*Saves->GetActiveSlotId(), Saves->IsSaveInFlight(), Saves->IsSaveRecoveryPending());
 	}
 #endif
 }

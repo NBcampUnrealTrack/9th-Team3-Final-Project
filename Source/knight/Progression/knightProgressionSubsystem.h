@@ -4,6 +4,7 @@
 #include "GameplayTagContainer.h"
 #include "Raid/knightRaidTypes.h"
 #include "Subsystems/GameInstanceSubsystem.h"
+#include "UObject/PrimaryAssetId.h"
 #include "knightProgressionSubsystem.generated.h"
 
 class UknightItemDefinition;
@@ -12,6 +13,18 @@ class UknightSaveGame;
 class UknightCraftRecipeDefinition;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FknightProgressionChanged);
+
+/** Receipt for one fully validated material sale. It is display data, not another inventory. */
+USTRUCT(BlueprintType)
+struct KNIGHT_API FKnightMaterialSaleReceipt
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category="Sale") FPrimaryAssetId ItemId;
+	UPROPERTY(BlueprintReadOnly, Category="Sale") int32 Count = 0;
+	UPROPERTY(BlueprintReadOnly, Category="Sale") int32 UnitPrice = 0;
+	UPROPERTY(BlueprintReadOnly, Category="Sale") int64 TotalMoney = 0;
+};
 
 /**
  * Gameplay-facing progress API over UknightSaveSubsystem: stage clears, the item box, upgrades and the
@@ -75,6 +88,14 @@ public:
 	/** Removes Count if available. Returns false and changes nothing otherwise. */
 	UFUNCTION(BlueprintCallable, Category="Knight|Progression")
 	bool ConsumeItem(const UknightItemDefinition* Item, int32 Count);
+
+	/** Quotes a sale from the selected slot and the current item definition; never changes the save. */
+	UFUNCTION(BlueprintCallable, Category="Knight|Progression|Sale")
+	bool GetMaterialSaleQuote(FPrimaryAssetId ItemId, int32 Count, FKnightMaterialSaleReceipt& OutReceipt) const;
+
+	/** Decrements one material and credits money in one save snapshot. Refuses overlapping requests. */
+	UFUNCTION(BlueprintCallable, Category="Knight|Progression|Sale")
+	bool SellMaterial(FPrimaryAssetId ItemId, int32 Count, FKnightMaterialSaleReceipt& OutReceipt);
 
 	/** Every owned item with its definition loaded. Items whose asset no longer exists are skipped. */
 	UFUNCTION(BlueprintCallable, Category="Knight|Progression")

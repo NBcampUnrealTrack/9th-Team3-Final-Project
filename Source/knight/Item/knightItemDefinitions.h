@@ -70,6 +70,13 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Material")
 	bool bHardModeExclusive = false;
 
+	/** Explicit per-item sale policy. A new material is not sellable until its price is authored. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Material|Sale")
+	bool bSellable = false;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Material|Sale", meta=(ClampMin=0))
+	int32 SellPrice = 0;
+
 	/** Monster that drops it, for the item description. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Material")
 	TObjectPtr<const UknightMonsterDefinition> SourceMonster;

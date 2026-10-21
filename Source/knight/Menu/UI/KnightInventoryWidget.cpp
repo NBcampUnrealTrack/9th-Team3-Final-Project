@@ -6,6 +6,7 @@
 #include "Components/Button.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
+#include "Components/EditableTextBox.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/ScrollBox.h"
@@ -146,6 +147,8 @@ TSharedRef<SWidget> UKnightInventoryWidget::RebuildWidget()
 			->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 		ProfileText = MakeText(WidgetTree, FText::GetEmpty(), TEXT("TS_Knight_Caption"));
 		Header->AddChildToHorizontalBox(ProfileText);
+		MoneyText = MakeText(WidgetTree, FText::GetEmpty(), TEXT("TS_Knight_Caption"));
+		Header->AddChildToHorizontalBox(MoneyText)->SetPadding(FMargin(18, 0, 0, 0));
 
 		UHorizontalBox* Tabs = WidgetTree->ConstructWidget<UHorizontalBox>();
 		Layout->AddChildToVerticalBox(Tabs)->SetPadding(FMargin(0, 0, 0, 16));
@@ -175,6 +178,44 @@ TSharedRef<SWidget> UKnightInventoryWidget::RebuildWidget()
 		DetailDescription->SetAutoWrapText(true);
 		DetailBody->AddChildToVerticalBox(DetailDescription);
 
+		SalePanel = WidgetTree->ConstructWidget<UVerticalBox>();
+		DetailBody->AddChildToVerticalBox(SalePanel)->SetPadding(FMargin(0, 22, 0, 0));
+		SaleSelectionText = MakeText(WidgetTree, FText::GetEmpty(), TEXT("TS_Knight_Body"));
+		SalePanel->AddChildToVerticalBox(SaleSelectionText)->SetPadding(FMargin(0, 0, 0, 8));
+		UnitPriceText = MakeText(WidgetTree, FText::GetEmpty(), TEXT("TS_Knight_Body"));
+		SalePanel->AddChildToVerticalBox(UnitPriceText)->SetPadding(FMargin(0, 0, 0, 8));
+		UHorizontalBox* QuantityRow = WidgetTree->ConstructWidget<UHorizontalBox>();
+		SalePanel->AddChildToVerticalBox(QuantityRow)->SetPadding(FMargin(0, 0, 0, 8));
+		QuantityRow->AddChildToHorizontalBox(MakeText(WidgetTree,
+			LOCTEXT("SaleQuantity", "판매 수량"), TEXT("TS_Knight_Body")))->SetPadding(FMargin(0, 4, 12, 0));
+		auto MakeQuantityButton = [this, QuantityRow](const FText& Label)
+		{
+			UButton* Button = WidgetTree->ConstructWidget<UButton>();
+			Button->SetBackgroundColor(RowColor);
+			Button->SetContent(MakeText(WidgetTree, Label, TEXT("TS_Knight_Button")));
+			QuantityRow->AddChildToHorizontalBox(Button)->SetPadding(FMargin(0, 0, 8, 0));
+			return Button;
+		};
+		DecreaseButton = MakeQuantityButton(LOCTEXT("SaleMinus", "−"));
+		USizeBox* QuantityWidth = WidgetTree->ConstructWidget<USizeBox>();
+		QuantityWidth->SetWidthOverride(80.f);
+		SaleQuantityInput = WidgetTree->ConstructWidget<UEditableTextBox>();
+		SaleQuantityInput->SetText(FText::AsNumber(1));
+		SaleQuantityInput->SetHintText(LOCTEXT("QuantityHint", "수량"));
+		QuantityWidth->SetContent(SaleQuantityInput);
+		QuantityRow->AddChildToHorizontalBox(QuantityWidth)->SetPadding(FMargin(0, 0, 8, 0));
+		IncreaseButton = MakeQuantityButton(LOCTEXT("SalePlus", "+"));
+		MaxButton = MakeQuantityButton(LOCTEXT("SaleMax", "최대"));
+		TotalPriceText = MakeText(WidgetTree, FText::GetEmpty(), TEXT("TS_Knight_Body"));
+		SalePanel->AddChildToVerticalBox(TotalPriceText)->SetPadding(FMargin(0, 0, 0, 12));
+		SellButton = WidgetTree->ConstructWidget<UButton>();
+		SellButton->SetBackgroundColor(InventorySelectedColor);
+		SellButton->SetContent(MakeText(WidgetTree, LOCTEXT("Sell", "판매"), TEXT("TS_Knight_Button")));
+		SalePanel->AddChildToVerticalBox(SellButton)->SetPadding(FMargin(0, 0, 0, 8));
+		SaleFeedbackText = MakeText(WidgetTree, FText::GetEmpty(), TEXT("TS_Knight_Caption"));
+		SalePanel->AddChildToVerticalBox(SaleFeedbackText);
+		SalePanel->SetVisibility(ESlateVisibility::Collapsed);
+
 		Layout->AddChildToVerticalBox(MakeText(WidgetTree,
 			LOCTEXT("Hint", "I: 열기/닫기   ·   Esc: 닫기"), TEXT("TS_Knight_Caption")))
 			->SetPadding(FMargin(0, 16, 0, 0));
@@ -190,7 +231,10 @@ void UKnightInventoryWidget::NativeOnInitialized()
 		if (UknightProgressionSubsystem* Progression = GI->GetSubsystem<UknightProgressionSubsystem>())
 			Progression->OnProgressionChanged.AddUniqueDynamic(this, &ThisClass::HandleProgressionChanged);
 		if (UknightSaveSubsystem* Saves = GI->GetSubsystem<UknightSaveSubsystem>())
+		{
 			Saves->OnActiveSlotChanged.AddUniqueDynamic(this, &ThisClass::HandleActiveSlotChanged);
+			Saves->OnSaveFinished.AddUniqueDynamic(this, &ThisClass::HandleSaveFinished);
+		}
 	}
 }
 
@@ -200,6 +244,11 @@ void UKnightInventoryWidget::NativeConstruct()
 	if (EquipmentButton) EquipmentButton->OnClicked.AddUniqueDynamic(this, &ThisClass::ShowEquipment);
 	if (MaterialButton) MaterialButton->OnClicked.AddUniqueDynamic(this, &ThisClass::ShowMaterials);
 	if (SocketButton) SocketButton->OnClicked.AddUniqueDynamic(this, &ThisClass::ShowSockets);
+	if (DecreaseButton) DecreaseButton->OnClicked.AddUniqueDynamic(this, &ThisClass::DecreaseSaleQuantity);
+	if (IncreaseButton) IncreaseButton->OnClicked.AddUniqueDynamic(this, &ThisClass::IncreaseSaleQuantity);
+	if (MaxButton) MaxButton->OnClicked.AddUniqueDynamic(this, &ThisClass::MaxSaleQuantity);
+	if (SellButton) SellButton->OnClicked.AddUniqueDynamic(this, &ThisClass::SellSelectedMaterial);
+	if (SaleQuantityInput) SaleQuantityInput->OnTextChanged.AddUniqueDynamic(this, &ThisClass::HandleQuantityChanged);
 }
 
 void UKnightInventoryWidget::NativeDestruct()
@@ -209,14 +258,17 @@ void UKnightInventoryWidget::NativeDestruct()
 		if (UknightProgressionSubsystem* Progression = GI->GetSubsystem<UknightProgressionSubsystem>())
 			Progression->OnProgressionChanged.RemoveDynamic(this, &ThisClass::HandleProgressionChanged);
 		if (UknightSaveSubsystem* Saves = GI->GetSubsystem<UknightSaveSubsystem>())
+		{
 			Saves->OnActiveSlotChanged.RemoveDynamic(this, &ThisClass::HandleActiveSlotChanged);
+			Saves->OnSaveFinished.RemoveDynamic(this, &ThisClass::HandleSaveFinished);
+		}
 	}
 	Entries.Reset();
 	Super::NativeDestruct();
 }
 
 void UKnightInventoryWidget::Open() { SetCategory(0); }
-void UKnightInventoryWidget::Close() { SelectedItemId = FPrimaryAssetId(); Entries.Reset(); if (ItemList) ItemList->ClearChildren(); }
+void UKnightInventoryWidget::Close() { SelectedItemId = FPrimaryAssetId(); Entries.Reset(); SaleFeedback = FText::GetEmpty(); bSaleSaveFailureShown = false; if (ItemList) ItemList->ClearChildren(); }
 UButton* UKnightInventoryWidget::GetFocusButton() const { return EquipmentButton; }
 void UKnightInventoryWidget::ShowEquipment() { SetCategory(0); }
 void UKnightInventoryWidget::ShowMaterials() { SetCategory(1); }
@@ -225,6 +277,9 @@ void UKnightInventoryWidget::SetCategory(int32 NewCategory)
 {
 	Category = NewCategory;
 	SelectedItemId = FPrimaryAssetId();
+	SaleFeedback = FText::GetEmpty();
+	bSaleSaveFailureShown = false;
+	SetSaleQuantity(1);
 	Refresh();
 	if (EquipmentButton) EquipmentButton->SetBackgroundColor(Category == 0 ? InventorySelectedColor : RowColor);
 	if (MaterialButton) MaterialButton->SetBackgroundColor(Category == 1 ? InventorySelectedColor : RowColor);
@@ -237,9 +292,26 @@ UknightProgressionSubsystem* UKnightInventoryWidget::GetProgression() const
 }
 
 void UKnightInventoryWidget::HandleProgressionChanged() { Refresh(); }
+void UKnightInventoryWidget::HandleSaveFinished(bool bSuccess)
+{
+	if (!bSuccess)
+	{
+		SaleFeedback = LOCTEXT("SaleSaveFailed", "저장 실패: 저장을 다시 시도해야 합니다.");
+		bSaleSaveFailureShown = true;
+	}
+	else if (bSaleSaveFailureShown)
+	{
+		SaleFeedback = LOCTEXT("SaleSaveRecovered", "저장 완료");
+		bSaleSaveFailureShown = false;
+	}
+	RefreshSale();
+}
 void UKnightInventoryWidget::HandleActiveSlotChanged(const FString& SlotId)
 {
 	SelectedItemId = FPrimaryAssetId();
+	SaleFeedback = FText::GetEmpty();
+	bSaleSaveFailureShown = false;
+	SetSaleQuantity(1);
 	Refresh();
 }
 
@@ -258,6 +330,9 @@ void UKnightInventoryWidget::Refresh()
 		ProfileText->SetText(FixedSlotNumber > 0 ? FText::Format(LOCTEXT("Slot", "저장 {0}"), FText::AsNumber(FixedSlotNumber))
 			: bHasSlot ? LOCTEXT("TestSlot", "테스트 저장") : LOCTEXT("NoSlot", "선택한 저장 없음"));
 	}
+	if (MoneyText) MoneyText->SetText(bHasSlot && Progression
+		? FText::Format(LOCTEXT("Money", "보유 돈: {0}"), FText::AsNumber(Progression->GetMoney()))
+		: FText::GetEmpty());
 	TArray<FknightItemStack> Owned;
 	if (bHasSlot && Progression) Progression->GetOwnedItems(Owned);
 	TMap<FPrimaryAssetId, const UknightPartItemDefinition*> Equipped;
@@ -316,7 +391,11 @@ void UKnightInventoryWidget::Refresh()
 		bool bStillOwned = false;
 		for (const UKnightInventoryEntryWidget* Entry : Entries)
 			if (Entry && Entry->GetItem() && Entry->GetItem()->GetPrimaryAssetId() == SelectedItemId) { bStillOwned = true; break; }
-		if (!bStillOwned) SelectedItemId = FPrimaryAssetId();
+		if (!bStillOwned)
+		{
+			SelectedItemId = FPrimaryAssetId();
+			if (Category == 1 && MaterialButton && GetOwningPlayer()) MaterialButton->SetUserFocus(GetOwningPlayer());
+		}
 	}
 	RefreshDetail();
 }
@@ -324,6 +403,8 @@ void UKnightInventoryWidget::Refresh()
 void UKnightInventoryWidget::SelectItem(const UknightItemDefinition* Item)
 {
 	SelectedItemId = Item ? Item->GetPrimaryAssetId() : FPrimaryAssetId();
+	SaleFeedback = FText::GetEmpty();
+	SetSaleQuantity(1);
 	for (UKnightInventoryEntryWidget* Entry : Entries)
 		if (Entry) Entry->SetSelected(Entry->GetItem() == Item);
 	RefreshDetail();
@@ -338,6 +419,100 @@ void UKnightInventoryWidget::RefreshDetail()
 	if (DetailName) DetailName->SetText(Item ? ItemName(Item) : LOCTEXT("Select", "항목 선택"));
 	if (DetailDescription) DetailDescription->SetText(Item && !Item->Description.IsEmpty()
 		? Item->Description : Item ? LOCTEXT("NoDescription", "설명이 없습니다.") : FText::GetEmpty());
+	RefreshSale();
+}
+
+void UKnightInventoryWidget::SetSaleQuantity(int32 Quantity)
+{
+	SaleQuantity = Quantity;
+	if (SaleQuantityInput) SaleQuantityInput->SetText(FText::AsNumber(Quantity));
+	RefreshSale();
+}
+
+void UKnightInventoryWidget::HandleQuantityChanged(const FText& Text)
+{
+	const FString Raw = Text.ToString().TrimStartAndEnd();
+	int32 Parsed = 0;
+	SaleQuantity = LexTryParseString(Parsed, *Raw) ? Parsed : 0;
+	RefreshSale();
+}
+
+void UKnightInventoryWidget::DecreaseSaleQuantity()
+{
+	SetSaleQuantity(FMath::Max(1, SaleQuantity - 1));
+}
+
+void UKnightInventoryWidget::IncreaseSaleQuantity()
+{
+	const UknightProgressionSubsystem* const Progression = GetProgression();
+	const UknightMaterialItemDefinition* Material = nullptr;
+	for (const UKnightInventoryEntryWidget* Entry : Entries)
+		if (Entry && Entry->GetItem() && Entry->GetItem()->GetPrimaryAssetId() == SelectedItemId)
+		{ Material = Cast<UknightMaterialItemDefinition>(Entry->GetItem()); break; }
+	const int32 Owned = Progression && Material ? Progression->GetItemCount(Material) : 0;
+	if (Owned > 0) SetSaleQuantity(SaleQuantity < 1 ? 1 : SaleQuantity >= Owned ? Owned : SaleQuantity + 1);
+}
+
+void UKnightInventoryWidget::MaxSaleQuantity()
+{
+	const UknightProgressionSubsystem* const Progression = GetProgression();
+	for (const UKnightInventoryEntryWidget* Entry : Entries)
+	{
+		if (Entry && Entry->GetItem() && Entry->GetItem()->GetPrimaryAssetId() == SelectedItemId)
+		{
+			if (const UknightMaterialItemDefinition* const Material = Cast<UknightMaterialItemDefinition>(Entry->GetItem()))
+				SetSaleQuantity(Progression ? Progression->GetItemCount(Material) : 0);
+			return;
+		}
+	}
+}
+
+void UKnightInventoryWidget::RefreshSale()
+{
+	if (!SalePanel) return;
+	SalePanel->SetVisibility(Category == 1 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	if (Category != 1) return;
+	const UknightProgressionSubsystem* const Progression = GetProgression();
+	const UknightMaterialItemDefinition* Material = nullptr;
+	for (const UKnightInventoryEntryWidget* Entry : Entries)
+		if (Entry && Entry->GetItem() && Entry->GetItem()->GetPrimaryAssetId() == SelectedItemId)
+		{ Material = Cast<UknightMaterialItemDefinition>(Entry->GetItem()); break; }
+	const int32 Owned = Progression && Material ? Progression->GetItemCount(Material) : 0;
+	if (SaleSelectionText) SaleSelectionText->SetText(Material
+		? FText::Format(LOCTEXT("SaleSelected", "{0}  ·  보유 {1}개"), ItemName(Material), FText::AsNumber(Owned))
+		: LOCTEXT("SaleChoose", "판매할 소재를 선택하세요."));
+	if (UnitPriceText) UnitPriceText->SetText(Material && Material->bSellable && Material->SellPrice > 0
+		? FText::Format(LOCTEXT("SaleUnitPrice", "개당 판매 가격: {0}"), FText::AsNumber(Material->SellPrice))
+		: LOCTEXT("SaleUnavailable", "판매 불가"));
+	FKnightMaterialSaleReceipt Quote;
+	const bool bValid = !bSaleRequestInProgress && Progression && Material
+		&& Progression->GetMaterialSaleQuote(SelectedItemId, SaleQuantity, Quote);
+	if (TotalPriceText) TotalPriceText->SetText(bValid
+		? FText::Format(LOCTEXT("SaleTotal", "총 판매 금액: {0}"), FText::AsNumber(Quote.TotalMoney))
+		: LOCTEXT("SaleTotalInvalid", "총 판매 금액: —"));
+	if (SellButton) SellButton->SetIsEnabled(bValid);
+	if (DecreaseButton) DecreaseButton->SetIsEnabled(Owned > 0);
+	if (IncreaseButton) IncreaseButton->SetIsEnabled(Owned > 0);
+	if (MaxButton) MaxButton->SetIsEnabled(Owned > 0);
+	if (SaleFeedbackText) SaleFeedbackText->SetText(SaleFeedback);
+}
+
+void UKnightInventoryWidget::SellSelectedMaterial()
+{
+	if (bSaleRequestInProgress || Category != 1 || !SelectedItemId.IsValid()) return;
+	UknightProgressionSubsystem* const Progression = GetProgression();
+	if (!Progression) return;
+	bSaleRequestInProgress = true;
+	FKnightMaterialSaleReceipt Receipt;
+	const bool bSold = Progression->SellMaterial(SelectedItemId, SaleQuantity, Receipt);
+	bSaleRequestInProgress = false;
+	SaleFeedback = bSold
+		? FText::Format(LOCTEXT("SaleSuccess", "{0}개 판매 완료 · +{1}"),
+			FText::AsNumber(Receipt.Count), FText::AsNumber(Receipt.TotalMoney))
+		: LOCTEXT("SaleRejected", "판매할 수 없습니다. 수량과 저장 상태를 확인하세요.");
+	if (bSold) bSaleSaveFailureShown = false;
+	if (bSold) SetSaleQuantity(1);
+	RefreshDetail();
 }
 
 #undef LOCTEXT_NAMESPACE

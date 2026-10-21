@@ -12,6 +12,7 @@
 #include "Progression/knightSaveSubsystem.h"
 #include "Raid/knightRaidSubsystem.h"
 #include "Raid/knightRaidDefinition.h"
+#include "System/knightGameplayTags.h"
 #include "knight.h"
 
 namespace
@@ -329,6 +330,44 @@ bool UknightProgressionSubsystem::ConsumeItem(const UknightItemDefinition* Item,
 	{
 		Save->ItemCounts.Remove(ItemId);
 	}
+	CommitChange();
+	return true;
+}
+
+bool UknightProgressionSubsystem::GetMaterialSaleQuote(FPrimaryAssetId ItemId, int32 Count,
+	FKnightMaterialSaleReceipt& OutReceipt) const
+{
+	OutReceipt = FKnightMaterialSaleReceipt();
+	const UknightSaveSubsystem* const Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	const UknightSaveGame* const Save = Saves && Saves->CanStartAtomicTransaction() ? Saves->GetSaveGame() : nullptr;
+	if (!Save || !ItemId.IsValid() || Count <= 0) return false;
+	const UknightMaterialItemDefinition* const Material = Cast<UknightMaterialItemDefinition>(
+		UknightInventoryLibrary::LoadItemDefinition(ItemId));
+	if (!Material || Material->GetPrimaryAssetId() != ItemId
+		|| Material->ItemType != knightGameplayTags::Item_Type_Material
+		|| !Material->bSellable || Material->SellPrice <= 0
+		|| Save->ItemCounts.FindRef(ItemId) < Count) return false;
+	const int64 Price = Material->SellPrice;
+	if (Price > MAX_int64 / Count) return false;
+	const int64 Total = Price * Count;
+	if (Save->Money < 0 || Save->Money > MAX_int64 - Total) return false;
+	OutReceipt.ItemId = ItemId;
+	OutReceipt.Count = Count;
+	OutReceipt.UnitPrice = Material->SellPrice;
+	OutReceipt.TotalMoney = Total;
+	return true;
+}
+
+bool UknightProgressionSubsystem::SellMaterial(FPrimaryAssetId ItemId, int32 Count,
+	FKnightMaterialSaleReceipt& OutReceipt)
+{
+	if (!GetMaterialSaleQuote(ItemId, Count, OutReceipt)) return false;
+	UknightSaveGame* const Save = GetSave();
+	int32& Owned = Save->ItemCounts.FindChecked(ItemId);
+	Owned -= Count;
+	if (Owned == 0) Save->ItemCounts.Remove(ItemId);
+	Save->Money += OutReceipt.TotalMoney;
+	// RequestSave snapshots both changes before OnProgressionChanged refreshes the inventory.
 	CommitChange();
 	return true;
 }

@@ -52,6 +52,13 @@ public:
 	UFUNCTION(BlueprintPure, Category="Knight|Save")
 	bool IsSaveInFlight() const { return bSaveInFlight; }
 
+	/** Atomic inventory transactions wait for the previous snapshot and any failed-save recovery. */
+	UFUNCTION(BlueprintPure, Category="Knight|Save")
+	bool CanStartAtomicTransaction() const { return HasSelectedSlot() && !bSaveInFlight && !bSaveRecoveryPending; }
+
+	UFUNCTION(BlueprintPure, Category="Knight|Save")
+	bool IsSaveRecoveryPending() const { return bSaveRecoveryPending; }
+
 	UFUNCTION(BlueprintPure, Category="Knight|Save")
 	FString GetActiveSlotId() const { return ActiveSlotId; }
 
