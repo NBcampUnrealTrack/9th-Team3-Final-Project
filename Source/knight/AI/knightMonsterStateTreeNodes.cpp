@@ -122,6 +122,31 @@ EStateTreeRunStatus FknightStateTreeActivateAbilityTask::EnterState(FStateTreeEx
 		}
 	}
 
+	// 직전 공격 연속 금지. 이 상태의 후보만이 아니라 모든 몬스터 공격 중 마지막에 쓴 것을 뺀다(원거리 → 근접 상태가 바뀌어도 같다).
+	// 그것 하나만 남으면 그대로 둔다. 쓸 공격이 없어 멈춰 서는 것보다 같은 공격을 한 번 더 쓰는 편이 낫다.
+	const AknightMonsterCharacterBase* const MonsterActor = Cast<AknightMonsterCharacterBase>(InstanceData.Actor);
+	const UknightMonsterDefinition* const Definition = MonsterActor ? MonsterActor->GetMonsterDefinition() : nullptr;
+	if (Definition && Definition->bAvoidRepeatingLastAttack && Candidates.Num() > 1)
+	{
+		FGameplayAbilitySpecHandle LastHandle;
+		double LastTime = -UE_BIG_NUMBER;
+		for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+		{
+			const UknightGameplayAbility_MonsterAttack* const Attack = Cast<UknightGameplayAbility_MonsterAttack>(Spec.GetPrimaryInstance());
+			if (Attack && Attack->GetLastActivationTime() > LastTime)
+			{
+				LastTime = Attack->GetLastActivationTime();
+				LastHandle = Spec.Handle;
+			}
+		}
+		const int32 LastIndex = Candidates.IndexOfByPredicate([LastHandle](const TPair<FGameplayAbilitySpecHandle, float>& Candidate) { return Candidate.Key == LastHandle; });
+		if (LastIndex != INDEX_NONE)
+		{
+			TotalWeight -= Candidates[LastIndex].Value;
+			Candidates.RemoveAtSwap(LastIndex);
+		}
+	}
+
 	// 가중치로 뽑는다. 발동을 거부한 후보(차단, 비용 부족)는 빼고 다시 뽑는다.
 	while (Candidates.Num() > 0)
 	{

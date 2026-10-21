@@ -72,6 +72,13 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Targeting")
 	FName FallbackLockOnSocket = TEXT("spine_03");
 
+	/**
+	 * 공격을 고를 때 바로 전에 쓴 공격은 후보에서 뺀다. 그 공격밖에 쓸 수 없을 때(거리·각도·쿨다운)만 다시 쓴다.
+	 * Knight Activate Ability 태스크가 본다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI")
+	bool bAvoidRepeatingLastAttack = false;
+
 	/** 공용 StateTree(ST_Monster_Default)의 추격이 멈추는 거리. 몸 크기에 맞춘다. Knight Monster Target 평가기가 내보낸다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="cm"))
 	float ChaseStopDistance = 900.f;

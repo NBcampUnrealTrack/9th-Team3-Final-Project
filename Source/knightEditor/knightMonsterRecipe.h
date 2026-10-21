@@ -336,6 +336,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Targeting")
 	FName FallbackLockOnSocket = TEXT("spine_03");
 
+	/** 바로 전에 쓴 공격은 다음 선택에서 뺀다(그것밖에 쓸 수 없을 때만 다시 쓴다). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="AI")
+	bool bAvoidRepeatingLastAttack = false;
+
 	/** 공용 StateTree의 추격 정지 거리. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="cm"))
 	float ChaseStopDistance = 900.f;

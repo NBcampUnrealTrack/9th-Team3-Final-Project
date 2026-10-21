@@ -716,6 +716,7 @@ namespace knightRecipe
 		Definition->TargetRadius = Recipe.TargetRadius;
 		Definition->FallbackLockOnSocket = Recipe.FallbackLockOnSocket;
 		Definition->ChaseStopDistance = Recipe.ChaseStopDistance;
+		Definition->bAvoidRepeatingLastAttack = Recipe.bAvoidRepeatingLastAttack;
 		Definition->RangedMinDistance = Recipe.RangedMinDistance;
 		Definition->RangedMaxDistance = Recipe.RangedMaxDistance;
 		Context.Touch(Definition);
@@ -1613,6 +1614,7 @@ UknightMonsterRecipe* UknightMonsterRecipeLibrary::CreateRecipeFromMonster(TSubc
 	Recipe->TargetRadius = Definition->TargetRadius;
 	Recipe->FallbackLockOnSocket = Definition->FallbackLockOnSocket;
 	Recipe->ChaseStopDistance = Definition->ChaseStopDistance;
+	Recipe->bAvoidRepeatingLastAttack = Definition->bAvoidRepeatingLastAttack;
 	Recipe->RangedMinDistance = Definition->RangedMinDistance;
 	Recipe->RangedMaxDistance = Definition->RangedMaxDistance;
 	Recipe->Parts = Definition->PartData ? Definition->PartData->Parts : TArray<FknightMonsterPartDefinition>();
