@@ -16,6 +16,7 @@
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 #include "Sound/SoundBase.h"
+#include "knight.h"
 
 namespace
 {
@@ -31,6 +32,10 @@ TSharedPtr<FknightMechAttackTiming> FknightMechAttackTiming::Start(UAnimInstance
 	if (!InSettings.bEnabled || CVarMechTiming.GetValueOnGameThread() == 0 || !AnimInstance || !InMontage || InBaseRate <= 0.f
 		|| !AnimInstance->Montage_IsPlaying(InMontage))
 	{
+		// (2026-10-21) 소리가 안 나던 문제 확인용: 왜 시작 못 했는지 남긴다.
+		UE_LOG(LogknightCombat, Log, TEXT("MechTiming skipped %s: enabled %d, cvar %d, anim %d, rate %.2f, playing %d"),
+			*GetNameSafe(InMontage), InSettings.bEnabled, CVarMechTiming.GetValueOnGameThread(), AnimInstance != nullptr, InBaseRate,
+			AnimInstance && InMontage ? AnimInstance->Montage_IsPlaying(InMontage) : 0);
 		return nullptr;
 	}
 
@@ -49,8 +54,12 @@ TSharedPtr<FknightMechAttackTiming> FknightMechAttackTiming::Start(UAnimInstance
 	}
 	if (FirstStart == MAX_FLT)
 	{
+		UE_LOG(LogknightCombat, Log, TEXT("MechTiming skipped %s: no melee trace notify"), *GetNameSafe(InMontage));
 		return nullptr;
 	}
+	UE_LOG(LogknightCombat, Log, TEXT("MechTiming start %s: trace %.2f-%.2f, lock at %.2f, rate %.2f, lock sound %s"),
+		*GetNameSafe(InMontage), FirstStart, FirstEnd, FMath::Max(0.f, FirstStart - InSettings.LockLeadTime), InBaseRate,
+		*GetNameSafe(InSettings.LockSound.Get()));
 
 	TSharedPtr<FknightMechAttackTiming> Timing = MakeShared<FknightMechAttackTiming>();
 	Timing->Anim = AnimInstance;
@@ -191,9 +200,13 @@ void FknightMechAttackTiming::EnterPhase(EPhase NewPhase)
 	case EPhase::Lock:
 		SetRate(Settings.LockRate);
 		PlaySound(Settings.LockSound);
+		UE_LOG(LogknightCombat, Log, TEXT("MechTiming lock %s at %.2f, sound %s"), *GetNameSafe(Montage.Get()),
+			IsStillPlaying() ? Anim->Montage_GetPosition(Montage.Get()) : -1.f, *GetNameSafe(Settings.LockSound.Get()));
 		break;
 	case EPhase::Burst:
 	{
+		UE_LOG(LogknightCombat, Log, TEXT("MechTiming burst %s at %.2f"), *GetNameSafe(Montage.Get()),
+			IsStillPlaying() ? Anim->Montage_GetPosition(Montage.Get()) : -1.f);
 		SetRate(BurstRate);
 		SpawnEffects(Settings.BurstEffect, bTwoHandedStance && !Settings.TwoHandedBurstSockets.IsEmpty()
 			? Settings.TwoHandedBurstSockets : Settings.BurstSockets, Settings.BurstEffectScale, BurstFx);
