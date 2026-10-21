@@ -87,4 +87,11 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
 	static int32 SetMontageSoundTime(UAnimMontage* Montage, const USoundBase* Sound, float Time);
+
+	/**
+	 * 몽타주의 Start~End(몽타주 시간)에 재생 속도(Knight Play Rate) 노티파이를 넣는다. 같은 구간에 이미 있으면 속도만 바꾼다.
+	 * 예비 동작을 늘이거나 도약 직전에 멈칫하게 할 때 쓴다. 어빌리티가 몽타주 위치로 재는 타이밍은 그대로다. 저장은 호출한 쪽.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
+	static bool SetMontagePlayRateWindow(UAnimMontage* Montage, float Start, float End, float PlayRate);
 };
