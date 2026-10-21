@@ -127,7 +127,8 @@ void UknightGroggyFeedbackComponent::EndPlay(const EEndPlayReason::Type EndPlayR
 	Super::EndPlay(EndPlayReason);
 }
 
-void UknightGroggyFeedbackComponent::WatchAttack(UGameplayAbility* Attack, UAnimMontage* Montage, const FknightMeleeHitParams& HitParams)
+void UknightGroggyFeedbackComponent::WatchAttack(UGameplayAbility* Attack, UAnimMontage* Montage, const FknightMeleeHitParams& HitParams,
+	const TSet<TWeakObjectPtr<AActor>>* AlreadyHitTargets)
 {
 	if (!Attack || !Montage || !Attack->IsActive() || Montage->bLoop)
 	{
@@ -145,6 +146,11 @@ void UknightGroggyFeedbackComponent::WatchAttack(UGameplayAbility* Attack, UAnim
 	WatchedMontage = Montage;
 	WatchedHitParams = HitParams;
 	PredictedTargetsThisAttack.Reset();
+	// (2026-10-20) 이미 맞힌 대상은 이번 몽타주에서 맞지 않으니 예측한 것으로 쳐서 건너뛴다.
+	if (AlreadyHitTargets)
+	{
+		PredictedTargetsThisAttack.Append(*AlreadyHitTargets);
+	}
 	bWatchedPredictionAttempted = TryStartPredictedKnockdown(Attack, HitParams);
 	EnsureFeedbackTicker();
 }
