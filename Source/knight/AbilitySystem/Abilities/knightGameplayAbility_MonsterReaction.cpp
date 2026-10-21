@@ -240,7 +240,17 @@ void UknightGameplayAbility_MonsterReaction::RestorePoise() const
 		return;
 	}
 	// 기본값(Base)을 바꾸므로 변경이 영구적이다. Poise가 0보다 커지면 Poise 붕괴 이벤트도 다시 발생할 수 있게 된다.
-	const float NewMaxPoise = ASC->GetNumericAttributeBase(UknightCoreAttributeSet::GetMaxPoiseAttribute()) * (1.f + MaxPoiseGrowth);
+	const float CurrentMaxPoise = ASC->GetNumericAttributeBase(UknightCoreAttributeSet::GetMaxPoiseAttribute());
+	if (InitialMaxPoise < 0.f)
+	{
+		InitialMaxPoise = CurrentMaxPoise;
+	}
+	float NewMaxPoise = CurrentMaxPoise * (1.f + MaxPoiseGrowth);
+	// (2026-10-20) 처음 MaxPoise의 MaxPoiseGrowthLimit배에서 멈춘다(이미 넘었으면 줄이지 않는다).
+	if (MaxPoiseGrowthLimit > 0.f)
+	{
+		NewMaxPoise = FMath::Max(CurrentMaxPoise, FMath::Min(NewMaxPoise, InitialMaxPoise * MaxPoiseGrowthLimit));
+	}
 	ASC->SetNumericAttributeBase(UknightCoreAttributeSet::GetMaxPoiseAttribute(), NewMaxPoise);
 	ASC->SetNumericAttributeBase(UknightCoreAttributeSet::GetPoiseAttribute(), NewMaxPoise);
 }

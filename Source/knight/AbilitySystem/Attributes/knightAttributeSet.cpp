@@ -13,14 +13,16 @@ UknightAttributeSet::UknightAttributeSet()
 	InitBoostRecoveryDelay(1.2f);
 
 	// 부위 체력 기본값: 4부위 x 25 = 100으로, Core의 MaxHealth 기본값(100)과 맞춘다.
-	InitHeadHealth(25.f);
-	InitMaxHeadHealth(25.f);
-	InitTorsoHealth(25.f);
-	InitMaxTorsoHealth(25.f);
-	InitArmsHealth(25.f);
-	InitMaxArmsHealth(25.f);
-	InitLegsHealth(25.f);
-	InitMaxLegsHealth(25.f);
+	// (2026-10-21 사용자 결정) 기본 메카 총 체력 100 → 150: 4부위 x 37.5. 기본 메카로 잔열 3판 모두 쓰러져서(체력 + 수리 키트 250으로 약 12번).
+	// 출격 때 캐릭터가 MaxHealth를 부위 최대 체력의 합으로 맞추므로 여기만 바꾸면 된다. 바뀔 수 있는 값.
+	InitHeadHealth(37.5f);
+	InitMaxHeadHealth(37.5f);
+	InitTorsoHealth(37.5f);
+	InitMaxTorsoHealth(37.5f);
+	InitArmsHealth(37.5f);
+	InitMaxArmsHealth(37.5f);
+	InitLegsHealth(37.5f);
+	InitMaxLegsHealth(37.5f);
 
 	// 적재 한도는 임시값. 파츠 데이터가 정해지면 조정한다.
 	InitWeight(0.f);

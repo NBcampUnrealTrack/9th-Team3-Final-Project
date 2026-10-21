@@ -124,6 +124,23 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|RepairKit", meta=(ClampMin=0))
 	float RepairKitGaugePerPerfectGuard = 20.f;
 
+	/**
+	 * (2026-10-20 사용자 결정) 기본 메카 스탯 중 속성 세트 기본값과 다른 것. 파츠를 입히기 전에 기본값(Base)으로 넣는다.
+	 * 그로기 자연 회복: 안 맞은 지 ASC의 PoiseRecoveryDelay(BP_Knight 3초)가 지나면 초당 이만큼 오른다. 바뀔 수 있는 값.
+	 * (속성 세트 기본값은 0이고 몬스터도 같은 세트를 써서, 플레이어만 여기서 넣는다.)
+	 * (2026-10-21) 10 → 5, 대기 2 → 3초: 회복이 빨라 가드·피격으로 쌓인 그로기가 금방 비어 기절이 거의 안 났다.
+	 * (2026-10-21) 5 → 2: 체력 150 판에서도 7분 동안 기절 0번(맞는 간격이 평균 14초라 그 사이 다 찼다). 100이 차는 데 50초.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|BaseStats", meta=(ClampMin=0))
+	float BasePoiseRecoveryRate = 2.f;
+
+	/**
+	 * (2026-10-20 사용자 결정) 기본 가드 효율. 0.8이면 막을 때 피해 0.36배·그로기 0.6배(1.0이면 0.2배·0.5배).
+	 * 막으면 사실상 피해가 없던 것을 낮췄다. 파츠로 올릴 여지를 둔다. 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|BaseStats", meta=(ClampMin=0))
+	float BaseGuardEfficiency = 0.8f;
+
 	/** 템플릿 입력. InputConfig가 비어 있을 때만 쓴다. */
 	UPROPERTY(EditAnywhere, Category="Input")
 	UInputAction* JumpAction;
