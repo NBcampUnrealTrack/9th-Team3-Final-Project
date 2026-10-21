@@ -233,6 +233,8 @@ void UknightGameplayAbility_MeleeAttack::StartAttack()
 	MontageTask->OnInterrupted.AddDynamic(this, &ThisClass::OnMontageFinished);
 	MontageTask->OnCancelled.AddDynamic(this, &ThisClass::OnMontageFinished);
 	MontageTask->ReadyForActivation();
+	// (2026-10-20) 기계식 타이밍: 준비 끝 락 → 모터 버스트 → 판정 끝 스톱.
+	StartMechTiming(Montage, Rate);
 	if (AActor* const Avatar = GetAvatarActorFromActorInfo())
 	{
 		if (UknightGroggyFeedbackComponent* const Feedback = Avatar->FindComponentByClass<UknightGroggyFeedbackComponent>())

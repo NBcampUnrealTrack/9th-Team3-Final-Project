@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystem/Abilities/knightGameplayAbility.h"
+#include "Combat/knightMechAttackTiming.h"
 #include "knightAbilitySystemComponent.generated.h"
 
 class UknightAbilityTagRelationshipMapping;
@@ -153,6 +154,9 @@ public:
 	 * 로컬 플레이어가 조종하는 아바타만. 타격 큐(GCN_Hit_Melee)의 기본 흔들림 위에 겹친다.
 	 */
 	void PlayAttackImpactShake(float PoiseDamage, bool bGuarded) const;
+
+	/** (2026-10-20) 기계식 공격 타이밍 설정(락 → 버스트 → 스톱). 공격 어빌리티가 모션을 재생할 때 읽는다. */
+	const FknightMechTimingSettings& GetMechTimingSettings() const { return MechTiming; }
 	void CancelActivationGroupAbilities(EknightAbilityActivationGroup Group, const UknightGameplayAbility* IgnoreAbility);
 
 	// 태그 관계
@@ -296,6 +300,13 @@ protected:
 	float AttackShakeCooldown = 0.12f;
 
 	mutable double LastAttackShakeTime = -UE_BIG_NUMBER;
+
+	/**
+	 * (2026-10-20 사용자 요청 '사람이 아니라 로봇이 하는 느낌') 기계식 공격 타이밍.
+	 * 준비 끝에서 뚝 멈췄다가(락) 모터가 확 돌고(버스트) 판정 끝에서 뚝 멈춘다(스톱). 자세한 설명은 knightMechAttackTiming.h.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack Feel")
+	FknightMechTimingSettings MechTiming;
 
 	FTimerHandle BoostRecoveryTimer;
 
