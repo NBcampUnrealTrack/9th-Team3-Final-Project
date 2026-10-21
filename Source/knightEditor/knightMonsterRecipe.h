@@ -112,6 +112,10 @@ struct FknightRecipeAttack
 	UPROPERTY(EditAnywhere, Category="Selection")
 	FknightMonsterAttackSelection Selection;
 
+	/** 공중 턴(AirGroundTurnTime > 0)에만 쓰는 공격. 아니면 지상 턴에만 쓴다. 공중 턴이 없는 몬스터에서는 보지 않는다. */
+	UPROPERTY(EditAnywhere, Category="Selection")
+	bool bAirAttack = false;
+
 	/** 퍼펙트 가드당하면 경직도가 깎인다. 원거리처럼 패링 보상만 주는 공격은 끈다. */
 	UPROPERTY(EditAnywhere, Category="Damage")
 	bool bParryBuildsPoise = true;
@@ -242,6 +246,51 @@ public:
 	/** 디뎠을 때 발 뼈의 바닥 위 높이(cm, 메시 배율 적용). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Hover", meta=(ClampMin=0, Units="cm", EditCondition="HoverDrop > 0"))
 	float HoverFootHeight = 0.f;
+
+	/**
+	 * 지상 턴 시간(knightMonsterAirTurnComponent). 0보다 크면 지상 턴 → 이륙 → 공중 공격 AirAttacksPerTurn번 → 착지를 반복한다.
+	 * 지상 공격은 공중 턴에 막히고, bAirAttack 공격만 공중 턴에 쓴다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(ClampMin=0, Units="s"))
+	float AirGroundTurnTime = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(ClampMin=1, EditCondition="AirGroundTurnTime > 0"))
+	int32 AirAttacksPerTurn = 2;
+
+	/** 공중 공격을 다 쓰지 못해도 이 시간이 지나면 착지한다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(ClampMin=0, Units="s", EditCondition="AirGroundTurnTime > 0"))
+	float AirTurnMaxTime = 20.f;
+
+	/** 공중 턴에 애니메이션 원래 높이(HoverDrop을 빼지 않은 높이)보다 더 띄우는 높이. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(ClampMin=0, Units="cm", EditCondition="AirGroundTurnTime > 0"))
+	float AirLift = 0.f;
+
+	/** 공중 턴에 AirCeilingBone이 바닥 위 이 높이를 넘지 않는다(이륙 애니메이션이 몸을 크게 들어 올릴 때). 0이면 끈다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(ClampMin=0, Units="cm", EditCondition="AirGroundTurnTime > 0"))
+	float AirCeiling = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(EditCondition="AirGroundTurnTime > 0 && AirCeiling > 0"))
+	FName AirCeilingBone = TEXT("pelvis");
+
+	/** 이륙 애니메이션과 쓸 구간(초). End가 0이면 끝까지. 구간 길이 동안 메시가 공중 높이로 오른다. */
+	UPROPERTY(EditAnywhere, Category="Air Turn", meta=(EditCondition="AirGroundTurnTime > 0"))
+	TObjectPtr<UAnimSequence> TakeOff;
+
+	UPROPERTY(EditAnywhere, Category="Air Turn", meta=(ClampMin=0, Units="s", EditCondition="AirGroundTurnTime > 0"))
+	float TakeOffStart = 0.f;
+
+	UPROPERTY(EditAnywhere, Category="Air Turn", meta=(ClampMin=0, Units="s", EditCondition="AirGroundTurnTime > 0"))
+	float TakeOffEnd = 0.f;
+
+	/** 착지 애니메이션과 쓸 구간(초). 구간 길이 동안 메시가 지상 높이로 내려온다. */
+	UPROPERTY(EditAnywhere, Category="Air Turn", meta=(EditCondition="AirGroundTurnTime > 0"))
+	TObjectPtr<UAnimSequence> Landing;
+
+	UPROPERTY(EditAnywhere, Category="Air Turn", meta=(ClampMin=0, Units="s", EditCondition="AirGroundTurnTime > 0"))
+	float LandingStart = 0.f;
+
+	UPROPERTY(EditAnywhere, Category="Air Turn", meta=(ClampMin=0, Units="s", EditCondition="AirGroundTurnTime > 0"))
+	float LandingEnd = 0.f;
 
 	/** 바닥 가까이에서 날개 끝이 바닥을 뚫지 않게 들어 올린다(애님 그래프의 Knight Wing Clearance 노드). 비우면 노드를 넣지 않는다. */
 	UPROPERTY(EditAnywhere, Category="Hover", meta=(TitleProperty="RootBone"))

@@ -43,6 +43,7 @@
 #include "Monster/knightMonsterBodyBlockerComponent.h"
 #include "Monster/knightMonsterCharacterBase.h"
 #include "Monster/knightMonsterDefinition.h"
+#include "Monster/knightMonsterAirTurnComponent.h"
 #include "Monster/knightMonsterHoverComponent.h"
 #include "Monster/knightMonsterPartData.h"
 #include "Monster/knightMonsterPushOutComponent.h"
@@ -407,6 +408,26 @@ namespace knightRecipe
 	{
 		return Sequence ? BuildMontage(Context, Name, TArray<UAnimSequence*>{ Sequence }, false, bAutoBlendOut) : nullptr;
 	}
+
+	/** 시퀀스의 Start ~ End(초) 구간만 재생하는 몽타주. End가 0이거나 길이를 넘으면 끝까지. */
+	UAnimMontage* BuildRangeMontage(FContext& Context, const FString& Name, UAnimSequence* Sequence, float Start, float End)
+	{
+		UAnimMontage* const Montage = BuildMontage(Context, Name, Sequence);
+		if (!Montage)
+		{
+			return nullptr;
+		}
+		const float Length = Sequence->GetPlayLength();
+		const float RangeEnd = End > 0.f ? FMath::Min(End, Length) : Length;
+		const float RangeStart = FMath::Clamp(Start, 0.f, RangeEnd);
+		FAnimSegment& Segment = Montage->SlotAnimTracks[0].AnimTrack.AnimSegments[0];
+		Segment.AnimStartTime = RangeStart;
+		Segment.AnimEndTime = RangeEnd;
+		Montage->SetCompositeLength(RangeEnd - RangeStart);
+		Montage->RefreshCacheData();
+		Montage->PostEditChange();
+		return Montage;
+	}
 }
 
 ////////////////////////////////////////////////////////////////////
@@ -426,7 +447,13 @@ namespace knightRecipe
 		UObject* const CDO = GetCDO(Blueprint);
 		FLog& Log = Context.Log;
 
-		SetValue(CDO, TEXT("Selection"), Attack.Selection, Log);
+		// 공중 턴이 있는 몬스터는 턴 태그로 지상·공중 공격을 나눈다.
+		FknightMonsterAttackSelection Selection = Attack.Selection;
+		if (Context.Recipe->AirGroundTurnTime > 0.f)
+		{
+			(Attack.bAirAttack ? Selection.RequiredOwnerTags : Selection.BlockedOwnerTags).AddTag(Tag(TEXT("State.Monster.Airborne")));
+		}
+		SetValue(CDO, TEXT("Selection"), Selection, Log);
 		SetValue(CDO, TEXT("HitParams"), Attack.HitParams, Log);
 		SetObject(CDO, TEXT("Montage"), Montage, Log);
 		SetValue<float>(CDO, TEXT("StartTurnYaw"), Attack.StartTurnYaw, Log);
@@ -457,7 +484,7 @@ namespace knightRecipe
 		FGameplayTagContainer Blocked;
 		Blocked.AddTag(Tag(TEXT("State.Dead")));
 		Blocked.AddTag(Tag(TEXT("State.HitReact")));
-		Blocked.AppendTags(Attack.Selection.BlockedOwnerTags);
+		Blocked.AppendTags(Selection.BlockedOwnerTags);
 		SetValue(CDO, TEXT("ActivationBlockedTags"), Blocked, Log);
 
 		Context.Touch(Blueprint);
@@ -569,6 +596,32 @@ namespace knightRecipe
 			Enrage.TriggerTag = Tag(TEXT("State.Monster.Enraged"));
 			Enrage.TriggerSource = EGameplayAbilityTriggerSource::OwnedTagAdded;
 			OutAbilities.Add(BuildReactionAbility(Context, Enrage));
+		}
+
+		const UknightMonsterRecipe& Recipe = *Context.Recipe;
+		if (Recipe.AirGroundTurnTime > 0.f)
+		{
+			// 이륙·착지 중에는 맞아도 경직하지 않는다. 메시 높이는 공중 턴 컴포넌트가 같은 시간 동안 옮긴다.
+			if (UAnimMontage* const TakeOff = BuildRangeMontage(Context, FString::Printf(TEXT("AM_%s_TakeOff"), *Prefix), Recipe.TakeOff, Recipe.TakeOffStart, Recipe.TakeOffEnd))
+			{
+				FReactionSettings Settings;
+				Settings.Name = TEXT("TakeOff");
+				Settings.StateTag = Tag(TEXT("State.SuperArmor"));
+				Settings.HoldTime = TakeOff->GetPlayLength();
+				Settings.HoldMontage = TakeOff;
+				Settings.TriggerTag = Tag(TEXT("Event.Monster.TakeOff"));
+				OutAbilities.Add(BuildReactionAbility(Context, Settings));
+			}
+			if (UAnimMontage* const Landing = BuildRangeMontage(Context, FString::Printf(TEXT("AM_%s_Land"), *Prefix), Recipe.Landing, Recipe.LandingStart, Recipe.LandingEnd))
+			{
+				FReactionSettings Settings;
+				Settings.Name = TEXT("Land");
+				Settings.StateTag = Tag(TEXT("State.SuperArmor"));
+				Settings.HoldTime = Landing->GetPlayLength();
+				Settings.HoldMontage = Landing;
+				Settings.TriggerTag = Tag(TEXT("Event.Monster.Land"));
+				OutAbilities.Add(BuildReactionAbility(Context, Settings));
+			}
 		}
 
 		if (UAnimMontage* const Death = BuildMontage(Context, FString::Printf(TEXT("AM_%s_Death"), *Prefix), Reactions.Death, false))
@@ -988,6 +1041,27 @@ namespace knightRecipe
 			SetValue<float>(Hover, TEXT("HoverDrop"), Recipe.HoverDrop, Context.Log);
 			SetValue<TArray<FName>>(Hover, TEXT("FootBones"), Recipe.HoverFootBones, Context.Log);
 			SetValue<float>(Hover, TEXT("FootGroundHeight"), Recipe.HoverFootHeight, Context.Log);
+			SetValue<float>(Hover, TEXT("AirLift"), Recipe.AirGroundTurnTime > 0.f ? Recipe.AirLift : 0.f, Context.Log);
+			SetValue<float>(Hover, TEXT("AirCeiling"), Recipe.AirGroundTurnTime > 0.f ? Recipe.AirCeiling : 0.f, Context.Log);
+			SetValue<FName>(Hover, TEXT("AirCeilingBone"), Recipe.AirCeilingBone, Context.Log);
+		}
+		if (UknightMonsterAirTurnComponent* const AirTurn = GetObject<UknightMonsterAirTurnComponent>(CDO, TEXT("AirTurn")))
+		{
+			AirTurn->Modify();
+			auto RangeLength = [](const UAnimSequence* Sequence, float Start, float End, float Fallback)
+			{
+				if (!Sequence)
+				{
+					return Fallback;
+				}
+				const float RangeEnd = End > 0.f ? FMath::Min(End, Sequence->GetPlayLength()) : Sequence->GetPlayLength();
+				return FMath::Max(0.f, RangeEnd - FMath::Max(0.f, Start));
+			};
+			SetValue<float>(AirTurn, TEXT("GroundTurnTime"), Recipe.AirGroundTurnTime, Context.Log);
+			SetValue<int32>(AirTurn, TEXT("AirAttacksPerTurn"), Recipe.AirAttacksPerTurn, Context.Log);
+			SetValue<float>(AirTurn, TEXT("AirTurnMaxTime"), Recipe.AirTurnMaxTime, Context.Log);
+			SetValue<float>(AirTurn, TEXT("TakeOffBlendTime"), RangeLength(Recipe.TakeOff, Recipe.TakeOffStart, Recipe.TakeOffEnd, 1.f), Context.Log);
+			SetValue<float>(AirTurn, TEXT("LandBlendTime"), RangeLength(Recipe.Landing, Recipe.LandingStart, Recipe.LandingEnd, 1.5f), Context.Log);
 		}
 		Context.Touch(Blueprint);
 		return Blueprint;
@@ -1570,6 +1644,15 @@ UknightMonsterRecipe* UknightMonsterRecipeLibrary::CreateRecipeFromMonster(TSubc
 		GetValue(Hover, TEXT("HoverDrop"), Recipe->HoverDrop);
 		GetValue(Hover, TEXT("FootBones"), Recipe->HoverFootBones);
 		GetValue(Hover, TEXT("FootGroundHeight"), Recipe->HoverFootHeight);
+		GetValue(Hover, TEXT("AirLift"), Recipe->AirLift);
+		GetValue(Hover, TEXT("AirCeiling"), Recipe->AirCeiling);
+		GetValue(Hover, TEXT("AirCeilingBone"), Recipe->AirCeilingBone);
+	}
+	if (const UknightMonsterAirTurnComponent* const AirTurn = GetObject<UknightMonsterAirTurnComponent>(Monster, TEXT("AirTurn")))
+	{
+		GetValue(AirTurn, TEXT("GroundTurnTime"), Recipe->AirGroundTurnTime);
+		GetValue(AirTurn, TEXT("AirAttacksPerTurn"), Recipe->AirAttacksPerTurn);
+		GetValue(AirTurn, TEXT("AirTurnMaxTime"), Recipe->AirTurnMaxTime);
 	}
 	if (const UBlueprint* const MonsterBlueprint = Cast<UBlueprint>(MonsterClass->ClassGeneratedBy))
 	{
@@ -1676,6 +1759,11 @@ UknightMonsterRecipe* UknightMonsterRecipeLibrary::CreateRecipeFromMonster(TSubc
 				Attack.Animation = SegmentSequence(Montage, 0);
 				ReadMontageWindows(Montage, Attack);
 				GetValue(CDO, TEXT("Selection"), Attack.Selection);
+				// 공중 턴 태그는 Build가 bAirAttack으로 넣는 값이라 레시피에는 bAirAttack으로만 남긴다.
+				const FGameplayTag AirborneTag = Tag(TEXT("State.Monster.Airborne"));
+				Attack.bAirAttack = Attack.Selection.RequiredOwnerTags.HasTagExact(AirborneTag);
+				Attack.Selection.RequiredOwnerTags.RemoveTag(AirborneTag);
+				Attack.Selection.BlockedOwnerTags.RemoveTag(AirborneTag);
 				GetValue(CDO, TEXT("HitParams"), Attack.HitParams);
 				GetValue(CDO, TEXT("StartTurnYaw"), Attack.StartTurnYaw);
 				GetValue(CDO, TEXT("StartTurnRate"), Attack.StartTurnRate);
@@ -1728,6 +1816,15 @@ UknightMonsterRecipe* UknightMonsterRecipeLibrary::CreateRecipeFromMonster(TSubc
 				else if (Trigger == Tag(TEXT("State.Monster.Enraged")))
 				{
 					Reactions.EnrageRoar = SegmentSequence(Hold, 0);
+				}
+				else if (Trigger == Tag(TEXT("Event.Monster.TakeOff")) || Trigger == Tag(TEXT("Event.Monster.Land")))
+				{
+					const bool bTakeOff = Trigger == Tag(TEXT("Event.Monster.TakeOff"));
+					const FAnimSegment* const Segment = Hold && !Hold->SlotAnimTracks.IsEmpty() && !Hold->SlotAnimTracks[0].AnimTrack.AnimSegments.IsEmpty()
+						? &Hold->SlotAnimTracks[0].AnimTrack.AnimSegments[0] : nullptr;
+					(bTakeOff ? Recipe->TakeOff : Recipe->Landing) = SegmentSequence(Hold, 0);
+					(bTakeOff ? Recipe->TakeOffStart : Recipe->LandingStart) = Segment ? Segment->AnimStartTime : 0.f;
+					(bTakeOff ? Recipe->TakeOffEnd : Recipe->LandingEnd) = Segment ? Segment->AnimEndTime : 0.f;
 				}
 				else
 				{

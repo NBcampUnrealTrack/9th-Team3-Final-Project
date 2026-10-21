@@ -56,6 +56,7 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_HitReact_Groggy, "State.HitReact.Groggy", "Player poise broken: stunned for a while (start, loop, end).");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Monster_Enraged, "State.Monster.Enraged", "Monster rage state.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Monster_Exhausted, "State.Monster.Exhausted", "Monster fatigue state.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Monster_Airborne, "State.Monster.Airborne", "Flying monster is in its air turn (ground attacks blocked, air attacks allowed).");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Monster_Reacting, "State.Monster.Reacting", "Monster is in a down, flinch or roar; its StateTree waits instead of acting.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Monster_Phase2, "State.Monster.Phase2", "Monster health fell below its Phase2HealthRatio (once per life; never removed).");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Monster_PassThroughPawns, "State.Monster.PassThroughPawns", "Monster's movement capsule ignores pawns (body attacks roll or charge through the player; push-out moves the player aside).");
@@ -80,6 +81,8 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Event_PartBroken, "Event.PartBroken", "A monster part was broken.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Event_Death, "Event.Death", "Health reached zero.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Event_Monster_Engaged, "Event.Monster.Engaged", "A monster found its first target (once per life; plays the encounter roar).");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Event_Monster_TakeOff, "Event.Monster.TakeOff", "Flying monster starts its air turn (plays the take-off reaction).");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Event_Monster_Land, "Event.Monster.Land", "Flying monster ends its air turn (plays the landing reaction).");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(SetByCaller_Damage, "SetByCaller.Damage", "Base damage magnitude.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(SetByCaller_PoiseDamage, "SetByCaller.PoiseDamage", "Base poise damage magnitude.");

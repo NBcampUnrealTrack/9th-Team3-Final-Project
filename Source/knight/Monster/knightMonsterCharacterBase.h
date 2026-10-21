@@ -17,6 +17,7 @@ class UknightMeleeTraceComponent;
 class UknightMonsterAttributeSet;
 class UknightMonsterDefinition;
 class UknightMonsterHoverComponent;
+class UknightMonsterAirTurnComponent;
 class UknightMonsterMovementComponent;
 class UknightMonsterPartComponent;
 class UknightMonsterPushOutComponent;
@@ -137,6 +138,10 @@ private:
 	/** 떠 있게 만든 애니메이션을 바닥 가까이 내린다(날짐승). HoverDrop이 0인 몬스터에서는 쉰다. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UknightMonsterHoverComponent> Hover;
+
+	/** 지상 턴과 공중 턴을 번갈아 돌린다(날짐승). GroundTurnTime이 0이면 꺼져 있다. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UknightMonsterAirTurnComponent> AirTurn;
 
 	UPROPERTY()
 	TObjectPtr<UknightCoreAttributeSet> CoreAttributeSet;

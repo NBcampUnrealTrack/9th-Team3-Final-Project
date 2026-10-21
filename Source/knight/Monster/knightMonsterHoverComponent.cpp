@@ -1,5 +1,6 @@
 #include "Monster/knightMonsterHoverComponent.h"
 
+#include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/Character.h"
 #include "knight.h"
@@ -22,7 +23,17 @@ void UknightMonsterHoverComponent::BeginPlay()
 	{
 		BaseMeshHeight = Mesh->GetRelativeLocation().Z;
 	}
-	SetComponentTickEnabled(Mesh.IsValid() && HoverDrop > 0.f && !FootBones.IsEmpty());
+	SetComponentTickEnabled(Mesh.IsValid() && ((HoverDrop > 0.f && !FootBones.IsEmpty()) || AirLift > 0.f));
+}
+
+void UknightMonsterHoverComponent::SetAirborne(bool bInAirborne, float BlendTime)
+{
+	AirAlphaTarget = bInAirborne ? 1.f : 0.f;
+	AirAlphaSpeed = BlendTime > 0.f ? 1.f / BlendTime : 0.f;
+	if (AirAlphaSpeed <= 0.f)
+	{
+		AirAlpha = AirAlphaTarget;
+	}
 }
 
 void UknightMonsterHoverComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
@@ -37,17 +48,35 @@ void UknightMonsterHoverComponent::TickComponent(float DeltaTime, ELevelTick Tic
 	}
 	// 메시 원점(애니메이션의 바닥) 기준 발 높이. 메시를 옮겨도 이 값은 바뀌지 않는다.
 	const float MeshOriginZ = MeshComponent->GetComponentLocation().Z;
-	float LowestFoot = TNumericLimits<float>::Max();
-	for (const FName Bone : FootBones)
+	float Drop = 0.f;
+	if (HoverDrop > 0.f && !FootBones.IsEmpty())
 	{
-		LowestFoot = FMath::Min(LowestFoot, MeshComponent->GetSocketLocation(Bone).Z - MeshOriginZ);
+		float LowestFoot = TNumericLimits<float>::Max();
+		for (const FName Bone : FootBones)
+		{
+			LowestFoot = FMath::Min(LowestFoot, MeshComponent->GetSocketLocation(Bone).Z - MeshOriginZ);
+		}
+		Drop = FMath::Clamp(LowestFoot - FootGroundHeight, 0.f, HoverDrop);
 	}
-	const float Drop = FMath::Clamp(LowestFoot - FootGroundHeight, 0.f, HoverDrop);
+	if (AirAlpha != AirAlphaTarget)
+	{
+		AirAlpha = FMath::FInterpConstantTo(AirAlpha, AirAlphaTarget, DeltaTime, AirAlphaSpeed);
+	}
+	// 부드럽게 오르내리도록 보간 비율에 이즈를 건다.
+	const float Air = FMath::SmoothStep(0.f, 1.f, AirAlpha);
+	float Height = BaseMeshHeight - Drop * (1.f - Air) + AirLift * Air;
+	const ACharacter* const Character = Cast<ACharacter>(GetOwner());
+	if (AirAlpha > 0.f && AirCeiling > 0.f && Character && Character->GetCapsuleComponent())
+	{
+		// 캡슐 원점 기준: 뼈 높이 = Height + (뼈 - 메시 원점) ≤ -캡슐 반높이 + AirCeiling
+		const float BoneAboveOrigin = MeshComponent->GetSocketLocation(AirCeilingBone).Z - MeshOriginZ;
+		Height = FMath::Min(Height, AirCeiling - Character->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() - BoneAboveOrigin);
+	}
 
 	FVector Location = MeshComponent->GetRelativeLocation();
-	if (!FMath::IsNearlyEqual(Location.Z, BaseMeshHeight - Drop, 0.1f))
+	if (!FMath::IsNearlyEqual(Location.Z, Height, 0.1f))
 	{
-		Location.Z = BaseMeshHeight - Drop;
+		Location.Z = Height;
 		MeshComponent->SetRelativeLocation(Location);
 	}
 }
