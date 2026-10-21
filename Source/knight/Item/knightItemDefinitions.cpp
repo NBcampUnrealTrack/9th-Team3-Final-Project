@@ -17,6 +17,11 @@ UknightMaterialItemDefinition::UknightMaterialItemDefinition()
 	MaxStack = 999;
 }
 
+UknightSocketItemDefinition::UknightSocketItemDefinition()
+{
+	ItemType = knightGameplayTags::Item_Type_Socket;
+}
+
 UknightPartItemDefinition::UknightPartItemDefinition()
 {
 	ItemType = knightGameplayTags::Item_Type_Part;

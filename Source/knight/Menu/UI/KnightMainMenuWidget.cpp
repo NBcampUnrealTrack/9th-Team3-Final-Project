@@ -23,6 +23,11 @@
 #include "Codex/KnightCodexWidget.h"
 #include "Menu/KnightMaintenanceCameraRig.h"
 #include "Menu/UI/KnightMaintenanceWidget.h"
+#include "Menu/UI/KnightInventoryWidget.h"
+#include "Blueprint/WidgetTree.h"
+#include "Components/CanvasPanel.h"
+#include "Components/Button.h"
+#include "Components/WidgetSwitcher.h"
 #include "EngineUtils.h"
 
 #define LOCTEXT_NAMESPACE "KnightMainMenu"
@@ -90,6 +95,7 @@ void UKnightMainMenuWidget::NativeConstruct()
 
 void UKnightMainMenuWidget::NativeDestruct()
 {
+	if (InventoryWidget) InventoryWidget->Close();
 	if (MaintenanceWidget) MaintenanceWidget->Close();
 	if (MaintenanceCameraRig.IsValid()) MaintenanceCameraRig->SetMaintenanceView(false);
 	if (SettingsWidget)
@@ -118,6 +124,7 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 		return false;
 	}
 	UPanelWidget* Page = nullptr;
+	if (NewPage == EKnightMainMenuPage::Inventory) EnsureInventoryWidget();
 	switch (NewPage)
 	{
 	case EKnightMainMenuPage::Home: Page = Panel_Home; break;
@@ -125,6 +132,7 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 	case EKnightMainMenuPage::Maintenance: Page = Panel_Maintenance; break;
 	case EKnightMainMenuPage::Settings: Page = Panel_Settings; break;
 	case EKnightMainMenuPage::Codex: Page = Panel_Codex; break;
+	case EKnightMainMenuPage::Inventory: Page = InventoryPanel; break;
 	default:
 		UE_LOG(Logknight, Error, TEXT("Invalid main menu page %d."), static_cast<int32>(NewPage));
 		return false;
@@ -134,6 +142,12 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 		return false;
 	}
 	const bool bEnteringStage = NewPage == EKnightMainMenuPage::Stage && CurrentPage != EKnightMainMenuPage::Stage;
+	const bool bLeavingInventory = CurrentPage == EKnightMainMenuPage::Inventory && NewPage != CurrentPage;
+	if (bLeavingInventory)
+	{
+		if (InventoryWidget) InventoryWidget->Close();
+		bRestoreInventoryFocus = NewPage == EKnightMainMenuPage::Home;
+	}
 	const bool bLeavingMaintenance = CurrentPage == EKnightMainMenuPage::Maintenance && NewPage != CurrentPage;
 	if (bLeavingMaintenance)
 	{
@@ -144,6 +158,7 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 	CurrentPage = NewPage;
 	if (NewPage != EKnightMainMenuPage::Home) bRestoreCodexFocus = false;
 	if (NewPage != EKnightMainMenuPage::Home) bRestoreMaintenanceFocus = false;
+	if (NewPage != EKnightMainMenuPage::Home) bRestoreInventoryFocus = false;
 	bool bHasStages = true;
 	if (bEnteringStage)
 	{
@@ -184,6 +199,7 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 		}
 		if (MaintenanceCameraRig.IsValid()) MaintenanceCameraRig->SetMaintenanceView(true);
 	}
+	if (NewPage == EKnightMainMenuPage::Inventory && InventoryWidget) InventoryWidget->Open();
 	// Settings and the codex bring their own close buttons.
 	UpdateBackVisibility(NewPage == EKnightMainMenuPage::Home || NewPage == EKnightMainMenuPage::Settings || NewPage == EKnightMainMenuPage::Codex);
 	RefreshTravelControls();
@@ -203,11 +219,14 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 	}
 	if (NewPage == EKnightMainMenuPage::Maintenance && MaintenanceWidget && MaintenanceWidget->GetFocusButton())
 		MaintenanceWidget->GetFocusButton()->SetUserFocus(GetOwningPlayer());
+	if (NewPage == EKnightMainMenuPage::Inventory && InventoryWidget && InventoryWidget->GetFocusButton())
+		InventoryWidget->GetFocusButton()->SetUserFocus(GetOwningPlayer());
 	return true;
 }
 
 bool UKnightMainMenuWidget::HandleBackRequested()
 {
+	if (CurrentPage == EKnightMainMenuPage::Inventory) return ShowPage(EKnightMainMenuPage::Home);
 	if (CurrentPage == EKnightMainMenuPage::Settings && SettingsWidget) { SettingsWidget->RequestClose(); return true; }
 	if (CurrentPage == EKnightMainMenuPage::Codex) { HandleCodexClosed(); return true; }
 	if (CurrentPage == EKnightMainMenuPage::Maintenance && MaintenanceWidget && MaintenanceWidget->HandleBack()) return true;
@@ -221,6 +240,21 @@ bool UKnightMainMenuWidget::HandleBackRequested()
 
 FReply UKnightMainMenuWidget::NativeOnPreviewKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
 {
+	if (InKeyEvent.GetKey() == EKeys::I && !InKeyEvent.IsRepeat() && !IsTravelPending()
+		&& (CurrentPage == EKnightMainMenuPage::Home || CurrentPage == EKnightMainMenuPage::Inventory))
+	{
+		if (CurrentPage == EKnightMainMenuPage::Home)
+		{
+			FocusBeforeInventory.Reset();
+			for (UCommonButtonBase* Button : { Button_Stage.Get(), Button_Maintenance.Get(), Button_Settings.Get(),
+				Button_Codex.Get(), Button_ReturnToTitle.Get() })
+			{
+				if (Button && (Button->HasAnyUserFocus() || Button->HasFocusedDescendants())) { FocusBeforeInventory = Button; break; }
+			}
+		}
+		ShowPage(CurrentPage == EKnightMainMenuPage::Inventory ? EKnightMainMenuPage::Home : EKnightMainMenuPage::Inventory);
+		return FReply::Handled();
+	}
 	if (CurrentPage == EKnightMainMenuPage::Maintenance && MaintenanceWidget && !IsTravelPending())
 	{
 		const FKey Key = InKeyEvent.GetKey();
@@ -303,6 +337,18 @@ void UKnightMainMenuWidget::EnsureMaintenanceWidget()
 	});
 }
 
+void UKnightMainMenuWidget::EnsureInventoryWidget()
+{
+	if (InventoryWidget || !Switcher_Pages || !GetOwningPlayer() || !WidgetTree) return;
+	InventoryPanel = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("Panel_InventoryRuntime"));
+	Switcher_Pages->AddChild(InventoryPanel);
+	InventoryWidget = CreateWidget<UKnightInventoryWidget>(GetOwningPlayer(), UKnightInventoryWidget::StaticClass());
+	if (!InventoryWidget) return;
+	UCanvasPanelSlot* InventoryCanvasSlot = InventoryPanel->AddChildToCanvas(InventoryWidget);
+	InventoryCanvasSlot->SetAnchors(FAnchors(0, 0, 1, 1));
+	InventoryCanvasSlot->SetOffsets(FMargin(0));
+}
+
 void UKnightMainMenuWidget::HandleCodexClosed()
 {
 	bRestoreCodexFocus = true;
@@ -311,6 +357,9 @@ void UKnightMainMenuWidget::HandleCodexClosed()
 
 UWidget* UKnightMainMenuWidget::GetPreferredFocusTarget() const
 {
+	if (CurrentPage == EKnightMainMenuPage::Home && bRestoreInventoryFocus && FocusBeforeInventory.IsValid())
+		return FocusBeforeInventory.Get();
+	if (CurrentPage == EKnightMainMenuPage::Inventory && InventoryWidget) return InventoryWidget->GetFocusButton();
 	if (CurrentPage == EKnightMainMenuPage::Home && bRestoreMaintenanceFocus && Button_Maintenance) return Button_Maintenance;
 	if (CurrentPage == EKnightMainMenuPage::Maintenance && MaintenanceWidget) return MaintenanceWidget->GetFocusButton();
 	if (CurrentPage == EKnightMainMenuPage::Home && bRestoreCodexFocus && Button_Codex)

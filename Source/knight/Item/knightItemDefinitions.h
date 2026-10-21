@@ -66,9 +66,22 @@ class KNIGHT_API UknightMaterialItemDefinition : public UknightItemDefinition
 public:
 	UknightMaterialItemDefinition();
 
+	/** Inventory name color only. Rarity 1 is common; rarity 2+ is rare. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Material")
+	bool bHardModeExclusive = false;
+
 	/** Monster that drops it, for the item description. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Material")
 	TObjectPtr<const UknightMonsterDefinition> SourceMonster;
+};
+
+/** Socket consumable/data item. Socket effects are intentionally outside the phase-one inventory. */
+UCLASS(BlueprintType, Const)
+class KNIGHT_API UknightSocketItemDefinition : public UknightItemDefinition
+{
+	GENERATED_BODY()
+public:
+	UknightSocketItemDefinition();
 };
 
 /**

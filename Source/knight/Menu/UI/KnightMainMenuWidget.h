@@ -12,6 +12,8 @@ class UKnightStageMapWidget;
 class UKnightSettingsWidget;
 class UKnightCodexWidget;
 class UKnightMaintenanceWidget;
+class UKnightInventoryWidget;
+class UCanvasPanel;
 class AKnightMaintenanceCameraRig;
 struct FStreamableHandle;
 
@@ -22,7 +24,8 @@ enum class EKnightMainMenuPage : uint8
 	Stage,
 	Maintenance,
 	Settings,
-	Codex
+	Codex,
+	Inventory
 };
 
 /**
@@ -166,6 +169,7 @@ private:
 	void EnsureSettingsWidget();
 	void EnsureCodexWidget();
 	void EnsureMaintenanceWidget();
+	void EnsureInventoryWidget();
 
 	UPROPERTY(Transient)
 	TObjectPtr<UKnightSettingsWidget> SettingsWidget;
@@ -173,6 +177,12 @@ private:
 	TObjectPtr<UKnightCodexWidget> CodexWidget;
 	UPROPERTY(Transient)
 	TObjectPtr<UKnightMaintenanceWidget> MaintenanceWidget;
+	UPROPERTY(Transient)
+	TObjectPtr<UKnightInventoryWidget> InventoryWidget;
+	UPROPERTY(Transient)
+	TObjectPtr<UCanvasPanel> InventoryPanel;
+	TWeakObjectPtr<UWidget> FocusBeforeInventory;
+	bool bRestoreInventoryFocus = false;
 	TWeakObjectPtr<AKnightMaintenanceCameraRig> MaintenanceCameraRig;
 	bool bRestoreMaintenanceFocus = false;
 	bool bRestoreCodexFocus = false;
