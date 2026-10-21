@@ -174,6 +174,10 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 		Payload.EventTag = knightGameplayTags::Event_Parried;
 		Payload.Instigator = Target;
 		Payload.Target = Attacker;
+		if (!Params.bParryBuildsPoise)
+		{
+			Payload.InstigatorTags.AddTag(knightGameplayTags::Event_Parried_NoPoise);
+		}
 		SourceASC->HandleGameplayEvent(Payload.EventTag, &Payload);
 		// The defender learns about its own parry too (the guard ability opens the parry counter window).
 		static const FGameplayTag ParrySucceededTag = FGameplayTag::RequestGameplayTag(TEXT("Event.ParrySucceeded"), false);
@@ -244,6 +248,7 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 		if (const UknightAbilitySystemComponent* const KnightSourceASC = Cast<UknightAbilitySystemComponent>(SourceASC))
 		{
 			KnightSourceASC->PlayAttackImpactShake(Params.PoiseDamage, true);
+			KnightSourceASC->PlayAttackImpactEffects(Hit, true);
 		}
 		return EknightHitOutcome::Guarded;
 	}
@@ -260,12 +265,22 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 		? knightGameplayTags::GameplayCue_Hit_Weakpoint.GetTag()
 		: knightGameplayTags::GameplayCue_Hit_Melee.GetTag();
 	CueParams.RawMagnitude = PartMultiplier;
-	TargetASC->ExecuteGameplayCue(CueTag, CueParams);
+	// (2026-10-21) 나이트의 일반 타격은 공용 큐(반짝이·기존 소리) 대신 나이트 전용 타격(PlayAttackImpactEffects)만 쓴다. 약점 큐는 그대로.
+	const UknightAbilitySystemComponent* const KnightAttackerASC = Cast<UknightAbilitySystemComponent>(SourceASC);
+	const bool bWeakpointHit = CueTag == knightGameplayTags::GameplayCue_Hit_Weakpoint.GetTag();
+	// (2026-10-21) 약점 큐(번개)도 판타지 느낌이라 같이 대신한다. 약점은 나이트 타격을 더 크게(AttackImpactWeakpointScale).
+	const bool bKnightReplacesCue = KnightAttackerASC && KnightAttackerASC->ShouldReplaceSharedHitCue();
+	if (!bKnightReplacesCue)
+	{
+		TargetASC->ExecuteGameplayCue(CueTag, CueParams);
+	}
 	ApplyHitStopPair(Attacker, Target, Params.HitStopDuration);
 	// (2026-10-20) 공격 무게(그로기 피해)만큼 때린 쪽 화면을 더 흔든다. 양손·차지·내려찍기가 크게 흔들린다.
 	if (const UknightAbilitySystemComponent* const KnightSourceASC = Cast<UknightAbilitySystemComponent>(SourceASC))
 	{
 		KnightSourceASC->PlayAttackImpactShake(Params.PoiseDamage, false);
+		// (2026-10-21) 나이트 전용 타격 이펙트·소리(몬스터 ASC는 비어 있어 아무것도 안 한다).
+		KnightSourceASC->PlayAttackImpactEffects(Hit, false, bWeakpointHit);
 	}
 	// 전투는 소리가 난다. 아직 전투를 알아채지 못한 몬스터도 이 소리를 들을 수 있다.
 	UAISense_Hearing::ReportNoiseEvent(Attacker, Hit.ImpactPoint, 1.f, Attacker, 0.f, TEXT("Hit"));

@@ -182,7 +182,7 @@ void UknightDamageExecution::Execute_Implementation(const FGameplayEffectCustomE
 
 bool UknightDamageExecution::IsAttackerInGuardArc(const AActor* Target, const AActor* Attacker, const FHitResult* Hit) const
 {
-	if (!Target || !Attacker)
+	if (!Target || !Attacker || GuardArcDegrees <= 0.f)
 	{
 		return false;
 	}

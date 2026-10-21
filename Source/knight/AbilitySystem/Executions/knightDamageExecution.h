@@ -126,7 +126,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Guard", meta=(ClampMin=0))
 	float GuardBlockedDamageToPoise = 1.f;
 
-	/** 가드 범위의 전체 각도(도). 맞는 쪽의 정면을 중심으로 한다. */
+	/** 가드 범위의 전체 각도(도). 맞는 쪽의 정면을 중심으로 한다. 0이면 가드·퍼펙트 가드가 모두 안 되는 공격(회피만)이다. */
 	UPROPERTY(EditDefaultsOnly, Category="Guard", meta=(ClampMin=0, ClampMax=360))
 	float GuardArcDegrees = 150.f;
 };

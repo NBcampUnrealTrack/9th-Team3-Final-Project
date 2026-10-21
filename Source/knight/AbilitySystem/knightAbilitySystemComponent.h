@@ -8,6 +8,8 @@
 
 class UknightAbilityTagRelationshipMapping;
 class UCameraShakeBase;
+class UFXSystemAsset;
+class USoundBase;
 
 /**
  * 그로기 자연 회복의 순수 계산. GAS 객체 없이 테스트(knightPoiseRecoveryTest.cpp)로 검증한다.
@@ -162,6 +164,19 @@ public:
 	 */
 	void PlayAttackImpactShake(float PoiseDamage, bool bGuarded) const;
 
+	/**
+	 * (2026-10-21) 내가 때린 곳에 나이트 전용 타격 이펙트·소리(AttackImpactEffect / AttackImpactSounds). ApplyMeleeHit이 맞힌·막힌 뒤 부른다.
+	 * 타격 큐(GCN_Hit_Melee)는 몬스터도 같이 쓰므로, 나이트만의 느낌은 여기서 겹친다. 비워 두면 아무것도 안 한다.
+	 */
+	void PlayAttackImpactEffects(const FHitResult& Hit, bool bGuarded, bool bWeakpoint = false) const;
+
+	/**
+	 * (2026-10-21) 나이트가 때린 일반 타격에서 공용 타격 큐(GCN_Hit_Melee: 반짝이 + SC_Hit_Cue + SC_Janyeol_Slam)를
+	 * 건너뛰고 위 나이트 전용 이펙트·소리만 쓸지. 가드 큐와 몬스터가 때릴 때는 그대로.
+	 * (2026-10-21) 약점 큐(GCN_Hit_Weakpoint: 번개)도 대신한다. 약점은 AttackImpactWeakpointScale만큼 크게.
+	 */
+	bool ShouldReplaceSharedHitCue() const { return bReplaceSharedHitCue && (!AttackImpactEffects.IsEmpty() || !AttackImpactSounds.IsEmpty()); }
+
 	/** (2026-10-20) 기계식 공격 타이밍 설정(락 → 버스트 → 스톱). 공격 어빌리티가 모션을 재생할 때 읽는다. */
 	const FknightMechTimingSettings& GetMechTimingSettings() const { return MechTiming; }
 
@@ -310,6 +325,52 @@ protected:
 	float AttackShakeCooldown = 0.12f;
 
 	mutable double LastAttackShakeTime = -UE_BIG_NUMBER;
+
+	/**
+	 * (2026-10-21) 내가 때린 곳에 동시에 나오는 타격 이펙트들(불꽃·파편 등을 겹쳐 쓴다). 비우면 없음.
+	 * 나이아가라와 예전 파티클(Cascade, P_ 이름) 모두 된다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack Feel|Impact")
+	TArray<TObjectPtr<UFXSystemAsset>> AttackImpactEffects;
+
+	/** 켜면 나이트의 일반 타격에서 공용 타격 큐(GCN_Hit_Melee)를 대신한다. 끄면 둘 다 나온다. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack Feel|Impact")
+	bool bReplaceSharedHitCue = true;
+
+	/** 공용 큐를 대신할 때, 큐가 하던 기본 화면 흔들림(AttackImpactShake) 세기. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack Feel|Impact", meta=(ClampMin=0))
+	float AttackImpactBaseShakeScale = 1.f;
+
+	/** (2026-10-21) 약점(머리 등) 타격일 때 이펙트 크기·흔들림·소리 배율. 예전에는 약점만 번개 큐가 따로 나왔다. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack Feel|Impact", meta=(ClampMin=1))
+	float AttackImpactWeakpointScale = 1.5f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack Feel|Impact", meta=(ClampMin=0))
+	float AttackImpactEffectScale = 1.f;
+
+	/**
+	 * (2026-10-21) 켜면 이펙트의 위쪽(Z)을 맞은 면 바깥쪽으로 돌린다(발자국·불꽃처럼 '위로 튀는' 이펙트용).
+	 * 끄면 이펙트의 앞쪽(X)을 맞춘다(총탄 타격처럼 '앞으로 튀는' 이펙트용).
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack Feel|Impact")
+	bool bAttackImpactEffectUpAlongNormal = true;
+
+	/** 적이 가드로 막았을 때 이펙트 크기 비율. 0이면 막혔을 때는 안 나온다. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack Feel|Impact", meta=(ClampMin=0, ClampMax=1))
+	float AttackImpactGuardedEffectRatio = 0.6f;
+
+	/** 타격 소리 후보. 매번 하나를 무작위로. 비우면 없음(타격 큐의 기본 소리만 남). */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack Feel|Impact")
+	TArray<TObjectPtr<USoundBase>> AttackImpactSounds;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack Feel|Impact", meta=(ClampMin=0))
+	float AttackImpactSoundVolume = 1.f;
+
+	/** 한 번 휘두르기가 여러 부위를 동시에 맞혀도 소리가 겹치지 않게 하는 최소 간격(초). */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack Feel|Impact", meta=(ClampMin=0, Units="s"))
+	float AttackImpactSoundCooldown = 0.1f;
+
+	mutable double LastAttackImpactSoundTime = -UE_BIG_NUMBER;
 
 	/**
 	 * (2026-10-20 사용자 요청 '사람이 아니라 로봇이 하는 느낌') 기계식 공격 타이밍.

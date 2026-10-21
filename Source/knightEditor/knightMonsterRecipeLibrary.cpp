@@ -15,6 +15,7 @@
 #include "Animation/AnimSequence.h"
 #include "Animation/BlendSpace.h"
 #include "Animation/knightAnimNode_LegPlacement.h"
+#include "Animation/knightAnimNode_WingClearance.h"
 #include "Animation/knightAnimNotifyState_MeleeTrace.h"
 #include "Animation/knightAnimNotifyState_PlayRate.h"
 #include "AssetRegistry/AssetRegistryModule.h"
@@ -36,12 +37,25 @@
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Logging/MessageLog.h"
+#include "MeshUtilitiesCommon.h"
+#include "MeshUtilitiesEngine.h"
 #include "Misc/PackageName.h"
 #include "Monster/knightMonsterBodyBlockerComponent.h"
 #include "Monster/knightMonsterCharacterBase.h"
 #include "Monster/knightMonsterDefinition.h"
+#include "AbilitySystem/Abilities/knightGameplayAbility_MonsterDiveAttack.h"
+#include "AbilitySystem/Abilities/knightGameplayAbility_MonsterGlideAttack.h"
+#include "AbilitySystem/Abilities/knightGameplayAbility_MonsterFlybyAttack.h"
+#include "AbilitySystem/Abilities/knightGameplayAbility_MonsterRushAttack.h"
+#include "AbilitySystem/Abilities/knightGameplayAbility_MonsterTornadoAttack.h"
+#include "AbilitySystem/Abilities/knightGameplayAbility_MonsterProjectileAttack.h"
+#include "Monster/knightMonsterAirTurnComponent.h"
+#include "Monster/knightMonsterHoverComponent.h"
 #include "Monster/knightMonsterPartData.h"
 #include "Monster/knightMonsterPushOutComponent.h"
+#include "PhysicsAssetUtils.h"
+#include "PhysicsEngine/PhysicsAsset.h"
+#include "PhysicsEngine/SkeletalBodySetup.h"
 #include "StateTree.h"
 #include "StateTreeCompilerLog.h"
 #include "StateTreeEditingSubsystem.h"
@@ -400,6 +414,26 @@ namespace knightRecipe
 	{
 		return Sequence ? BuildMontage(Context, Name, TArray<UAnimSequence*>{ Sequence }, false, bAutoBlendOut) : nullptr;
 	}
+
+	/** 시퀀스의 Start ~ End(초) 구간만 재생하는 몽타주. End가 0이거나 길이를 넘으면 끝까지. */
+	UAnimMontage* BuildRangeMontage(FContext& Context, const FString& Name, UAnimSequence* Sequence, float Start, float End)
+	{
+		UAnimMontage* const Montage = BuildMontage(Context, Name, Sequence);
+		if (!Montage)
+		{
+			return nullptr;
+		}
+		const float Length = Sequence->GetPlayLength();
+		const float RangeEnd = End > 0.f ? FMath::Min(End, Length) : Length;
+		const float RangeStart = FMath::Clamp(Start, 0.f, RangeEnd);
+		FAnimSegment& Segment = Montage->SlotAnimTracks[0].AnimTrack.AnimSegments[0];
+		Segment.AnimStartTime = RangeStart;
+		Segment.AnimEndTime = RangeEnd;
+		Montage->SetCompositeLength(RangeEnd - RangeStart);
+		Montage->RefreshCacheData();
+		Montage->PostEditChange();
+		return Montage;
+	}
 }
 
 ////////////////////////////////////////////////////////////////////
@@ -419,7 +453,13 @@ namespace knightRecipe
 		UObject* const CDO = GetCDO(Blueprint);
 		FLog& Log = Context.Log;
 
-		SetValue(CDO, TEXT("Selection"), Attack.Selection, Log);
+		// 공중 턴이 있는 몬스터는 턴 태그로 지상·공중 공격을 나눈다.
+		FknightMonsterAttackSelection Selection = Attack.Selection;
+		if (Context.Recipe->AirGroundTurnTime > 0.f)
+		{
+			(Attack.bAirAttack ? Selection.RequiredOwnerTags : Selection.BlockedOwnerTags).AddTag(Tag(TEXT("State.Monster.Airborne")));
+		}
+		SetValue(CDO, TEXT("Selection"), Selection, Log);
 		SetValue(CDO, TEXT("HitParams"), Attack.HitParams, Log);
 		SetObject(CDO, TEXT("Montage"), Montage, Log);
 		SetValue<float>(CDO, TEXT("StartTurnYaw"), Attack.StartTurnYaw, Log);
@@ -433,6 +473,9 @@ namespace knightRecipe
 			SetValue(CDO, TEXT("AreaOffset"), Attack.AreaOffset, Log);
 			SetValue<float>(CDO, TEXT("AreaRadius"), Attack.AreaRadius, Log);
 			SetValue(CDO, TEXT("TelegraphCue"), Attack.TelegraphCue, Log);
+			SetValue<float>(CDO, TEXT("LungeMaxDistance"), Attack.LungeMaxDistance, Log);
+			SetValue<float>(CDO, TEXT("LungeStartTime"), Attack.LungeStartTime, Log);
+			SetValue<float>(CDO, TEXT("LungeEndTime"), Attack.LungeEndTime, Log);
 		}
 
 		FGameplayTagContainer AbilityTags(Tag(TEXT("Ability.Attack")));
@@ -446,7 +489,7 @@ namespace knightRecipe
 		FGameplayTagContainer Blocked;
 		Blocked.AddTag(Tag(TEXT("State.Dead")));
 		Blocked.AddTag(Tag(TEXT("State.HitReact")));
-		Blocked.AppendTags(Attack.Selection.BlockedOwnerTags);
+		Blocked.AppendTags(Selection.BlockedOwnerTags);
 		SetValue(CDO, TEXT("ActivationBlockedTags"), Blocked, Log);
 
 		Context.Touch(Blueprint);
@@ -466,6 +509,8 @@ namespace knightRecipe
 		bool bCancelOtherReactions = false;
 		FGameplayTag TriggerTag;
 		EGameplayAbilityTriggerSource::Type TriggerSource = EGameplayAbilityTriggerSource::GameplayEvent;
+		/** 경직 반응(패링·부위 파괴)은 State.Monster.NoFlinch 동안 시작하지 않는다(다이브가 패링을 직접 처리). */
+		bool bFlinch = false;
 	};
 
 	TSubclassOf<UGameplayAbility> BuildReactionAbility(FContext& Context, const FReactionSettings& Settings)
@@ -483,6 +528,12 @@ namespace knightRecipe
 		SetBool(CDO, TEXT("bRestorePoise"), Settings.bRestorePoise, Log);
 		SetValue<float>(CDO, TEXT("MaxPoiseGrowth"), Settings.MaxPoiseGrowth, Log);
 		SetBool(CDO, TEXT("bCancelOtherReactions"), Settings.bCancelOtherReactions, Log);
+		FGameplayTagContainer Blocked(Tag(TEXT("State.Dead")));
+		if (Settings.bFlinch)
+		{
+			Blocked.AddTag(Tag(TEXT("State.Monster.NoFlinch")));
+		}
+		SetValue(CDO, TEXT("ActivationBlockedTags"), Blocked, Log);
 
 		FAbilityTriggerData Trigger;
 		Trigger.TriggerTag = Settings.TriggerTag;
@@ -507,6 +558,7 @@ namespace knightRecipe
 			Parried.HoldTime = StaggerTime;
 			Parried.HoldMontage = Hit;
 			Parried.TriggerTag = Tag(TEXT("Event.Parried"));
+			Parried.bFlinch = true;
 			OutAbilities.Add(BuildReactionAbility(Context, Parried));
 
 			FReactionSettings BreakFlinch = Parried;
@@ -560,6 +612,32 @@ namespace knightRecipe
 			OutAbilities.Add(BuildReactionAbility(Context, Enrage));
 		}
 
+		const UknightMonsterRecipe& Recipe = *Context.Recipe;
+		if (Recipe.AirGroundTurnTime > 0.f)
+		{
+			// 이륙·착지 중에는 맞아도 경직하지 않는다. 메시 높이는 공중 턴 컴포넌트가 같은 시간 동안 옮긴다.
+			if (UAnimMontage* const TakeOff = BuildRangeMontage(Context, FString::Printf(TEXT("AM_%s_TakeOff"), *Prefix), Recipe.TakeOff, Recipe.TakeOffStart, Recipe.TakeOffEnd))
+			{
+				FReactionSettings Settings;
+				Settings.Name = TEXT("TakeOff");
+				Settings.StateTag = Tag(TEXT("State.SuperArmor"));
+				Settings.HoldTime = TakeOff->GetPlayLength();
+				Settings.HoldMontage = TakeOff;
+				Settings.TriggerTag = Tag(TEXT("Event.Monster.TakeOff"));
+				OutAbilities.Add(BuildReactionAbility(Context, Settings));
+			}
+			if (UAnimMontage* const Landing = BuildRangeMontage(Context, FString::Printf(TEXT("AM_%s_Land"), *Prefix), Recipe.Landing, Recipe.LandingStart, Recipe.LandingEnd))
+			{
+				FReactionSettings Settings;
+				Settings.Name = TEXT("Land");
+				Settings.StateTag = Tag(TEXT("State.SuperArmor"));
+				Settings.HoldTime = Landing->GetPlayLength();
+				Settings.HoldMontage = Landing;
+				Settings.TriggerTag = Tag(TEXT("Event.Monster.Land"));
+				OutAbilities.Add(BuildReactionAbility(Context, Settings));
+			}
+		}
+
 		if (UAnimMontage* const Death = BuildMontage(Context, FString::Printf(TEXT("AM_%s_Death"), *Prefix), Reactions.Death, false))
 		{
 			UBlueprint* const Blueprint = FindOrCreateBlueprint(Context, Context.Path(TEXT("Abilities"), FString::Printf(TEXT("GA_%s_Death"), *Prefix)),
@@ -608,6 +686,10 @@ namespace knightRecipe
 		{
 			Override(Attribute(Core, TEXT("MaxPoise")), Recipe.MaxPoise);
 			Override(Attribute(Core, TEXT("Poise")), Recipe.MaxPoise);
+		}
+		if (!FMath::IsNearlyEqual(Recipe.PoiseDamageTakenMultiplier, 1.f))
+		{
+			Override(Attribute(Core, TEXT("PoiseDamageTakenMultiplier")), Recipe.PoiseDamageTakenMultiplier);
 		}
 		if (Recipe.MaxRage > 0.f)
 		{
@@ -697,9 +779,12 @@ namespace knightRecipe
 		Definition->EnrageEffect = Enrage;
 		Definition->ExhaustEffect = Exhaust;
 		Definition->ParriedPoiseDamageRatio = Recipe.ParriedPoiseDamageRatio;
+		Definition->ParriedPoiseBlockedTags = Recipe.ParriedPoiseBlockedTags;
 		Definition->TargetRadius = Recipe.TargetRadius;
 		Definition->FallbackLockOnSocket = Recipe.FallbackLockOnSocket;
 		Definition->ChaseStopDistance = Recipe.ChaseStopDistance;
+		Definition->AirChaseStopDistance = Recipe.AirChaseStopDistance;
+		Definition->bAvoidRepeatingLastAttack = Recipe.bAvoidRepeatingLastAttack;
 		Definition->RangedMinDistance = Recipe.RangedMinDistance;
 		Definition->RangedMaxDistance = Recipe.RangedMaxDistance;
 		Context.Touch(Definition);
@@ -713,6 +798,47 @@ namespace knightRecipe
 namespace knightRecipe
 {
 	/** 공용 ABP_Monster_Base를 복사한 뒤 스켈레톤, 블렌드스페이스, 발 뼈만 레시피 값으로 바꾼다. */
+	const FName WingClearanceNodeClass = TEXT("AnimGraphNode_knightWingClearance");
+
+	/**
+	 * Knight Leg Placement 노드 출력 바로 뒤에 Knight Wing Clearance 노드를 끼운다. 공용 애님 Blueprint에는 이 노드가 없어서
+	 * 날짐승 레시피에서만 넣는다. 그래프 노드 클래스는 knightAnimGraph 모듈에 있어 이름으로 찾는다.
+	 */
+	UEdGraphNode* InsertWingClearanceNode(UEdGraphNode* LegGraphNode)
+	{
+		UClass* const WingClass = FindObject<UClass>(nullptr, TEXT("/Script/knightAnimGraph.AnimGraphNode_knightWingClearance"));
+		UEdGraphPin* const LegOut = LegGraphNode ? LegGraphNode->FindPin(TEXT("Pose"), EGPD_Output) : nullptr;
+		if (!WingClass || !LegOut)
+		{
+			return nullptr;
+		}
+		UEdGraph* const Graph = LegGraphNode->GetGraph();
+		Graph->Modify();
+		UEdGraphNode* const WingNode = NewObject<UEdGraphNode>(Graph, WingClass, NAME_None, RF_Transactional);
+		Graph->AddNode(WingNode, false, false);
+		WingNode->CreateNewGuid();
+		WingNode->PostPlacedNewNode();
+		WingNode->AllocateDefaultPins();
+		WingNode->NodePosX = LegGraphNode->NodePosX + 320;
+		WingNode->NodePosY = LegGraphNode->NodePosY;
+
+		UEdGraphPin* const WingIn = WingNode->FindPin(TEXT("ComponentPose"), EGPD_Input);
+		UEdGraphPin* const WingOut = WingNode->FindPin(TEXT("Pose"), EGPD_Output);
+		if (!WingIn || !WingOut)
+		{
+			Graph->RemoveNode(WingNode);
+			return nullptr;
+		}
+		const TArray<UEdGraphPin*> Targets = LegOut->LinkedTo;
+		LegOut->BreakAllPinLinks();
+		LegOut->MakeLinkTo(WingIn);
+		for (UEdGraphPin* const Target : Targets)
+		{
+			WingOut->MakeLinkTo(Target);
+		}
+		return WingNode;
+	}
+
 	UAnimBlueprint* BuildAnimBlueprint(FContext& Context)
 	{
 		const UknightMonsterRecipe& Recipe = *Context.Recipe;
@@ -734,6 +860,8 @@ namespace knightRecipe
 
 		bool bFoundBlendSpace = false;
 		bool bFoundLegs = false;
+		UEdGraphNode* LegGraphNode = nullptr;
+		UEdGraphNode* WingGraphNode = nullptr;
 		TArray<UEdGraph*> Graphs;
 		AnimBlueprint->GetAllGraphs(Graphs);
 		for (UEdGraph* const Graph : Graphs)
@@ -760,8 +888,52 @@ namespace knightRecipe
 						}
 						LegNode->PelvisBone.BoneName = Recipe.PelvisBone;
 						bFoundLegs = true;
+						LegGraphNode = Node;
 					}
 				}
+				else if (Node && Node->GetClass()->GetFName() == WingClearanceNodeClass)
+				{
+					WingGraphNode = Node;
+				}
+			}
+		}
+		if (!Recipe.HoverWings.IsEmpty())
+		{
+			if (!WingGraphNode)
+			{
+				WingGraphNode = InsertWingClearanceNode(LegGraphNode);
+				if (WingGraphNode)
+				{
+					Context.Log.Info(FString::Printf(TEXT("%s에 Knight Wing Clearance 노드를 넣었습니다."), *PackagePath));
+				}
+				else
+				{
+					Context.Log.Error(FString::Printf(TEXT("%s에 Knight Wing Clearance 노드를 넣지 못했습니다(Knight Leg Placement 노드 뒤에 넣습니다)."), *PackagePath));
+				}
+			}
+			if (FAnimNode_knightWingClearance* const WingNode = WingGraphNode
+				? ValuePtr<FAnimNode_knightWingClearance>(WingGraphNode->GetClass(), WingGraphNode, TEXT("Node"), &Context.Log) : nullptr)
+			{
+				WingGraphNode->Modify();
+				WingNode->Wings.Reset();
+				for (const FknightRecipeWing& RecipeWing : Recipe.HoverWings)
+				{
+					FknightWingClearanceWing& Wing = WingNode->Wings.AddDefaulted_GetRef();
+					Wing.RootBone.BoneName = RecipeWing.RootBone;
+					for (const FName Tip : RecipeWing.TipBones)
+					{
+						Wing.TipBones.AddDefaulted_GetRef().BoneName = Tip;
+					}
+				}
+				WingNode->Clearance = Recipe.HoverWingClearance;
+			}
+		}
+		else if (WingGraphNode)
+		{
+			if (FAnimNode_knightWingClearance* const WingNode = ValuePtr<FAnimNode_knightWingClearance>(WingGraphNode->GetClass(), WingGraphNode, TEXT("Node"), &Context.Log))
+			{
+				WingGraphNode->Modify();
+				WingNode->Wings.Reset();
 			}
 		}
 		if (!bFoundBlendSpace)
@@ -878,6 +1050,35 @@ namespace knightRecipe
 			}
 			SetBool(PushOut, TEXT("bPushOutOfMesh"), Recipe.bPushOutOfMesh, Context.Log);
 		}
+		if (UknightMonsterHoverComponent* const Hover = GetObject<UknightMonsterHoverComponent>(CDO, TEXT("Hover")))
+		{
+			Hover->Modify();
+			SetValue<float>(Hover, TEXT("HoverDrop"), Recipe.HoverDrop, Context.Log);
+			SetValue<TArray<FName>>(Hover, TEXT("FootBones"), Recipe.HoverFootBones, Context.Log);
+			SetValue<float>(Hover, TEXT("FootGroundHeight"), Recipe.HoverFootHeight, Context.Log);
+			SetValue<float>(Hover, TEXT("AirLift"), Recipe.AirGroundTurnTime > 0.f ? Recipe.AirLift : 0.f, Context.Log);
+			SetValue<float>(Hover, TEXT("AirCeiling"), Recipe.AirGroundTurnTime > 0.f ? Recipe.AirCeiling : 0.f, Context.Log);
+			SetValue<FName>(Hover, TEXT("AirCeilingBone"), Recipe.AirCeilingBone, Context.Log);
+		}
+		if (UknightMonsterAirTurnComponent* const AirTurn = GetObject<UknightMonsterAirTurnComponent>(CDO, TEXT("AirTurn")))
+		{
+			AirTurn->Modify();
+			auto RangeLength = [](const UAnimSequence* Sequence, float Start, float End, float Fallback)
+			{
+				if (!Sequence)
+				{
+					return Fallback;
+				}
+				const float RangeEnd = End > 0.f ? FMath::Min(End, Sequence->GetPlayLength()) : Sequence->GetPlayLength();
+				return FMath::Max(0.f, RangeEnd - FMath::Max(0.f, Start));
+			};
+			SetValue<float>(AirTurn, TEXT("GroundTurnTime"), Recipe.AirGroundTurnTime, Context.Log);
+			SetValue<int32>(AirTurn, TEXT("AirAttacksPerTurn"), Recipe.AirAttacksPerTurn, Context.Log);
+			SetValue<float>(AirTurn, TEXT("AirTurnMaxTime"), Recipe.AirTurnMaxTime, Context.Log);
+			SetValue<float>(AirTurn, TEXT("AirKeepDistance"), Recipe.AirKeepDistance, Context.Log);
+			SetValue<float>(AirTurn, TEXT("TakeOffBlendTime"), RangeLength(Recipe.TakeOff, Recipe.TakeOffStart, Recipe.TakeOffEnd, 1.f), Context.Log);
+			SetValue<float>(AirTurn, TEXT("LandBlendTime"), RangeLength(Recipe.Landing, Recipe.LandingStart, Recipe.LandingEnd, 1.5f), Context.Log);
+		}
 		Context.Touch(Blueprint);
 		return Blueprint;
 	}
@@ -925,6 +1126,10 @@ TArray<FString> UknightMonsterRecipeLibrary::ValidateMonsterRecipe(const Uknight
 	{
 		Error(TEXT("Mesh가 없거나 스켈레톤이 없습니다."));
 	}
+	else if (!Mesh->GetPhysicsAsset())
+	{
+		Warning(TEXT("Mesh에 피직스 에셋이 없어 공격이 맞지 않습니다. CreateMonsterPhysicsAsset으로 만드세요."));
+	}
 	auto CheckSequence = [&](const UAnimationAsset* Sequence, const FString& Label, bool bRequired)
 	{
 		if (!Sequence)
@@ -946,6 +1151,17 @@ TArray<FString> UknightMonsterRecipeLibrary::ValidateMonsterRecipe(const Uknight
 		if (Mesh && Mesh->GetRefSkeleton().FindBoneIndex(Bone) == INDEX_NONE)
 		{
 			Error(FString::Printf(TEXT("FootBones: %s 뼈가 메시에 없습니다."), *Bone.ToString()));
+		}
+	}
+	if (Recipe->HoverDrop > 0.f && Recipe->HoverFootBones.IsEmpty())
+	{
+		Error(TEXT("HoverDrop을 쓰려면 HoverFootBones가 필요합니다."));
+	}
+	for (const FName Bone : Recipe->HoverFootBones)
+	{
+		if (Mesh && Mesh->GetRefSkeleton().FindBoneIndex(Bone) == INDEX_NONE)
+		{
+			Error(FString::Printf(TEXT("HoverFootBones: %s 뼈가 메시에 없습니다."), *Bone.ToString()));
 		}
 	}
 	if (!Recipe->FootBones.IsEmpty() && Mesh && Mesh->GetRefSkeleton().FindBoneIndex(Recipe->PelvisBone) == INDEX_NONE)
@@ -1133,6 +1349,7 @@ bool UknightMonsterRecipeLibrary::BuildMonsterRecipe(UknightMonsterRecipe* Recip
 		Abilities.Add(BuildAttackAbility(Context, Attack));
 	}
 	BuildReactionAbilities(Context, Abilities);
+	Abilities.Append(Recipe->ExtraAbilities);
 
 	const TSubclassOf<UGameplayEffect> InitEffect = BuildInitEffect(Context);
 	const TSubclassOf<UGameplayEffect> Enrage = BuildTimedEffect(Context, TEXT("Enrage"), SharedEnrage, Recipe->EnrageDuration);
@@ -1439,6 +1656,22 @@ UknightMonsterRecipe* UknightMonsterRecipeLibrary::CreateRecipeFromMonster(TSubc
 		GetValue(PushOut, TEXT("BodyAxisHalfLength"), Recipe->PushOutBodyAxisHalfLength);
 		Recipe->bPushOutOfMesh = GetBool(PushOut, TEXT("bPushOutOfMesh"));
 	}
+	if (const UknightMonsterHoverComponent* const Hover = GetObject<UknightMonsterHoverComponent>(Monster, TEXT("Hover")))
+	{
+		GetValue(Hover, TEXT("HoverDrop"), Recipe->HoverDrop);
+		GetValue(Hover, TEXT("FootBones"), Recipe->HoverFootBones);
+		GetValue(Hover, TEXT("FootGroundHeight"), Recipe->HoverFootHeight);
+		GetValue(Hover, TEXT("AirLift"), Recipe->AirLift);
+		GetValue(Hover, TEXT("AirCeiling"), Recipe->AirCeiling);
+		GetValue(Hover, TEXT("AirCeilingBone"), Recipe->AirCeilingBone);
+	}
+	if (const UknightMonsterAirTurnComponent* const AirTurn = GetObject<UknightMonsterAirTurnComponent>(Monster, TEXT("AirTurn")))
+	{
+		GetValue(AirTurn, TEXT("GroundTurnTime"), Recipe->AirGroundTurnTime);
+		GetValue(AirTurn, TEXT("AirAttacksPerTurn"), Recipe->AirAttacksPerTurn);
+		GetValue(AirTurn, TEXT("AirTurnMaxTime"), Recipe->AirTurnMaxTime);
+		GetValue(AirTurn, TEXT("AirKeepDistance"), Recipe->AirKeepDistance);
+	}
 	if (const UBlueprint* const MonsterBlueprint = Cast<UBlueprint>(MonsterClass->ClassGeneratedBy))
 	{
 		const USCS_Node* const Blocker = MonsterBlueprint->SimpleConstructionScript ? MonsterBlueprint->SimpleConstructionScript->FindSCSNode(TEXT("BodyBlocker")) : nullptr;
@@ -1478,9 +1711,12 @@ UknightMonsterRecipe* UknightMonsterRecipeLibrary::CreateRecipeFromMonster(TSubc
 	}
 
 	Recipe->ParriedPoiseDamageRatio = Definition->ParriedPoiseDamageRatio;
+	Recipe->ParriedPoiseBlockedTags = Definition->ParriedPoiseBlockedTags;
 	Recipe->TargetRadius = Definition->TargetRadius;
 	Recipe->FallbackLockOnSocket = Definition->FallbackLockOnSocket;
 	Recipe->ChaseStopDistance = Definition->ChaseStopDistance;
+	Recipe->AirChaseStopDistance = Definition->AirChaseStopDistance;
+	Recipe->bAvoidRepeatingLastAttack = Definition->bAvoidRepeatingLastAttack;
 	Recipe->RangedMinDistance = Definition->RangedMinDistance;
 	Recipe->RangedMaxDistance = Definition->RangedMaxDistance;
 	Recipe->Parts = Definition->PartData ? Definition->PartData->Parts : TArray<FknightMonsterPartDefinition>();
@@ -1513,6 +1749,7 @@ UknightMonsterRecipe* UknightMonsterRecipeLibrary::CreateRecipeFromMonster(TSubc
 				if (Attribute == TEXT("MaxHealth")) { Recipe->MaxHealth = Value; }
 				else if (Attribute == TEXT("AttackPower")) { Recipe->AttackPower = Value; }
 				else if (Attribute == TEXT("MaxPoise")) { Recipe->MaxPoise = Value; }
+				else if (Attribute == TEXT("PoiseDamageTakenMultiplier")) { Recipe->PoiseDamageTakenMultiplier = Value; }
 				else if (Attribute == TEXT("MaxRage")) { Recipe->MaxRage = Value; }
 				else if (Attribute == TEXT("MaxStamina")) { Recipe->MaxStamina = Value; }
 			}
@@ -1529,6 +1766,15 @@ UknightMonsterRecipe* UknightMonsterRecipeLibrary::CreateRecipeFromMonster(TSubc
 			ShortName.RemoveFromEnd(TEXT("_C"));
 			ShortName.RemoveFromStart(AbilityPrefix);
 
+			// 레시피 항목(근접·범위 공격)으로 만들 수 없는 전용 공격은 추가 어빌리티로 그대로 둔다.
+			if (CDO->IsA<UknightGameplayAbility_MonsterDiveAttack>() || CDO->IsA<UknightGameplayAbility_MonsterProjectileAttack>()
+				|| CDO->IsA<UknightGameplayAbility_MonsterGlideAttack>()
+				|| CDO->IsA<UknightGameplayAbility_MonsterTornadoAttack>() || CDO->IsA<UknightGameplayAbility_MonsterRushAttack>()
+				|| CDO->IsA<UknightGameplayAbility_MonsterFlybyAttack>())
+			{
+				Recipe->ExtraAbilities.Add(Entry.Ability.Get());
+				continue;
+			}
 			if (CDO->IsA<UknightGameplayAbility_MonsterAttack>())
 			{
 				FknightRecipeAttack& Attack = Recipe->Attacks.AddDefaulted_GetRef();
@@ -1541,6 +1787,11 @@ UknightMonsterRecipe* UknightMonsterRecipeLibrary::CreateRecipeFromMonster(TSubc
 				Attack.Animation = SegmentSequence(Montage, 0);
 				ReadMontageWindows(Montage, Attack);
 				GetValue(CDO, TEXT("Selection"), Attack.Selection);
+				// 공중 턴 태그는 Build가 bAirAttack으로 넣는 값이라 레시피에는 bAirAttack으로만 남긴다.
+				const FGameplayTag AirborneTag = Tag(TEXT("State.Monster.Airborne"));
+				Attack.bAirAttack = Attack.Selection.RequiredOwnerTags.HasTagExact(AirborneTag);
+				Attack.Selection.RequiredOwnerTags.RemoveTag(AirborneTag);
+				Attack.Selection.BlockedOwnerTags.RemoveTag(AirborneTag);
 				GetValue(CDO, TEXT("HitParams"), Attack.HitParams);
 				GetValue(CDO, TEXT("StartTurnYaw"), Attack.StartTurnYaw);
 				GetValue(CDO, TEXT("StartTurnRate"), Attack.StartTurnRate);
@@ -1554,6 +1805,9 @@ UknightMonsterRecipe* UknightMonsterRecipeLibrary::CreateRecipeFromMonster(TSubc
 					GetValue(CDO, TEXT("AreaOffset"), Attack.AreaOffset);
 					GetValue(CDO, TEXT("AreaRadius"), Attack.AreaRadius);
 					GetValue(CDO, TEXT("TelegraphCue"), Attack.TelegraphCue);
+					GetValue(CDO, TEXT("LungeMaxDistance"), Attack.LungeMaxDistance);
+					GetValue(CDO, TEXT("LungeStartTime"), Attack.LungeStartTime);
+					GetValue(CDO, TEXT("LungeEndTime"), Attack.LungeEndTime);
 				}
 			}
 			else if (CDO->IsA<UknightGameplayAbility_MonsterDeath>())
@@ -1589,6 +1843,15 @@ UknightMonsterRecipe* UknightMonsterRecipeLibrary::CreateRecipeFromMonster(TSubc
 				else if (Trigger == Tag(TEXT("State.Monster.Enraged")))
 				{
 					Reactions.EnrageRoar = SegmentSequence(Hold, 0);
+				}
+				else if (Trigger == Tag(TEXT("Event.Monster.TakeOff")) || Trigger == Tag(TEXT("Event.Monster.Land")))
+				{
+					const bool bTakeOff = Trigger == Tag(TEXT("Event.Monster.TakeOff"));
+					const FAnimSegment* const Segment = Hold && !Hold->SlotAnimTracks.IsEmpty() && !Hold->SlotAnimTracks[0].AnimTrack.AnimSegments.IsEmpty()
+						? &Hold->SlotAnimTracks[0].AnimTrack.AnimSegments[0] : nullptr;
+					(bTakeOff ? Recipe->TakeOff : Recipe->Landing) = SegmentSequence(Hold, 0);
+					(bTakeOff ? Recipe->TakeOffStart : Recipe->LandingStart) = Segment ? Segment->AnimStartTime : 0.f;
+					(bTakeOff ? Recipe->TakeOffEnd : Recipe->LandingEnd) = Segment ? Segment->AnimEndTime : 0.f;
 				}
 				else
 				{
@@ -1779,6 +2042,78 @@ bool UknightMonsterRecipeLibrary::SetMontagePlayRateWindow(UAnimMontage* Montage
 	Montage->PostEditChange();
 	Montage->MarkPackageDirty();
 	return true;
+}
+
+UPhysicsAsset* UknightMonsterRecipeLibrary::CreateMonsterPhysicsAsset(USkeletalMesh* Mesh, const FString& PackagePath,
+	const TArray<FName>& CapsuleBones, const TArray<FName>& BoxBones)
+{
+	if (!Mesh || (CapsuleBones.IsEmpty() && BoxBones.IsEmpty()))
+	{
+		UE_LOG(LogTemp, Error, TEXT("CreateMonsterPhysicsAsset %s: 메시와 뼈 목록이 필요합니다."), *PackagePath);
+		return nullptr;
+	}
+	const FReferenceSkeleton& RefSkeleton = Mesh->GetRefSkeleton();
+	TArray<TPair<int32, EPhysAssetFitGeomType>> Bodies;
+	for (const TPair<const TArray<FName>*, EPhysAssetFitGeomType> List : { TPair<const TArray<FName>*, EPhysAssetFitGeomType>(&CapsuleBones, EFG_Sphyl),
+		TPair<const TArray<FName>*, EPhysAssetFitGeomType>(&BoxBones, EFG_Box) })
+	{
+		for (const FName Bone : *List.Key)
+		{
+			const int32 BoneIndex = RefSkeleton.FindBoneIndex(Bone);
+			if (BoneIndex == INDEX_NONE)
+			{
+				UE_LOG(LogTemp, Error, TEXT("CreateMonsterPhysicsAsset %s: 뼈 %s가 메시에 없습니다."), *PackagePath, *Bone.ToString());
+				return nullptr;
+			}
+			Bodies.Emplace(BoneIndex, List.Value);
+		}
+	}
+
+	bool bCreated = false;
+	UPhysicsAsset* const PhysicsAsset = knightRecipe::FindOrCreateAsset<UPhysicsAsset>(PackagePath, bCreated);
+	PhysicsAsset->Modify();
+	PhysicsAsset->SkeletalBodySetups.Reset();
+	PhysicsAsset->ConstraintSetup.Reset();
+	PhysicsAsset->CollisionDisableTable.Reset();
+	PhysicsAsset->UpdateBodySetupIndexMap();
+
+	// 목록에 없는 자식 뼈의 정점은 가장 가까운 목록 조상 바디에 들어간다(BoneIndicesInCreation).
+	TArray<int32> BoneIndicesInCreation;
+	for (const TPair<int32, EPhysAssetFitGeomType>& Body : Bodies)
+	{
+		BoneIndicesInCreation.Add(Body.Key);
+	}
+	TArray<FBoneVertInfo> Infos;
+	FMeshUtilitiesEngine::CalcBoneVertInfos(Mesh, Infos, true, 0);
+
+	for (const TPair<int32, EPhysAssetFitGeomType>& Body : Bodies)
+	{
+		FPhysAssetCreateParams Params;
+		Params.GeomType = Body.Value;
+		Params.bCreateConstraints = false;
+		const FName BoneName = RefSkeleton.GetBoneName(Body.Key);
+		const int32 BodyIndex = FPhysicsAssetUtils::CreateNewBody(PhysicsAsset, BoneName, Params);
+		USkeletalBodySetup* const BodySetup = PhysicsAsset->SkeletalBodySetups[BodyIndex];
+		if (!FPhysicsAssetUtils::CreateCollisionFromBone(BodySetup, Mesh, Body.Key, Params, Infos[Body.Key], PhysicsAsset, BoneIndicesInCreation))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("CreateMonsterPhysicsAsset %s: 뼈 %s에 붙은 정점이 없어 바디를 만들지 못했습니다."), *PackagePath, *BoneName.ToString());
+		}
+		// 피격 판정만 받는다. 시뮬레이션하지 않고 애니메이션을 따라간다.
+		BodySetup->PhysicsType = PhysType_Kinematic;
+	}
+	PhysicsAsset->UpdateBodySetupIndexMap();
+	PhysicsAsset->UpdateBoundsBodiesArray();
+	PhysicsAsset->SetPreviewMesh(Mesh);
+	PhysicsAsset->PostEditChange();
+	PhysicsAsset->MarkPackageDirty();
+
+	if (Mesh->GetPhysicsAsset() != PhysicsAsset)
+	{
+		Mesh->Modify();
+		Mesh->SetPhysicsAsset(PhysicsAsset);
+		Mesh->MarkPackageDirty();
+	}
+	return PhysicsAsset;
 }
 
 #undef LOCTEXT_NAMESPACE
