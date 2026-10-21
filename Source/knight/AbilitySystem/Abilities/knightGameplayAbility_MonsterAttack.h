@@ -120,6 +120,9 @@ public:
 	/** Selection.Cooldown이 끝나 이 공격을 다시 쓸 수 있을 때까지 남은 시간(초). 준비되었으면 0이다. */
 	float GetCooldownRemaining(double WorldTime) const;
 
+	/** 마지막으로 발동한 시각(월드 초). 한 번도 쓰지 않았으면 아주 작은 값이다. */
+	double GetLastActivationTime() const { return LastActivationTime; }
+
 	const FknightMonsterAttackSelection& GetSelection() const { return Selection; }
 
 	/**

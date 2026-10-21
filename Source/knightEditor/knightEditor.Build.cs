@@ -38,6 +38,10 @@ public class knightEditor : ModuleRules
 			"PropertyBindingUtils",
 			"StateTreeEditorModule",
 			"StateTreeModule",
+			// 몬스터 피직스 에셋 생성(CreateMonsterPhysicsAsset).
+			"MeshUtilitiesCommon",
+			"MeshUtilitiesEngine",
+			"PhysicsUtilities",
 			// 몬스터 연출 Niagara 생성(knightMonsterFXBuilder). 경량 이미터 헤더는 Niagara의 Internal 폴더에 있다.
 			"Niagara",
 			"NiagaraCore",

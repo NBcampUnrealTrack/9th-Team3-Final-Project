@@ -16,6 +16,8 @@ class UknightHitStopComponent;
 class UknightMeleeTraceComponent;
 class UknightMonsterAttributeSet;
 class UknightMonsterDefinition;
+class UknightMonsterHoverComponent;
+class UknightMonsterAirTurnComponent;
 class UknightMonsterMovementComponent;
 class UknightMonsterPartComponent;
 class UknightMonsterPushOutComponent;
@@ -97,6 +99,9 @@ protected:
 	/** 퍼펙트 가드를 당하면(Event.Parried) MonsterDefinition의 ParriedPoiseDamageRatio만큼 경직도를 깎는다. */
 	void HandleParried(const FGameplayEventData* Payload);
 
+	/** ParriedPoiseBlockedTags가 붙으면 경직도를 가득 채운다. */
+	void HandleParriedPoiseBlockedChanged(const FGameplayTag Tag, int32 NewCount);
+
 	/** The first target of this life sends Event.Monster.Engaged (an encounter roar ability triggers on it). */
 	UFUNCTION()
 	void HandleTargetChanged(AActor* OldTarget, AActor* NewTarget);
@@ -129,6 +134,14 @@ private:
 	/** 몸(몸 아래 차단 상자, 설정하면 메시 바디)과 겹친 플레이어를 밀어낸다. 검사할 몸이 없는 몬스터에서는 쉰다. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UknightMonsterPushOutComponent> PushOut;
+
+	/** 떠 있게 만든 애니메이션을 바닥 가까이 내린다(날짐승). HoverDrop이 0인 몬스터에서는 쉰다. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UknightMonsterHoverComponent> Hover;
+
+	/** 지상 턴과 공중 턴을 번갈아 돌린다(날짐승). GroundTurnTime이 0이면 꺼져 있다. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UknightMonsterAirTurnComponent> AirTurn;
 
 	UPROPERTY()
 	TObjectPtr<UknightCoreAttributeSet> CoreAttributeSet;

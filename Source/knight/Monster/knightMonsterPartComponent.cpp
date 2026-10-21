@@ -92,7 +92,18 @@ FGameplayTag UknightMonsterPartComponent::ResolvePart(const FHitResult& Hit) con
 			}
 		}
 	}
-	return Index && PartStates.IsValidIndex(*Index) ? PartStates[*Index].PartTag : FGameplayTag();
+	if (!Index || !PartStates.IsValidIndex(*Index))
+	{
+		return FGameplayTag();
+	}
+	// 드러나지 않은 약점은 덮고 있는 부위로 맞는다. 한 단계만 넘긴다.
+	const FknightMonsterPartDefinition* const Definition = GetDefinition(*Index);
+	if (Definition && !Definition->ExposedTags.IsEmpty() && !(BoundASC.IsValid() && BoundASC->HasAnyMatchingGameplayTags(Definition->ExposedTags)))
+	{
+		const int32 CoverIndex = FindPartIndex(Definition->CoveredByPart);
+		return PartStates.IsValidIndex(CoverIndex) ? PartStates[CoverIndex].PartTag : FGameplayTag();
+	}
+	return PartStates[*Index].PartTag;
 }
 
 float UknightMonsterPartComponent::GetDamageMultiplier(const FGameplayTag& PartTag) const
