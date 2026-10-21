@@ -250,9 +250,11 @@ protected:
 	 * (2026-10-14 사용자 결정) 후딜 길이 = 공격의 캔슬 창이 열린 뒤 퀵스텝만 끊을 수 있는 시간(초, 실제 시간). 바뀔 수 있는 값.
 	 * 공격 몽타주의 캔슬 창은 타격 직후부터 몽타주 끝(검을 등 쪽으로 들어 올리는 동작)까지라, 창 전체를 후딜로 잡으면
 	 * 0.7배속에서 1타 기준 2.5초 동안 아무것도 못 했다. 공격 배속과 상관없이 이 시간만큼만 묶인다.
+	 * (2026-10-21 사용자 결정) 0.5 → 0.25: 기계식 타이밍·양손 배속이 들어온 뒤 판정 끝에서 가드·이동까지 약 0.72초라
+	 * 반응이 너무 늦었다(특히 콤보 창이 없는 4타·대쉬공격·돌진 베기·패링 반격). 0.25면 약 0.47초.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack", meta=(ClampMin=0, Units="s", EditCondition="bOnlyDashCancelsAttackRecovery"))
-	float AttackRecoveryDashOnlyTime = 0.5f;
+	float AttackRecoveryDashOnlyTime = 0.25f;
 
 	/** (2026-10-14) Window.Cancel 태그 수가 늘 때(창이 열릴 때) 시각을 기록한다. */
 	void HandleCancelWindowChanged(const FGameplayTag Tag, int32 NewCount);
