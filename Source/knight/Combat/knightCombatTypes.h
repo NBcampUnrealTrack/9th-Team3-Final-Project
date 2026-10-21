@@ -69,6 +69,13 @@ struct KNIGHT_API FknightMeleeHitParams
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Defense")
 	bool bCanBeParried = true;
 
+	/**
+	 * 몬스터 공격용. false면 퍼펙트 가드당해도 공격한 몬스터의 경직도가 깎이지 않는다(패링 보상만 있는 원거리 공격).
+	 * Event.Parried에 Event.Parried.NoPoise 태그(InstigatorTags)로 실려 간다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Defense", meta=(EditCondition="bCanBeParried"))
+	bool bParryBuildsPoise = true;
+
 	/** Part multipliers at or above this play the weak point cue instead of the normal hit cue. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Feedback")
 	float WeakpointMultiplierThreshold = 1.45f;

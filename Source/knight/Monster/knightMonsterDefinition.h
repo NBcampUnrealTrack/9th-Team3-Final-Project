@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
+#include "GameplayTagContainer.h"
 #include "knightMonsterDefinition.generated.h"
 
 class UAnimMontage;
@@ -50,6 +51,13 @@ public:
 	float ParriedPoiseDamageRatio = 0.f;
 
 	/**
+	 * 몬스터에 이 태그 중 하나라도 있으면 퍼펙트 가드를 당해도 경직도가 깎이지 않는다(잔향은 공명해방 중 그로기 없음).
+	 * 태그가 붙는 순간 경직도를 가득 채우므로, 태그가 떨어진 뒤에는 게이지가 처음부터 다시 쌓인다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="States", meta=(Categories="State"))
+	FGameplayTagContainer ParriedPoiseBlockedTags;
+
+	/**
 	 * 체력이 이 비율 밑으로 내려가면 State.Monster.Phase2를 붙인다(한 생에 한 번, 떼지 않는다). 0이면 2페이즈가 없다.
 	 * 다운·경직·포효 중에 넘으면 그 반응이 끝난 뒤에 붙인다. 전환 포효는 이 태그를 트리거로 쓰는 반응 어빌리티로 만든다.
 	 */
@@ -64,9 +72,20 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Targeting")
 	FName FallbackLockOnSocket = TEXT("spine_03");
 
+	/**
+	 * 공격을 고를 때 바로 전에 쓴 공격은 후보에서 뺀다. 그 공격밖에 쓸 수 없을 때(거리·각도·쿨다운)만 다시 쓴다.
+	 * Knight Activate Ability 태스크가 본다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI")
+	bool bAvoidRepeatingLastAttack = false;
+
 	/** 공용 StateTree(ST_Monster_Default)의 추격이 멈추는 거리. 몸 크기에 맞춘다. Knight Monster Target 평가기가 내보낸다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="cm"))
 	float ChaseStopDistance = 900.f;
+
+	/** 0보다 크면 공중 턴(State.Monster.Airborne) 동안 ChaseStopDistance 대신 쓴다. 공중 공격(다이브)이 쓸 거리를 남긴다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="cm"))
+	float AirChaseStopDistance = 0.f;
 
 	/** 공용 StateTree가 원거리 공격(Ability.Attack.Ranged)으로 넘어가는 거리 구간. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="cm"))

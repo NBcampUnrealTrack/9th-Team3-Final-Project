@@ -28,6 +28,13 @@ EDataValidationResult UknightMonsterPartData::IsDataValid(FDataValidationContext
 			Result = EDataValidationResult::Invalid;
 		}
 		SeenTags.Add(Part.PartTag);
+		if (Part.CoveredByPart.IsValid() && (Part.CoveredByPart == Part.PartTag
+			|| !Parts.ContainsByPredicate([&Part](const FknightMonsterPartDefinition& Other) { return Other.PartTag == Part.CoveredByPart; })))
+		{
+			Context.AddError(FText::Format(LOCTEXT("BadCover", "Part {0}: CoveredByPart {1} must be another part of this monster."),
+				FText::FromName(Part.PartTag.GetTagName()), FText::FromName(Part.CoveredByPart.GetTagName())));
+			Result = EDataValidationResult::Invalid;
+		}
 		if (Part.Bones.IsEmpty() && Part.ComponentTags.IsEmpty())
 		{
 			Context.AddWarning(FText::Format(LOCTEXT("NoBones", "Part {0} lists no bones or component tags, so no hit can resolve to it."), FText::FromName(Part.PartTag.GetTagName())));

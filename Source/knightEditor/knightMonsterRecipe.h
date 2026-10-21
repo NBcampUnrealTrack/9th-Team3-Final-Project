@@ -98,9 +98,23 @@ struct FknightRecipeAttack
 	UPROPERTY(EditAnywhere, Category="Area", meta=(EditCondition="Type == EknightRecipeAttackType::Area", EditConditionHides, Categories="GameplayCue"))
 	FGameplayTag TelegraphCue;
 
+	/** 0보다 크면 LungeStartTime ~ LungeEndTime(발동부터 실제 초) 동안 타깃 쪽으로 돌진한다. 구체 중심이 타깃에 오는 거리까지, 최대 이만큼. */
+	UPROPERTY(EditAnywhere, Category="Area", meta=(EditCondition="Type == EknightRecipeAttackType::Area", EditConditionHides, ClampMin=0, Units="cm"))
+	float LungeMaxDistance = 0.f;
+
+	UPROPERTY(EditAnywhere, Category="Area", meta=(EditCondition="Type == EknightRecipeAttackType::Area && LungeMaxDistance > 0", EditConditionHides, ClampMin=0, Units="s"))
+	float LungeStartTime = 0.4f;
+
+	UPROPERTY(EditAnywhere, Category="Area", meta=(EditCondition="Type == EknightRecipeAttackType::Area && LungeMaxDistance > 0", EditConditionHides, ClampMin=0, Units="s"))
+	float LungeEndTime = 0.8f;
+
 	/** 고를 수 있는 조건과 확률. BlockedOwnerTags는 발동 차단 태그에도 들어간다(부위 파괴 후 봉인). */
 	UPROPERTY(EditAnywhere, Category="Selection")
 	FknightMonsterAttackSelection Selection;
+
+	/** 공중 턴(AirGroundTurnTime > 0)에만 쓰는 공격. 아니면 지상 턴에만 쓴다. 공중 턴이 없는 몬스터에서는 보지 않는다. */
+	UPROPERTY(EditAnywhere, Category="Selection")
+	bool bAirAttack = false;
 
 	UPROPERTY(EditAnywhere, Category="Damage")
 	FknightMeleeHitParams HitParams;
@@ -114,6 +128,19 @@ struct FknightRecipeAttack
 
 	UPROPERTY(EditAnywhere, Category="Turn", meta=(ClampMin=0, Units="s", EditCondition="StartTurnYaw != 0"))
 	float StartTurnMaxTime = 0.5f;
+};
+
+/** 날개 하나. 어깨 뼈를 돌려 날개 끝들을 바닥 위에 둔다. */
+USTRUCT()
+struct FknightRecipeWing
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, Category="Wing")
+	FName RootBone;
+
+	UPROPERTY(EditAnywhere, Category="Wing")
+	TArray<FName> TipBones;
 };
 
 /** 공격이 아닌 반응. 비어 있는 애니메이션의 반응 어빌리티는 만들지 않는다. */
@@ -201,6 +228,85 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Body")
 	float MeshYaw = -90.f;
 
+	/**
+	 * 늘 떠 있게 만든 애니메이션(날짐승)을 바닥 가까이 내리는 최대 높이(knightMonsterHoverComponent). 발 뼈가 디딘 높이
+	 * 아래로는 내리지 않으므로 쓰러지는 애니메이션은 원래 높이 그대로다. 0이면 내리지 않는다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Hover", meta=(ClampMin=0, Units="cm"))
+	float HoverDrop = 0.f;
+
+	/** 바닥 아래로 들어가면 안 되는 발 뼈. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Hover", meta=(EditCondition="HoverDrop > 0"))
+	TArray<FName> HoverFootBones;
+
+	/** 디뎠을 때 발 뼈의 바닥 위 높이(cm, 메시 배율 적용). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Hover", meta=(ClampMin=0, Units="cm", EditCondition="HoverDrop > 0"))
+	float HoverFootHeight = 0.f;
+
+	/**
+	 * 레시피 항목으로 만들지 않는 어빌리티(공중 패턴처럼 전용 클래스로 직접 만든 공격). Build가 어빌리티 세트에 그대로 넣고 건드리지 않는다.
+	 * 공중 턴 공격이면 그 어빌리티의 Selection에 State.Monster.Airborne 필요 태그를 직접 둔다.
+	 */
+	UPROPERTY(EditAnywhere, Category="Attacks")
+	TArray<TSubclassOf<UGameplayAbility>> ExtraAbilities;
+
+	/**
+	 * 지상 턴 시간(knightMonsterAirTurnComponent). 0보다 크면 지상 턴 → 이륙 → 공중 공격 AirAttacksPerTurn번 → 착지를 반복한다.
+	 * 지상 공격은 공중 턴에 막히고, bAirAttack 공격만 공중 턴에 쓴다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(ClampMin=0, Units="s"))
+	float AirGroundTurnTime = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(ClampMin=1, EditCondition="AirGroundTurnTime > 0"))
+	int32 AirAttacksPerTurn = 2;
+
+	/** 공중 공격을 다 쓰지 못해도 이 시간이 지나면 착지한다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(ClampMin=0, Units="s", EditCondition="AirGroundTurnTime > 0"))
+	float AirTurnMaxTime = 20.f;
+
+	/** 공중 턴에 타깃과 이 거리(수평)보다 가까우면 뒤로 물러난다. 0이면 물러나지 않는다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(ClampMin=0, Units="cm", EditCondition="AirGroundTurnTime > 0"))
+	float AirKeepDistance = 0.f;
+
+	/** 공중 턴에 애니메이션 원래 높이(HoverDrop을 빼지 않은 높이)보다 더 띄우는 높이. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(ClampMin=0, Units="cm", EditCondition="AirGroundTurnTime > 0"))
+	float AirLift = 0.f;
+
+	/** 공중 턴에 AirCeilingBone이 바닥 위 이 높이를 넘지 않는다(이륙 애니메이션이 몸을 크게 들어 올릴 때). 0이면 끈다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(ClampMin=0, Units="cm", EditCondition="AirGroundTurnTime > 0"))
+	float AirCeiling = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(EditCondition="AirGroundTurnTime > 0 && AirCeiling > 0"))
+	FName AirCeilingBone = TEXT("pelvis");
+
+	/** 이륙 애니메이션과 쓸 구간(초). End가 0이면 끝까지. 구간 길이 동안 메시가 공중 높이로 오른다. */
+	UPROPERTY(EditAnywhere, Category="Air Turn", meta=(EditCondition="AirGroundTurnTime > 0"))
+	TObjectPtr<UAnimSequence> TakeOff;
+
+	UPROPERTY(EditAnywhere, Category="Air Turn", meta=(ClampMin=0, Units="s", EditCondition="AirGroundTurnTime > 0"))
+	float TakeOffStart = 0.f;
+
+	UPROPERTY(EditAnywhere, Category="Air Turn", meta=(ClampMin=0, Units="s", EditCondition="AirGroundTurnTime > 0"))
+	float TakeOffEnd = 0.f;
+
+	/** 착지 애니메이션과 쓸 구간(초). 구간 길이 동안 메시가 지상 높이로 내려온다. */
+	UPROPERTY(EditAnywhere, Category="Air Turn", meta=(EditCondition="AirGroundTurnTime > 0"))
+	TObjectPtr<UAnimSequence> Landing;
+
+	UPROPERTY(EditAnywhere, Category="Air Turn", meta=(ClampMin=0, Units="s", EditCondition="AirGroundTurnTime > 0"))
+	float LandingStart = 0.f;
+
+	UPROPERTY(EditAnywhere, Category="Air Turn", meta=(ClampMin=0, Units="s", EditCondition="AirGroundTurnTime > 0"))
+	float LandingEnd = 0.f;
+
+	/** 바닥 가까이에서 날개 끝이 바닥을 뚫지 않게 들어 올린다(애님 그래프의 Knight Wing Clearance 노드). 비우면 노드를 넣지 않는다. */
+	UPROPERTY(EditAnywhere, Category="Hover", meta=(TitleProperty="RootBone"))
+	TArray<FknightRecipeWing> HoverWings;
+
+	/** 날개 끝 뼈를 바닥에서 띄우는 높이(cm). */
+	UPROPERTY(EditAnywhere, Category="Hover", meta=(ClampMin=0, Units="cm"))
+	float HoverWingClearance = 30.f;
+
 	/** 이동용 캡슐. 피격은 메시의 피직스 바디가 받으므로 몸보다 작게 둔다. 메시는 캡슐 바닥에 맞춘다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Body", meta=(ClampMin=1, Units="cm"))
 	float CapsuleRadius = 100.f;
@@ -271,6 +377,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stats", meta=(ClampMin=0, ClampMax=1))
 	float ParriedPoiseDamageRatio = 0.25f;
 
+	/** 플레이어 타격이 깎는 경직도 배율(받는 경직 배율). 0이면 타격으로는 그로기가 쌓이지 않고 퍼펙트 가드로만 쌓인다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stats", meta=(ClampMin=0))
+	float PoiseDamageTakenMultiplier = 1.f;
+
+	/** 이 태그 중 하나라도 있으면 퍼펙트 가드로도 경직도가 깎이지 않고, 붙는 순간 게이지가 비워진다(공명해방). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stats", meta=(Categories="State"))
+	FGameplayTagContainer ParriedPoiseBlockedTags;
+
 	/** 락온 카메라가 몬스터를 담는 반지름. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Targeting", meta=(ClampMin=0, Units="cm"))
 	float TargetRadius = 600.f;
@@ -278,9 +392,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Targeting")
 	FName FallbackLockOnSocket = TEXT("spine_03");
 
+	/** 바로 전에 쓴 공격은 다음 선택에서 뺀다(그것밖에 쓸 수 없을 때만 다시 쓴다). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="AI")
+	bool bAvoidRepeatingLastAttack = false;
+
 	/** 공용 StateTree의 추격 정지 거리. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="cm"))
 	float ChaseStopDistance = 900.f;
+
+	/** 공중 턴 동안의 추격 정지 거리. 0이면 ChaseStopDistance. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="cm"))
+	float AirChaseStopDistance = 0.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="cm"))
 	float RangedMinDistance = 533.f;

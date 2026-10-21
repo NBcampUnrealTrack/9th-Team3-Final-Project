@@ -38,6 +38,17 @@ struct KNIGHT_API FknightMonsterPartDefinition
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hitzone", meta=(ClampMin=0))
 	float DamageMultiplier = 1.f;
 
+	/**
+	 * 비어 있지 않으면 몬스터에 이 태그 중 하나가 있을 때만 이 부위로 맞는다(그로기 중에만 드러나는 약점).
+	 * 그 밖에는 CoveredByPart로 맞고, 이 부위의 배율과 내구도는 쓰지 않는다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hitzone", meta=(Categories="State"))
+	FGameplayTagContainer ExposedTags;
+
+	/** ExposedTags가 없을 때 대신 맞는 부위(약점을 덮고 있는 몸통 등). 비워 두면 부위 없이 맞는다(배율 1). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hitzone", meta=(Categories="Monster.Part", EditCondition="!ExposedTags.IsEmpty()"))
+	FGameplayTag CoveredByPart;
+
 	/** Socket or bone used as a lock-on point. None means this part is not a lock-on point. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Lock On")
 	FName LockOnSocket;
