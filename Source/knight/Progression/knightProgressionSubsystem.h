@@ -75,7 +75,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|Progression")
 	bool UpgradePart(const UknightPartItemDefinition* Part);
 
-	/** Validates all ingredients and stage unlocks without changing the save. */
+	/** Validates ownership, ingredients and stage unlocks without changing the save. */
 	UFUNCTION(BlueprintPure, Category="Knight|Progression")
 	bool CanCraftPart(const UknightCraftRecipeDefinition* Recipe) const;
 

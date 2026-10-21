@@ -27,7 +27,7 @@ namespace
 {
 	const FLinearColor PanelColor(FColor(15, 25, 35, 242));
 	const FLinearColor RowColor(FColor(35, 52, 67, 230));
-	const FLinearColor SelectedColor(FColor(176, 123, 55, 240));
+	const FLinearColor InventorySelectedColor(FColor(176, 123, 55, 240));
 	const FLinearColor White(FColor(242, 244, 246));
 
 	UCommonTextBlock* MakeText(UWidgetTree* Tree, const FText& Value, const TCHAR* Style)
@@ -105,13 +105,13 @@ void UKnightInventoryEntryWidget::ApplyConfiguration()
 	}
 	if (CountText) CountText->SetText(FText::Format(LOCTEXT("Count", "×{0}"), FText::AsNumber(DisplayCount)));
 	if (EquippedText) EquippedText->SetText(bDisplayEquipped ? LOCTEXT("Equipped", "장착 중") : FText::GetEmpty());
-	if (Button) Button->SetBackgroundColor(bSelected ? SelectedColor : RowColor);
+	if (Button) Button->SetBackgroundColor(bSelected ? InventorySelectedColor : RowColor);
 }
 
 void UKnightInventoryEntryWidget::SetSelected(bool bInSelected)
 {
 	bSelected = bInSelected;
-	if (Button) Button->SetBackgroundColor(bInSelected ? SelectedColor : RowColor);
+	if (Button) Button->SetBackgroundColor(bInSelected ? InventorySelectedColor : RowColor);
 }
 
 void UKnightInventoryEntryWidget::HandleClicked()
@@ -226,9 +226,9 @@ void UKnightInventoryWidget::SetCategory(int32 NewCategory)
 	Category = NewCategory;
 	SelectedItemId = FPrimaryAssetId();
 	Refresh();
-	if (EquipmentButton) EquipmentButton->SetBackgroundColor(Category == 0 ? SelectedColor : RowColor);
-	if (MaterialButton) MaterialButton->SetBackgroundColor(Category == 1 ? SelectedColor : RowColor);
-	if (SocketButton) SocketButton->SetBackgroundColor(Category == 2 ? SelectedColor : RowColor);
+	if (EquipmentButton) EquipmentButton->SetBackgroundColor(Category == 0 ? InventorySelectedColor : RowColor);
+	if (MaterialButton) MaterialButton->SetBackgroundColor(Category == 1 ? InventorySelectedColor : RowColor);
+	if (SocketButton) SocketButton->SetBackgroundColor(Category == 2 ? InventorySelectedColor : RowColor);
 }
 
 UknightProgressionSubsystem* UKnightInventoryWidget::GetProgression() const

@@ -444,7 +444,8 @@ void UKnightMaintenanceWidget::RebuildList()
 		if (!Entry) return;
 		const int32 Owned = Progression ? Progression->GetItemCount(Part) : 0;
 		EKnightMaintenanceEntryState State = EKnightMaintenanceEntryState::Owned;
-		if (Recipe) State = Progression && Progression->CanCraftPart(Recipe) ? EKnightMaintenanceEntryState::Craftable : EKnightMaintenanceEntryState::MissingMaterials;
+		if (Recipe) State = Owned > 0 ? EKnightMaintenanceEntryState::Owned
+			: Progression && Progression->CanCraftPart(Recipe) ? EKnightMaintenanceEntryState::Craftable : EKnightMaintenanceEntryState::MissingMaterials;
 		else if (EffectiveLoadout.FindRef(Part->SlotTag) == Part) State = EKnightMaintenanceEntryState::Equipped;
 		Entry->SetEntry(Part, Recipe, State, Owned);
 		Entry->OnClicked().AddUObject(this, &ThisClass::HandleEntryClicked, Entry);
@@ -773,6 +774,8 @@ void UKnightMaintenanceWidget::RefreshDetails()
 	{
 		ExecuteLockReason = FText::GetEmpty();
 		if (!SelectedPart) ExecuteLockReason = LOCTEXT("LockPick", "목록에서 장비를 선택하세요.");
+		else if (Category == 0 && Progression && Progression->GetItemCount(SelectedPart) > 0)
+			ExecuteLockReason = LOCTEXT("LockAlreadyOwned", "이미 보유한 장비입니다.");
 		else if (Category == 0 && SelectedRecipe && !SelectedRecipe->RequiredClearedStageId.IsNone()
 			&& !(Progression && Progression->IsStageCleared(SelectedRecipe->RequiredClearedStageId)))
 			ExecuteLockReason = LOCTEXT("LockStage", "필요 스테이지를 먼저 클리어해야 합니다.");

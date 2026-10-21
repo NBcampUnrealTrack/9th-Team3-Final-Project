@@ -187,7 +187,6 @@ namespace
 			{
 				if (!Recipe || !Recipe->GetPathName().StartsWith(TEXT("/Game/Knight/Data/Equipment/"))) continue;
 				++NewRecipeCount;
-				const int32 Before = Progression->GetItemCount(Recipe->Result);
 				if (Recipe->Result)
 				{
 					const FPrimaryAssetId Id = Recipe->Result->GetPrimaryAssetId();
@@ -200,12 +199,37 @@ namespace
 						FString::Printf(TEXT("unique ID, class, slot and set %s"), *Recipe->Result->GetName()));
 					UniqueIds.Add(Id);
 				}
-				Check(Recipe->Result && Recipe->Costs.IsEmpty() && Recipe->RequiredClearedStageId.IsNone()
-					&& Progression->CanCraftPart(Recipe) && Progression->CraftPart(Recipe)
-					&& Progression->GetItemCount(Recipe->Result) == Before + 1,
-					FString::Printf(TEXT("zero-cost craft %s"), *Recipe->GetName()));
+				const bool bValidCosts = Recipe->Costs.Num() == 2
+					&& Recipe->Costs[0].Item && Recipe->Costs[1].Item
+					&& Recipe->Costs[0].Item != Recipe->Costs[1].Item
+					&& Recipe->Costs[0].Count > 0 && Recipe->Costs[1].Count > 0
+					&& Recipe->Costs[0].Item->IsA<UknightMaterialItemDefinition>()
+					&& Recipe->Costs[1].Item->IsA<UknightMaterialItemDefinition>();
+				Check(bValidCosts && Recipe->RequiredClearedStageId.IsNone(),
+					FString::Printf(TEXT("two distinct positive material costs %s"), *Recipe->GetName()));
+				if (!Recipe->Result || !bValidCosts) continue;
+				const int32 Before = Progression->GetItemCount(Recipe->Result);
+				if (Before > 0)
+				{
+					Check(!Progression->CanCraftPart(Recipe) && !Progression->CraftPart(Recipe),
+						FString::Printf(TEXT("already owned craft blocked %s"), *Recipe->GetName()));
+					continue;
+				}
+				for (const FknightItemCost& Cost : Recipe->Costs)
+				{
+					const int32 Missing = FMath::Max(0, Cost.Count - Progression->GetItemCount(Cost.Item));
+					if (Missing > 0) Progression->AddItem(Cost.Item, Missing);
+				}
+				const int32 MaterialA = Progression->GetItemCount(Recipe->Costs[0].Item);
+				const int32 MaterialB = Progression->GetItemCount(Recipe->Costs[1].Item);
+				Check(Progression->CanCraftPart(Recipe) && Progression->CraftPart(Recipe)
+					&& Progression->GetItemCount(Recipe->Result) == Before + 1
+					&& Progression->GetItemCount(Recipe->Costs[0].Item) == MaterialA - Recipe->Costs[0].Count
+					&& Progression->GetItemCount(Recipe->Costs[1].Item) == MaterialB - Recipe->Costs[1].Count
+					&& !Progression->CanCraftPart(Recipe) && !Progression->CraftPart(Recipe),
+					FString::Printf(TEXT("craft spends exactly two costs and blocks duplicates %s"), *Recipe->GetName()));
 			}
-			Check(NewRecipeCount == 15, FString::Printf(TEXT("catalog has %d/15 new recipes"), NewRecipeCount));
+			Check(NewRecipeCount == 21, FString::Printf(TEXT("catalog has %d/21 formal recipes"), NewRecipeCount));
 			UE_LOG(LogknightDev, Log, TEXT("MaintenanceTest AssetCases result: %s (%d failures)"), Failures ? TEXT("FAIL") : TEXT("PASS"), Failures);
 			return;
 		}

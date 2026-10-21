@@ -284,6 +284,8 @@ bool UknightProgressionSubsystem::CanCraftPart(const UknightCraftRecipeDefinitio
 	{
 		return false;
 	}
+	// Equipment is unique per save slot. A second craft must never spend materials.
+	if (GetItemCount(Recipe->Result) > 0) return false;
 	TMap<FPrimaryAssetId, int32> Totals;
 	for (const FknightItemCost& Cost : Recipe->Costs)
 	{
@@ -296,7 +298,7 @@ bool UknightProgressionSubsystem::CanCraftPart(const UknightCraftRecipeDefinitio
 	{
 		if (Save->ItemCounts.FindRef(Cost.Key) < Cost.Value) return false;
 	}
-	return GetItemCount(Recipe->Result) < MAX_int32;
+	return true;
 }
 
 bool UknightProgressionSubsystem::CraftPart(const UknightCraftRecipeDefinition* Recipe)
