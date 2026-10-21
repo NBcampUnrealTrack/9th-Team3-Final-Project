@@ -46,6 +46,7 @@ void UknightMonsterRecipe::Resize()
 		Attack.Selection.MaxRange *= Factor;
 		Attack.AreaOffset *= Factor;
 		Attack.AreaRadius *= Factor;
+		Attack.LungeMaxDistance *= Factor;
 		for (FknightRecipeHitWindow& Hit : Attack.HitWindows)
 		{
 			Hit.Trace.Radius *= Factor;

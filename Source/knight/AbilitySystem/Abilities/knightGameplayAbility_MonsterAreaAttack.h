@@ -18,6 +18,9 @@ class UGameplayEffect;
  *
  * ConeHalfAngle을 주면 구체 안에서도 원뿔(ConeOrigin에서 정면으로 좌우 ConeHalfAngle) 안의 대상만 맞는다.
  *
+ * LungeMaxDistance를 주면 LungeStartTime ~ LungeEndTime 동안 타깃 쪽으로 몸을 던진다(애니메이션에 이동이 없는 몸통 박치기).
+ * 방향과 거리는 돌진을 시작할 때 정하고 그 뒤로는 따라가지 않으므로, 몸을 끌어올리는 예고를 보고 옆으로 피할 수 있다.
+ *
  * 디버그: knight.Monster.DrawAttacks 1 이면 예고(주황)와 타격 지점(빨강)을 그린다.
  */
 UCLASS()
@@ -65,6 +68,20 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Area", meta=(EditCondition="ConeHalfAngle > 0"))
 	FVector ConeOrigin = FVector::ZeroVector;
 
+	/**
+	 * 0보다 크면 돌진한다. 구체 중심(AreaOffset.X 앞)이 타깃에 오도록 타깃까지 거리 - AreaOffset.X만큼 가되 이 거리를 넘지 않는다.
+	 * 가까우면 제자리에서 친다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Lunge", meta=(ClampMin=0, Units="cm"))
+	float LungeMaxDistance = 0.f;
+
+	/** 돌진 구간(발동부터 초). 끝나는 시각은 WindupTime 근처로 두어 몸이 닿는 순간 판정이 난다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Lunge", meta=(ClampMin=0, Units="s", EditCondition="LungeMaxDistance > 0"))
+	float LungeStartTime = 0.4f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Lunge", meta=(ClampMin=0, Units="s", EditCondition="LungeMaxDistance > 0"))
+	float LungeEndTime = 0.8f;
+
 	UPROPERTY(EditDefaultsOnly, Category="Attack")
 	FknightMeleeHitParams HitParams;
 
@@ -83,6 +100,9 @@ protected:
 private:
 	UFUNCTION()
 	void HandleWindupFinished();
+
+	UFUNCTION()
+	void StartLunge();
 
 	UFUNCTION()
 	void HandleActiveTick(int32 ActionNumber);

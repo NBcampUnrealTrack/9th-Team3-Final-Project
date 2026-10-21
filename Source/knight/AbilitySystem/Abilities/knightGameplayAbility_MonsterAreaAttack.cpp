@@ -2,13 +2,18 @@
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
+#include "Abilities/Tasks/AbilityTask_ApplyRootMotionConstantForce.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_Repeat.h"
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "Combat/knightCombatLibrary.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/RootMotionSource.h"
+#include "Monster/knightMonsterCharacterBase.h"
 #include "Monster/knightMonsterDebug.h"
+#include "Monster/knightMonsterTargetingComponent.h"
 #include "knight.h"
 #include "knightPerfCounters.h"
 
@@ -63,9 +68,42 @@ void UknightGameplayAbility_MonsterAreaAttack::ActivateAbility(const FGameplayAb
 		MontageTask->ReadyForActivation();
 	}
 
+	if (LungeMaxDistance > 0.f && LungeEndTime > LungeStartTime)
+	{
+		UAbilityTask_WaitDelay* const LungeDelayTask = UAbilityTask_WaitDelay::WaitDelay(this, LungeStartTime);
+		LungeDelayTask->OnFinish.AddDynamic(this, &ThisClass::StartLunge);
+		LungeDelayTask->ReadyForActivation();
+	}
+
 	UAbilityTask_WaitDelay* const WindupTask = UAbilityTask_WaitDelay::WaitDelay(this, WindupTime);
 	WindupTask->OnFinish.AddDynamic(this, &ThisClass::HandleWindupFinished);
 	WindupTask->ReadyForActivation();
+}
+
+void UknightGameplayAbility_MonsterAreaAttack::StartLunge()
+{
+	const AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetAvatarActorFromActorInfo());
+	const UknightMonsterTargetingComponent* const Targeting = Monster ? Monster->GetTargetingComponent() : nullptr;
+	const AActor* const Target = Targeting ? Targeting->GetCurrentTarget() : nullptr;
+	const UCharacterMovementComponent* const Movement = Monster ? Monster->GetCharacterMovement() : nullptr;
+	if (!Target || !Movement)
+	{
+		return;
+	}
+	const FVector ToTarget = Target->GetActorLocation() - Monster->GetActorLocation();
+	const float Distance = FMath::Clamp(static_cast<float>(ToTarget.Size2D()) - AreaOffset.X, 0.f, LungeMaxDistance);
+	if (Distance < 1.f)
+	{
+		return;
+	}
+	// 정면이 아니라 타깃 쪽으로 던진다. 예고 동안 타깃이 옆으로 조금 움직여도 몸이 따라간다.
+	const FVector Direction = ToTarget.GetSafeNormal2D();
+	const float Duration = LungeEndTime - LungeStartTime;
+	UAbilityTask_ApplyRootMotionConstantForce* const LungeTask = UAbilityTask_ApplyRootMotionConstantForce::ApplyRootMotionConstantForce(
+		this, TEXT("AreaLunge"), Direction, Distance / Duration, Duration, false, nullptr,
+		ERootMotionFinishVelocityMode::ClampVelocity, FVector::ZeroVector, 0.f, false);
+	LungeTask->ReadyForActivation();
+	UE_LOG(LogknightAI, Verbose, TEXT("%s: %s lunges %.0f cm over %.2f s."), *GetNameSafe(Monster), *GetName(), Distance, Duration);
 }
 
 void UknightGameplayAbility_MonsterAreaAttack::HandleWindupFinished()

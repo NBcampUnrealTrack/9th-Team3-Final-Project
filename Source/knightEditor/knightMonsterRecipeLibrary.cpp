@@ -440,6 +440,9 @@ namespace knightRecipe
 			SetValue(CDO, TEXT("AreaOffset"), Attack.AreaOffset, Log);
 			SetValue<float>(CDO, TEXT("AreaRadius"), Attack.AreaRadius, Log);
 			SetValue(CDO, TEXT("TelegraphCue"), Attack.TelegraphCue, Log);
+			SetValue<float>(CDO, TEXT("LungeMaxDistance"), Attack.LungeMaxDistance, Log);
+			SetValue<float>(CDO, TEXT("LungeStartTime"), Attack.LungeStartTime, Log);
+			SetValue<float>(CDO, TEXT("LungeEndTime"), Attack.LungeEndTime, Log);
 		}
 
 		FGameplayTagContainer AbilityTags(Tag(TEXT("Ability.Attack")));
@@ -1676,6 +1679,9 @@ UknightMonsterRecipe* UknightMonsterRecipeLibrary::CreateRecipeFromMonster(TSubc
 					GetValue(CDO, TEXT("AreaOffset"), Attack.AreaOffset);
 					GetValue(CDO, TEXT("AreaRadius"), Attack.AreaRadius);
 					GetValue(CDO, TEXT("TelegraphCue"), Attack.TelegraphCue);
+					GetValue(CDO, TEXT("LungeMaxDistance"), Attack.LungeMaxDistance);
+					GetValue(CDO, TEXT("LungeStartTime"), Attack.LungeStartTime);
+					GetValue(CDO, TEXT("LungeEndTime"), Attack.LungeEndTime);
 				}
 			}
 			else if (CDO->IsA<UknightGameplayAbility_MonsterDeath>())

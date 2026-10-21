@@ -98,6 +98,16 @@ struct FknightRecipeAttack
 	UPROPERTY(EditAnywhere, Category="Area", meta=(EditCondition="Type == EknightRecipeAttackType::Area", EditConditionHides, Categories="GameplayCue"))
 	FGameplayTag TelegraphCue;
 
+	/** 0보다 크면 LungeStartTime ~ LungeEndTime(발동부터 실제 초) 동안 타깃 쪽으로 돌진한다. 구체 중심이 타깃에 오는 거리까지, 최대 이만큼. */
+	UPROPERTY(EditAnywhere, Category="Area", meta=(EditCondition="Type == EknightRecipeAttackType::Area", EditConditionHides, ClampMin=0, Units="cm"))
+	float LungeMaxDistance = 0.f;
+
+	UPROPERTY(EditAnywhere, Category="Area", meta=(EditCondition="Type == EknightRecipeAttackType::Area && LungeMaxDistance > 0", EditConditionHides, ClampMin=0, Units="s"))
+	float LungeStartTime = 0.4f;
+
+	UPROPERTY(EditAnywhere, Category="Area", meta=(EditCondition="Type == EknightRecipeAttackType::Area && LungeMaxDistance > 0", EditConditionHides, ClampMin=0, Units="s"))
+	float LungeEndTime = 0.8f;
+
 	/** 고를 수 있는 조건과 확률. BlockedOwnerTags는 발동 차단 태그에도 들어간다(부위 파괴 후 봉인). */
 	UPROPERTY(EditAnywhere, Category="Selection")
 	FknightMonsterAttackSelection Selection;
