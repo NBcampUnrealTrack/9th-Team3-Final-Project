@@ -122,6 +122,8 @@ public:
 
 	const FknightMonsterAttackSelection& GetSelection() const { return Selection; }
 
+	bool DoesParryBuildPoise() const { return bParryBuildsPoise; }
+
 	/**
 	 * 탈진(State.Monster.Exhausted) 중에는 어떤 공격도 시작하지 않는다. 이미 시작한 공격은 끝까지 한다.
 	 * ActivationBlockedTags는 BP와 몬스터 생성기가 부위 파괴 태그로 통째로 덮어쓰므로 여기서 검사한다.
@@ -150,6 +152,13 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Turn", meta=(ClampMin=0, Units="s", EditCondition="StartTurnYaw != 0"))
 	float StartTurnMaxTime = 0.5f;
+
+	/**
+	 * 이 공격을 퍼펙트 가드당하면 경직도가 깎인다(MonsterDefinition.ParriedPoiseDamageRatio). 패링 타이밍 보상만 있고
+	 * 그로기는 쌓이지 않는 공격(원거리 초음파 등)은 끈다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Poise")
+	bool bParryBuildsPoise = true;
 
 private:
 	UFUNCTION()

@@ -3,6 +3,7 @@
 #include "AIController.h"
 #include "BrainComponent.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
+#include "AbilitySystem/Abilities/knightGameplayAbility_MonsterAttack.h"
 #include "AbilitySystem/Attributes/knightMonsterAttributeSet.h"
 #include "AbilitySystem/knightAbilitySystemComponent.h"
 #include "Abilities/GameplayAbilityTypes.h"
@@ -87,6 +88,14 @@ void AknightMonsterCharacterBase::BeginPlay()
 	MonsterAttributeSet->OnStaminaDepleted.AddUObject(this, &ThisClass::HandleStaminaDepleted);
 	TargetingComponent->OnTargetChanged.AddUniqueDynamic(this, &ThisClass::HandleTargetChanged);
 	AbilitySystemComponent->GenericGameplayEventCallbacks.FindOrAdd(knightGameplayTags::Event_Parried).AddUObject(this, &ThisClass::HandleParried);
+	if (MonsterDefinition)
+	{
+		for (const FGameplayTag& BlockedTag : MonsterDefinition->ParriedPoiseBlockedTags)
+		{
+			AbilitySystemComponent->RegisterGameplayTagEvent(BlockedTag, EGameplayTagEventType::NewOrRemoved)
+				.AddUObject(this, &ThisClass::HandleParriedPoiseBlockedChanged);
+		}
+	}
 
 	// 배치된 몬스터는 빙의 전에 BeginPlay가 불릴 수 있다. 부위와 위협도는 어느 쪽이든 동작한다.
 	InitializeAbilitySystem();
@@ -366,6 +375,21 @@ void AknightMonsterCharacterBase::HandleParried(const FGameplayEventData* Payloa
 	{
 		return;
 	}
+	if (AbilitySystemComponent->HasAnyMatchingGameplayTags(MonsterDefinition->ParriedPoiseBlockedTags))
+	{
+		UE_LOG(LogknightAI, Log, TEXT("%s: parried, poise blocked by state."), *GetNameSafe(this));
+		return;
+	}
+	// 패링 이벤트에는 공격 어빌리티가 담기지 않으므로 지금 실행 중인 공격을 찾는다. 공격은 한 번에 하나만 실행된다.
+	for (const FGameplayAbilitySpec& Spec : AbilitySystemComponent->GetActivatableAbilities())
+	{
+		const UknightGameplayAbility_MonsterAttack* const Attack = Spec.IsActive() ? Cast<UknightGameplayAbility_MonsterAttack>(Spec.GetPrimaryInstance()) : nullptr;
+		if (Attack && !Attack->DoesParryBuildPoise())
+		{
+			UE_LOG(LogknightAI, Log, TEXT("%s: parried, %s does not build poise."), *GetNameSafe(this), *GetNameSafe(Attack));
+			return;
+		}
+	}
 	const float PoiseDamage = CoreAttributeSet->GetMaxPoise() * Ratio;
 	AActor* const Defender = Payload ? const_cast<AActor*>(Payload->Instigator.Get()) : nullptr;
 	FGameplayEffectContextHandle Context = AbilitySystemComponent->MakeEffectContext();
@@ -378,6 +402,17 @@ void AknightMonsterCharacterBase::HandleParried(const FGameplayEventData* Payloa
 	AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(Spec);
 	UE_LOG(LogknightAI, Log, TEXT("%s: parried by %s, poise -%.0f -> %.0f / %.0f."), *GetNameSafe(this), *GetNameSafe(Defender),
 		PoiseDamage, CoreAttributeSet->GetPoise(), CoreAttributeSet->GetMaxPoise());
+}
+
+void AknightMonsterCharacterBase::HandleParriedPoiseBlockedChanged(const FGameplayTag Tag, int32 NewCount)
+{
+	if (NewCount <= 0 || IsDead())
+	{
+		return;
+	}
+	const float MaxPoise = AbilitySystemComponent->GetNumericAttributeBase(UknightCoreAttributeSet::GetMaxPoiseAttribute());
+	AbilitySystemComponent->SetNumericAttributeBase(UknightCoreAttributeSet::GetPoiseAttribute(), MaxPoise);
+	UE_LOG(LogknightAI, Log, TEXT("%s: %s added, poise reset to %.0f."), *GetNameSafe(this), *Tag.ToString(), MaxPoise);
 }
 
 void AknightMonsterCharacterBase::HandleStaminaDepleted(AActor* EffectInstigator, AActor* EffectCauser, const FGameplayEffectSpec* EffectSpec,

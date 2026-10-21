@@ -432,6 +432,7 @@ namespace knightRecipe
 		SetValue<float>(CDO, TEXT("StartTurnYaw"), Attack.StartTurnYaw, Log);
 		SetValue<float>(CDO, TEXT("StartTurnRate"), Attack.StartTurnRate, Log);
 		SetValue<float>(CDO, TEXT("StartTurnMaxTime"), Attack.StartTurnMaxTime, Log);
+		SetBool(CDO, TEXT("bParryBuildsPoise"), Attack.bParryBuildsPoise, Log);
 		if (Attack.Type == EknightRecipeAttackType::Area)
 		{
 			SetValue<float>(CDO, TEXT("WindupTime"), Attack.WindupTime, Log);
@@ -619,6 +620,10 @@ namespace knightRecipe
 			Override(Attribute(Core, TEXT("MaxPoise")), Recipe.MaxPoise);
 			Override(Attribute(Core, TEXT("Poise")), Recipe.MaxPoise);
 		}
+		if (!FMath::IsNearlyEqual(Recipe.PoiseDamageTakenMultiplier, 1.f))
+		{
+			Override(Attribute(Core, TEXT("PoiseDamageTakenMultiplier")), Recipe.PoiseDamageTakenMultiplier);
+		}
 		if (Recipe.MaxRage > 0.f)
 		{
 			Override(Attribute(Monster, TEXT("MaxRage")), Recipe.MaxRage);
@@ -707,6 +712,7 @@ namespace knightRecipe
 		Definition->EnrageEffect = Enrage;
 		Definition->ExhaustEffect = Exhaust;
 		Definition->ParriedPoiseDamageRatio = Recipe.ParriedPoiseDamageRatio;
+		Definition->ParriedPoiseBlockedTags = Recipe.ParriedPoiseBlockedTags;
 		Definition->TargetRadius = Recipe.TargetRadius;
 		Definition->FallbackLockOnSocket = Recipe.FallbackLockOnSocket;
 		Definition->ChaseStopDistance = Recipe.ChaseStopDistance;
@@ -1603,6 +1609,7 @@ UknightMonsterRecipe* UknightMonsterRecipeLibrary::CreateRecipeFromMonster(TSubc
 	}
 
 	Recipe->ParriedPoiseDamageRatio = Definition->ParriedPoiseDamageRatio;
+	Recipe->ParriedPoiseBlockedTags = Definition->ParriedPoiseBlockedTags;
 	Recipe->TargetRadius = Definition->TargetRadius;
 	Recipe->FallbackLockOnSocket = Definition->FallbackLockOnSocket;
 	Recipe->ChaseStopDistance = Definition->ChaseStopDistance;
@@ -1638,6 +1645,7 @@ UknightMonsterRecipe* UknightMonsterRecipeLibrary::CreateRecipeFromMonster(TSubc
 				if (Attribute == TEXT("MaxHealth")) { Recipe->MaxHealth = Value; }
 				else if (Attribute == TEXT("AttackPower")) { Recipe->AttackPower = Value; }
 				else if (Attribute == TEXT("MaxPoise")) { Recipe->MaxPoise = Value; }
+				else if (Attribute == TEXT("PoiseDamageTakenMultiplier")) { Recipe->PoiseDamageTakenMultiplier = Value; }
 				else if (Attribute == TEXT("MaxRage")) { Recipe->MaxRage = Value; }
 				else if (Attribute == TEXT("MaxStamina")) { Recipe->MaxStamina = Value; }
 			}
@@ -1670,6 +1678,7 @@ UknightMonsterRecipe* UknightMonsterRecipeLibrary::CreateRecipeFromMonster(TSubc
 				GetValue(CDO, TEXT("StartTurnYaw"), Attack.StartTurnYaw);
 				GetValue(CDO, TEXT("StartTurnRate"), Attack.StartTurnRate);
 				GetValue(CDO, TEXT("StartTurnMaxTime"), Attack.StartTurnMaxTime);
+				Attack.bParryBuildsPoise = GetBool(CDO, TEXT("bParryBuildsPoise"));
 				if (Attack.Type == EknightRecipeAttackType::Area)
 				{
 					Attack.HitWindows.Reset();

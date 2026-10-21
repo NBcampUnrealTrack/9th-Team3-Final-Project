@@ -112,6 +112,10 @@ struct FknightRecipeAttack
 	UPROPERTY(EditAnywhere, Category="Selection")
 	FknightMonsterAttackSelection Selection;
 
+	/** 퍼펙트 가드당하면 경직도가 깎인다. 원거리처럼 패링 보상만 주는 공격은 끈다. */
+	UPROPERTY(EditAnywhere, Category="Damage")
+	bool bParryBuildsPoise = true;
+
 	UPROPERTY(EditAnywhere, Category="Damage")
 	FknightMeleeHitParams HitParams;
 
@@ -316,6 +320,14 @@ public:
 	/** 퍼펙트 가드를 당할 때마다 깎이는 경직도(최대 경직도 비율). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stats", meta=(ClampMin=0, ClampMax=1))
 	float ParriedPoiseDamageRatio = 0.25f;
+
+	/** 플레이어 타격이 깎는 경직도 배율(받는 경직 배율). 0이면 타격으로는 그로기가 쌓이지 않고 퍼펙트 가드로만 쌓인다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stats", meta=(ClampMin=0))
+	float PoiseDamageTakenMultiplier = 1.f;
+
+	/** 이 태그 중 하나라도 있으면 퍼펙트 가드로도 경직도가 깎이지 않고, 붙는 순간 게이지가 비워진다(공명해방). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stats", meta=(Categories="State"))
+	FGameplayTagContainer ParriedPoiseBlockedTags;
 
 	/** 락온 카메라가 몬스터를 담는 반지름. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Targeting", meta=(ClampMin=0, Units="cm"))

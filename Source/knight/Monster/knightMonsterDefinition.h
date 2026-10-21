@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
+#include "GameplayTagContainer.h"
 #include "knightMonsterDefinition.generated.h"
 
 class UAnimMontage;
@@ -48,6 +49,13 @@ public:
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="States", meta=(ClampMin=0, ClampMax=1))
 	float ParriedPoiseDamageRatio = 0.f;
+
+	/**
+	 * 몬스터에 이 태그 중 하나라도 있으면 퍼펙트 가드를 당해도 경직도가 깎이지 않는다(잔향은 공명해방 중 그로기 없음).
+	 * 태그가 붙는 순간 경직도를 가득 채우므로, 태그가 떨어진 뒤에는 게이지가 처음부터 다시 쌓인다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="States", meta=(Categories="State"))
+	FGameplayTagContainer ParriedPoiseBlockedTags;
 
 	/**
 	 * 체력이 이 비율 밑으로 내려가면 State.Monster.Phase2를 붙인다(한 생에 한 번, 떼지 않는다). 0이면 2페이즈가 없다.
