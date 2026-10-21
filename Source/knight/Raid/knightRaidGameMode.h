@@ -58,6 +58,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|Raid")
 	void RegisterTargetMonster(AknightMonsterCharacterBase* Monster);
 
+	/** Accepts a confirmed broken part on this run's target once. Head/tail rewards read the resulting tags. */
+	UFUNCTION(BlueprintCallable, Category="Knight|Raid")
+	bool RecordBrokenPart(FGuid RunId, FName BossId, AknightMonsterCharacterBase* Monster, FGameplayTag PartTag);
+
 	const UknightRaidDefinition* GetRaidDefinition() const { return RaidDefinition; }
 
 	/** Monsters that must be defeated. Filled in StartPlay, after actors begin play. */
@@ -118,7 +122,7 @@ private:
 	void HandleMonsterTargetChanged(AActor* OldTarget, AActor* NewTarget);
 
 	UFUNCTION()
-	void HandlePartBroken(FGameplayTag PartTag, AActor* BreakInstigator);
+	void HandlePartBroken(FGameplayTag PartTag, AActor* BreakInstigator, AActor* BrokenMonster);
 
 	void HandleMonsterEnragedChanged(const FGameplayTag Tag, int32 NewCount);
 

@@ -67,4 +67,11 @@ struct KNIGHT_API FknightRaidResult
 	/** Items won. Added to the item box by UknightProgressionSubsystem. */
 	UPROPERTY(BlueprintReadOnly, Category="Raid")
 	TArray<FknightItemStack> Rewards;
+
+	/** Actual quest payout for this run, set once by progression before showing the result screen. */
+	UPROPERTY(BlueprintReadOnly, Category="Raid")
+	int64 MoneyEarned = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category="Raid")
+	int32 FirstBossSocketSlotsEarned = 0;
 };

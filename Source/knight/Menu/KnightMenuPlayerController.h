@@ -28,6 +28,11 @@ public:
 	UFUNCTION(Exec) void KnightCoreProfileStatus();
 	UFUNCTION(Exec) void KnightCoreUseFixedSlot(int32 SlotNumber);
 	UFUNCTION(Exec) void KnightCoreReturnTitle();
+	/** Isolated editor-only settlement probes; refuse to run without -KnightSaveTestNamespace. */
+	UFUNCTION(Exec) void KnightCoreRewardTestSlot(int32 SlotNumber);
+	UFUNCTION(Exec) void KnightCoreRewardFailNextSaves(int32 Count);
+	UFUNCTION(Exec) void KnightCoreRewardResult(FName QuestId, int32 bSuccess, int32 bHead, int32 bTail);
+	UFUNCTION(Exec) void KnightCoreRewardStatus();
 
 protected:
 	virtual void BeginPlay() override;

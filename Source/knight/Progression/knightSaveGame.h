@@ -36,8 +36,9 @@ public:
 	 * Bump when the layout changes, and handle the old version in UknightSaveSubsystem::MigrateSave.
 	 * 1: items keyed by FName. 2: primary asset IDs and equipment. 3: explicit unlocks and applied run IDs.
 	 * 5: confirmed quest IDs (older saves default to an empty set).
+	 * 6: money and first-boss shared socket awards (older saves default to zero/empty).
 	 */
-	static constexpr int32 CurrentVersion = 5;
+	static constexpr int32 CurrentVersion = 6;
 
 	UPROPERTY(SaveGame)
 	int32 SaveVersion = CurrentVersion;
@@ -56,6 +57,17 @@ public:
 	/** Confirmed quest completions for this save slot. Independent of stage clears and raid results. */
 	UPROPERTY(SaveGame)
 	TSet<FName> CompletedQuestIds;
+
+	/** Slot currency for quest rewards, later sales and upgrades. */
+	UPROPERTY(SaveGame)
+	int64 Money = 0;
+
+	/** One first-clear award per BossId across all difficulties. */
+	UPROPERTY(SaveGame)
+	TSet<FName> FirstDefeatedBossIds;
+
+	UPROPERTY(SaveGame)
+	int32 UnlockedSharedSocketSlots = 0;
 
 	/** The item box: owned count per item. */
 	UPROPERTY(SaveGame)

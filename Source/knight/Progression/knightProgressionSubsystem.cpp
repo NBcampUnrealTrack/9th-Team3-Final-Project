@@ -7,6 +7,7 @@
 #include "Item/knightEquipmentData.h"
 #include "Item/knightEquipmentStats.h"
 #include "knightInventoryLibrary.h"
+#include "Quest/KnightQuestData.h"
 #include "Progression/knightSaveGame.h"
 #include "Progression/knightSaveSubsystem.h"
 #include "Raid/knightRaidSubsystem.h"
@@ -19,6 +20,13 @@ namespace
 	{
 		const auto Defaults = knightEquipmentStats::ReadLoadout(nullptr, UknightEquipmentSettings::LoadCatalog());
 		return Defaults.FindRef(Slot);
+	}
+
+	bool RecordQuestCompletionInSave(UknightSaveGame& Save, FName QuestId)
+	{
+		if (QuestId.IsNone() || Save.CompletedQuestIds.Contains(QuestId)) return false;
+		Save.CompletedQuestIds.Add(QuestId);
+		return true;
 	}
 }
 
@@ -62,8 +70,7 @@ bool UknightProgressionSubsystem::RecordQuestCompleted(FName QuestId)
 {
 	const UknightSaveSubsystem* const SaveSubsystem = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
 	UknightSaveGame* const Save = SaveSubsystem && SaveSubsystem->HasSelectedSlot() ? GetSave() : nullptr;
-	if (!Save || QuestId.IsNone() || Save->CompletedQuestIds.Contains(QuestId)) return false;
-	Save->CompletedQuestIds.Add(QuestId);
+	if (!Save || !RecordQuestCompletionInSave(*Save, QuestId)) return false;
 	CommitChange();
 	return true;
 }
@@ -75,14 +82,159 @@ bool UknightProgressionSubsystem::IsQuestCompleted(FName QuestId) const
 	return Save && !QuestId.IsNone() && Save->CompletedQuestIds.Contains(QuestId);
 }
 
+int64 UknightProgressionSubsystem::GetMoney() const
+{
+	const UknightSaveGame* const Save = GetSave();
+	return Save ? Save->Money : 0;
+}
+
+bool UknightProgressionSubsystem::AddMoney(int64 Amount)
+{
+	const UknightSaveSubsystem* const Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	UknightSaveGame* const Save = Saves && Saves->HasSelectedSlot() ? GetSave() : nullptr;
+	if (!Save || Amount <= 0 || Save->Money > MAX_int64 - Amount) return false;
+	Save->Money += Amount;
+	CommitChange();
+	return true;
+}
+
+bool UknightProgressionSubsystem::SpendMoney(int64 Amount)
+{
+	const UknightSaveSubsystem* const Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	UknightSaveGame* const Save = Saves && Saves->HasSelectedSlot() ? GetSave() : nullptr;
+	if (!Save || Amount <= 0 || Save->Money < Amount) return false;
+	Save->Money -= Amount;
+	CommitChange();
+	return true;
+}
+
+int32 UknightProgressionSubsystem::GetUnlockedSharedSocketSlots() const
+{
+	const UknightSaveGame* const Save = GetSave();
+	return Save ? Save->UnlockedSharedSocketSlots : 0;
+}
+
+bool UknightProgressionSubsystem::HasFirstDefeatedBoss(FName BossId) const
+{
+	const UknightSaveGame* const Save = GetSave();
+	return Save && !BossId.IsNone() && Save->FirstDefeatedBossIds.Contains(BossId);
+}
+
 void UknightProgressionSubsystem::HandleRaidResult(const FknightRaidResult& Result)
 {
-	UknightSaveGame* const Save = GetSave();
-	if (!Save || !Result.RunId.IsValid() || Save->AppliedRaidRuns.Contains(Result.RunId))
+	UknightSaveSubsystem* const Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	UknightSaveGame* const Save = Saves && Saves->HasSelectedSlot() ? Saves->GetSaveGame() : nullptr;
+	if (!Save || !Result.RunId.IsValid() || Save->AppliedRaidRuns.Contains(Result.RunId)) return;
+
+	const bool bQuestRun = !Result.QuestContext.QuestId.IsNone();
+	const UKnightQuestDefinition* Quest = nullptr;
+	if (bQuestRun)
 	{
+		const FKnightQuestRunContext& Context = Result.QuestContext;
+		const UKnightQuestCatalog* const Catalog = UKnightQuestSettings::LoadCatalog();
+		Quest = Catalog ? Catalog->FindQuest(Context.QuestId) : nullptr;
+		FText DataReason;
+		if (!Context.IsValid() || Context.RunId != Result.RunId || Context.StageId != Result.StageId
+			|| Context.SlotId != Saves->GetActiveSlotId() || !Quest || !Quest->bContentEnabled
+			|| !Quest->HasValidConfiguration(DataReason) || Quest->StageId != Context.StageId
+			|| Quest->BossId != Context.BossId || Quest->Difficulty != Context.Difficulty)
+		{
+			UE_LOG(Logknight, Error, TEXT("Quest settlement rejected run=%s quest=%s slot=%s activeSlot=%s: %s"),
+				*Result.RunId.ToString(), *Context.QuestId.ToString(), *Context.SlotId,
+				*Saves->GetActiveSlotId(), *DataReason.ToString());
+			return;
+		}
+	}
+	if (Result.bSuccess && !Result.StageId.IsNone()
+		&& Save->StageRecords.FindRef(Result.StageId).ClearCount == MAX_int32)
+	{
+		UE_LOG(Logknight, Error, TEXT("Raid settlement rejected: clear count overflow for %s."), *Result.StageId.ToString());
 		return;
 	}
-	Save->AppliedRaidRuns.Add(Result.RunId);
+
+	// Plan the whole grant before touching the save. Quest runs ignore the raid definition's legacy
+	// reward list; direct-stage runs keep that existing list. Every quest line rolls independently.
+	TMap<FPrimaryAssetId, int64> Counts;
+	TMap<FPrimaryAssetId, const UknightItemDefinition*> Definitions;
+	auto AddPlannedItem = [&Counts, &Definitions](const UknightItemDefinition* Item, int32 Count)
+	{
+		const FPrimaryAssetId Id = Item ? Item->GetPrimaryAssetId() : FPrimaryAssetId();
+		if (!Id.IsValid() || Count <= 0) return false;
+		int64& Total = Counts.FindOrAdd(Id);
+		if (Total > MAX_int32 - Count) return false;
+		Total += Count;
+		Definitions.FindOrAdd(Id) = Item;
+		return true;
+	};
+	auto RollLine = [&AddPlannedItem](const FknightRaidReward& Line)
+	{
+		if (Line.Chance <= 0.f || FMath::FRand() >= Line.Chance) return true;
+		return AddPlannedItem(Line.Item, FMath::RandRange(Line.MinCount, Line.MaxCount));
+	};
+	if (Result.bSuccess)
+	{
+		if (Quest)
+		{
+			for (const FknightRaidReward& Line : Quest->ClearRewards)
+			{
+				if (!RollLine(Line)) return;
+			}
+			for (const FKnightQuestPartBreakReward& Entry : Quest->PartBreakRewards)
+			{
+				if (Result.BrokenParts.HasTagExact(Entry.Reward.RequiredBrokenPart) && !RollLine(Entry.Reward)) return;
+			}
+		}
+		else
+		{
+			for (const FknightItemStack& Stack : Result.Rewards)
+			{
+				if (!AddPlannedItem(Stack.Item, Stack.Count)) return;
+			}
+		}
+	}
+	for (const TPair<FPrimaryAssetId, int64>& Entry : Counts)
+	{
+		const int32 Owned = Save->ItemCounts.FindRef(Entry.Key);
+		if (Owned < 0 || Entry.Value > MAX_int32 - Owned)
+		{
+			UE_LOG(Logknight, Error, TEXT("Raid settlement rejected: item count overflow for %s."), *Entry.Key.ToString());
+			return;
+		}
+	}
+	const int64 MoneyAward = Result.bSuccess && Quest ? Quest->MoneyReward : 0;
+	const int32 SocketAward = Result.bSuccess && Quest && !Save->FirstDefeatedBossIds.Contains(Quest->BossId)
+		? Quest->FirstBossSocketSlots : 0;
+	if (MoneyAward < 0 || Save->Money > MAX_int64 - MoneyAward
+		|| SocketAward < 0 || Save->UnlockedSharedSocketSlots > MAX_int32 - SocketAward)
+	{
+		UE_LOG(Logknight, Error, TEXT("Raid settlement rejected: money or shared socket overflow."));
+		return;
+	}
+
+	FknightRaidResult Settled = Result;
+	Settled.Rewards.Reset();
+	for (const TPair<FPrimaryAssetId, int64>& Entry : Counts)
+	{
+		Settled.Rewards.Emplace(Definitions.FindChecked(Entry.Key), static_cast<int32>(Entry.Value));
+	}
+	Settled.MoneyEarned = MoneyAward;
+	Settled.FirstBossSocketSlotsEarned = SocketAward;
+	for (const TPair<FPrimaryAssetId, int64>& Entry : Counts)
+	{
+		Save->ItemCounts.FindOrAdd(Entry.Key) += static_cast<int32>(Entry.Value);
+	}
+	Save->Money += MoneyAward;
+	if (Result.bSuccess && Quest)
+	{
+		// Share RecordQuestCompleted's idempotent record step, but defer its save/notification
+		// until the entire raid grant and RunId are in the same snapshot.
+		RecordQuestCompletionInSave(*Save, Quest->QuestId);
+		if (!Save->FirstDefeatedBossIds.Contains(Quest->BossId))
+		{
+			Save->FirstDefeatedBossIds.Add(Quest->BossId);
+			Save->UnlockedSharedSocketSlots += SocketAward;
+		}
+	}
 	if (Result.bSuccess && !Result.StageId.IsNone())
 	{
 		FknightStageRecord& Record = Save->StageRecords.FindOrAdd(Result.StageId);
@@ -92,14 +244,14 @@ void UknightProgressionSubsystem::HandleRaidResult(const FknightRaidResult& Resu
 			Record.BestClearTime = Result.ElapsedTime;
 		}
 	}
-	for (const FknightItemStack& Reward : Result.Rewards)
+	Save->AppliedRaidRuns.Add(Result.RunId);
+	if (UknightRaidSubsystem* const Raid = GetGameInstance()->GetSubsystem<UknightRaidSubsystem>())
 	{
-		if (Result.bSuccess && Reward.Item && Reward.Count > 0 && Reward.Item->GetPrimaryAssetId().IsValid()
-			&& Save->ItemCounts.FindRef(Reward.Item->GetPrimaryAssetId()) <= MAX_int32 - Reward.Count)
-		{
-			Save->ItemCounts.FindOrAdd(Reward.Item->GetPrimaryAssetId()) += Reward.Count;
-		}
+		Raid->SetSettledResult(Settled);
 	}
+	UE_LOG(Logknight, Log, TEXT("Raid settled run=%s quest=%s slot=%s items=%d money=%lld sockets=%d"),
+		*Result.RunId.ToString(), Quest ? *Quest->QuestId.ToString() : TEXT("None"),
+		*Saves->GetActiveSlotId(), Settled.Rewards.Num(), MoneyAward, SocketAward);
 	CommitChange();
 }
 

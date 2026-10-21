@@ -7,6 +7,7 @@
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "Progression/knightSaveGame.h"
+#include "Raid/knightRaidSubsystem.h"
 #include "knight.h"
 
 const FString UknightSaveSubsystem::SlotName = TEXT("KnightProgress");
@@ -24,6 +25,7 @@ void UknightSaveSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 void UknightSaveSubsystem::Deinitialize()
 {
 	FTSTicker::GetCoreTicker().RemoveTicker(PlayTimeTickerHandle);
+	if (SaveRetryTickerHandle.IsValid()) FTSTicker::GetCoreTicker().RemoveTicker(SaveRetryTickerHandle);
 	Super::Deinitialize();
 }
 
@@ -183,6 +185,8 @@ bool UknightSaveSubsystem::MigrateSave(UknightSaveGame& Save) const
 		if (!Entry.Key.IsValid() || Entry.Value < 0) return false;
 	}
 	Save.CompletedQuestIds.Remove(NAME_None);
+	Save.FirstDefeatedBossIds.Remove(NAME_None);
+	if (Save.Money < 0 || Save.UnlockedSharedSocketSlots < 0) return false;
 	if (!FMath::IsFinite(Save.TotalPlayTime) || Save.TotalPlayTime < 0.f) return false;
 	Save.SaveVersion = UknightSaveGame::CurrentVersion;
 	return true;
@@ -222,6 +226,18 @@ bool UknightSaveSubsystem::SelectSlot(const FString& SlotId)
 {
 	FString NewSlot;
 	if (bSaveInFlight || !MakeSlotName(SlotId, NewSlot)) return false;
+	if (bSaveRecoveryPending && NewSlot != ActiveSlotName)
+	{
+		UE_LOG(Logknight, Error, TEXT("Cannot leave slot %s while its latest state is unsaved; retry RequestSave."), *ActiveSlotName);
+		return false;
+	}
+	// A quest result must be credited to the same profile that accepted the launch.
+	if (NewSlot != ActiveSlotName)
+	{
+		const UknightRaidSubsystem* const Raid = GetGameInstance()
+			? GetGameInstance()->GetSubsystem<UknightRaidSubsystem>() : nullptr;
+		if (Raid && Raid->GetCurrentRunId().IsValid()) return false;
+	}
 	if (NewSlot == ActiveSlotName)
 	{
 		const bool bWasSelected = bSlotSelected;
@@ -262,6 +278,7 @@ void UknightSaveSubsystem::StartAsyncSave()
 {
 	bSaveInFlight = true;
 	bSavePending = false;
+	SaveRetryCount = 0;
 	InFlightSlotName = ActiveSlotName;
 	SaveSnapshot = DuplicateObject<UknightSaveGame>(SaveGame, this);
 	if (!SaveSnapshot)
@@ -271,6 +288,11 @@ void UknightSaveSubsystem::StartAsyncSave()
 		OnSaveFinished.Broadcast(false);
 		return;
 	}
+	LaunchSaveAttempt();
+}
+
+void UknightSaveSubsystem::LaunchSaveAttempt()
+{
 	#if WITH_EDITOR
 	if (DebugFailuresRemaining > 0)
 	{
@@ -288,6 +310,13 @@ void UknightSaveSubsystem::StartAsyncSave()
 		FAsyncSaveGameToSlotDelegate::CreateUObject(this, &ThisClass::HandleAsyncSaveFinished));
 }
 
+bool UknightSaveSubsystem::RetryFailedSave(float DeltaTime)
+{
+	SaveRetryTickerHandle.Reset();
+	if (bSaveInFlight && SaveSnapshot && !InFlightSlotName.IsEmpty()) LaunchSaveAttempt();
+	return false;
+}
+
 #if WITH_EDITOR
 void UknightSaveSubsystem::HandleDebugSaveFailure()
 {
@@ -303,13 +332,25 @@ void UknightSaveSubsystem::HandleAsyncSaveFinished(const FString& Slot, int32 Us
 		UE_LOG(Logknight, Error, TEXT("Ignoring stale save completion for slot %s."), *CompletedSlot);
 		return;
 	}
+	if (!bSuccess)
+	{
+		if (SaveSnapshot && SaveRetryCount < 2)
+		{
+			++SaveRetryCount;
+			UE_LOG(Logknight, Warning, TEXT("Saving slot %s failed; retry %d uses the same snapshot."),
+				*CompletedSlot, SaveRetryCount);
+			SaveRetryTickerHandle = FTSTicker::GetCoreTicker().AddTicker(
+				FTickerDelegate::CreateUObject(this, &ThisClass::RetryFailedSave), 0.5f);
+			return;
+		}
+		UE_LOG(Logknight, Error, TEXT("Saving slot %s failed after retries; the in-memory state remains available for RequestSave."),
+			*CompletedSlot);
+		bSaveRecoveryPending = true;
+	}
+	else bSaveRecoveryPending = false;
 	bSaveInFlight = false;
 	SaveSnapshot = nullptr;
 	InFlightSlotName.Reset();
-	if (!bSuccess)
-	{
-		UE_LOG(Logknight, Error, TEXT("Saving slot %s failed."), *CompletedSlot);
-	}
 	UE_LOG(Logknight, Log, TEXT("Save completion slot=%s success=%d followUp=%d"), *CompletedSlot, bSuccess, bSavePending);
 	if (bSavePending)
 	{
@@ -321,7 +362,7 @@ void UknightSaveSubsystem::HandleAsyncSaveFinished(const FString& Slot, int32 Us
 
 void UknightSaveSubsystem::ResetSave()
 {
-	if (bSaveInFlight || (UGameplayStatics::DoesSaveGameExist(ActiveSlotName, UserIndex)
+	if (bSaveInFlight || bSaveRecoveryPending || (UGameplayStatics::DoesSaveGameExist(ActiveSlotName, UserIndex)
 		&& !UGameplayStatics::DeleteGameInSlot(ActiveSlotName, UserIndex)))
 	{
 		OnSaveFinished.Broadcast(false);

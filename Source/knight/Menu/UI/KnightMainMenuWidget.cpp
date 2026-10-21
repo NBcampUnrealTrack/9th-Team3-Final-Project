@@ -87,8 +87,9 @@ void UKnightMainMenuWidget::NativeConstruct()
 			RewardCount += FMath::Max(0, Reward.Count);
 		}
 		SetStatusText(Result.bSuccess
-			? FText::Format(LOCTEXT("RaidSuccessResult", "레이드 성공: {0} | 보상 {1}개"),
-				FText::FromName(Result.StageId), FText::AsNumber(RewardCount))
+			? FText::Format(LOCTEXT("RaidSuccessResult", "레이드 성공: {0} | 아이템 {1}개 | 돈 +{2} | 소켓 +{3}"),
+				FText::FromName(Result.StageId), FText::AsNumber(RewardCount),
+				FText::AsNumber(Result.MoneyEarned), FText::AsNumber(Result.FirstBossSocketSlotsEarned))
 			: FText::Format(LOCTEXT("RaidFailedResult", "레이드 실패: {0}"), FText::FromName(Result.StageId)));
 		Session->ClearLastResult();
 	}

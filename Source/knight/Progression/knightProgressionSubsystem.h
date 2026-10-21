@@ -44,6 +44,23 @@ public:
 	UFUNCTION(BlueprintPure, Category="Knight|Progression|Quest")
 	bool IsQuestCompleted(FName QuestId) const;
 
+	UFUNCTION(BlueprintPure, Category="Knight|Progression|Rewards")
+	int64 GetMoney() const;
+
+	/** Credit positive currency, with overflow protection. */
+	UFUNCTION(BlueprintCallable, Category="Knight|Progression|Rewards")
+	bool AddMoney(int64 Amount);
+
+	/** Spend only when the full amount is available. */
+	UFUNCTION(BlueprintCallable, Category="Knight|Progression|Rewards")
+	bool SpendMoney(int64 Amount);
+
+	UFUNCTION(BlueprintPure, Category="Knight|Progression|Rewards")
+	int32 GetUnlockedSharedSocketSlots() const;
+
+	UFUNCTION(BlueprintPure, Category="Knight|Progression|Rewards")
+	bool HasFirstDefeatedBoss(FName BossId) const;
+
 	/** Zero if never cleared. */
 	UFUNCTION(BlueprintPure, Category="Knight|Progression")
 	float GetBestClearTime(FName StageId) const;

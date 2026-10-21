@@ -8,9 +8,13 @@
 #include "GameFlow/KnightGameFlowSubsystem.h"
 #include "Progression/knightSaveGame.h"
 #include "Progression/knightSaveSubsystem.h"
+#include "Quest/KnightQuestData.h"
 #include "Raid/knightRaidSubsystem.h"
+#include "knightItemDefinition.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "TimerManager.h"
 #include "knight.h"
 
@@ -195,5 +199,105 @@ void AKnightMenuPlayerController::KnightCoreProfileStatus()
 		Saves && Saves->DidLoadFail(), Saves && Saves->IsSaveInFlight(), MaterialCount,
 		Save ? Save->ItemUpgradeLevels.Num() : -1, Save ? Save->UnlockedStages.Num() : -1,
 		Save ? Save->AppliedRaidRuns.Num() : -1);
+#endif
+}
+
+namespace
+{
+	bool IsIsolatedRewardProbe()
+	{
+#if WITH_EDITOR
+		FString Namespace;
+		return FParse::Value(FCommandLine::Get(), TEXT("KnightSaveTestNamespace="), Namespace) && !Namespace.IsEmpty();
+#else
+		return false;
+#endif
+	}
+}
+
+void AKnightMenuPlayerController::KnightCoreRewardTestSlot(int32 SlotNumber)
+{
+#if WITH_EDITOR
+	if (!IsIsolatedRewardProbe()) return;
+	UknightSaveSubsystem* const Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	const bool bSelected = Saves && Saves->SelectFixedSlot(SlotNumber);
+	UE_LOG(Logknight, Log, TEXT("KnightCoreRewardTestSlot requested=%d selected=%d active=%s"), SlotNumber,
+		bSelected, Saves ? *Saves->GetActiveSlotId() : TEXT("None"));
+#endif
+}
+
+void AKnightMenuPlayerController::KnightCoreRewardFailNextSaves(int32 Count)
+{
+#if WITH_EDITOR
+	if (!IsIsolatedRewardProbe()) return;
+	if (UknightSaveSubsystem* const Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>())
+	{
+		Saves->DebugFailNextSaves(Count);
+		UE_LOG(Logknight, Log, TEXT("KnightCoreRewardFailNextSaves count=%d"), Count);
+	}
+#endif
+}
+
+void AKnightMenuPlayerController::KnightCoreRewardResult(FName QuestId, int32 bSuccess, int32 bHead, int32 bTail)
+{
+#if WITH_EDITOR
+	if (!IsIsolatedRewardProbe()) return;
+	UknightSaveSubsystem* const Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	UknightRaidSubsystem* const Raid = GetGameInstance()->GetSubsystem<UknightRaidSubsystem>();
+	const UKnightQuestCatalog* const Catalog = UKnightQuestSettings::LoadCatalog();
+	const UKnightQuestDefinition* const Quest = Catalog ? Catalog->FindQuest(QuestId) : nullptr;
+	if (!Saves || !Saves->HasSelectedSlot() || Saves->IsSaveInFlight() || !Raid || !Quest
+		|| !Quest->bContentEnabled || Quest->StageId.IsNone() || Quest->BossId.IsNone()
+		|| Raid->GetCurrentRunId().IsValid())
+	{
+		UE_LOG(Logknight, Error, TEXT("KnightCoreRewardResult refused quest=%s"), *QuestId.ToString());
+		return;
+	}
+	FknightRaidResult Result;
+	Result.RunId = Raid->BeginRun(Quest->StageId, Quest->QuestId, Quest->BossId, Quest->Difficulty,
+		Saves->GetActiveSlotId());
+	const int32 OtherSlot = Saves->GetActiveFixedSlotNumber() == 1 ? 2 : 1;
+	const bool bCrossSlotAccepted = Saves->SelectFixedSlot(OtherSlot);
+	UE_LOG(Logknight, Log, TEXT("KnightCoreRewardResult active-run cross-slot switch accepted=%d"), bCrossSlotAccepted);
+	Result.StageId = Quest->StageId;
+	Result.bSuccess = bSuccess != 0;
+	for (const FKnightQuestPartBreakReward& Entry : Quest->PartBreakRewards)
+	{
+		if ((Entry.Part == EKnightQuestBreakPart::Head && bHead != 0)
+			|| (Entry.Part == EKnightQuestBreakPart::Tail && bTail != 0))
+		{
+			Result.BrokenParts.AddTag(Entry.Reward.RequiredBrokenPart);
+		}
+	}
+	const bool bAccepted = Raid->RecordResult(Result);
+	const bool bDuplicateAccepted = Raid->RecordResult(Result);
+	FknightRaidResult Settled;
+	Raid->GetLastResult(Settled);
+	UE_LOG(Logknight, Log, TEXT("KnightCoreRewardResult quest=%s run=%s success=%d head=%d tail=%d accepted=%d duplicateAccepted=%d itemKinds=%d money=%lld sockets=%d"),
+		*QuestId.ToString(), *Result.RunId.ToString(), Result.bSuccess, bHead, bTail, bAccepted, bDuplicateAccepted,
+		Settled.Rewards.Num(), Settled.MoneyEarned, Settled.FirstBossSocketSlotsEarned);
+	for (const FknightItemStack& Stack : Settled.Rewards)
+	{
+		UE_LOG(Logknight, Log, TEXT("KnightCoreRewardItem item=%s count=%d"),
+			Stack.Item ? *Stack.Item->GetPrimaryAssetId().ToString() : TEXT("None"), Stack.Count);
+	}
+	Raid->EndRun();
+#endif
+}
+
+void AKnightMenuPlayerController::KnightCoreRewardStatus()
+{
+#if WITH_EDITOR
+	if (!IsIsolatedRewardProbe()) return;
+	const UknightSaveSubsystem* const Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	const UknightSaveGame* const Save = Saves && Saves->HasSelectedSlot() ? Saves->GetSaveGame() : nullptr;
+	if (!Save) return;
+	UE_LOG(Logknight, Log, TEXT("KnightCoreRewardStatus slot=%s money=%lld sockets=%d firstBosses=%d completedQuests=%d appliedRuns=%d saveBusy=%d"),
+		*Saves->GetActiveSlotId(), Save->Money, Save->UnlockedSharedSocketSlots,
+		Save->FirstDefeatedBossIds.Num(), Save->CompletedQuestIds.Num(), Save->AppliedRaidRuns.Num(), Saves->IsSaveInFlight());
+	for (const TPair<FPrimaryAssetId, int32>& Entry : Save->ItemCounts)
+	{
+		UE_LOG(Logknight, Log, TEXT("KnightCoreRewardOwned item=%s count=%d"), *Entry.Key.ToString(), Entry.Value);
+	}
 #endif
 }

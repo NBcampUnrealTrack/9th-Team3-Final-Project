@@ -232,6 +232,13 @@ bool UKnightGameFlowSubsystem::RequestStartQuest(FName QuestId, FText& OutReason
 		OutReason = LOCTEXT("QuestNotInMenu", "메인메뉴에서만 출격할 수 있습니다.");
 		return RejectRequest(EKnightFlowState::Gameplay, OutReason);
 	}
+	const UknightSaveSubsystem* const Saves = GetGameInstance()
+		? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
+	if (!Saves || !Saves->HasSelectedSlot())
+	{
+		OutReason = LOCTEXT("QuestNoSaveSlot", "저장 슬롯을 먼저 선택해야 합니다.");
+		return RejectRequest(EKnightFlowState::Gameplay, OutReason);
+	}
 	const UKnightQuestCatalog* const Catalog = UKnightQuestSettings::LoadCatalog();
 	const UKnightQuestDefinition* const Quest = Catalog ? Catalog->FindQuest(QuestId) : nullptr;
 	if (!Catalog || !Quest)
@@ -295,6 +302,10 @@ bool UKnightGameFlowSubsystem::RequestStartStageInternal(FName StageId, const UK
 		PendingQuestContext.StageId = Quest->StageId;
 		PendingQuestContext.BossId = Quest->BossId;
 		PendingQuestContext.Difficulty = Quest->Difficulty;
+		if (const UknightSaveSubsystem* const Saves = GameInstance->GetSubsystem<UknightSaveSubsystem>())
+		{
+			PendingQuestContext.SlotId = Saves->GetActiveSlotId();
+		}
 	}
 	PendingDestination = EKnightFlowState::Gameplay;
 	PendingMapPackage = MapPackage;
@@ -387,7 +398,7 @@ bool UKnightGameFlowSubsystem::BeginTravel(EKnightFlowState Destination, const F
 			PendingRunId = PendingQuestContext.QuestId.IsNone()
 				? Session->BeginRun(StageId)
 				: Session->BeginRun(StageId, PendingQuestContext.QuestId, PendingQuestContext.BossId,
-					PendingQuestContext.Difficulty);
+					PendingQuestContext.Difficulty, PendingQuestContext.SlotId);
 		}
 	}
 	SetTravelPending(true);

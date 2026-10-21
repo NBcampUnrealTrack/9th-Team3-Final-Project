@@ -218,7 +218,7 @@ void AknightRaidGameMode::RegisterTargetMonster(AknightMonsterCharacterBase* Mon
 	}
 	if (UknightMonsterPartComponent* const Parts = Monster->GetPartComponent())
 	{
-		Parts->OnPartBroken.AddUniqueDynamic(this, &ThisClass::HandlePartBroken);
+		Parts->OnPartBrokenNative.AddUObject(this, &ThisClass::HandlePartBroken);
 	}
 	if (UAbilitySystemComponent* const ASC = Monster->GetAbilitySystemComponent())
 	{
@@ -425,9 +425,38 @@ void AknightRaidGameMode::HandleMonsterTargetChanged(AActor* OldTarget, AActor* 
 	}
 }
 
-void AknightRaidGameMode::HandlePartBroken(FGameplayTag PartTag, AActor* BreakInstigator)
+bool AknightRaidGameMode::RecordBrokenPart(FGuid RunId, FName BossId,
+	AknightMonsterCharacterBase* Monster, FGameplayTag PartTag)
 {
+	const UGameInstance* const GameInstance = GetGameInstance();
+	const UknightRaidSubsystem* const Raid = GameInstance ? GameInstance->GetSubsystem<UknightRaidSubsystem>() : nullptr;
+	const AknightRaidGameState* const State = GetRaidGameState();
+	const EknightRaidPhase Phase = State ? State->GetRaidPhase() : EknightRaidPhase::None;
+	if (!Raid || !RunId.IsValid() || Raid->GetCurrentRunId() != RunId || !Monster
+		|| !TargetMonsters.Contains(Monster) || !IsTargetMonster(Monster)
+		|| (Phase != EknightRaidPhase::Explore && Phase != EknightRaidPhase::Combat)
+		|| !PartTag.IsValid() || !PartTag.MatchesTag(knightGameplayTags::Monster_Part)
+		|| BrokenParts.HasTagExact(PartTag))
+	{
+		return false;
+	}
+	FKnightQuestRunContext Context;
+	const bool bQuestRun = Raid->GetActiveQuestRunContext(Context);
+	if ((bQuestRun && BossId != Context.BossId) || (!bQuestRun && !BossId.IsNone())) return false;
+	const UknightMonsterPartComponent* const Parts = Monster->GetPartComponent();
+	if (!Parts || !Parts->IsPartBroken(PartTag)) return false;
 	BrokenParts.AddTag(PartTag);
+	return true;
+}
+
+void AknightRaidGameMode::HandlePartBroken(FGameplayTag PartTag, AActor* BreakInstigator, AActor* BrokenMonster)
+{
+	const UGameInstance* const GameInstance = GetGameInstance();
+	const UknightRaidSubsystem* const Raid = GameInstance ? GameInstance->GetSubsystem<UknightRaidSubsystem>() : nullptr;
+	if (!Raid) return;
+	FKnightQuestRunContext Context;
+	const FName BossId = Raid->GetActiveQuestRunContext(Context) ? Context.BossId : NAME_None;
+	RecordBrokenPart(Raid->GetCurrentRunId(), BossId, Cast<AknightMonsterCharacterBase>(BrokenMonster), PartTag);
 }
 
 void AknightRaidGameMode::HandleMonsterDefeated(AknightMonsterCharacterBase* Monster, AActor* Killer)
@@ -489,7 +518,11 @@ void AknightRaidGameMode::FinishRaid(bool bSuccess, EknightRaidFailReason FailRe
 	Result.FailReason = FailReason;
 	Result.ElapsedTime = RaidState ? RaidState->GetElapsedRaidTime() : 0.f;
 	Result.BrokenParts = BrokenParts;
-	if (bSuccess && RaidDefinition)
+	FKnightQuestRunContext QuestContext;
+	const UknightRaidSubsystem* const ActiveRun = GameInstance ? GameInstance->GetSubsystem<UknightRaidSubsystem>() : nullptr;
+	const bool bQuestRun = ActiveRun && ActiveRun->GetActiveQuestRunContext(QuestContext)
+		&& QuestContext.RunId == Result.RunId && QuestContext.StageId == Result.StageId;
+	if (bSuccess && RaidDefinition && !bQuestRun)
 	{
 		RaidDefinition->RollRewards(BrokenParts, Result.Rewards);
 	}

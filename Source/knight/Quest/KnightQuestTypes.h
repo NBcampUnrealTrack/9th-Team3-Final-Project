@@ -28,11 +28,15 @@ struct KNIGHT_API FKnightQuestRunContext
 	UPROPERTY(BlueprintReadOnly, Category="Quest")
 	FName BossId;
 
+	/** Save slot selected when the launch was accepted. Never infer it from the result screen. */
+	UPROPERTY(BlueprintReadOnly, Category="Quest")
+	FString SlotId;
+
 	UPROPERTY(BlueprintReadOnly, Category="Quest")
 	EKnightQuestDifficulty Difficulty = EKnightQuestDifficulty::Normal;
 
 	bool IsValid() const
 	{
-		return RunId.IsValid() && !QuestId.IsNone() && !StageId.IsNone() && !BossId.IsNone();
+		return RunId.IsValid() && !QuestId.IsNone() && !StageId.IsNone() && !BossId.IsNone() && !SlotId.IsEmpty();
 	}
 };

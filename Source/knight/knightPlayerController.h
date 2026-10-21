@@ -50,6 +50,8 @@ public:
 	UFUNCTION(Exec) void KnightRaidDebugFailure();
 	UFUNCTION(Exec) void KnightRaidDebugReturn();
 	UFUNCTION(Exec) void KnightRaidDebugSettings();
+	/** Isolated editor probe: break the configured quest head/tail directly, without combat input. */
+	UFUNCTION(Exec) void KnightRaidDebugBreakQuestParts();
 
 protected:
 
