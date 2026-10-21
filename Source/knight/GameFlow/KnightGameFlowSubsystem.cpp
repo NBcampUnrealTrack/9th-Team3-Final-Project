@@ -9,6 +9,7 @@
 #include "Misc/PackageName.h"
 #include "Progression/knightProgressionSubsystem.h"
 #include "Progression/knightSaveSubsystem.h"
+#include "Quest/KnightQuestData.h"
 #include "Raid/knightRaidDefinition.h"
 #include "Raid/knightRaidSubsystem.h"
 #include "System/knightAssetManager.h"
@@ -215,38 +216,96 @@ bool UKnightGameFlowSubsystem::ResolveMapPackage(const TSoftObjectPtr<UWorld>& M
 
 bool UKnightGameFlowSubsystem::RequestStartStage(FName StageId)
 {
+	FText Reason;
+	return RequestStartStageInternal(StageId, nullptr, Reason);
+}
+
+bool UKnightGameFlowSubsystem::RequestStartQuest(FName QuestId, FText& OutReason)
+{
 	if (bTravelPending)
 	{
-		return RejectRequest(EKnightFlowState::Gameplay, LOCTEXT("TravelAlreadyPending", "A level transition is already in progress."));
+		OutReason = LOCTEXT("QuestTravelPending", "이미 출격 준비 중입니다.");
+		return RejectRequest(EKnightFlowState::Gameplay, OutReason);
 	}
 	if (CurrentFlowState != EKnightFlowState::MainMenu)
 	{
-		return RejectRequest(EKnightFlowState::Gameplay, LOCTEXT("NotInMainMenu", "Stages can only launch from the main menu."));
+		OutReason = LOCTEXT("QuestNotInMenu", "메인메뉴에서만 출격할 수 있습니다.");
+		return RejectRequest(EKnightFlowState::Gameplay, OutReason);
 	}
-	FText Reason;
-	if (!CanLaunchStage(StageId, Reason))
+	const UknightSaveSubsystem* const Saves = GetGameInstance()
+		? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
+	if (!Saves || !Saves->HasSelectedSlot())
 	{
-		return RejectRequest(EKnightFlowState::Gameplay, Reason);
+		OutReason = LOCTEXT("QuestNoSaveSlot", "저장 슬롯을 먼저 선택해야 합니다.");
+		return RejectRequest(EKnightFlowState::Gameplay, OutReason);
+	}
+	const UKnightQuestCatalog* const Catalog = UKnightQuestSettings::LoadCatalog();
+	const UKnightQuestDefinition* const Quest = Catalog ? Catalog->FindQuest(QuestId) : nullptr;
+	if (!Catalog || !Quest)
+	{
+		UE_LOG(Logknight, Error, TEXT("Quest launch rejected: missing catalog or QuestId %s."), *QuestId.ToString());
+		OutReason = LOCTEXT("QuestMissing", "퀘스트 정보를 확인할 수 없습니다.");
+		return RejectRequest(EKnightFlowState::Gameplay, OutReason);
+	}
+	if (!Catalog->CanSelectQuest(QuestId, GetGameInstance(), OutReason))
+	{
+		UE_LOG(Logknight, Warning, TEXT("Quest %s cannot launch: %s"), *QuestId.ToString(), *OutReason.ToString());
+		return RejectRequest(EKnightFlowState::Gameplay, OutReason);
+	}
+	return RequestStartStageInternal(Quest->StageId, Quest, OutReason);
+}
+
+bool UKnightGameFlowSubsystem::RequestStartStageInternal(FName StageId, const UKnightQuestDefinition* Quest, FText& OutReason)
+{
+	if (bTravelPending)
+	{
+		OutReason = LOCTEXT("TravelAlreadyPending", "A level transition is already in progress.");
+		return RejectRequest(EKnightFlowState::Gameplay, OutReason);
+	}
+	if (CurrentFlowState != EKnightFlowState::MainMenu)
+	{
+		OutReason = LOCTEXT("NotInMainMenu", "Stages can only launch from the main menu.");
+		return RejectRequest(EKnightFlowState::Gameplay, OutReason);
+	}
+	if (!CanLaunchStage(StageId, OutReason))
+	{
+		return RejectRequest(EKnightFlowState::Gameplay, OutReason);
 	}
 	FKnightStageDefinition Stage;
 	if (!FindStageDefinition(StageId, Stage))
 	{
-		return RejectRequest(EKnightFlowState::Gameplay, LOCTEXT("StageChanged", "Stage definition is no longer available."));
+		OutReason = LOCTEXT("StageChanged", "Stage definition is no longer available.");
+		return RejectRequest(EKnightFlowState::Gameplay, OutReason);
 	}
 	UGameInstance* const GameInstance = GetGameInstance();
 	UWorld* const World = GameInstance ? GameInstance->GetWorld() : nullptr;
 	if (!GEngine || !World || !World->IsGameWorld() || World->GetGameInstance() != GameInstance || RegisteredWorld.Get() != World)
 	{
-		return RejectRequest(EKnightFlowState::Gameplay, LOCTEXT("NoMenuWorld", "No registered main menu world is available for stage travel."));
+		OutReason = LOCTEXT("NoMenuWorld", "No registered main menu world is available for stage travel.");
+		return RejectRequest(EKnightFlowState::Gameplay, OutReason);
 	}
 	FString MapPackage;
 	if (!ResolveMapPackage(Stage.GameplayMap, MapPackage))
 	{
-		return RejectRequest(EKnightFlowState::Gameplay, LOCTEXT("StageMapChanged", "Stage map is no longer available."));
+		OutReason = LOCTEXT("StageMapChanged", "Stage map is no longer available.");
+		return RejectRequest(EKnightFlowState::Gameplay, OutReason);
 	}
 	if (Stage.RaidDefinition.IsNull())
 	{
+		PendingQuestContext = FKnightQuestRunContext();
 		return BeginTravel(EKnightFlowState::Gameplay, MapPackage, World, StageId);
+	}
+	PendingQuestContext = FKnightQuestRunContext();
+	if (Quest)
+	{
+		PendingQuestContext.QuestId = Quest->QuestId;
+		PendingQuestContext.StageId = Quest->StageId;
+		PendingQuestContext.BossId = Quest->BossId;
+		PendingQuestContext.Difficulty = Quest->Difficulty;
+		if (const UknightSaveSubsystem* const Saves = GameInstance->GetSubsystem<UknightSaveSubsystem>())
+		{
+			PendingQuestContext.SlotId = Saves->GetActiveSlotId();
+		}
 	}
 	PendingDestination = EKnightFlowState::Gameplay;
 	PendingMapPackage = MapPackage;
@@ -259,8 +318,10 @@ bool UKnightGameFlowSubsystem::RequestStartStage(FName StageId)
 	if (!PendingLoadHandle)
 	{
 		ResetPendingTravel();
-		return RejectRequest(EKnightFlowState::Gameplay, LOCTEXT("RaidLoadCouldNotStart", "Could not start loading the raid definition."));
+		OutReason = LOCTEXT("RaidLoadCouldNotStart", "Could not start loading the raid definition.");
+		return RejectRequest(EKnightFlowState::Gameplay, OutReason);
 	}
+	OutReason = FText::GetEmpty();
 	return true;
 }
 
@@ -334,7 +395,10 @@ bool UKnightGameFlowSubsystem::BeginTravel(EKnightFlowState Destination, const F
 	{
 		if (UknightRaidSubsystem* const Session = GetGameInstance()->GetSubsystem<UknightRaidSubsystem>())
 		{
-			PendingRunId = Session->BeginRun(StageId);
+			PendingRunId = PendingQuestContext.QuestId.IsNone()
+				? Session->BeginRun(StageId)
+				: Session->BeginRun(StageId, PendingQuestContext.QuestId, PendingQuestContext.BossId,
+					PendingQuestContext.Difficulty, PendingQuestContext.SlotId);
 		}
 	}
 	SetTravelPending(true);
@@ -407,6 +471,17 @@ void UKnightGameFlowSubsystem::RegisterEnteredGameplay(UWorld* EnteredWorld)
 	RegisteredWorld = EnteredWorld;
 	ActiveStageId = bWasPending ? PendingStageId : NAME_None;
 	ConfirmEnteredWorld(EKnightFlowState::Gameplay);
+	if (bWasPending)
+	{
+		FKnightQuestRunContext Context;
+		const UknightRaidSubsystem* const Session = GameInstance->GetSubsystem<UknightRaidSubsystem>();
+		if (Session && Session->GetActiveQuestRunContext(Context))
+		{
+			UE_LOG(Logknight, Log, TEXT("Quest run entered gameplay quest=%s stage=%s boss=%s difficulty=%d run=%s world=%s"),
+				*Context.QuestId.ToString(), *Context.StageId.ToString(), *Context.BossId.ToString(),
+				static_cast<int32>(Context.Difficulty), *Context.RunId.ToString(), *EnteredWorld->GetPathName());
+		}
+	}
 }
 
 void UKnightGameFlowSubsystem::HandleTravelFailure(UWorld* FailedWorld, ETravelFailure::Type FailureType, const FString& ErrorString)
@@ -449,6 +524,10 @@ void UKnightGameFlowSubsystem::HandlePostLoadMap(UWorld* LoadedWorld)
 	const bool bWasPending = bTravelPending;
 	const EKnightFlowState RequestedState = PendingDestination;
 	ResetPendingTravel();
+	if (UknightRaidSubsystem* const Session = GetGameInstance()->GetSubsystem<UknightRaidSubsystem>())
+	{
+		Session->EndRun();
+	}
 	RegisteredWorld.Reset();
 	ActiveStageId = NAME_None;
 	SetCurrentFlowState(EKnightFlowState::Uninitialized);
@@ -483,6 +562,13 @@ void UKnightGameFlowSubsystem::ConfirmEnteredWorld(EKnightFlowState NewState)
 {
 	// Publish an internally complete arrival before either delegate runs.
 	const EKnightFlowState PreviousState = CurrentFlowState;
+	if (NewState != EKnightFlowState::Gameplay)
+	{
+		if (UknightRaidSubsystem* const Session = GetGameInstance()->GetSubsystem<UknightRaidSubsystem>())
+		{
+			Session->EndRun();
+		}
+	}
 	const bool bWasPending = bTravelPending;
 	PendingDestination = EKnightFlowState::Uninitialized;
 	PendingMapPackage.Reset();
@@ -491,6 +577,7 @@ void UKnightGameFlowSubsystem::ConfirmEnteredWorld(EKnightFlowState NewState)
 	PendingRaidDefinitionPath.Reset();
 	PendingLoadHandle.Reset();
 	PendingRunId.Invalidate();
+	PendingQuestContext = FKnightQuestRunContext();
 	bTravelPending = false;
 	CurrentFlowState = NewState;
 	if (bWasPending)
@@ -520,6 +607,7 @@ void UKnightGameFlowSubsystem::ResetPendingTravel()
 	PendingMapPackage.Reset();
 	PendingSourceWorld.Reset();
 	PendingStageId = NAME_None;
+	PendingQuestContext = FKnightQuestRunContext();
 	SetTravelPending(false);
 }
 

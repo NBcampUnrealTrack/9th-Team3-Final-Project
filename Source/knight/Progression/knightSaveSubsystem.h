@@ -52,6 +52,13 @@ public:
 	UFUNCTION(BlueprintPure, Category="Knight|Save")
 	bool IsSaveInFlight() const { return bSaveInFlight; }
 
+	/** Atomic inventory transactions wait for the previous snapshot and any failed-save recovery. */
+	UFUNCTION(BlueprintPure, Category="Knight|Save")
+	bool CanStartAtomicTransaction() const { return HasSelectedSlot() && !bSaveInFlight && !bSaveRecoveryPending; }
+
+	UFUNCTION(BlueprintPure, Category="Knight|Save")
+	bool IsSaveRecoveryPending() const { return bSaveRecoveryPending; }
+
 	UFUNCTION(BlueprintPure, Category="Knight|Save")
 	FString GetActiveSlotId() const { return ActiveSlotId; }
 
@@ -93,6 +100,8 @@ private:
 	void AccumulatePlayTime();
 	bool CanCountPlayTime() const;
 	void StartAsyncSave();
+	void LaunchSaveAttempt();
+	bool RetryFailedSave(float DeltaTime);
 	void HandleAsyncSaveFinished(const FString& Slot, int32 User, bool bSuccess);
 
 	UPROPERTY(Transient)
@@ -112,8 +121,12 @@ private:
 	FTSTicker::FDelegateHandle PlayTimeTickerHandle;
 
 	bool bSaveInFlight = false;
+	/** Keep an unsaved settlement in memory until a retry succeeds; never switch or reset this slot. */
+	bool bSaveRecoveryPending = false;
 	bool bSavePending = false;
 	FString InFlightSlotName;
+	int32 SaveRetryCount = 0;
+	FTSTicker::FDelegateHandle SaveRetryTickerHandle;
 #if WITH_EDITOR
 	int32 DebugFailuresRemaining = 0;
 	FTimerHandle DebugFailureTimer;

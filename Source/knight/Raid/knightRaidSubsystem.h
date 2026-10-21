@@ -18,11 +18,18 @@ class KNIGHT_API UknightRaidSubsystem : public UGameInstanceSubsystem
 
 public:
 	/** Runtime context survives map travel. A new request replaces an unfinished run. */
-	FGuid BeginRun(FName StageId);
+	FGuid BeginRun(FName StageId, FName QuestId = NAME_None, FName BossId = NAME_None,
+		EKnightQuestDifficulty Difficulty = EKnightQuestDifficulty::Normal, const FString& SlotId = FString());
 	void CancelRun(FGuid RunId);
+	/** Clears active run data on confirmed menu return, preserving LastResult for the result UI. */
+	void EndRun();
 	FGuid GetCurrentRunId() const { return CurrentRunId; }
 	FName GetSelectedStageId() const { return SelectedStageId; }
+	UFUNCTION(BlueprintCallable, Category="Knight|Raid")
+	bool GetActiveQuestRunContext(FKnightQuestRunContext& OutContext) const;
 	bool RecordResult(const FknightRaidResult& Result);
+	/** Writes the already calculated settlement onto the result shown after travel. Does not broadcast or pay again. */
+	bool SetSettledResult(const FknightRaidResult& SettledResult);
 
 	/** False if no raid has finished since the last ClearLastResult. */
 	UFUNCTION(BlueprintCallable, Category="Knight|Raid")
@@ -38,6 +45,7 @@ public:
 private:
 	FGuid CurrentRunId;
 	FName SelectedStageId;
+	FKnightQuestRunContext ActiveQuestContext;
 	FknightRaidResult LastResult;
 	bool bHasResult = false;
 };

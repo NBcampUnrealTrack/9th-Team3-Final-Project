@@ -6,7 +6,9 @@
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/Image.h"
 #include "Components/PanelWidget.h"
-#include "Components/VerticalBoxSlot.h"
+#include "Components/ScrollBox.h"
+#include "Components/ScrollBoxSlot.h"
+#include "Components/SizeBox.h"
 #include "Engine/GameInstance.h"
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
@@ -242,14 +244,15 @@ void UknightRaidResultScreen::FillRewards(const FknightRaidResult& Result)
 	if (Box_Rewards)
 	{
 		Box_Rewards->ClearChildren();
-		for (const FknightItemStack& Reward : Result.Rewards)
+		USizeBox* const RewardHeight = WidgetTree->ConstructWidget<USizeBox>();
+		RewardHeight->SetMaxDesiredHeight(110.f);
+		UScrollBox* const RewardScroll = WidgetTree->ConstructWidget<UScrollBox>();
+		RewardHeight->SetContent(RewardScroll);
+		Box_Rewards->AddChild(RewardHeight);
+		auto AddRewardRow = [this, RewardScroll, &RowCount](const FText& Text, UTexture2D* Icon)
 		{
-			if (!Reward.Item || Reward.Count <= 0)
-			{
-				continue;
-			}
 			UHorizontalBox* const Row = WidgetTree->ConstructWidget<UHorizontalBox>();
-			if (UTexture2D* const Icon = Reward.Item->Icon.LoadSynchronous())
+			if (Icon)
 			{
 				UImage* const IconImage = WidgetTree->ConstructWidget<UImage>();
 				IconImage->SetBrushFromTexture(Icon);
@@ -259,19 +262,34 @@ void UknightRaidResultScreen::FillRewards(const FknightRaidResult& Result)
 				IconSlot->SetPadding(FMargin(0.f, 0.f, 12.f, 0.f));
 			}
 			UCommonTextBlock* const Label = WidgetTree->ConstructWidget<UCommonTextBlock>();
-			if (RewardTextStyle)
-			{
-				Label->SetStyle(RewardTextStyle);
-			}
-			Label->SetText(FText::Format(LOCTEXT("RewardRow", "{0}  x{1}"), Reward.Item->DisplayName, FText::AsNumber(Reward.Count)));
+			if (RewardTextStyle) Label->SetStyle(RewardTextStyle);
+			Label->SetText(Text);
 			Row->AddChildToHorizontalBox(Label)->SetVerticalAlignment(VAlign_Center);
-
-			UPanelSlot* const RowSlot = Box_Rewards->AddChild(Row);
-			if (UVerticalBoxSlot* const VerticalSlot = Cast<UVerticalBoxSlot>(RowSlot); VerticalSlot && RowCount > 0)
+			UPanelSlot* const RowSlot = RewardScroll->AddChild(Row);
+			if (UScrollBoxSlot* const ScrollSlot = Cast<UScrollBoxSlot>(RowSlot); ScrollSlot && RowCount > 0)
 			{
-				VerticalSlot->SetPadding(FMargin(0.f, 6.f, 0.f, 0.f));
+				ScrollSlot->SetPadding(FMargin(0.f, 6.f, 0.f, 0.f));
 			}
 			++RowCount;
+		};
+		for (const FknightItemStack& Reward : Result.Rewards)
+		{
+			if (!Reward.Item || Reward.Count <= 0)
+			{
+				continue;
+			}
+			AddRewardRow(FText::Format(LOCTEXT("RewardRow", "{0}  x{1}"), Reward.Item->DisplayName,
+				FText::AsNumber(Reward.Count)), Reward.Item->Icon.LoadSynchronous());
+		}
+		if (Result.MoneyEarned > 0)
+		{
+			AddRewardRow(FText::Format(LOCTEXT("MoneyReward", "획득 돈  +{0}"),
+				FText::AsNumber(Result.MoneyEarned)), nullptr);
+		}
+		if (Result.FirstBossSocketSlotsEarned > 0)
+		{
+			AddRewardRow(FText::Format(LOCTEXT("FirstBossSocketReward", "공용 소켓 칸  +{0}"),
+				FText::AsNumber(Result.FirstBossSocketSlotsEarned)), nullptr);
 		}
 	}
 	if (Txt_NoRewards)

@@ -81,9 +81,12 @@ namespace
 					const int32 Count = Stats.SetCounts.FindRef(Part->SetTag);
 					const float Defense = Stats.Values.FindRef(UknightCoreAttributeSet::GetDefenseAttribute()) - BaseDefense;
 					const float Attack = Stats.Values.FindRef(UknightCoreAttributeSet::GetAttackPowerAttribute()) - BaseAttack;
-					const float ExpectedDefense = bJanyeol ? 5.f * (Index + 1 - (Index == 4 ? 1 : 0)) + (Index >= 3 ? 30.f : Index >= 1 ? 10.f : 0.f)
+					// Janyeol values follow the equipment/stat pass on main: the four-piece adds AttackPower, not Defense.
+					constexpr float JanyeolDefense[] = { 5.f, 23.f, 28.f, 34.f, 34.f };
+					constexpr float JanyeolAttack[] = { 0.f, 0.f, 10.f, 22.f, 142.f };
+					const float ExpectedDefense = bJanyeol ? JanyeolDefense[Index]
 						: 5.f * (Index + 1 - (Index == 4 ? 1 : 0));
-					const float ExpectedAttack = bJanyeol ? (Index == 4 ? 10.f : 0.f)
+					const float ExpectedAttack = bJanyeol ? JanyeolAttack[Index]
 						: (Index >= 3 ? 30.f : Index >= 1 ? 10.f : 0.f) + (Index == 4 ? 10.f : 0.f);
 					Check(Count == Index + 1 && FMath::IsNearlyEqual(Defense, ExpectedDefense)
 						&& FMath::IsNearlyEqual(Attack, ExpectedAttack),
@@ -101,7 +104,7 @@ namespace
 					const FknightEquipmentStats After = knightEquipmentStats::Calculate(Preview, Catalog, nullptr);
 					Check(After.SetCounts.FindRef(HeadB->SetTag) == 5 && Loadout.FindRef(HeadB->SlotTag) == Previous
 						&& FMath::IsNearlyEqual(After.Values.FindRef(UknightCoreAttributeSet::GetDefenseAttribute())
-							- Before.Values.FindRef(UknightCoreAttributeSet::GetDefenseAttribute()), 1.f),
+							- Before.Values.FindRef(UknightCoreAttributeSet::GetDefenseAttribute()), bJanyeol ? 2.f : 1.f),
 						FString::Printf(TEXT("%s HeadA/B preview replaces one slot without changing loadout"), SetName));
 				}
 				if (bJanyeol)
@@ -117,7 +120,7 @@ namespace
 						const FknightEquipmentStats After = knightEquipmentStats::Calculate(Preview, Catalog, nullptr);
 						Check(After.SetCounts.FindRef(BodyB->SetTag) == 5 && Loadout.FindRef(BodyB->SlotTag) == Previous
 							&& FMath::IsNearlyEqual(After.Values.FindRef(UknightCoreAttributeSet::GetDefenseAttribute())
-								- Before.Values.FindRef(UknightCoreAttributeSet::GetDefenseAttribute()), 1.f),
+								- Before.Values.FindRef(UknightCoreAttributeSet::GetDefenseAttribute()), 3.f),
 							TEXT("Janyeol BodyA/B preview replaces one slot without changing loadout"));
 					}
 				}
@@ -135,14 +138,17 @@ namespace
 				Loadout.Remove(Body->SlotTag);
 				const FknightEquipmentStats One = knightEquipmentStats::Calculate(Loadout, Catalog, nullptr);
 				const FGameplayTag SetTag = Body->SetTag;
-				const FGameplayAttribute BonusAttribute = bJanyeol
-					? UknightCoreAttributeSet::GetDefenseAttribute() : UknightCoreAttributeSet::GetAttackPowerAttribute();
-				const float FourBonus = Four.Values.FindRef(BonusAttribute) - (bJanyeol ? BaseDefense + 20.f : BaseAttack);
-				const float ThreeBonus = Three.Values.FindRef(BonusAttribute) - (bJanyeol ? BaseDefense + 15.f : BaseAttack);
-				const float OneBonus = One.Values.FindRef(BonusAttribute) - (bJanyeol ? BaseDefense + 5.f : BaseAttack);
+				const FGameplayAttribute BonusAttribute = UknightCoreAttributeSet::GetAttackPowerAttribute();
+				const float FourBonus = Four.Values.FindRef(BonusAttribute) - BaseAttack;
+				const float ThreeBonus = Three.Values.FindRef(BonusAttribute) - BaseAttack;
+				const float OneBonus = One.Values.FindRef(BonusAttribute) - BaseAttack;
 				Check(Four.SetCounts.FindRef(SetTag) == 4 && Three.SetCounts.FindRef(SetTag) == 3
-					&& One.SetCounts.FindRef(SetTag) == 1 && FMath::IsNearlyEqual(FourBonus, 30.f)
-					&& FMath::IsNearlyEqual(ThreeBonus, 10.f) && FMath::IsNearlyZero(OneBonus),
+				&& One.SetCounts.FindRef(SetTag) == 1
+				&& FMath::IsNearlyEqual(FourBonus, bJanyeol ? 22.f : 30.f)
+				&& FMath::IsNearlyEqual(ThreeBonus, 10.f) && FMath::IsNearlyZero(OneBonus)
+				&& (!bJanyeol || (FMath::IsNearlyEqual(Four.Values.FindRef(UknightCoreAttributeSet::GetDefenseAttribute()) - BaseDefense, 34.f)
+					&& FMath::IsNearlyEqual(Three.Values.FindRef(UknightCoreAttributeSet::GetDefenseAttribute()) - BaseDefense, 28.f)
+					&& FMath::IsNearlyEqual(One.Values.FindRef(UknightCoreAttributeSet::GetDefenseAttribute()) - BaseDefense, 5.f))),
 					FString::Printf(TEXT("%s unequip removes tier effects: 4=%.1f 3=%.1f 1=%.1f"),
 						SetName, FourBonus, ThreeBonus, OneBonus));
 			}
@@ -187,7 +193,6 @@ namespace
 			{
 				if (!Recipe || !Recipe->GetPathName().StartsWith(TEXT("/Game/Knight/Data/Equipment/"))) continue;
 				++NewRecipeCount;
-				const int32 Before = Progression->GetItemCount(Recipe->Result);
 				if (Recipe->Result)
 				{
 					const FPrimaryAssetId Id = Recipe->Result->GetPrimaryAssetId();
@@ -200,12 +205,37 @@ namespace
 						FString::Printf(TEXT("unique ID, class, slot and set %s"), *Recipe->Result->GetName()));
 					UniqueIds.Add(Id);
 				}
-				Check(Recipe->Result && Recipe->Costs.IsEmpty() && Recipe->RequiredClearedStageId.IsNone()
-					&& Progression->CanCraftPart(Recipe) && Progression->CraftPart(Recipe)
-					&& Progression->GetItemCount(Recipe->Result) == Before + 1,
-					FString::Printf(TEXT("zero-cost craft %s"), *Recipe->GetName()));
+				const bool bValidCosts = Recipe->Costs.Num() == 2
+					&& Recipe->Costs[0].Item && Recipe->Costs[1].Item
+					&& Recipe->Costs[0].Item != Recipe->Costs[1].Item
+					&& Recipe->Costs[0].Count > 0 && Recipe->Costs[1].Count > 0
+					&& Recipe->Costs[0].Item->IsA<UknightMaterialItemDefinition>()
+					&& Recipe->Costs[1].Item->IsA<UknightMaterialItemDefinition>();
+				Check(bValidCosts && Recipe->RequiredClearedStageId.IsNone(),
+					FString::Printf(TEXT("two distinct positive material costs %s"), *Recipe->GetName()));
+				if (!Recipe->Result || !bValidCosts) continue;
+				const int32 Before = Progression->GetItemCount(Recipe->Result);
+				if (Before > 0)
+				{
+					Check(!Progression->CanCraftPart(Recipe) && !Progression->CraftPart(Recipe),
+						FString::Printf(TEXT("already owned craft blocked %s"), *Recipe->GetName()));
+					continue;
+				}
+				for (const FknightItemCost& Cost : Recipe->Costs)
+				{
+					const int32 Missing = FMath::Max(0, Cost.Count - Progression->GetItemCount(Cost.Item));
+					if (Missing > 0) Progression->AddItem(Cost.Item, Missing);
+				}
+				const int32 MaterialA = Progression->GetItemCount(Recipe->Costs[0].Item);
+				const int32 MaterialB = Progression->GetItemCount(Recipe->Costs[1].Item);
+				Check(Progression->CanCraftPart(Recipe) && Progression->CraftPart(Recipe)
+					&& Progression->GetItemCount(Recipe->Result) == Before + 1
+					&& Progression->GetItemCount(Recipe->Costs[0].Item) == MaterialA - Recipe->Costs[0].Count
+					&& Progression->GetItemCount(Recipe->Costs[1].Item) == MaterialB - Recipe->Costs[1].Count
+					&& !Progression->CanCraftPart(Recipe) && !Progression->CraftPart(Recipe),
+					FString::Printf(TEXT("craft spends exactly two costs and blocks duplicates %s"), *Recipe->GetName()));
 			}
-			Check(NewRecipeCount == 15, FString::Printf(TEXT("catalog has %d/15 new recipes"), NewRecipeCount));
+			Check(NewRecipeCount == 21, FString::Printf(TEXT("catalog has %d/21 formal recipes"), NewRecipeCount));
 			UE_LOG(LogknightDev, Log, TEXT("MaintenanceTest AssetCases result: %s (%d failures)"), Failures ? TEXT("FAIL") : TEXT("PASS"), Failures);
 			return;
 		}

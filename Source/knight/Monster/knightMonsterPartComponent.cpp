@@ -320,6 +320,7 @@ void UknightMonsterPartComponent::BreakPart(int32 PartIndex, AActor* BreakInstig
 
 	OnPartConditionChanged.Broadcast(Definition->PartTag, EknightPartCondition::Broken);
 	OnPartBroken.Broadcast(Definition->PartTag, BreakInstigator);
+	OnPartBrokenNative.Broadcast(Definition->PartTag, BreakInstigator, GetOwner());
 }
 
 void UknightMonsterPartComponent::SpawnBreakPiece(const FknightMonsterPartDefinition& Definition, USkinnedMeshComponent* Mesh) const

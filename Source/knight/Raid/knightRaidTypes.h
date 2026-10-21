@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameplayTagContainer.h"
+#include "Quest/KnightQuestTypes.h"
 #include "knightInventoryTypes.h"
 #include "knightRaidTypes.generated.h"
 
@@ -45,6 +46,10 @@ struct KNIGHT_API FknightRaidResult
 	UPROPERTY(BlueprintReadOnly, Category="Raid")
 	FName StageId;
 
+	/** Captured at launch, empty for direct stage PIE and development-stage runs. */
+	UPROPERTY(BlueprintReadOnly, Category="Raid")
+	FKnightQuestRunContext QuestContext;
+
 	UPROPERTY(BlueprintReadOnly, Category="Raid")
 	bool bSuccess = false;
 
@@ -62,4 +67,11 @@ struct KNIGHT_API FknightRaidResult
 	/** Items won. Added to the item box by UknightProgressionSubsystem. */
 	UPROPERTY(BlueprintReadOnly, Category="Raid")
 	TArray<FknightItemStack> Rewards;
+
+	/** Actual quest payout for this run, set once by progression before showing the result screen. */
+	UPROPERTY(BlueprintReadOnly, Category="Raid")
+	int64 MoneyEarned = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category="Raid")
+	int32 FirstBossSocketSlotsEarned = 0;
 };

@@ -9,6 +9,7 @@
 #include "GenericTeamAgentInterface.h"
 #include "Interfaces/CombatInterface.h"
 #include "AbilitySystem/knightAbilitySet.h"
+#include "GameplayEffectTypes.h"
 #include "Logging/LogMacros.h"
 #include "knightCharacter.generated.h"
 
@@ -31,6 +32,7 @@ class UMotionWarpingComponent;
 class UknightDamageVisualComponent;
 class UknightPartsComponent;
 class UknightPartHealthComponent;
+class UGameplayEffect;
 struct FGameplayEffectSpec;
 struct FGameplayEventData;
 struct FInputActionValue;
@@ -124,6 +126,12 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|RepairKit", meta=(ClampMin=0))
 	float RepairKitGaugePerPerfectGuard = 20.f;
 
+	/** This socket bonus is a removable GE; kit count is never replenished by a loadout refresh. */
+	UPROPERTY(Transient) TObjectPtr<UGameplayEffect> SocketRepairCapacityEffect;
+	FActiveGameplayEffectHandle SocketRepairCapacityHandle;
+	int32 AppliedSocketRepairBonus = INDEX_NONE;
+	UFUNCTION() void HandleSocketProgressionChanged();
+
 	/**
 	 * (2026-10-20 사용자 결정) 기본 메카 스탯 중 속성 세트 기본값과 다른 것. 파츠를 입히기 전에 기본값(Base)으로 넣는다.
 	 * 그로기 자연 회복: 안 맞은 지 ASC의 PoiseRecoveryDelay(BP_Knight 3초)가 지나면 초당 이만큼 오른다. 바뀔 수 있는 값.
@@ -188,6 +196,8 @@ public:
 	UknightTargetLockComponent* GetTargetLock() const { return TargetLock; }
 	UknightPartHealthComponent* GetPartHealth() const { return PartHealth; }
 	UknightMovementComponent* GetKnightMovementComponent() const;
+	/** Recompute the equipped socket capacity without restoring spent repair kits. */
+	void RefreshSocketEffects();
 
 	/** Health가 0이 되면 한 번 발생한다. State.Dead가 붙고 Event.Death가 보내진 뒤다. */
 	UPROPERTY(BlueprintAssignable, Category="Knight|Health")
@@ -196,6 +206,7 @@ public:
 protected:
 
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void PossessedBy(AController* NewController) override;
 
 	/** 입력 액션 연결을 초기화한다 */

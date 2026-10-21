@@ -9,7 +9,10 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Engine/GameInstance.h"
 #include "System/knightGameplayTags.h"
+#include "Progression/knightProgressionSubsystem.h"
+#include "knightCharacter.h"
 
 UknightGameplayAbility::UknightGameplayAbility(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -115,7 +118,15 @@ float UknightGameplayAbility::GetEffectiveStaminaCost(const UAbilitySystemCompon
 	{
 		return StaminaCost;
 	}
-	return StaminaCost * KnightASC->GetStanceModifiers().StaminaCostScale;
+	float Cost = StaminaCost * KnightASC->GetStanceModifiers().StaminaCostScale;
+	// Both CheckCost and ApplyCost use this path. Only the player attack receives the socket reduction.
+	if (const AknightCharacter* const Knight = Cast<AknightCharacter>(KnightASC->GetAvatarActor()))
+	{
+		const UknightProgressionSubsystem* const Progression = Knight->GetGameInstance()
+			? Knight->GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>() : nullptr;
+		if (Progression) Cost *= Progression->GetAttackStaminaCostMultiplier();
+	}
+	return Cost;
 }
 
 void UknightGameplayAbility::StartMechTiming(UAnimMontage* Montage, float BaseRate)

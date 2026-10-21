@@ -23,6 +23,12 @@
 #include "Codex/KnightCodexWidget.h"
 #include "Menu/KnightMaintenanceCameraRig.h"
 #include "Menu/UI/KnightMaintenanceWidget.h"
+#include "Menu/UI/KnightInventoryWidget.h"
+#include "Menu/UI/KnightQuestMenuWidget.h"
+#include "Blueprint/WidgetTree.h"
+#include "Components/CanvasPanel.h"
+#include "Components/Button.h"
+#include "Components/WidgetSwitcher.h"
 #include "EngineUtils.h"
 
 #define LOCTEXT_NAMESPACE "KnightMainMenu"
@@ -81,8 +87,9 @@ void UKnightMainMenuWidget::NativeConstruct()
 			RewardCount += FMath::Max(0, Reward.Count);
 		}
 		SetStatusText(Result.bSuccess
-			? FText::Format(LOCTEXT("RaidSuccessResult", "레이드 성공: {0} | 보상 {1}개"),
-				FText::FromName(Result.StageId), FText::AsNumber(RewardCount))
+			? FText::Format(LOCTEXT("RaidSuccessResult", "레이드 성공: {0} | 아이템 {1}개 | 돈 +{2} | 소켓 +{3}"),
+				FText::FromName(Result.StageId), FText::AsNumber(RewardCount),
+				FText::AsNumber(Result.MoneyEarned), FText::AsNumber(Result.FirstBossSocketSlotsEarned))
 			: FText::Format(LOCTEXT("RaidFailedResult", "레이드 실패: {0}"), FText::FromName(Result.StageId)));
 		Session->ClearLastResult();
 	}
@@ -90,6 +97,7 @@ void UKnightMainMenuWidget::NativeConstruct()
 
 void UKnightMainMenuWidget::NativeDestruct()
 {
+	if (InventoryWidget) InventoryWidget->Close();
 	if (MaintenanceWidget) MaintenanceWidget->Close();
 	if (MaintenanceCameraRig.IsValid()) MaintenanceCameraRig->SetMaintenanceView(false);
 	if (SettingsWidget)
@@ -103,6 +111,7 @@ void UKnightMainMenuWidget::NativeDestruct()
 		RaidDefinitionHandle->CancelHandle();
 		RaidDefinitionHandle.Reset();
 	}
+	if (QuestWidget) QuestWidget->OnLaunchRequested.RemoveAll(this);
 	Super::NativeDestruct();
 }
 
@@ -118,6 +127,7 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 		return false;
 	}
 	UPanelWidget* Page = nullptr;
+	if (NewPage == EKnightMainMenuPage::Inventory) EnsureInventoryWidget();
 	switch (NewPage)
 	{
 	case EKnightMainMenuPage::Home: Page = Panel_Home; break;
@@ -125,6 +135,7 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 	case EKnightMainMenuPage::Maintenance: Page = Panel_Maintenance; break;
 	case EKnightMainMenuPage::Settings: Page = Panel_Settings; break;
 	case EKnightMainMenuPage::Codex: Page = Panel_Codex; break;
+	case EKnightMainMenuPage::Inventory: Page = InventoryPanel; break;
 	default:
 		UE_LOG(Logknight, Error, TEXT("Invalid main menu page %d."), static_cast<int32>(NewPage));
 		return false;
@@ -134,6 +145,12 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 		return false;
 	}
 	const bool bEnteringStage = NewPage == EKnightMainMenuPage::Stage && CurrentPage != EKnightMainMenuPage::Stage;
+	const bool bLeavingInventory = CurrentPage == EKnightMainMenuPage::Inventory && NewPage != CurrentPage;
+	if (bLeavingInventory)
+	{
+		if (InventoryWidget) InventoryWidget->Close();
+		bRestoreInventoryFocus = NewPage == EKnightMainMenuPage::Home;
+	}
 	const bool bLeavingMaintenance = CurrentPage == EKnightMainMenuPage::Maintenance && NewPage != CurrentPage;
 	if (bLeavingMaintenance)
 	{
@@ -144,15 +161,33 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 	CurrentPage = NewPage;
 	if (NewPage != EKnightMainMenuPage::Home) bRestoreCodexFocus = false;
 	if (NewPage != EKnightMainMenuPage::Home) bRestoreMaintenanceFocus = false;
+	if (NewPage != EKnightMainMenuPage::Home) bRestoreInventoryFocus = false;
 	bool bHasStages = true;
 	if (bEnteringStage)
 	{
-		// Unlocks can change between visits (a clear unlocks the next stage), so rebuild every time.
 		SelectedStageId = NAME_None;
 		if (Map_Stages) Map_Stages->SetSelectedStage(NAME_None);
-		bHasStages = RebuildMapMarkers();
-		RefreshStageDetails();
-		PlaceStageInfo();
+		EnsureQuestWidget();
+		bQuestMode = QuestWidget != nullptr;
+		if (Panel_QuestHost) Panel_QuestHost->SetVisibility(bQuestMode ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+		if (Map_Stages) Map_Stages->SetVisibility(bQuestMode ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+		if (UWidget* const Header = WidgetTree ? WidgetTree->FindWidget(TEXT("VerticalBox_StageHeader")) : nullptr)
+			Header->SetVisibility(bQuestMode ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+		if (UWidget* const Hints = WidgetTree ? WidgetTree->FindWidget(TEXT("Panel_StageHints")) : nullptr)
+			Hints->SetVisibility(bQuestMode ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+		if (bQuestMode)
+		{
+			bStageLaunchAvailable = false;
+			if (Panel_StageInfo) Panel_StageInfo->SetVisibility(ESlateVisibility::Collapsed);
+			QuestWidget->RefreshQuests();
+		}
+		else
+		{
+			// Legacy map remains available if the quest view cannot be created.
+			bHasStages = RebuildMapMarkers();
+			RefreshStageDetails();
+			PlaceStageInfo();
+		}
 	}
 	if (NewPage == EKnightMainMenuPage::Settings)
 	{
@@ -184,6 +219,7 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 		}
 		if (MaintenanceCameraRig.IsValid()) MaintenanceCameraRig->SetMaintenanceView(true);
 	}
+	if (NewPage == EKnightMainMenuPage::Inventory && InventoryWidget) InventoryWidget->Open();
 	// Settings and the codex bring their own close buttons.
 	UpdateBackVisibility(NewPage == EKnightMainMenuPage::Home || NewPage == EKnightMainMenuPage::Settings || NewPage == EKnightMainMenuPage::Codex);
 	RefreshTravelControls();
@@ -203,14 +239,19 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 	}
 	if (NewPage == EKnightMainMenuPage::Maintenance && MaintenanceWidget && MaintenanceWidget->GetFocusButton())
 		MaintenanceWidget->GetFocusButton()->SetUserFocus(GetOwningPlayer());
+	if (NewPage == EKnightMainMenuPage::Inventory && InventoryWidget && InventoryWidget->GetFocusButton())
+		InventoryWidget->GetFocusButton()->SetUserFocus(GetOwningPlayer());
 	return true;
 }
 
 bool UKnightMainMenuWidget::HandleBackRequested()
 {
+	if (CurrentPage == EKnightMainMenuPage::Inventory) return ShowPage(EKnightMainMenuPage::Home);
 	if (CurrentPage == EKnightMainMenuPage::Settings && SettingsWidget) { SettingsWidget->RequestClose(); return true; }
 	if (CurrentPage == EKnightMainMenuPage::Codex) { HandleCodexClosed(); return true; }
 	if (CurrentPage == EKnightMainMenuPage::Maintenance && MaintenanceWidget && MaintenanceWidget->HandleBack()) return true;
+	if (CurrentPage == EKnightMainMenuPage::Stage && bQuestMode && QuestWidget
+		&& !QuestWidget->GetSelectedQuestId().IsNone()) return QuestWidget->SelectQuest(NAME_None);
 	// First Esc clears the selected region, the next one leaves the map.
 	if (CurrentPage == EKnightMainMenuPage::Stage && !SelectedStageId.IsNone())
 	{
@@ -221,6 +262,21 @@ bool UKnightMainMenuWidget::HandleBackRequested()
 
 FReply UKnightMainMenuWidget::NativeOnPreviewKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
 {
+	if (InKeyEvent.GetKey() == EKeys::I && !InKeyEvent.IsRepeat() && !IsTravelPending()
+		&& (CurrentPage == EKnightMainMenuPage::Home || CurrentPage == EKnightMainMenuPage::Inventory))
+	{
+		if (CurrentPage == EKnightMainMenuPage::Home)
+		{
+			FocusBeforeInventory.Reset();
+			for (UCommonButtonBase* Button : { Button_Stage.Get(), Button_Maintenance.Get(), Button_Settings.Get(),
+				Button_Codex.Get(), Button_ReturnToTitle.Get() })
+			{
+				if (Button && (Button->HasAnyUserFocus() || Button->HasFocusedDescendants())) { FocusBeforeInventory = Button; break; }
+			}
+		}
+		ShowPage(CurrentPage == EKnightMainMenuPage::Inventory ? EKnightMainMenuPage::Home : EKnightMainMenuPage::Inventory);
+		return FReply::Handled();
+	}
 	if (CurrentPage == EKnightMainMenuPage::Maintenance && MaintenanceWidget && !IsTravelPending())
 	{
 		const FKey Key = InKeyEvent.GetKey();
@@ -241,7 +297,8 @@ FReply UKnightMainMenuWidget::NativeOnPreviewKeyDown(const FGeometry& InGeometry
 		const FKey Key = InKeyEvent.GetKey();
 		if (Key == EKeys::Left || Key == EKeys::A || Key == EKeys::Right || Key == EKeys::D)
 		{
-			CycleStage(Key == EKeys::Left || Key == EKeys::A ? -1 : 1);
+			if (bQuestMode && QuestWidget) QuestWidget->CycleQuest(Key == EKeys::Left || Key == EKeys::A ? -1 : 1);
+			else CycleStage(Key == EKeys::Left || Key == EKeys::A ? -1 : 1);
 			return FReply::Handled();
 		}
 	}
@@ -303,6 +360,36 @@ void UKnightMainMenuWidget::EnsureMaintenanceWidget()
 	});
 }
 
+void UKnightMainMenuWidget::EnsureInventoryWidget()
+{
+	if (InventoryWidget || !Switcher_Pages || !GetOwningPlayer() || !WidgetTree) return;
+	InventoryPanel = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("Panel_InventoryRuntime"));
+	Switcher_Pages->AddChild(InventoryPanel);
+	InventoryWidget = CreateWidget<UKnightInventoryWidget>(GetOwningPlayer(), UKnightInventoryWidget::StaticClass());
+	if (!InventoryWidget) return;
+	UCanvasPanelSlot* InventoryCanvasSlot = InventoryPanel->AddChildToCanvas(InventoryWidget);
+	InventoryCanvasSlot->SetAnchors(FAnchors(0, 0, 1, 1));
+	InventoryCanvasSlot->SetOffsets(FMargin(0));
+}
+
+void UKnightMainMenuWidget::EnsureQuestWidget()
+{
+	if (QuestWidget || !Panel_QuestHost || !GetOwningPlayer()) return;
+	QuestWidget = CreateWidget<UKnightQuestMenuWidget>(GetOwningPlayer(), UKnightQuestMenuWidget::StaticClass());
+	if (!QuestWidget) return;
+	UCanvasPanelSlot* const QuestSlot = Panel_QuestHost->AddChildToCanvas(QuestWidget);
+	QuestSlot->SetAnchors(FAnchors(0, 0, 1, 1));
+	QuestSlot->SetOffsets(FMargin(0));
+	QuestWidget->OnLaunchRequested.AddUObject(this, &ThisClass::HandleQuestLaunchRequested);
+}
+
+bool UKnightMainMenuWidget::SelectQuest(FName QuestId)
+{
+	if (IsTravelPending()) return false;
+	if (CurrentPage != EKnightMainMenuPage::Stage && !ShowPage(EKnightMainMenuPage::Stage)) return false;
+	return bQuestMode && QuestWidget && QuestWidget->SelectQuest(QuestId);
+}
+
 void UKnightMainMenuWidget::HandleCodexClosed()
 {
 	bRestoreCodexFocus = true;
@@ -311,6 +398,9 @@ void UKnightMainMenuWidget::HandleCodexClosed()
 
 UWidget* UKnightMainMenuWidget::GetPreferredFocusTarget() const
 {
+	if (CurrentPage == EKnightMainMenuPage::Home && bRestoreInventoryFocus && FocusBeforeInventory.IsValid())
+		return FocusBeforeInventory.Get();
+	if (CurrentPage == EKnightMainMenuPage::Inventory && InventoryWidget) return InventoryWidget->GetFocusButton();
 	if (CurrentPage == EKnightMainMenuPage::Home && bRestoreMaintenanceFocus && Button_Maintenance) return Button_Maintenance;
 	if (CurrentPage == EKnightMainMenuPage::Maintenance && MaintenanceWidget) return MaintenanceWidget->GetFocusButton();
 	if (CurrentPage == EKnightMainMenuPage::Home && bRestoreCodexFocus && Button_Codex)
@@ -321,6 +411,8 @@ UWidget* UKnightMainMenuWidget::GetPreferredFocusTarget() const
 	{
 		return CodexWidget->GetFocusButton();
 	}
+	if (CurrentPage == EKnightMainMenuPage::Stage && bQuestMode && QuestWidget)
+		return QuestWidget->GetFocusButton();
 	if (CurrentPage == EKnightMainMenuPage::Stage && !SelectedStageId.IsNone() && CanFocusButton(Button_LaunchStage))
 	{
 		return Button_LaunchStage;
@@ -349,6 +441,7 @@ void UKnightMainMenuWidget::SetTravelControlsEnabled(bool bEnabled)
 	if (Button_Codex) Button_Codex->SetIsEnabled(bEnabled);
 	if (Button_LaunchStage) Button_LaunchStage->SetIsEnabled(bEnabled && bStageLaunchAvailable && !SelectedStageId.IsNone());
 	if (Map_Stages) Map_Stages->SetIsEnabled(bEnabled);
+	if (QuestWidget) QuestWidget->SetIsEnabled(bEnabled);
 }
 
 void UKnightMainMenuWidget::HandleStageClicked()
@@ -548,11 +641,12 @@ void UKnightMainMenuWidget::RefreshRaidDetails()
 
 void UKnightMainMenuWidget::HandleMapStageClicked(FName StageId)
 {
-	SelectStage(StageId);
+	if (!bQuestMode) SelectStage(StageId);
 }
 
 void UKnightMainMenuWidget::HandleLaunchStageClicked()
 {
+	if (bQuestMode) return;
 	UKnightGameFlowSubsystem* const Flow = GetFlow();
 	if (!Flow || IsTravelPending() || !bStageLaunchAvailable || SelectedStageId.IsNone())
 	{
@@ -564,6 +658,17 @@ void UKnightMainMenuWidget::HandleLaunchStageClicked()
 	{
 		SetStatusText(LOCTEXT("LaunchingStage", "스테이지로 이동 중입니다."));
 	}
+}
+
+void UKnightMainMenuWidget::HandleQuestLaunchRequested(FName QuestId)
+{
+	UKnightGameFlowSubsystem* const Flow = GetFlow();
+	if (!Flow) return;
+	FText Reason;
+	const bool bAccepted = Flow->RequestStartQuest(QuestId, Reason);
+	RefreshTravelControls();
+	if (bAccepted) SetStatusText(LOCTEXT("LaunchingQuest", "퀘스트 출격 준비 중입니다."));
+	else if (!Reason.IsEmpty()) SetStatusText(Reason);
 }
 
 #undef LOCTEXT_NAMESPACE

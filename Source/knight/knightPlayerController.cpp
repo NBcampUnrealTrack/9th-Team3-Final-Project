@@ -16,6 +16,11 @@
 #include "Raid/knightRaidGameState.h"
 #include "Raid/knightRaidDefinition.h"
 #include "Raid/knightRaidSubsystem.h"
+#include "Quest/KnightQuestData.h"
+#include "Monster/knightMonsterCharacterBase.h"
+#include "Monster/knightMonsterPartComponent.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "knight.h"
 #include "Widgets/Input/SVirtualJoystick.h"
 #include "AbilitySystem/knightAbilitySystemComponent.h"
@@ -321,6 +326,36 @@ void AknightPlayerController::KnightRaidDebugSettings()
 	// Opens the settings window itself, even when Esc is routed to the pause menu.
 	if (SettingsWidget && SettingsWidget->IsInViewport()) SettingsWidget->RequestClose();
 	else if (IsLocalController() && GetWorld() && GetWorld()->GetAuthGameMode<AknightRaidGameMode>()) OpenSettings(false);
+#endif
+}
+
+void AknightPlayerController::KnightRaidDebugBreakQuestParts()
+{
+#if WITH_EDITOR
+	FString TestNamespace;
+	if (!FParse::Value(FCommandLine::Get(), TEXT("KnightSaveTestNamespace="), TestNamespace)
+		|| TestNamespace.IsEmpty()) return;
+	UknightRaidSubsystem* const Raid = GetGameInstance()->GetSubsystem<UknightRaidSubsystem>();
+	AknightRaidGameMode* const Mode = GetWorld() ? GetWorld()->GetAuthGameMode<AknightRaidGameMode>() : nullptr;
+	FKnightQuestRunContext Context;
+	const UKnightQuestCatalog* const Catalog = UKnightQuestSettings::LoadCatalog();
+	const UKnightQuestDefinition* const Quest = Raid && Raid->GetActiveQuestRunContext(Context) && Catalog
+		? Catalog->FindQuest(Context.QuestId) : nullptr;
+	if (!Mode || !Quest || Mode->GetTargetMonsters().IsEmpty()) return;
+	AknightMonsterCharacterBase* const Monster = Mode->GetTargetMonsters()[0].Get();
+	UknightMonsterPartComponent* const Parts = Monster ? Monster->GetPartComponent() : nullptr;
+	if (!Parts) return;
+	for (const FKnightQuestPartBreakReward& Entry : Quest->PartBreakRewards)
+	{
+		if (Entry.Part != EKnightQuestBreakPart::Head && Entry.Part != EKnightQuestBreakPart::Tail) continue;
+		const FGameplayTag Tag = Entry.Reward.RequiredBrokenPart;
+		Parts->ApplyPartDamage(Tag, 5000.f, GetPawn());
+		const bool bDuplicateAccepted = Mode->RecordBrokenPart(Context.RunId, Context.BossId, Monster, Tag);
+		const bool bWrongBossAccepted = Mode->RecordBrokenPart(Context.RunId, FName(TEXT("WrongBoss")), Monster, Tag);
+		const bool bOldRunAccepted = Mode->RecordBrokenPart(FGuid::NewGuid(), Context.BossId, Monster, Tag);
+		UE_LOG(Logknight, Log, TEXT("KnightRaidDebugBreakQuestParts part=%s broken=%d duplicate=%d wrongBoss=%d oldRun=%d"),
+			*Tag.ToString(), Parts->IsPartBroken(Tag), bDuplicateAccepted, bWrongBossAccepted, bOldRunAccepted);
+	}
 #endif
 }
 

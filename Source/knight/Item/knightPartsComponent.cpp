@@ -1,6 +1,7 @@
 #include "Item/knightPartsComponent.h"
 
 #include "AbilitySystem/Attributes/knightAttributeSet.h"
+#include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
 #include "AbilitySystem/knightAbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -178,6 +179,10 @@ bool UknightPartsComponent::EquipPartUnchecked(const UknightPartItemDefinition* 
 	{
 		Equipped.StatEffectHandle = ASC->ApplyGameplayEffectToSelf(StatEffect, 1.f, ASC->MakeEffectContext());
 	}
+	if (const UknightWeaponItemDefinition* Weapon = Cast<UknightWeaponItemDefinition>(Part))
+	{
+		ApplyWeaponUpgradeAttack(Equipped, Weapon);
+	}
 
 	UpdateWeightAttribute();
 	RefreshSetBonuses();
@@ -186,6 +191,38 @@ bool UknightPartsComponent::EquipPartUnchecked(const UknightPartItemDefinition* 
 	UE_LOG(Logknight, Verbose, TEXT("%s equipped %s (level %d) in %s."), *GetNameSafe(Character), *Part->GetName(), Equipped.UpgradeLevel, *Part->SlotTag.ToString());
 	OnEquipmentChanged.Broadcast(Part->SlotTag, const_cast<UknightPartItemDefinition*>(Part));
 	return true;
+}
+
+void UknightPartsComponent::RefreshWeaponUpgrade(const UknightWeaponItemDefinition* Weapon, int32 NewLevel)
+{
+	if (!Weapon) return;
+	FknightEquippedPart* Equipped = EquippedParts.Find(Weapon->SlotTag);
+	if (!Equipped || Equipped->Definition != Weapon) return;
+	Equipped->UpgradeLevel = FMath::Clamp(NewLevel, 0, Weapon->GetMaxUpgradeLevel());
+	ApplyWeaponUpgradeAttack(*Equipped, Weapon);
+}
+
+void UknightPartsComponent::ApplyWeaponUpgradeAttack(FknightEquippedPart& Part, const UknightWeaponItemDefinition* Weapon)
+{
+	UknightAbilitySystemComponent* ASC = Cast<UknightAbilitySystemComponent>(
+		UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner()));
+	if (!ASC || !Weapon) return;
+	if (Part.UpgradeAttackEffectHandle.IsValid())
+	{
+		ASC->RemoveActiveGameplayEffect(Part.UpgradeAttackEffectHandle);
+		Part.UpgradeAttackEffectHandle.Invalidate();
+	}
+	Part.UpgradeAttackEffect = nullptr;
+	const float Bonus = Weapon->GetUpgradeAttackBonus(Part.UpgradeLevel);
+	if (Bonus <= 0.f) return;
+	UGameplayEffect* Effect = NewObject<UGameplayEffect>(this, NAME_None, RF_Transient);
+	Effect->DurationPolicy = EGameplayEffectDurationType::Infinite;
+	FGameplayModifierInfo& Modifier = Effect->Modifiers.AddDefaulted_GetRef();
+	Modifier.Attribute = UknightCoreAttributeSet::GetAttackPowerAttribute();
+	Modifier.ModifierOp = EGameplayModOp::AddBase;
+	Modifier.ModifierMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(Bonus));
+	Part.UpgradeAttackEffect = Effect;
+	Part.UpgradeAttackEffectHandle = ASC->ApplyGameplayEffectToSelf(Effect, 1.f, ASC->MakeEffectContext());
 }
 
 void UknightPartsComponent::UnequipSlot(FGameplayTag SlotTag)
@@ -300,6 +337,12 @@ void UknightPartsComponent::RemovePart(FknightEquippedPart& Part)
 			ASC->RemoveActiveGameplayEffect(Part.StatEffectHandle);
 			Part.StatEffectHandle.Invalidate();
 		}
+		if (Part.UpgradeAttackEffectHandle.IsValid())
+		{
+			ASC->RemoveActiveGameplayEffect(Part.UpgradeAttackEffectHandle);
+			Part.UpgradeAttackEffectHandle.Invalidate();
+		}
+		Part.UpgradeAttackEffect = nullptr;
 	}
 	if (UMeshComponent* const Mesh = Part.MeshComponent.Get())
 	{

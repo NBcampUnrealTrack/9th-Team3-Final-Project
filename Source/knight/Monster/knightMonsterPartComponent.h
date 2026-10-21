@@ -26,6 +26,8 @@ enum class EknightPartCondition : uint8
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FknightMonsterPartBroken, FGameplayTag, PartTag, AActor*, BreakInstigator);
+DECLARE_MULTICAST_DELEGATE_ThreeParams(FknightMonsterPartBrokenNative, FGameplayTag /*PartTag*/,
+	AActor* /*BreakInstigator*/, AActor* /*BrokenMonster*/);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FknightMonsterPartDamaged, FGameplayTag, PartTag, float, RemainingRatio);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FknightMonsterPartConditionChanged, FGameplayTag, PartTag, EknightPartCondition, NewCondition);
 
@@ -96,6 +98,9 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category="Knight|Monster")
 	FknightMonsterPartBroken OnPartBroken;
+
+	/** Native companion with the owning monster; preserves the existing Blueprint event signature. */
+	FknightMonsterPartBrokenNative OnPartBrokenNative;
 
 	/** 파괴 가능한 부위가 피해를 받을 때마다. 파괴하는 타격도 포함한다(RemainingRatio 0). 파괴된 뒤와 파괴할 수 없는 부위는 보내지 않는다. */
 	UPROPERTY(BlueprintAssignable, Category="Knight|Monster")

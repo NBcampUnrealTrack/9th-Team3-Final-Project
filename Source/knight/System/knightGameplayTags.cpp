@@ -119,6 +119,7 @@ UE_DEFINE_GAMEPLAY_TAG_COMMENT(GameplayCue_Hit_Groggy_Release, "GameplayCue.Hit.
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Knight_Part_Legs, "Knight.Part.Legs", "Knight legs part (part health).");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Item_Type_Material, "Item.Type.Material", "Monster materials and other crafting stackables.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Item_Type_Socket, "Item.Type.Socket", "Socket items held in the progression item box.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Item_Type_Part, "Item.Type.Part", "Mech armor and equipment parts.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Item_Type_Weapon, "Item.Type.Weapon", "Weapons (the greatsword and its variants).");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Equipment_Slot_Head, "Equipment.Slot.Head", "Head part slot.");
