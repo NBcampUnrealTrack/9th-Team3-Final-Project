@@ -145,8 +145,9 @@ void UknightGameplayAbility_BoostDash::StartDash(ACharacter& Character)
 	}
 
 	// 거리 = 기본 거리 x 퀵스텝 속도 배율 x 중량 계수. 시간은 고정이라 거리가 늘면 속도도 빨라진다.
+	// (2026-10-21) 중량 계수는 퀵스텝 전용(적재율 50%부터 최대 15%)을 쓴다. 이동용 계수는 0%부터 최대 30%라 회피가 너무 짧아졌다.
 	const UknightMovementComponent* const KnightMovement = Cast<UknightMovementComponent>(Character.GetCharacterMovement());
-	const float WeightFactor = KnightMovement ? KnightMovement->GetWeightSpeedFactor() : 1.f;
+	const float WeightFactor = KnightMovement ? KnightMovement->GetDodgeWeightFactor() : 1.f;
 	const float Distance = DashDistance * GetMechAttributeValue(UknightAttributeSet::GetDodgeSpeedAttribute(), 1.f) * WeightFactor;
 	const float Strength = Distance / DashDuration;
 	UAbilityTask_ApplyRootMotionConstantForce* const DashTask = UAbilityTask_ApplyRootMotionConstantForce::ApplyRootMotionConstantForce(

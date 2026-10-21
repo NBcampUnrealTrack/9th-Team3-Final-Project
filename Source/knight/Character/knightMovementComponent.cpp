@@ -103,18 +103,30 @@ float UknightMovementComponent::GetMechAttributeValue(const FGameplayAttribute& 
 	return ASC && ASC->HasAttributeSetForAttribute(Attribute) ? ASC->GetNumericAttribute(Attribute) : Fallback;
 }
 
-float UknightMovementComponent::GetWeightSpeedFactor() const
+float UknightMovementComponent::GetLoadRatio() const
 {
 	const float Weight = GetMechAttributeValue(UknightAttributeSet::GetWeightAttribute(), 0.f);
 	const float LoadCapacity = GetMechAttributeValue(UknightAttributeSet::GetLoadCapacityAttribute(), 1.f);
 
 	// 적재 한도를 넘는 장착은 막을 예정이지만, 혹시 넘더라도 계수가 바닥 아래로 내려가지 않게 0~1로 자른다.
-	const float LoadRatio = LoadCapacity > 0.f ? FMath::Clamp(Weight / LoadCapacity, 0.f, 1.f) : 0.f;
+	return LoadCapacity > 0.f ? FMath::Clamp(Weight / LoadCapacity, 0.f, 1.f) : 0.f;
+}
+
+float UknightMovementComponent::GetWeightSpeedFactor() const
+{
+	const float LoadRatio = GetLoadRatio();
 	if (WeightSpeedCurve)
 	{
 		return FMath::Max(0.f, WeightSpeedCurve->GetFloatValue(LoadRatio));
 	}
 	return FMath::Lerp(1.f, MinWeightSpeedFactor, LoadRatio);
+}
+
+float UknightMovementComponent::GetDodgeWeightFactor() const
+{
+	// 시작 적재율까지는 0, 적재율 1에서 1이 되는 비율로 바꿔서 1.0 → MinDodgeWeightFactor 직선에 넣는다.
+	const float Alpha = FMath::GetRangePct(DodgeWeightStartRatio, 1.f, GetLoadRatio());
+	return FMath::Lerp(1.f, MinDodgeWeightFactor, FMath::Clamp(Alpha, 0.f, 1.f));
 }
 
 float UknightMovementComponent::GetMaxSpeed() const
