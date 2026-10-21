@@ -3,7 +3,6 @@
 #include "AIController.h"
 #include "BrainComponent.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
-#include "AbilitySystem/Abilities/knightGameplayAbility_MonsterAttack.h"
 #include "AbilitySystem/Attributes/knightMonsterAttributeSet.h"
 #include "AbilitySystem/knightAbilitySystemComponent.h"
 #include "Abilities/GameplayAbilityTypes.h"
@@ -382,15 +381,11 @@ void AknightMonsterCharacterBase::HandleParried(const FGameplayEventData* Payloa
 		UE_LOG(LogknightAI, Log, TEXT("%s: parried, poise blocked by state."), *GetNameSafe(this));
 		return;
 	}
-	// 패링 이벤트에는 공격 어빌리티가 담기지 않으므로 지금 실행 중인 공격을 찾는다. 공격은 한 번에 하나만 실행된다.
-	for (const FGameplayAbilitySpec& Spec : AbilitySystemComponent->GetActivatableAbilities())
+	// 경직 반응이 같은 이벤트로 먼저 발동해 공격을 취소하므로, 공격 쪽 설정은 이벤트에 실려 온 태그로 본다.
+	if (Payload && Payload->InstigatorTags.HasTagExact(knightGameplayTags::Event_Parried_NoPoise))
 	{
-		const UknightGameplayAbility_MonsterAttack* const Attack = Spec.IsActive() ? Cast<UknightGameplayAbility_MonsterAttack>(Spec.GetPrimaryInstance()) : nullptr;
-		if (Attack && !Attack->DoesParryBuildPoise())
-		{
-			UE_LOG(LogknightAI, Log, TEXT("%s: parried, %s does not build poise."), *GetNameSafe(this), *GetNameSafe(Attack));
-			return;
-		}
+		UE_LOG(LogknightAI, Log, TEXT("%s: parried, the attack does not build poise."), *GetNameSafe(this));
+		return;
 	}
 	const float PoiseDamage = CoreAttributeSet->GetMaxPoise() * Ratio;
 	AActor* const Defender = Payload ? const_cast<AActor*>(Payload->Instigator.Get()) : nullptr;

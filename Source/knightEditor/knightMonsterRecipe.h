@@ -116,10 +116,6 @@ struct FknightRecipeAttack
 	UPROPERTY(EditAnywhere, Category="Selection")
 	bool bAirAttack = false;
 
-	/** 퍼펙트 가드당하면 경직도가 깎인다. 원거리처럼 패링 보상만 주는 공격은 끈다. */
-	UPROPERTY(EditAnywhere, Category="Damage")
-	bool bParryBuildsPoise = true;
-
 	UPROPERTY(EditAnywhere, Category="Damage")
 	FknightMeleeHitParams HitParams;
 

@@ -82,6 +82,7 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Event_PartBroken, "Event.PartBroken", "A monster part was broken.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Event_Death, "Event.Death", "Health reached zero.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Event_Monster_Engaged, "Event.Monster.Engaged", "A monster found its first target (once per life; plays the encounter roar).");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Event_Parried_NoPoise, "Event.Parried.NoPoise", "Carried in an Event.Parried payload (InstigatorTags) when the parried attack must not reduce the attacker's poise.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Event_Monster_TakeOff, "Event.Monster.TakeOff", "Flying monster starts its air turn (plays the take-off reaction).");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Event_Monster_Land, "Event.Monster.Land", "Flying monster ends its air turn (plays the landing reaction).");
 

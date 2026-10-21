@@ -44,6 +44,7 @@
 #include "Monster/knightMonsterCharacterBase.h"
 #include "Monster/knightMonsterDefinition.h"
 #include "AbilitySystem/Abilities/knightGameplayAbility_MonsterDiveAttack.h"
+#include "AbilitySystem/Abilities/knightGameplayAbility_MonsterProjectileAttack.h"
 #include "Monster/knightMonsterAirTurnComponent.h"
 #include "Monster/knightMonsterHoverComponent.h"
 #include "Monster/knightMonsterPartData.h"
@@ -460,7 +461,6 @@ namespace knightRecipe
 		SetValue<float>(CDO, TEXT("StartTurnYaw"), Attack.StartTurnYaw, Log);
 		SetValue<float>(CDO, TEXT("StartTurnRate"), Attack.StartTurnRate, Log);
 		SetValue<float>(CDO, TEXT("StartTurnMaxTime"), Attack.StartTurnMaxTime, Log);
-		SetBool(CDO, TEXT("bParryBuildsPoise"), Attack.bParryBuildsPoise, Log);
 		if (Attack.Type == EknightRecipeAttackType::Area)
 		{
 			SetValue<float>(CDO, TEXT("WindupTime"), Attack.WindupTime, Log);
@@ -1763,7 +1763,7 @@ UknightMonsterRecipe* UknightMonsterRecipeLibrary::CreateRecipeFromMonster(TSubc
 			ShortName.RemoveFromStart(AbilityPrefix);
 
 			// 레시피 항목(근접·범위 공격)으로 만들 수 없는 전용 공격은 추가 어빌리티로 그대로 둔다.
-			if (CDO->IsA<UknightGameplayAbility_MonsterDiveAttack>())
+			if (CDO->IsA<UknightGameplayAbility_MonsterDiveAttack>() || CDO->IsA<UknightGameplayAbility_MonsterProjectileAttack>())
 			{
 				Recipe->ExtraAbilities.Add(Entry.Ability.Get());
 				continue;
@@ -1789,7 +1789,6 @@ UknightMonsterRecipe* UknightMonsterRecipeLibrary::CreateRecipeFromMonster(TSubc
 				GetValue(CDO, TEXT("StartTurnYaw"), Attack.StartTurnYaw);
 				GetValue(CDO, TEXT("StartTurnRate"), Attack.StartTurnRate);
 				GetValue(CDO, TEXT("StartTurnMaxTime"), Attack.StartTurnMaxTime);
-				Attack.bParryBuildsPoise = GetBool(CDO, TEXT("bParryBuildsPoise"));
 				if (Attack.Type == EknightRecipeAttackType::Area)
 				{
 					Attack.HitWindows.Reset();
