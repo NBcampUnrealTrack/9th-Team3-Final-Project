@@ -114,7 +114,8 @@ namespace
 		OutLocation = AttackerLocation + Direction * OutTravel;
 		OutRotation = Direction.Rotation();
 		// (2026-10-19) Verbose: 락온 중 매 프레임 불려서(락온 컴포넌트의 '멀다' 판정) 로그가 한 판에 10만 줄 넘게 쌓이고 랙을 만들었다.
-		UE_LOG(LogknightCombat, Verbose, TEXT("Attack warp -> %s: distance %.0f, radius %.0f, travel %.0f"),
+		// (2026-10-20) VeryVerbose: 밸런스 측정 때 LogknightCombat을 Verbose로 켜도 이 줄은 나오지 않게(타격 로그만 남게).
+		UE_LOG(LogknightCombat, VeryVerbose, TEXT("Attack warp -> %s: distance %.0f, radius %.0f, travel %.0f"),
 			*GetNameSafe(TargetActor), Distance, Radius, OutTravel);
 		return true;
 	}
@@ -199,6 +200,11 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 
 	FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
 	Context.AddHitResult(Hit, true);
+	// (2026-10-21) 어떤 공격의 피해인지 남긴다(피해 실행 로그의 [어빌리티], 밸런스 측정용).
+	if (SourceAbility)
+	{
+		Context.SetAbility(SourceAbility);
+	}
 	const FGameplayEffectSpecHandle SpecHandle = SourceASC->MakeOutgoingSpec(Params.DamageEffect, 1.f, Context);
 	if (!SpecHandle.IsValid())
 	{
