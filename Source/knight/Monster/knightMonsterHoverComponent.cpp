@@ -23,7 +23,7 @@ void UknightMonsterHoverComponent::BeginPlay()
 	{
 		BaseMeshHeight = Mesh->GetRelativeLocation().Z;
 	}
-	SetComponentTickEnabled(Mesh.IsValid() && ((HoverDrop > 0.f && !FootBones.IsEmpty()) || AirLift > 0.f));
+	SetComponentTickEnabled(Mesh.IsValid() && ((HoverDrop > 0.f && !FootBones.IsEmpty()) || AirLift > 0.f || !BodyBones.IsEmpty()));
 }
 
 void UknightMonsterHoverComponent::SetAirborne(bool bInAirborne, float BlendTime)
@@ -72,8 +72,19 @@ void UknightMonsterHoverComponent::TickComponent(float DeltaTime, ELevelTick Tic
 		const float BoneAboveOrigin = MeshComponent->GetSocketLocation(AirCeilingBone).Z - MeshOriginZ;
 		Height = FMath::Min(Height, AirCeiling - Character->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() - BoneAboveOrigin);
 	}
+	if (!BodyBones.IsEmpty() && Character && Character->GetCapsuleComponent())
+	{
+		// 천장보다 바닥이 먼저다. 캡슐 원점 기준: 뼈 높이 = Height + (뼈 - 메시 원점) ≥ -캡슐 반높이 + BodyClearance
+		float LowestBody = TNumericLimits<float>::Max();
+		for (const FName Bone : BodyBones)
+		{
+			LowestBody = FMath::Min(LowestBody, MeshComponent->GetSocketLocation(Bone).Z - MeshOriginZ);
+		}
+		Height = FMath::Max(Height, BodyClearance - Character->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() - LowestBody);
+	}
 
 	FVector Location = MeshComponent->GetRelativeLocation();
+	LastHeightDelta = Height - Location.Z;
 	if (!FMath::IsNearlyEqual(Location.Z, Height, 0.1f))
 	{
 		Location.Z = Height;
