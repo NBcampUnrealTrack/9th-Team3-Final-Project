@@ -90,6 +90,8 @@ EStateTreeRunStatus FknightStateTreeActivateAbilityTask::EnterState(FStateTreeEx
 	InstanceData.ActiveHandle = FGameplayAbilitySpecHandle();
 	InstanceData.EndedDelegateHandle.Reset();
 	InstanceData.FailAtTime = -1.0;
+	InstanceData.RestTime = 0.f;
+	InstanceData.SucceedAtTime = -1.0;
 
 	UAbilitySystemComponent* const ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(InstanceData.Actor);
 	InstanceData.AbilitySystem = ASC;
@@ -176,13 +178,26 @@ EStateTreeRunStatus FknightStateTreeActivateAbilityTask::EnterState(FStateTreeEx
 			// 발동 도중에 이미 끝났다(즉발 기술).
 			return EStateTreeRunStatus::Succeeded;
 		}
+		if (Definition && Cast<UknightGameplayAbility_MonsterAttack>(Spec->GetPrimaryInstance()))
+		{
+			InstanceData.RestTime = ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Phase2) ? Definition->Phase2AttackRestTime : Definition->AttackRestTime;
+		}
 		// 발동 후에 바인딩해서 EnterState가 아직 실행 중일 때 콜백이 Task를 끝내는 일이 없게 한다.
+		// 쉬는 시간이 있으면 정상 종료는 Tick이 맡는다(어빌리티가 끝난 걸 보고 RestTime 뒤에 성공).
 		InstanceData.EndedDelegateHandle = ASC->OnAbilityEnded.AddLambda(
-			[WeakContext = Context.MakeWeakExecutionContext(), Handle](const FAbilityEndedData& Data)
+			[WeakContext = Context.MakeWeakExecutionContext(), Handle, bRest = InstanceData.RestTime > 0.f](const FAbilityEndedData& Data)
 			{
-				if (Data.AbilitySpecHandle == Handle)
+				if (Data.AbilitySpecHandle != Handle)
 				{
-					WeakContext.FinishTask(Data.bWasCancelled ? EStateTreeFinishTaskType::Failed : EStateTreeFinishTaskType::Succeeded);
+					return;
+				}
+				if (Data.bWasCancelled)
+				{
+					WeakContext.FinishTask(EStateTreeFinishTaskType::Failed);
+				}
+				else if (!bRest)
+				{
+					WeakContext.FinishTask(EStateTreeFinishTaskType::Succeeded);
 				}
 			});
 		InstanceData.ActiveHandle = Handle;
@@ -202,10 +217,27 @@ EStateTreeRunStatus FknightStateTreeActivateAbilityTask::EnterState(FStateTreeEx
 
 EStateTreeRunStatus FknightStateTreeActivateAbilityTask::Tick(FStateTreeExecutionContext& Context, const float DeltaTime) const
 {
-	const FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
-	if (InstanceData.FailAtTime >= 0.0 && Context.GetWorld()->GetTimeSeconds() >= InstanceData.FailAtTime)
+	FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
+	const double Now = Context.GetWorld()->GetTimeSeconds();
+	if (InstanceData.FailAtTime >= 0.0 && Now >= InstanceData.FailAtTime)
 	{
 		return EStateTreeRunStatus::Failed;
+	}
+	if (InstanceData.RestTime > 0.f && InstanceData.ActiveHandle.IsValid())
+	{
+		if (InstanceData.SucceedAtTime < 0.0)
+		{
+			const UAbilitySystemComponent* const ASC = InstanceData.AbilitySystem.Get();
+			const FGameplayAbilitySpec* const Spec = ASC ? ASC->FindAbilitySpecFromHandle(InstanceData.ActiveHandle) : nullptr;
+			if (!Spec || !Spec->IsActive())
+			{
+				InstanceData.SucceedAtTime = Now + InstanceData.RestTime;
+			}
+		}
+		else if (Now >= InstanceData.SucceedAtTime)
+		{
+			return EStateTreeRunStatus::Succeeded;
+		}
 	}
 	return EStateTreeRunStatus::Running;
 }
