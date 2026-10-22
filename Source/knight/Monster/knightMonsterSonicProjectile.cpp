@@ -1,10 +1,13 @@
 #include "Monster/knightMonsterSonicProjectile.h"
 
+#include "Camera/knightPlayerCameraManager.h"
 #include "Combat/knightCombatLibrary.h"
 #include "Components/StaticMeshComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
+#include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerController.h"
 #include "NiagaraComponent.h"
 #include "Monster/knightMonsterDebug.h"
 #include "UObject/ConstructorHelpers.h"
@@ -70,7 +73,14 @@ void AknightMonsterSonicProjectile::Tick(float DeltaSeconds)
 	{
 		UknightCombatLibrary::ApplyAreaMeleeHits(Source, Center, FCollisionShape::MakeSphere(Radius), HitParams, HitActors,
 			[](const AActor&) { return true; },
-			[&bHit](AActor&, EknightHitOutcome Outcome) { bHit |= Outcome != EknightHitOutcome::Evaded && Outcome != EknightHitOutcome::Ignored; });
+			[this, &bHit](AActor& Target, EknightHitOutcome Outcome)
+			{
+				bHit |= Outcome != EknightHitOutcome::Evaded && Outcome != EknightHitOutcome::Ignored;
+				if (Outcome == EknightHitOutcome::Hit)
+				{
+					DeafenTarget(Target);
+				}
+			});
 		if (bHit)
 		{
 			break;
@@ -92,4 +102,14 @@ void AknightMonsterSonicProjectile::Tick(float DeltaSeconds)
 		return;
 	}
 	SetActorLocation(End);
+}
+
+void AknightMonsterSonicProjectile::DeafenTarget(AActor& Target) const
+{
+	const APawn* const Pawn = Cast<APawn>(&Target);
+	const APlayerController* const PC = Pawn ? Cast<APlayerController>(Pawn->GetController()) : nullptr;
+	if (AknightPlayerCameraManager* const Camera = DeafenTime > 0.f && PC && PC->IsLocalController() ? Cast<AknightPlayerCameraManager>(PC->PlayerCameraManager) : nullptr)
+	{
+		Camera->StartDeafen(DeafenTime);
+	}
 }

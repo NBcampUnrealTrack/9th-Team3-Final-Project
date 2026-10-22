@@ -69,6 +69,17 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Push Out")
 	FGameplayTagContainer PassThroughPawnTags;
 
+	/**
+	 * 이 뼈와 그 아래 뼈의 메시 바디는 PassThroughBoneTags 중에 밀어내지 않는다(잔향 날개 어깨).
+	 * 쓰러지거나 탈진해 엎드린 날짐승은 날갯짓이 땅을 쓸어, 다 밀어내면 몸에 붙어 때리지 못하고 계속 튕겨 나간다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Push Out", meta=(EditCondition="bPushOutOfMesh"))
+	TArray<FName> PassThroughBones;
+
+	/** 기본값: 다운(State.HitReact.Knockdown), 탈진(State.Monster.Exhausted), 탈진 착지(State.Monster.Collapsed). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Push Out", meta=(EditCondition="bPushOutOfMesh"))
+	FGameplayTagContainer PassThroughBoneTags;
+
 private:
 	/** MeshPenetration: 메시 바디에 이만큼 파고든 것까지는 겹침으로 보지 않는다. */
 	bool IsOverlappingBody(const class ACharacter* Character, float MeshPenetration) const;
@@ -77,6 +88,9 @@ private:
 	/** 차단 상자나 이동 캡슐 윗면에 서 있거나 모서리에 걸쳐 있는지. 위에서 떨어지면 몸 위에 올라타거나 공중에 걸린다. */
 	bool IsStandingOnBody(const class ACharacter* Character) const;
 	bool IsShallowMeshPushOut() const;
+	bool IsBonePassThrough() const;
+	/** 메시에서 PassThroughBodies를 뺀 바디 중 하나라도 겹치는지. */
+	bool IsOverlappingMeshBodies(const class ACharacter* Character, float Penetration) const;
 	bool WantsPassThroughPawns() const;
 	void SetCapsulePassThrough(bool bPassThrough);
 	FVector GetPushDirection(const FVector& Location) const;
@@ -94,6 +108,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UCapsuleComponent> MovementCapsule;
+
+	/** PassThroughBones 아래의 메시 바디 번호(USkeletalMeshComponent::Bodies). */
+	TSet<int32> PassThroughBodies;
 
 	/** 캡슐이 지금 플레이어를 통과시키는 중인지와, 통과 전의 Pawn 응답(되돌릴 값). */
 	bool bCapsulePassingThrough = false;

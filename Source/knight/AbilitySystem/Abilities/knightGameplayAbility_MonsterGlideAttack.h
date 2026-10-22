@@ -17,7 +17,11 @@ class UAnimMontage;
  *           HitStartTime ~ HitEndTime 동안 HitSocket(꼬리 끝) 구체에 닿은 대상을 한 번씩 때린다.
  *   연속: 분노 중이면 EnragedStrikeCount번. 중간 찌르기는 타깃 너머 RepassDistance까지 지나간 뒤 TurnTime 동안 멈춰 타깃 쪽으로 돈다.
  *   탈진 착지: 공중 턴을 끝내고 LandMontage를 LandHoldTime 동안, 이어서 GetUpMontage를 재생한다(공격 없는 딜 타임).
+ *             그동안 State.Monster.Collapsed를 붙인다(날개로 플레이어를 밀어내지 않음).
  *             끝나면 지상 턴이 처음부터 시작된다.
+ *
+ * bDarkenView면 포효부터 착지까지 플레이어 시야를 어둠으로 덮고, 첫 찌르기는 어둠이 덮인 뒤 DarknessHoldTime이 지나야 시작한다.
+ * 그리고 찌르기 SilhouetteLeadTime 전부터 찌르는 순간까지 몸 윤곽선만 보인다.
  *
  * 찌르는 동안 State.Monster.NoFlinch를 붙여 패링 경직이 활강을 끊지 않는다. 그로기 게이지가 다 차면 다운이 끊는다(격추).
  * 디버그: knight.Monster.DrawAttacks 1 이면 판정 구체를 그린다.
@@ -109,6 +113,18 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Land")
 	TObjectPtr<UAnimMontage> GetUpMontage;
 
+	/** 포효부터 착지(또는 끊길 때)까지 플레이어 시야를 어둠으로 덮는다. 소리는 그대로다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Darkness")
+	bool bDarkenView = false;
+
+	/** 어둠이 덮이고(포효 시작) 첫 찌르기까지 기다리는 시간. RoarTime보다 짧으면 RoarTime을 쓴다. 그동안 타깃 쪽으로 돈다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Darkness", meta=(EditCondition="bDarkenView", ClampMin=0, Units="s"))
+	float DarknessHoldTime = 3.f;
+
+	/** 찌르는 순간(StabTime) 이 시간 전부터 어둠 속에 몸 윤곽선이 희미하게 보인다. 0이면 보이지 않는다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Darkness", meta=(EditCondition="bDarkenView", ClampMin=0, Units="s"))
+	float SilhouetteLeadTime = 0.5f;
+
 private:
 	UFUNCTION()
 	void HandleTick(int32 ActionNumber);
@@ -120,6 +136,9 @@ private:
 	void StartLand();
 	void ApplyHits();
 	void SetNoFlinch(bool bOn);
+	void SetDarkness(bool bOn);
+	void SetCollapsed(bool bOn);
+	void SetSilhouette(bool bOn);
 
 	enum class EPhase : uint8 { Roar, Strike, Turn, Land, GetUp };
 
@@ -132,4 +151,7 @@ private:
 	float StrikeEndTime = 0.f;
 	bool bNoFlinchApplied = false;
 	bool bLanded = false;
+	bool bDarknessOn = false;
+	bool bCollapsedApplied = false;
+	bool bSilhouetteOn = false;
 };

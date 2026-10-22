@@ -5,6 +5,7 @@
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_Repeat.h"
 #include "Animation/AnimInstance.h"
+#include "Camera/knightPlayerCameraManager.h"
 #include "Combat/knightCombatLibrary.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "DrawDebugHelpers.h"
@@ -54,6 +55,7 @@ void UknightGameplayAbility_MonsterGlideAttack::ActivateAbility(const FGameplayA
 	Phase = EPhase::Roar;
 	PhaseTime = 0.f;
 	bLanded = false;
+	SetDarkness(bDarkenView);
 	if (RoarMontage)
 	{
 		UAbilityTask_PlayMontageAndWait* const RoarTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, RoarMontage);
@@ -85,12 +87,13 @@ void UknightGameplayAbility_MonsterGlideAttack::HandleTick(int32 ActionNumber)
 		{
 			Movement->TurnTowards(Target->GetActorLocation(), knightMonsterGlide::TickInterval, TurnRate, 2.f);
 		}
-		if (PhaseTime >= (Phase == EPhase::Roar ? RoarTime : TurnTime))
+		if (PhaseTime >= (Phase == EPhase::Roar ? (bDarkenView ? FMath::Max(RoarTime, DarknessHoldTime) : RoarTime) : TurnTime))
 		{
 			StartStrike();
 		}
 		break;
 	case EPhase::Strike:
+		SetSilhouette(SilhouetteLeadTime > 0.f && PhaseTime >= StabTime - SilhouetteLeadTime && PhaseTime < StabTime);
 		if (PhaseTime >= HitStartTime && PhaseTime <= HitEndTime)
 		{
 			ApplyHits();
@@ -180,6 +183,8 @@ void UknightGameplayAbility_MonsterGlideAttack::StartLand()
 		AirTurn->EndAirTurnNow(0.3f);
 	}
 	bLanded = true;
+	SetDarkness(false);
+	SetCollapsed(true);
 	Phase = EPhase::Land;
 	PhaseTime = 0.f;
 	if (!LandMontage)
@@ -236,6 +241,64 @@ void UknightGameplayAbility_MonsterGlideAttack::SetNoFlinch(bool bOn)
 	bNoFlinchApplied = bOn;
 }
 
+void UknightGameplayAbility_MonsterGlideAttack::SetCollapsed(bool bOn)
+{
+	UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();
+	if (!ASC || bOn == bCollapsedApplied)
+	{
+		return;
+	}
+	if (bOn)
+	{
+		ASC->AddLooseGameplayTag(knightGameplayTags::State_Monster_Collapsed);
+	}
+	else
+	{
+		ASC->RemoveLooseGameplayTag(knightGameplayTags::State_Monster_Collapsed);
+	}
+	bCollapsedApplied = bOn;
+}
+
+void UknightGameplayAbility_MonsterGlideAttack::SetDarkness(bool bOn)
+{
+	if (bOn == bDarknessOn)
+	{
+		return;
+	}
+	if (!bOn)
+	{
+		SetSilhouette(false);
+	}
+	UPrimitiveComponent* const Mesh = GetCurrentActorInfo() ? GetCurrentActorInfo()->SkeletalMeshComponent.Get() : nullptr;
+	AknightPlayerCameraManager::ForEachLocalCamera(GetAvatarActorFromActorInfo(), [Mesh, bOn](AknightPlayerCameraManager& Camera)
+	{
+		if (bOn)
+		{
+			Camera.StartDarkness(Mesh);
+		}
+		else
+		{
+			Camera.StopDarkness(Mesh);
+		}
+	});
+	bDarknessOn = bOn;
+}
+
+void UknightGameplayAbility_MonsterGlideAttack::SetSilhouette(bool bOn)
+{
+	bOn &= bDarknessOn;
+	if (bOn == bSilhouetteOn)
+	{
+		return;
+	}
+	const UPrimitiveComponent* const Mesh = GetCurrentActorInfo() ? GetCurrentActorInfo()->SkeletalMeshComponent.Get() : nullptr;
+	AknightPlayerCameraManager::ForEachLocalCamera(GetAvatarActorFromActorInfo(), [Mesh, bOn](AknightPlayerCameraManager& Camera)
+	{
+		Camera.SetDarknessSilhouette(Mesh, bOn);
+	});
+	bSilhouetteOn = bOn;
+}
+
 void UknightGameplayAbility_MonsterGlideAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
@@ -245,6 +308,8 @@ void UknightGameplayAbility_MonsterGlideAttack::EndAbility(const FGameplayAbilit
 	}
 	TickTask.Reset();
 	SetNoFlinch(false);
+	SetDarkness(false);
+	SetCollapsed(false);
 
 	const AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetAvatarActorFromActorInfo());
 	UknightMonsterAirTurnComponent* const AirTurn = Monster ? Monster->FindComponentByClass<UknightMonsterAirTurnComponent>() : nullptr;
