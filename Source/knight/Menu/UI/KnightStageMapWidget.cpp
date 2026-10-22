@@ -5,6 +5,7 @@
 #include "Framework/Application/SlateApplication.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Rendering/DrawElements.h"
+#include "Styling/CoreStyle.h"
 
 namespace
 {
@@ -42,6 +43,23 @@ namespace
 		return 1.f + 0.12f * FMath::Sin(3.f * Angle + static_cast<float>(CenterUV.X) * 40.f)
 			+ 0.07f * FMath::Cos(5.f * Angle + static_cast<float>(CenterUV.Y) * 40.f);
 	}
+
+	FSlateFontInfo QuestFont(TSubclassOf<UCommonTextStyle> TextStyle)
+	{
+		FSlateFontInfo Font = FCoreStyle::GetDefaultFontStyle(TEXT("Regular"), 14);
+		if (const UCommonTextStyle* const Style = TextStyle ? TextStyle->GetDefaultObject<UCommonTextStyle>() : nullptr)
+		{
+			Style->GetFont(Font);
+			Font.Size = FMath::Min(Font.Size, 16);
+		}
+		return Font;
+	}
+
+	FVector2D QuestPinSize(const FText& Label, const FSlateFontInfo& Font)
+	{
+		const FVector2D TextSize = FSlateApplication::Get().GetRenderer()->GetFontMeasureService()->Measure(Label, Font);
+		return FVector2D(FMath::Max(76.0, TextSize.X + 24.0), FMath::Max(30.0, TextSize.Y + 10.0));
+	}
 }
 
 UKnightStageMapWidget::UKnightStageMapWidget(const FObjectInitializer& ObjectInitializer)
@@ -49,6 +67,7 @@ UKnightStageMapWidget::UKnightStageMapWidget(const FObjectInitializer& ObjectIni
 {
 	// No child widgets, so the widget itself has to take the mouse.
 	SetVisibilityInternal(ESlateVisibility::Visible);
+	SetIsFocusable(true);
 }
 
 void UKnightStageMapWidget::NativeOnInitialized()
@@ -80,6 +99,21 @@ void UKnightStageMapWidget::SetMarkers(const TArray<FKnightMapMarker>& InMarkers
 		}
 		Center = Sum / Markers.Num();
 	}
+}
+
+void UKnightStageMapWidget::SetQuestMarkers(const TArray<FKnightMapQuestMarker>& InMarkers)
+{
+	QuestMarkers = InMarkers;
+	HoveredQuestIndex = INDEX_NONE;
+	if (!QuestMarkers.ContainsByPredicate([this](const FKnightMapQuestMarker& Marker) { return Marker.QuestId == SelectedQuestId; }))
+	{
+		SelectedQuestId = NAME_None;
+	}
+}
+
+void UKnightStageMapWidget::SetSelectedQuest(FName QuestId)
+{
+	SelectedQuestId = QuestId;
 }
 
 void UKnightStageMapWidget::SetSelectedStage(FName StageId)
@@ -231,6 +265,21 @@ int32 UKnightStageMapWidget::FindMarkerAt(const FVector2D& LocalPosition, const 
 	return Best;
 }
 
+int32 UKnightStageMapWidget::FindQuestMarkerAt(const FVector2D& LocalPosition, const FVector2D& LocalSize) const
+{
+	if (!FSlateApplication::IsInitialized()) return INDEX_NONE;
+	const FMapView View = MakeView(LocalSize);
+	const FSlateFontInfo Font = QuestFont(LabelTextStyle);
+	for (int32 Index = QuestMarkers.Num() - 1; Index >= 0; --Index)
+	{
+		const FKnightMapQuestMarker& Marker = QuestMarkers[Index];
+		const FVector2D Position = ToLocal(Marker.Location, View);
+		const FVector2D HalfSize = QuestPinSize(Marker.Label, Font) * 0.5;
+		if (FSlateRect(Position - HalfSize, Position + HalfSize).ContainsPoint(LocalPosition)) return Index;
+	}
+	return INDEX_NONE;
+}
+
 void UKnightStageMapWidget::SetHovered(int32 Index)
 {
 	if (Index == HoveredIndex)
@@ -238,11 +287,19 @@ void UKnightStageMapWidget::SetHovered(int32 Index)
 		return;
 	}
 	HoveredIndex = Index;
-	SetCursor(Index != INDEX_NONE ? EMouseCursor::Hand : EMouseCursor::Default);
+	SetCursor(Index != INDEX_NONE || HoveredQuestIndex != INDEX_NONE ? EMouseCursor::Hand : EMouseCursor::Default);
 	if (Index != INDEX_NONE && FSlateApplication::IsInitialized())
 	{
 		FSlateApplication::Get().PlaySound(HoverSound);
 	}
+}
+
+void UKnightStageMapWidget::SetHoveredQuest(int32 Index)
+{
+	if (Index == HoveredQuestIndex) return;
+	HoveredQuestIndex = Index;
+	SetCursor(Index != INDEX_NONE || HoveredIndex != INDEX_NONE ? EMouseCursor::Hand : EMouseCursor::Default);
+	if (Index != INDEX_NONE && FSlateApplication::IsInitialized()) FSlateApplication::Get().PlaySound(HoverSound);
 }
 
 FReply UKnightStageMapWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
@@ -265,7 +322,9 @@ FReply UKnightStageMapWidget::NativeOnMouseMove(const FGeometry& InGeometry, con
 	const FVector2D LocalSize = InGeometry.GetLocalSize();
 	if (!bDragging)
 	{
-		SetHovered(FindMarkerAt(InGeometry.AbsoluteToLocal(InMouseEvent.GetScreenSpacePosition()), LocalSize));
+		const FVector2D Local = InGeometry.AbsoluteToLocal(InMouseEvent.GetScreenSpacePosition());
+		SetHoveredQuest(FindQuestMarkerAt(Local, LocalSize));
+		SetHovered(HoveredQuestIndex == INDEX_NONE ? FindMarkerAt(Local, LocalSize) : INDEX_NONE);
 		return FReply::Unhandled();
 	}
 
@@ -278,6 +337,7 @@ FReply UKnightStageMapWidget::NativeOnMouseMove(const FGeometry& InGeometry, con
 		bDragMoved = true;
 		bUserTouched = true;
 		SetHovered(INDEX_NONE);
+		SetHoveredQuest(INDEX_NONE);
 	}
 	if (bDragMoved)
 	{
@@ -307,7 +367,19 @@ FReply UKnightStageMapWidget::NativeOnMouseButtonUp(const FGeometry& InGeometry,
 	}
 	if (!bDragMoved)
 	{
-		const int32 Index = FindMarkerAt(InGeometry.AbsoluteToLocal(InMouseEvent.GetScreenSpacePosition()), InGeometry.GetLocalSize());
+		const FVector2D Local = InGeometry.AbsoluteToLocal(InMouseEvent.GetScreenSpacePosition());
+		const int32 QuestIndex = FindQuestMarkerAt(Local, InGeometry.GetLocalSize());
+		if (QuestIndex != INDEX_NONE)
+		{
+			const FKnightMapQuestMarker& Quest = QuestMarkers[QuestIndex];
+			SetSelectedStage(Quest.RegionId);
+			SetSelectedQuest(Quest.QuestId);
+			FocusStage(Quest.RegionId);
+			if (FSlateApplication::IsInitialized()) FSlateApplication::Get().PlaySound(SelectSound);
+			OnQuestClicked.Broadcast(Quest.QuestId);
+			return FReply::Handled().ReleaseMouseCapture();
+		}
+		const int32 Index = FindMarkerAt(Local, InGeometry.GetLocalSize());
 		if (Index != INDEX_NONE)
 		{
 			SetSelectedStage(Markers[Index].StageId);
@@ -322,12 +394,23 @@ FReply UKnightStageMapWidget::NativeOnMouseButtonUp(const FGeometry& InGeometry,
 	return FReply::Handled().ReleaseMouseCapture();
 }
 
+FReply UKnightStageMapWidget::NativeOnMouseWheel(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	const float Wheel = InMouseEvent.GetWheelDelta();
+	if (FMath::IsNearlyZero(Wheel)) return FReply::Unhandled();
+	VisibleLatitude = FMath::Clamp(VisibleLatitude * FMath::Pow(0.9f, Wheel), 35.f, 150.f);
+	bUserTouched = true;
+	Velocity = FVector2D::ZeroVector;
+	return FReply::Handled();
+}
+
 void UKnightStageMapWidget::NativeOnMouseLeave(const FPointerEvent& InMouseEvent)
 {
 	Super::NativeOnMouseLeave(InMouseEvent);
 	if (!bDragging)
 	{
 		SetHovered(INDEX_NONE);
+		SetHoveredQuest(INDEX_NONE);
 	}
 }
 
@@ -413,6 +496,32 @@ int32 UKnightStageMapWidget::NativePaint(const FPaintArgs& Args, const FGeometry
 			FSlateDrawElement::MakeText(OutDrawElements, LayerId, AllottedGeometry.ToPaintGeometry(FVector2f(TextSize), FSlateLayoutTransform(TextPosition)),
 				Marker.Label, Font, ESlateDrawEffect::None, WithAlpha(TextColor, Opacity));
 		}
+	}
+
+	// Quest pins share the region's map coordinates, so dragging and zooming cannot separate them from the land.
+	const FSlateFontInfo PinFont = QuestFont(LabelTextStyle);
+	const FSlateBrush* const PinBrush = FCoreStyle::Get().GetBrush(TEXT("WhiteBrush"));
+	for (int32 Index = 0; Index < QuestMarkers.Num(); ++Index)
+	{
+		const FKnightMapQuestMarker& Marker = QuestMarkers[Index];
+		const FVector2D Position = ToLocal(Marker.Location, View);
+		const FVector2D PinSize = QuestPinSize(Marker.Label, PinFont);
+		const FVector2D TopLeft = Position - PinSize * 0.5;
+		if (!Bounds.ContainsPoint(Position)) continue;
+		const bool bSelected = Marker.QuestId == SelectedQuestId;
+		const bool bHovered = Index == HoveredQuestIndex;
+		const FLinearColor Edge = bSelected ? MapEmber : (Marker.bLocked ? LockedGrey : (bHovered ? MapWhite : MapFrost));
+		FSlateDrawElement::MakeBox(OutDrawElements, ++LayerId,
+			AllottedGeometry.ToPaintGeometry(FVector2f(PinSize), FSlateLayoutTransform(FVector2f(TopLeft))),
+			PinBrush, ESlateDrawEffect::None, WithAlpha(Edge, Opacity));
+		FSlateDrawElement::MakeBox(OutDrawElements, ++LayerId,
+			AllottedGeometry.ToPaintGeometry(FVector2f(PinSize - FVector2D(2.0)), FSlateLayoutTransform(FVector2f(TopLeft + FVector2D(1.0)))),
+			PinBrush, ESlateDrawEffect::None, WithAlpha(FLinearColor(FColor(15, 25, 35)), 0.94f * Opacity));
+		const FVector2D TextSize = Measure->Measure(Marker.Label, PinFont);
+		const FVector2D TextPosition = Position - TextSize * 0.5;
+		FSlateDrawElement::MakeText(OutDrawElements, ++LayerId,
+			AllottedGeometry.ToPaintGeometry(FVector2f(TextSize), FSlateLayoutTransform(FVector2f(TextPosition))),
+			Marker.Label, PinFont, ESlateDrawEffect::None, WithAlpha(Marker.bLocked ? FrostDim : (bSelected ? MapEmber : MapWhite), Opacity));
 	}
 
 	// Thin frame with brighter corner ticks.

@@ -30,6 +30,7 @@ void UknightMonsterRecipe::Resize()
 	MeshScale *= Factor;
 	HoverDrop *= Factor;
 	HoverFootHeight *= Factor;
+	HoverBodyClearance *= Factor;
 	AirLift *= Factor;
 	AirKeepDistance *= Factor;
 	AirCeiling *= Factor;

@@ -243,6 +243,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Hover", meta=(ClampMin=0, Units="cm", EditCondition="HoverDrop > 0"))
 	float HoverFootHeight = 0.f;
 
+	/** 바닥 아래로 들어가면 안 되는 몸 뼈. 쓰러질 때 몸이 바닥에 처박히면 그만큼 메시를 올린다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Hover")
+	TArray<FName> HoverBodyBones;
+
+	/** 몸 뼈의 바닥 위 최소 높이(cm, 메시 배율 적용). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Hover", meta=(ClampMin=0, Units="cm"))
+	float HoverBodyClearance = 0.f;
+
 	/**
 	 * 레시피 항목으로 만들지 않는 어빌리티(공중 패턴처럼 전용 클래스로 직접 만든 공격). Build가 어빌리티 세트에 그대로 넣고 건드리지 않는다.
 	 * 공중 턴 공격이면 그 어빌리티의 Selection에 State.Monster.Airborne 필요 태그를 직접 둔다.
@@ -306,6 +314,18 @@ public:
 	/** 날개 끝 뼈를 바닥에서 띄우는 높이(cm). */
 	UPROPERTY(EditAnywhere, Category="Hover", meta=(ClampMin=0, Units="cm"))
 	float HoverWingClearance = 30.f;
+
+	/** 바닥 가까이에서 늘어뜨린 꼬리가 바닥을 뚫지 않게 뼈마다 들어 올린다(Knight Wing Clearance 노드). 비우면 꼬리는 보지 않는다. */
+	UPROPERTY(EditAnywhere, Category="Hover")
+	FName HoverTailRootBone;
+
+	/** 꼬리 끝 뼈. HoverTailRootBone의 자손이어야 한다. */
+	UPROPERTY(EditAnywhere, Category="Hover", meta=(EditCondition="HoverTailRootBone != None"))
+	FName HoverTailTipBone;
+
+	/** 꼬리 뼈를 바닥에서 띄우는 높이(cm). */
+	UPROPERTY(EditAnywhere, Category="Hover", meta=(ClampMin=0, Units="cm"))
+	float HoverTailClearance = 20.f;
 
 	/** 이동용 캡슐. 피격은 메시의 피직스 바디가 받으므로 몸보다 작게 둔다. 메시는 캡슐 바닥에 맞춘다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Body", meta=(ClampMin=1, Units="cm"))

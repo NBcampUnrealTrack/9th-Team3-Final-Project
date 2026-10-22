@@ -39,6 +39,44 @@ struct KNIGHT_API FKnightQuestPartBreakReward
 	FknightRaidReward Reward;
 };
 
+/** A map-only region when no existing StageCatalog region represents the quest. This never enables travel. */
+USTRUCT(BlueprintType)
+struct KNIGHT_API FKnightQuestMapRegion
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Map")
+	FName RegionId;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Map")
+	FText DisplayName;
+
+	/** Same longitude/latitude coordinates as FKnightStageDefinition::GlobeLocation. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Map")
+	FVector2D GlobeLocation = FVector2D::ZeroVector;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Map", meta=(ClampMin=2, ClampMax=45, Units="deg"))
+	float GlobeRegionRadius = 14.f;
+};
+
+/** Editorial placement only. QuestId, not StageId, identifies each normal/hard marker. */
+USTRUCT(BlueprintType)
+struct KNIGHT_API FKnightQuestMapPlacement
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Map")
+	FName QuestId;
+
+	/** Existing StageCatalog StageId or an AdditionalMapRegions RegionId; does not affect quest travel. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Map")
+	FName RegionId;
+
+	/** Longitude/latitude offset from the region centre. Moves with map pan and zoom. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Map")
+	FVector2D MarkerOffset = FVector2D::ZeroVector;
+};
+
 /** Static quest configuration. Completion, payout and first-boss flags belong to a save slot, not this asset. */
 UCLASS(BlueprintType, Const)
 class KNIGHT_API UKnightQuestDefinition : public UPrimaryDataAsset
@@ -122,6 +160,14 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Quest", meta=(TitleProperty="QuestId"))
 	TArray<TObjectPtr<UKnightQuestDefinition>> Quests;
+
+	/** Display-only regions absent from StageCatalog. Never used as a raid stage. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Quest|Map", meta=(TitleProperty="RegionId"))
+	TArray<FKnightQuestMapRegion> AdditionalMapRegions;
+
+	/** Quest markers on existing or additional map regions; independent of QuestDefinition::StageId. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Quest|Map", meta=(TitleProperty="QuestId"))
+	TArray<FKnightQuestMapPlacement> MapPlacements;
 
 	UFUNCTION(BlueprintCallable, Category="Knight|Quest")
 	void GetQuestDefinitions(TArray<UKnightQuestDefinition*>& OutQuests) const;
