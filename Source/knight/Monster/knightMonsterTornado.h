@@ -31,7 +31,7 @@ struct KNIGHT_API FknightMonsterTornadoParams
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Tornado", meta=(ClampMin=0, Units="cm/s"))
 	float Speed = 800.f;
 
-	/** 타깃 쪽으로 진행 방향을 꺾는 속도. 작을수록 옆으로 피하기 쉽다. */
+	/** 타깃 쪽으로 진행 방향을 꺾는 속도. 작을수록 옆으로 피하기 쉽다. 0이면 처음 방향으로 일직선으로 지나간다(잔향). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Tornado", meta=(ClampMin=0, Units="deg"))
 	float TurnRate = 90.f;
 

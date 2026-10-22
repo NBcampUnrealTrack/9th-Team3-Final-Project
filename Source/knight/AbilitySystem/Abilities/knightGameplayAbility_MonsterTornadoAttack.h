@@ -14,7 +14,7 @@ class UAnimMontage;
  *
  *   날갯짓: SummonMontage를 재생하며 타깃 쪽으로 돈다. SpawnTime에 몸 아래 바닥에 회오리를 만들고,
  *           분노 중이면 EnragedTornadoCount개를 SpawnInterval 간격으로 만든다. 여러 개면 좌우로 SpawnSpread씩 벌려 놓고
- *           첫 진행 방향도 SpreadAngle씩 벌려 양옆에서 조여 오게 한다.
+ *           첫 진행 방향도 SpreadAngle씩 벌려 양옆에서 조여 오게 한다. 0이면 각자 자리에서 타깃 쪽으로 나가 타깃 근처에서 엇갈린다.
  *   탈진 착지: ExhaustTime에 공중 턴을 끝내고 LandMontage를 LandHoldTime 동안, 이어서 GetUpMontage를 재생한다(공격 없는 딜 타임).
  *             공중이 아니면 착지 없이 끝난다. 일어난 뒤부터 지상 턴이 처음부터 시작된다.
  *
