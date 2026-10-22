@@ -154,6 +154,13 @@ FknightEquipmentStats knightEquipmentStats::Calculate(const FLoadout& Loadout, c
 			}
 		}
 	}
+	// (2026-10-22) 적재 보강 소켓: 출격한 캐릭터와 같은 방식(MultiplyAdditive 1 + 값)으로 적재 한도에 곱해, 정비소 장착 판정에도 들어가게 한다.
+	if (Progression)
+	{
+		const float LoadBonus = Progression->GetSocketEffectTotal(EKnightSocketEffect::LoadCapacity);
+		if (LoadBonus > 0.f)
+			AddMod(Aggregators, UknightAttributeSet::GetLoadCapacityAttribute(), EGameplayModOp::MultiplyAdditive, 1.f + LoadBonus);
+	}
 	FAggregatorEvaluateParameters Params;
 	// Part-health component derives core MaxHealth from the four part maxima.
 	const float PartHealth = Aggregators.FindChecked(UknightAttributeSet::GetMaxHeadHealthAttribute())->Evaluate(Params)

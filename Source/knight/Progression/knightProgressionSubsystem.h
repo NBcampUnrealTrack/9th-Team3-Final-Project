@@ -132,6 +132,10 @@ public:
 	UFUNCTION(BlueprintPure, Category="Knight|Progression|Socket")
 	float GetSocketEffectTotal(EKnightSocketEffect Effect) const;
 
+	/** (2026-10-22) 이 효과를 가진 소켓을 몇 칸에 끼웠는지. 충전 보조(퍼펙트 가드 필요 횟수 -1)처럼 값 대신 개수로 쓰는 효과용. */
+	UFUNCTION(BlueprintPure, Category="Knight|Progression|Socket")
+	int32 GetSocketEffectCount(EKnightSocketEffect Effect) const;
+
 	UFUNCTION(BlueprintPure, Category="Knight|Progression|Socket")
 	int32 GetRepairKitCapacityBonus() const;
 
