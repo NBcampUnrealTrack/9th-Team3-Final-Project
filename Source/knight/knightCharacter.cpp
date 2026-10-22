@@ -413,8 +413,8 @@ void AknightCharacter::SetRunning(bool bRun)
 	{
 		KnightMovement->SetWantsToRun(bRun);
 	}
-	// 예전 Sprint 어빌리티가 붙이던 태그. 달리기 공격(GA_Knight_RunAttack)의 발동 조건이라 같이 맞춘다.
-	AbilitySystemComponent->SetLooseGameplayTagCount(knightGameplayTags::State_Sprinting, bRun ? 1 : 0);
+	// (2026-10-22) State.Sprinting(달리기 공격 조건)은 무브먼트(UknightMovementComponent::ShouldHaveSprintTag)가 실제 속도로만 붙인다.
+	// 여기서 Shift를 누르자마자 붙이면 제자리에서도 태그가 남아(무브먼트는 변화가 없어 안 지움) 일반 공격 대신 달리기 공격이 나갔다.
 }
 
 void AknightCharacter::DoMove(float Right, float Forward)

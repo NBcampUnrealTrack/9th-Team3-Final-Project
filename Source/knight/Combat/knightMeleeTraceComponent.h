@@ -7,6 +7,8 @@
 #include "knightMeleeTraceComponent.generated.h"
 
 class UMeshComponent;
+class UNiagaraComponent;
+class UNiagaraSystem;
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FknightMeleeHitEvent, const FHitResult& /*Hit*/);
 
@@ -54,13 +56,54 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Combat")
 	TArray<TEnumAsByte<EObjectTypeQuery>> HitObjectTypes;
 
+	/**
+	 * (2026-10-22) 휘두를 때 칼날을 따라 남는 칼자국(리본 트레일). 판정 구간(Knight Melee Trace)마다 하나씩 켜고 끝나면 끈다.
+	 * 판정 소켓 두 개(StartSocket~EndSocket) 가운데에 붙이고, 이펙트의 로컬 Z축을 칼날 방향으로 맞춘다.
+	 * SlashHitVFX의 NS_Trail_* 처럼 User.Width(리본 폭), User.AxisOffset(로컬 -Z)을 쓰는 이펙트용. 비우면 없음(몬스터 기본값).
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Combat|Swing Trail")
+	TObjectPtr<UNiagaraSystem> SwingTrail;
+
+	/** 리본 폭 = 두 소켓 사이 길이 x 이 값. 칼끝·손잡이까지 덮거나 줄일 때. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Combat|Swing Trail", meta=(ClampMin=0.1, EditCondition="SwingTrail"))
+	float SwingTrailWidthScale = 1.f;
+
+	/** 칼날 방향으로 이펙트 중심을 옮기는 거리(cm). +면 칼끝 쪽. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Combat|Swing Trail", meta=(EditCondition="SwingTrail", Units="cm"))
+	float SwingTrailCenterOffset = 0.f;
+
+	/** 0보다 크면 이펙트의 User.Life(꼬리가 남는 시간, 초)를 덮어쓴다. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Combat|Swing Trail", meta=(ClampMin=0, Units="s", EditCondition="SwingTrail"))
+	float SwingTrailLife = 0.f;
+
+	/** 켜면 아래 색으로 이펙트 색(User.ColorHead/ColorTail/ColorDark)을 덮어쓴다. 원본은 파란 판타지 색이라 기본으로 켠다. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Combat|Swing Trail", meta=(EditCondition="SwingTrail"))
+	bool bOverrideSwingTrailColor = true;
+
+	/** 칼날 바로 뒤(밝은 쪽). 금속 칼날 느낌의 옅은 흰색. HDR 값이라 1보다 크면 빛난다. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Combat|Swing Trail", meta=(EditCondition="SwingTrail && bOverrideSwingTrailColor"))
+	FLinearColor SwingTrailColorHead = FLinearColor(1.2f, 1.15f, 1.05f, 1.f);
+
+	/** 꼬리 쪽(사라지는 쪽). */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Combat|Swing Trail", meta=(EditCondition="SwingTrail && bOverrideSwingTrailColor"))
+	FLinearColor SwingTrailColorTail = FLinearColor(0.25f, 0.25f, 0.27f, 1.f);
+
+	/** 이펙트의 점광원(User.LightOn). 끄면 주변을 비추지 않는다. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Combat|Swing Trail", meta=(EditCondition="SwingTrail"))
+	bool bSwingTrailLight = false;
+
 private:
 	struct FActiveTrace
 	{
 		FknightMeleeTraceParams Params;
 		TWeakObjectPtr<UMeshComponent> Mesh;
 		TArray<FVector> PreviousPoints;
+		/** (2026-10-22) 이 판정 구간의 칼자국. */
+		TWeakObjectPtr<UNiagaraComponent> TrailFX;
 	};
+
+	void StartSwingTrail(FActiveTrace& Trace) const;
+	static void StopSwingTrail(FActiveTrace& Trace);
 
 	UMeshComponent* FindTraceMesh(FName ComponentTag) const;
 	static void SampleBlade(const FActiveTrace& Trace, TArray<FVector>& OutPoints);

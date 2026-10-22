@@ -138,11 +138,6 @@ void UknightGameplayAbility::StartMechTiming(UAnimMontage* Montage, float BaseRa
 	// 행동 에너지 속성이 있는 나이트만(몬스터도 같은 ASC를 쓴다).
 	if (!bUseMechTiming || !ASC || !Anim || !ASC->HasAttributeSetForAttribute(UknightAttributeSet::GetBoostGaugeAttribute()))
 	{
-		// (2026-10-21) 소리 문제 확인용. 몬스터(행동 에너지 없음)는 로그를 남기지 않는다.
-		if (ASC && ASC->HasAttributeSetForAttribute(UknightAttributeSet::GetBoostGaugeAttribute()))
-		{
-			UE_LOG(LogTemp, Log, TEXT("MechTiming not used by %s (bUseMechTiming %d, anim %d)"), *GetName(), bUseMechTiming, Anim != nullptr);
-		}
 		return;
 	}
 	ActiveMechTiming = FknightMechAttackTiming::Start(Anim, Montage, BaseRate, ASC->GetMechTimingSettings(),

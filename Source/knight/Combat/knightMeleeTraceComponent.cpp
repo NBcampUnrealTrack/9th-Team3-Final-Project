@@ -13,6 +13,9 @@
 #include "GenericTeamAgentInterface.h"
 #include "HAL/IConsoleManager.h"
 #include "Interfaces/CombatInterface.h"
+#include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
 #include "System/knightGameplayTags.h"
 #include "knight.h"
 #include "knightPerfCounters.h"
@@ -49,6 +52,7 @@ void UknightMeleeTraceComponent::BeginTrace(const FknightMeleeTraceParams& Param
 		UE_LOG(LogknightCombat, Warning, TEXT("%s: no mesh with tag '%s' for the melee trace."), *GetNameSafe(GetOwner()), *Params.MeshComponentTag.ToString());
 	}
 	SampleBlade(Trace, Trace.PreviousPoints);
+	StartSwingTrail(Trace);
 
 	if (!bFirst)
 	{
@@ -74,6 +78,7 @@ void UknightMeleeTraceComponent::EndTrace(const FknightMeleeTraceParams& Params)
 	{
 		return;
 	}
+	StopSwingTrail(ActiveTraces[Index]);
 	ActiveTraces.RemoveAt(Index);
 	if (ActiveTraces.IsEmpty())
 	{
@@ -81,8 +86,65 @@ void UknightMeleeTraceComponent::EndTrace(const FknightMeleeTraceParams& Params)
 	}
 }
 
+void UknightMeleeTraceComponent::StartSwingTrail(FActiveTrace& Trace) const
+{
+	UMeshComponent* const Mesh = Trace.Mesh.Get();
+	if (!SwingTrail || !Mesh)
+	{
+		return;
+	}
+	const FVector Start = Mesh->GetSocketLocation(Trace.Params.StartSocket);
+	const FVector End = Mesh->GetSocketLocation(Trace.Params.EndSocket);
+	const FVector Blade = End - Start;
+	const float Length = Blade.Size();
+	if (Length < 1.f)
+	{
+		return;
+	}
+	const FVector BladeDir = Blade / Length;
+
+	// 시작 소켓에 붙여 칼과 같이 움직이게 하고, 위치·회전은 월드 기준으로 맞춘 뒤 상대값으로 고정된다.
+	// 이펙트가 리본 폭을 로컬 -Z(User.AxisOffset)로 펼치므로 -Z를 칼날 방향으로 돌린다.
+	UNiagaraComponent* const FX = UNiagaraFunctionLibrary::SpawnSystemAttached(SwingTrail, Mesh, Trace.Params.StartSocket,
+		FVector::ZeroVector, FRotator::ZeroRotator, EAttachLocation::SnapToTarget, /*bAutoDestroy*/ true, /*bAutoActivate*/ false);
+	if (!FX)
+	{
+		return;
+	}
+	const FVector Center = (Start + End) * 0.5f + BladeDir * SwingTrailCenterOffset;
+	FX->SetWorldLocationAndRotation(Center, FRotationMatrix::MakeFromZ(-BladeDir).Rotator());
+	FX->SetVariableFloat(TEXT("User.Width"), Length * SwingTrailWidthScale);
+	FX->SetVariableBool(TEXT("User.LightOn"), bSwingTrailLight);
+	if (SwingTrailLife > 0.f)
+	{
+		FX->SetVariableFloat(TEXT("User.Life"), SwingTrailLife);
+	}
+	if (bOverrideSwingTrailColor)
+	{
+		FX->SetVariableLinearColor(TEXT("User.ColorHead"), SwingTrailColorHead);
+		FX->SetVariableLinearColor(TEXT("User.ColorTail"), SwingTrailColorTail);
+		FX->SetVariableLinearColor(TEXT("User.ColorDark"), SwingTrailColorTail);
+	}
+	FX->Activate(true);
+	Trace.TrailFX = FX;
+}
+
+void UknightMeleeTraceComponent::StopSwingTrail(FActiveTrace& Trace)
+{
+	// 끄면 이펙트가 남은 꼬리를 서서히 지우고(NMS_infiniteDeactivate) 다 사라지면 스스로 없어진다.
+	if (UNiagaraComponent* const FX = Trace.TrailFX.Get())
+	{
+		FX->Deactivate();
+	}
+	Trace.TrailFX.Reset();
+}
+
 void UknightMeleeTraceComponent::StopAllTraces()
 {
+	for (FActiveTrace& Trace : ActiveTraces)
+	{
+		StopSwingTrail(Trace);
+	}
 	ActiveTraces.Reset();
 	HitActors.Reset();
 	SetComponentTickEnabled(false);

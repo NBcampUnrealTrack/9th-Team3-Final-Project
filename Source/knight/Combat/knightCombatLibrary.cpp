@@ -265,7 +265,8 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 		? knightGameplayTags::GameplayCue_Hit_Weakpoint.GetTag()
 		: knightGameplayTags::GameplayCue_Hit_Melee.GetTag();
 	CueParams.RawMagnitude = PartMultiplier;
-	// (2026-10-21) 나이트의 일반 타격은 공용 큐(반짝이·기존 소리) 대신 나이트 전용 타격(PlayAttackImpactEffects)만 쓴다. 약점 큐는 그대로.
+	// (2026-10-21) 나이트의 타격은 ShouldReplaceSharedHitCue가 켜져 있으면(전용 이펙트·소리가 지정됨) 공용 큐 대신
+	// 나이트 전용 타격(PlayAttackImpactEffects)만 쓴다. 일반·약점 큐 모두 해당. 비어 있으면 공용 큐 그대로.
 	const UknightAbilitySystemComponent* const KnightAttackerASC = Cast<UknightAbilitySystemComponent>(SourceASC);
 	const bool bWeakpointHit = CueTag == knightGameplayTags::GameplayCue_Hit_Weakpoint.GetTag();
 	// (2026-10-21) 약점 큐(번개)도 판타지 느낌이라 같이 대신한다. 약점은 나이트 타격을 더 크게(AttackImpactWeakpointScale).

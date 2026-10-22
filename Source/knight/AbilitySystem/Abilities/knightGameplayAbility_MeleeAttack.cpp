@@ -65,13 +65,23 @@ bool UknightGameplayAbility_MeleeAttack::DoesAbilitySatisfyTagRequirements(const
 	const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
 {
 	const FGameplayTagContainer& OwnedTags = AbilitySystemComponent.GetOwnedGameplayTags();
-	if (ComboLinkFromTags.IsEmpty() || !OwnedTags.HasAny(ComboLinkFromTags))
+	const bool bComboLink = !ComboLinkFromTags.IsEmpty() && OwnedTags.HasAny(ComboLinkFromTags);
+	// (2026-10-22) 칼이 등에 있으면 DrawIgnoredBlockedTags(먼 락온 등)로는 막지 않는다. CDO에서 불릴 수 있어 ASC의 아바타로 본다.
+	const bool bDrawIgnore = DrawMontage && !DrawIgnoredBlockedTags.IsEmpty() && OwnedTags.HasAny(DrawIgnoredBlockedTags)
+		&& !IsWeaponInHandFor(AbilitySystemComponent.GetAvatarActor(), WeaponHandSocket, WeaponComponentTag);
+	if (!bComboLink && !bDrawIgnore)
 	{
 		return Super::DoesAbilitySatisfyTagRequirements(AbilitySystemComponent, SourceTags, TargetTags, OptionalRelevantTags);
 	}
 
-	// 콤보 이어받기: 엔진 검사(UGameplayAbility::DoesAbilitySatisfyTagRequirements)와 같되 ActivationBlockedTags 자리에 ComboLinkBlockedTags. (2026-10-15)
-	const bool bBlocked = OwnedTags.HasAny(ComboLinkBlockedTags)
+	// 엔진 검사(UGameplayAbility::DoesAbilitySatisfyTagRequirements)와 같되 ActivationBlockedTags를 바꿔 본다.
+	// 콤보 이어받기면 ComboLinkBlockedTags(2026-10-15), 칼이 등에 있으면 DrawIgnoredBlockedTags를 뺀다(2026-10-22).
+	FGameplayTagContainer EffectiveBlockedTags = bComboLink ? ComboLinkBlockedTags : ActivationBlockedTags;
+	if (bDrawIgnore)
+	{
+		EffectiveBlockedTags.RemoveTags(DrawIgnoredBlockedTags);
+	}
+	const bool bBlocked = OwnedTags.HasAny(EffectiveBlockedTags)
 		|| GetAssetTags().HasAny(AbilitySystemComponent.GetBlockedAbilityTags())
 		|| (SourceTags && SourceTags->HasAny(SourceBlockedTags))
 		|| (TargetTags && TargetTags->HasAny(TargetBlockedTags))
@@ -117,6 +127,12 @@ void UknightGameplayAbility_MeleeAttack::ActivateAbility(const FGameplayAbilityS
 		FaceScreenCenterIfUnlocked(Cast<ACharacter>(GetAvatarActorFromActorInfo()), GetAbilitySystemComponentFromActorInfo());
 		// (2026-10-15) 뽑을 때는 항상 한손 스탠스로 시작한다.
 		UknightGameplayAbility_StanceSwitch::ResetToOneHanded(GetAbilitySystemComponentFromActorInfo());
+		// (2026-10-22) 뽑는 동안에는 걷지 않는다. 뽑기만 하면 칼이 손에 들어올 때(CheckDrawMoveCancel),
+		// 뽑고 바로 공격하면 공격이 시작할 때(StartAttack), 중간에 끊기면 EndAbility에서 푼다.
+		if (bLockMovementWhileDrawing)
+		{
+			SetDrawMovementLocked(true);
+		}
 		// 발도도 행동 속도를 따른다. 공격으로 넘어가는 시점(DrawAttackStartTime)도 같은 배속으로 맞춘다. (2026-10-08)
 		const float DrawRate = DrawPlayRate * GetActionSpeed();
 		UAbilityTask_PlayMontageAndWait* const DrawTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
@@ -159,10 +175,36 @@ void UknightGameplayAbility_MeleeAttack::OnDrawFinished()
 	}
 }
 
+void UknightGameplayAbility_MeleeAttack::SetDrawMovementLocked(const bool bLock)
+{
+	if (bDrawMovementLocked == bLock)
+	{
+		return;
+	}
+	const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	AController* const Controller = Character ? Character->GetController() : nullptr;
+	if (!Controller)
+	{
+		return;
+	}
+	// SetIgnoreMoveInput은 횟수를 센다. 다른 곳에서 건 잠금은 건드리지 않고 내가 건 만큼만 푼다.
+	Controller->SetIgnoreMoveInput(bLock);
+	bDrawMovementLocked = bLock;
+}
+
 void UknightGameplayAbility_MeleeAttack::CheckDrawMoveCancel()
 {
 	const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
-	if (!IsActive() || bAttackStarted || !Character || !IsWeaponInHand() || Character->GetLastMovementInputVector().IsNearlyZero())
+	if (!IsActive() || bAttackStarted || !Character || !IsWeaponInHand())
+	{
+		return;
+	}
+	// (2026-10-22) 칼이 손에 들어왔다: 이동 잠금을 푼다. 다음 검사부터 이동 입력이 들어오면 발도를 끝낸다.
+	if (bDrawMovementLocked)
+	{
+		SetDrawMovementLocked(false);
+	}
+	if (Character->GetLastMovementInputVector().IsNearlyZero())
 	{
 		return;
 	}
@@ -188,7 +230,12 @@ void UknightGameplayAbility_MeleeAttack::OnDrawInterrupted()
 
 bool UknightGameplayAbility_MeleeAttack::IsWeaponInHand() const
 {
-	const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	return IsWeaponInHandFor(GetAvatarActorFromActorInfo(), WeaponHandSocket, WeaponComponentTag);
+}
+
+bool UknightGameplayAbility_MeleeAttack::IsWeaponInHandFor(const AActor* const Avatar, const FName HandSocket, const FName WeaponTag)
+{
+	const ACharacter* const Character = Cast<ACharacter>(Avatar);
 	const USkeletalMeshComponent* const CharacterMesh = Character ? Character->GetMesh() : nullptr;
 	if (!CharacterMesh)
 	{
@@ -198,9 +245,9 @@ bool UknightGameplayAbility_MeleeAttack::IsWeaponInHand() const
 	Character->GetComponents<UMeshComponent>(Meshes);
 	for (const UMeshComponent* const Mesh : Meshes)
 	{
-		if (Mesh != CharacterMesh && Mesh->ComponentHasTag(WeaponComponentTag))
+		if (Mesh != CharacterMesh && Mesh->ComponentHasTag(WeaponTag))
 		{
-			return Mesh->GetAttachSocketName() == WeaponHandSocket;
+			return Mesh->GetAttachSocketName() == HandSocket;
 		}
 	}
 	return true;
@@ -262,6 +309,7 @@ void UknightGameplayAbility_MeleeAttack::UpdateTrackedWarpTarget()
 void UknightGameplayAbility_MeleeAttack::StartAttack()
 {
 	bAttackStarted = true;
+	SetDrawMovementLocked(false);
 	if (UWorld* const World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(DrawTimer);
@@ -427,6 +475,8 @@ void UknightGameplayAbility_MeleeAttack::EndAbility(const FGameplayAbilitySpecHa
 		World->GetTimerManager().ClearTimer(DrawTimer);
 		World->GetTimerManager().ClearTimer(TrackWarpTimer);
 	}
+	// (2026-10-22) 뽑는 도중 끝나도(피격·사망·다른 어빌리티로 교체) 이동 잠금은 반드시 푼다.
+	SetDrawMovementLocked(false);
 	if (bRootMotionScaleApplied)
 	{
 		bRootMotionScaleApplied = false;
