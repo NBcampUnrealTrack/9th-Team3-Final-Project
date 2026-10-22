@@ -428,7 +428,7 @@ void UKnightInventoryWidget::RefreshDetail()
 	if (DetailName) DetailName->SetText(Item ? ItemName(Item) : LOCTEXT("Select", "항목 선택"));
 	if (DetailDescription)
 	{
-		FText Description = Item && !Item->Description.IsEmpty() ? Item->Description
+		FText Description = Category != 0 && Item && !Item->Description.IsEmpty() ? Item->Description
 			: Item ? LOCTEXT("NoDescription", "설명이 없습니다.") : FText::GetEmpty();
 		if (Category == 2)
 		{
@@ -440,7 +440,8 @@ void UKnightInventoryWidget::RefreshDetail()
 				Description = FText::Format(LOCTEXT("SocketInventoryDetail", "{0}\n장착 가능한 남은 수량: {1}"), Description, Available);
 			}
 		}
-		DetailDescription->SetText(Description);
+		DetailDescription->SetText(Category == 0 ? FText::GetEmpty() : Description);
+		DetailDescription->SetVisibility(Category == 0 ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
 	}
 	RefreshSale();
 }

@@ -626,7 +626,11 @@ void UKnightMaintenanceWidget::RefreshSocketDetails()
 	if (Txt_PartName) Txt_PartName->SetText(Item ? Item->DisplayName : LOCTEXT("SocketTitle", "공용 소켓"));
 	if (Txt_PartState) Txt_PartState->SetText(FText::Format(LOCTEXT("SocketState", "해금 {0}칸 · 선택 {1}"),
 		Slots, SelectedSocketSlot >= 0 ? SelectedSocketSlot + 1 : 0));
-	if (Txt_PartDesc) Txt_PartDesc->SetText(Item ? Item->Description : LOCTEXT("SocketPrompt", "소켓 칸과 보유 아이템을 선택하세요."));
+	if (Txt_PartDesc)
+	{
+		Txt_PartDesc->SetText(Item ? Item->Description : LOCTEXT("SocketPrompt", "소켓 칸과 보유 아이템을 선택하세요."));
+		Txt_PartDesc->SetVisibility(ESlateVisibility::HitTestInvisible);
+	}
 	if (Img_Selected) Img_Selected->SetVisibility(ESlateVisibility::Collapsed);
 	if (Stats_Rows) Stats_Rows->SetVisibility(ESlateVisibility::Collapsed);
 	if (Txt_ActiveSets) Txt_ActiveSets->SetVisibility(ESlateVisibility::Collapsed);
@@ -1011,7 +1015,11 @@ void UKnightMaintenanceWidget::RefreshDetails()
 		Txt_PartState->SetColorAndOpacity(FSlateColor(Color));
 		Txt_PartState->SetVisibility(State.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
 	}
-	if (Txt_PartDesc) Txt_PartDesc->SetText(Shown ? Shown->Description : LOCTEXT("PickPart", "왼쪽 목록에서 장비를 선택하세요."));
+	if (Txt_PartDesc)
+	{
+		Txt_PartDesc->SetText(Shown ? FText::GetEmpty() : LOCTEXT("PickPart", "왼쪽 목록에서 장비를 선택하세요."));
+		Txt_PartDesc->SetVisibility(Shown ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+	}
 	if (Txt_Bonus)
 	{
 		const FText Bonus = Shown ? JoinModifiers(Shown->StatModifiers) : FText::GetEmpty();
