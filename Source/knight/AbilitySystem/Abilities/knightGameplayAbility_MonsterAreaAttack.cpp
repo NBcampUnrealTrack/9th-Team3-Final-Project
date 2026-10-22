@@ -7,8 +7,11 @@
 #include "Abilities/Tasks/AbilityTask_Repeat.h"
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "Combat/knightCombatLibrary.h"
+#include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
+#include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/RootMotionSource.h"
 #include "Monster/knightMonsterCharacterBase.h"
@@ -42,6 +45,7 @@ void UknightGameplayAbility_MonsterAreaAttack::ActivateAbility(const FGameplayAb
 		return;
 	}
 	HitActors.Reset();
+	Knockback.Reset();
 
 	const FVector Center = GetAreaCenter();
 	if (TelegraphCue.IsValid())
@@ -75,9 +79,64 @@ void UknightGameplayAbility_MonsterAreaAttack::ActivateAbility(const FGameplayAb
 		LungeDelayTask->ReadyForActivation();
 	}
 
+	if (!Impacts.IsEmpty())
+	{
+		NextImpact = 0;
+		ScheduleNextImpact(0.f);
+		return;
+	}
 	UAbilityTask_WaitDelay* const WindupTask = UAbilityTask_WaitDelay::WaitDelay(this, WindupTime);
 	WindupTask->OnFinish.AddDynamic(this, &ThisClass::HandleWindupFinished);
 	WindupTask->ReadyForActivation();
+}
+
+void UknightGameplayAbility_MonsterAreaAttack::ScheduleNextImpact(float Now)
+{
+	if (!Impacts.IsValidIndex(NextImpact))
+	{
+		StartRecovery();
+		return;
+	}
+	UAbilityTask_WaitDelay* const ImpactTask = UAbilityTask_WaitDelay::WaitDelay(this, FMath::Max(0.f, Impacts[NextImpact].Time - Now));
+	ImpactTask->OnFinish.AddDynamic(this, &ThisClass::HandleImpactTime);
+	ImpactTask->ReadyForActivation();
+}
+
+void UknightGameplayAbility_MonsterAreaAttack::HandleImpactTime()
+{
+	if (!Impacts.IsValidIndex(NextImpact))
+	{
+		return;
+	}
+	const FknightMonsterAreaImpact& Impact = Impacts[NextImpact];
+	ApplyImpact(Impact);
+	++NextImpact;
+	ScheduleNextImpact(Impact.Time);
+}
+
+void UknightGameplayAbility_MonsterAreaAttack::ApplyImpact(const FknightMonsterAreaImpact& Impact)
+{
+	const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	const USkeletalMeshComponent* const Mesh = Character ? Character->GetMesh() : nullptr;
+	if (!Mesh || !Mesh->DoesSocketExist(Impact.Socket))
+	{
+		UE_LOG(LogknightAI, Warning, TEXT("%s: impact socket %s not found."), *GetName(), *Impact.Socket.ToString());
+		return;
+	}
+	const FVector Center = Mesh->GetSocketLocation(Impact.Socket);
+	const UCapsuleComponent* const Capsule = Character->GetCapsuleComponent();
+	const float Height = Center.Z - (Character->GetActorLocation().Z - Capsule->GetScaledCapsuleHalfHeight());
+	if (Impact.MaxHeight > 0.f && Height > Impact.MaxHeight)
+	{
+		UE_LOG(LogknightAI, Verbose, TEXT("%s: %s impact at %s skipped, %.0f cm above ground."), *GetNameSafe(Character), *GetName(), *Impact.Socket.ToString(), Height);
+		return;
+	}
+	HitArea(Center, Impact.Radius);
+}
+
+void UknightGameplayAbility_MonsterAreaAttack::HandleKnockbackTick(int32 ActionNumber)
+{
+	Knockback.Tick(knightMonsterAreaAttack::ActiveCheckInterval);
 }
 
 void UknightGameplayAbility_MonsterAreaAttack::StartLunge()
@@ -141,7 +200,11 @@ void UknightGameplayAbility_MonsterAreaAttack::HandleRecoveryFinished()
 void UknightGameplayAbility_MonsterAreaAttack::OnImpact()
 {
 	KNIGHT_PERF_SCOPE("Monster.AreaAttackImpact");
+	HitArea(GetAreaCenter(), AreaRadius);
+}
 
+void UknightGameplayAbility_MonsterAreaAttack::HitArea(const FVector& Center, float Radius)
+{
 	AActor* const Avatar = GetAvatarActorFromActorInfo();
 	UWorld* const World = GetWorld();
 	if (!Avatar || !World)
@@ -149,11 +212,18 @@ void UknightGameplayAbility_MonsterAreaAttack::OnImpact()
 		return;
 	}
 
-	const FVector Center = GetAreaCenter();
-	const int32 NewHits = UknightCombatLibrary::ApplyAreaMeleeHits(Avatar, Center, FCollisionShape::MakeSphere(AreaRadius), HitParams, HitActors,
+	const int32 NewHits = UknightCombatLibrary::ApplyAreaMeleeHits(Avatar, Center, FCollisionShape::MakeSphere(Radius), HitParams, HitActors,
 		[this, Avatar](const AActor& Target) { return IsInsideCone(*Avatar, Target.GetActorLocation()); },
-		[this](AActor& Target, EknightHitOutcome Outcome)
+		[this, Avatar](AActor& Target, EknightHitOutcome Outcome)
 		{
+			if (KnockbackSpeed > 0.f && (Outcome == EknightHitOutcome::Hit || Outcome == EknightHitOutcome::Guarded))
+			{
+				Knockback.Start(*Avatar, Target, KnockbackSpeed * (Outcome == EknightHitOutcome::Guarded ? GuardKnockbackScale : 1.f), KnockbackTime);
+				const int32 Ticks = FMath::CeilToInt(KnockbackTime / knightMonsterAreaAttack::ActiveCheckInterval);
+				UAbilityTask_Repeat* const KnockbackTask = UAbilityTask_Repeat::RepeatAction(this, knightMonsterAreaAttack::ActiveCheckInterval, Ticks);
+				KnockbackTask->OnPerformAction.AddDynamic(this, &ThisClass::HandleKnockbackTick);
+				KnockbackTask->ReadyForActivation();
+			}
 			if (Outcome != EknightHitOutcome::Hit || !HitTargetEffect)
 			{
 				return;
@@ -170,12 +240,12 @@ void UknightGameplayAbility_MonsterAreaAttack::OnImpact()
 #if ENABLE_DRAW_DEBUG
 	if (knightMonsterDebug::ShouldDrawAttacks())
 	{
-		DrawDebugSphere(World, Center, AreaRadius, 16, NewHits == 0 ? FColor::Red : FColor::Magenta, false,
+		DrawDebugSphere(World, Center, Radius, 16, NewHits == 0 ? FColor::Red : FColor::Magenta, false,
 			ActiveTime > 0.f ? knightMonsterAreaAttack::ActiveCheckInterval : 0.5f, 0, 3.f);
 		if (ConeHalfAngle > 0.f)
 		{
 			const FVector Origin = Avatar->GetActorTransform().TransformPosition(ConeOrigin);
-			const float Length = FVector::Dist(Origin, Center) + AreaRadius;
+			const float Length = FVector::Dist(Origin, Center) + Radius;
 			DrawDebugCone(World, Origin, Avatar->GetActorForwardVector(), Length, FMath::DegreesToRadians(ConeHalfAngle),
 				FMath::DegreesToRadians(5.f), 12, FColor::Yellow, false, ActiveTime > 0.f ? knightMonsterAreaAttack::ActiveCheckInterval : 0.5f);
 		}
@@ -200,5 +270,15 @@ bool UknightGameplayAbility_MonsterAreaAttack::IsInsideCone(const AActor& Avatar
 FVector UknightGameplayAbility_MonsterAreaAttack::GetAreaCenter() const
 {
 	const AActor* const Avatar = GetAvatarActorFromActorInfo();
-	return Avatar ? Avatar->GetActorTransform().TransformPosition(AreaOffset) : FVector::ZeroVector;
+	if (!Avatar)
+	{
+		return FVector::ZeroVector;
+	}
+	const ACharacter* const Character = Cast<ACharacter>(Avatar);
+	const USkeletalMeshComponent* const Mesh = Character ? Character->GetMesh() : nullptr;
+	if (!AreaSocket.IsNone() && Mesh && Mesh->DoesSocketExist(AreaSocket))
+	{
+		return Mesh->GetSocketLocation(AreaSocket) + Avatar->GetActorQuat().RotateVector(AreaOffset);
+	}
+	return Avatar->GetActorTransform().TransformPosition(AreaOffset);
 }

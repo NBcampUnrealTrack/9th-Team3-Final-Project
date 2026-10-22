@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "AbilitySystem/Abilities/knightGameplayAbility_MonsterAttack.h"
 #include "Combat/knightCombatTypes.h"
+#include "Monster/knightMonsterKnockback.h"
 #include "Monster/knightMonsterRushEffects.h"
 #include "knightGameplayAbility_MonsterChargeAttack.generated.h"
 
@@ -127,16 +128,10 @@ private:
 	void HandleRecoveryFinished();
 
 	void ApplyHits();
-	void Knockback(const AActor& Avatar, AActor& Target, float Scale);
-	void TickKnockback(float DeltaTime);
 	void BeginStop(bool bImmediate, const TCHAR* Reason);
 
 	TWeakObjectPtr<UAbilityTask_Repeat> TickTask;
-	TWeakObjectPtr<AActor> KnockbackActor;
-	FVector KnockbackVelocity = FVector::ZeroVector;
-	float KnockbackRemaining = 0.f;
-	FVector KnockbackSide = FVector::ZeroVector;
-	bool bKnockbackFlipped = false;
+	FknightMonsterKnockback Knockback;
 	TSet<TWeakObjectPtr<AActor>> HitActors;
 	FVector LastLocation = FVector::ZeroVector;
 	float LoopTime = 0.f;
