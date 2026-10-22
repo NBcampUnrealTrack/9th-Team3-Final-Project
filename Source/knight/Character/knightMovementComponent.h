@@ -7,6 +7,7 @@
 
 class UCameraShakeBase;
 class UCurveFloat;
+class USoundBase;
 struct FGameplayAttribute;
 
 /**
@@ -119,6 +120,19 @@ protected:
 	/** 착지할 때 카메라 흔들림. 비워 두면 흔들지 않는다. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Landing")
 	TSubclassOf<UCameraShakeBase> LandingShake;
+
+	/**
+	 * (2026-10-22) 착지 소리. 흔들림과 같은 기준(LandingShakeMinSpeed 이상으로 떨어졌을 때)으로 내고, 빠를수록 크게(MinVolume~MaxVolume).
+	 * 비워 두면 나지 않는다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Landing")
+	TObjectPtr<USoundBase> LandingSound;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Landing", meta=(ClampMin=0))
+	float LandingSoundMinVolume = 0.5f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Landing", meta=(ClampMin=0))
+	float LandingSoundMaxVolume = 1.f;
 
 	/** 이 속도(아래로) 이상으로 떨어져야 흔들린다. 제자리 점프 착지는 약 600. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Landing", meta=(ClampMin=0, Units="CentimetersPerSecond"))
