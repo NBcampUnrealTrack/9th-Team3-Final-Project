@@ -72,6 +72,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Projectile", meta=(ClampMin=0, Units="deg"))
 	float AimTurnRate = 180.f;
 
+	/** 맞은 플레이어의 소리가 줄었다가 이 시간 동안 돌아온다(잔향 초음파). 가드·패링·회피하면 없다. 0이면 끈다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Projectile", meta=(ClampMin=0, Units="s"))
+	float DeafenTime = 0.f;
+
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Timing", meta=(ClampMin=0, Units="s"))
 	float RecoveryTime = 0.8f;
 

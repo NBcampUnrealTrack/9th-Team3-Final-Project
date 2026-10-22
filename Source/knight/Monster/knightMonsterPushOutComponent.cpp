@@ -3,6 +3,10 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Engine/SkinnedAsset.h"
+#include "PhysicsEngine/BodyInstance.h"
+#include "PhysicsEngine/BodySetup.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -27,6 +31,9 @@ UknightMonsterPushOutComponent::UknightMonsterPushOutComponent()
 	PrimaryComponentTick.TickGroup = TG_PostPhysics;
 	ShallowMeshPushOutTags.AddTag(knightGameplayTags::State_HitReact_Knockdown);
 	PassThroughPawnTags.AddTag(knightGameplayTags::State_Monster_PassThroughPawns);
+	PassThroughBoneTags.AddTag(knightGameplayTags::State_HitReact_Knockdown);
+	PassThroughBoneTags.AddTag(knightGameplayTags::State_Monster_Exhausted);
+	PassThroughBoneTags.AddTag(knightGameplayTags::State_Monster_Collapsed);
 }
 
 void UknightMonsterPushOutComponent::BeginPlay()
@@ -51,6 +58,32 @@ void UknightMonsterPushOutComponent::BeginPlay()
 		{
 			MeshPrimitive = Character->GetMesh();
 			BodyPrimitives.Add(MeshPrimitive);
+			const USkinnedAsset* const Asset = Character->GetMesh()->GetSkinnedAsset();
+			const FReferenceSkeleton* const RefSkeleton = Asset ? &Asset->GetRefSkeleton() : nullptr;
+			TArray<int32> RootIndices;
+			for (const FName Bone : PassThroughBones)
+			{
+				const int32 Index = RefSkeleton ? RefSkeleton->FindBoneIndex(Bone) : INDEX_NONE;
+				if (Index == INDEX_NONE)
+				{
+					UE_LOG(LogknightAI, Warning, TEXT("%s: PassThroughBones %s is not in the mesh."), *GetNameSafe(Owner), *Bone.ToString());
+					continue;
+				}
+				RootIndices.Add(Index);
+			}
+			const TArray<FBodyInstance*>& Bodies = Character->GetMesh()->Bodies;
+			for (int32 BodyIndex = 0; BodyIndex < Bodies.Num() && !RootIndices.IsEmpty(); ++BodyIndex)
+			{
+				const UBodySetup* const Setup = Bodies[BodyIndex] ? Bodies[BodyIndex]->GetBodySetup() : nullptr;
+				for (int32 Bone = Setup ? RefSkeleton->FindBoneIndex(Setup->BoneName) : INDEX_NONE; Bone != INDEX_NONE; Bone = RefSkeleton->GetParentIndex(Bone))
+				{
+					if (RootIndices.Contains(Bone))
+					{
+						PassThroughBodies.Add(BodyIndex);
+						break;
+					}
+				}
+			}
 		}
 	}
 	SetComponentTickEnabled(BodyPrimitives.Num() > 0);
@@ -156,10 +189,29 @@ bool UknightMonsterPushOutComponent::IsShallowMeshPushOut() const
 	return ASC && ASC->HasAnyMatchingGameplayTags(ShallowMeshPushOutTags);
 }
 
+bool UknightMonsterPushOutComponent::IsBonePassThrough() const
+{
+	if (PassThroughBodies.IsEmpty() || PassThroughBoneTags.IsEmpty())
+	{
+		return false;
+	}
+	const UAbilitySystemComponent* const ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner());
+	return ASC && ASC->HasAnyMatchingGameplayTags(PassThroughBoneTags);
+}
+
 bool UknightMonsterPushOutComponent::IsOverlappingBody(const ACharacter* Character, float MeshPenetration) const
 {
+	const bool bSkipBones = IsBonePassThrough();
 	for (const UPrimitiveComponent* const Primitive : BodyPrimitives)
 	{
+		if (bSkipBones && Primitive == MeshPrimitive)
+		{
+			if (IsOverlappingMeshBodies(Character, MeshPenetration))
+			{
+				return true;
+			}
+			continue;
+		}
 		if (IsOverlappingPrimitive(Character, Primitive, Primitive == MeshPrimitive ? MeshPenetration : 0.f))
 		{
 			return true;
@@ -190,6 +242,35 @@ bool UknightMonsterPushOutComponent::IsOverlappingPrimitive(const ACharacter* Ch
 		return false;
 	}
 	return Primitive->OverlapComponent(Location, Capsule->GetComponentQuat(), FCollisionShape::MakeCapsule(Radius - Shrink, HalfHeight - Shrink));
+}
+
+bool UknightMonsterPushOutComponent::IsOverlappingMeshBodies(const ACharacter* Character, float Penetration) const
+{
+	const USkeletalMeshComponent* const Mesh = Cast<USkeletalMeshComponent>(MeshPrimitive);
+	if (!Mesh || !Mesh->IsQueryCollisionEnabled())
+	{
+		return false;
+	}
+	// IsOverlappingPrimitive와 같은 크기로 줄인 캡슐을 바디마다 따로 본다. 컴포넌트 전체 겹침에서는 바디를 뺄 수 없다.
+	const UCapsuleComponent* const Capsule = Character->GetCapsuleComponent();
+	const float Radius = Capsule->GetScaledCapsuleRadius() - knightMonsterPushOut::Skin;
+	const float HalfHeight = Capsule->GetScaledCapsuleHalfHeight() - knightMonsterPushOut::Skin;
+	const float Shrink = FMath::Clamp(Penetration, 0.f, Radius - knightMonsterPushOut::Skin);
+	if (Radius - Shrink <= 0.f)
+	{
+		return false;
+	}
+	const FVector Location = Capsule->GetComponentLocation();
+	const FCollisionShape Shape = FCollisionShape::MakeCapsule(Radius - Shrink, HalfHeight - Shrink);
+	for (int32 BodyIndex = 0; BodyIndex < Mesh->Bodies.Num(); ++BodyIndex)
+	{
+		const FBodyInstance* const Body = Mesh->Bodies[BodyIndex];
+		if (Body && !PassThroughBodies.Contains(BodyIndex) && Body->OverlapTest(Location, Capsule->GetComponentQuat(), Shape))
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 bool UknightMonsterPushOutComponent::IsStandingOnBody(const ACharacter* Character) const

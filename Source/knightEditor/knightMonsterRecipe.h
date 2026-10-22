@@ -353,6 +353,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Body")
 	bool bPushOutOfMesh = true;
 
+	/** 다운·탈진 중에는 이 뼈와 그 아래 뼈의 메시 바디로 플레이어를 밀어내지 않는다(날개 어깨). 비우면 모든 바디로 민다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Body", meta=(EditCondition="bPushOutOfMesh"))
+	TArray<FName> PushOutPassThroughBones;
+
 	/** 이동 속도(GroundSpeed)로 걷기·달리기를 섞는 1D 블렌드스페이스. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Animation")
 	TObjectPtr<UBlendSpace> Locomotion;

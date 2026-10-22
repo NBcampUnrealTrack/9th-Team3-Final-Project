@@ -4,7 +4,10 @@
 #include "Camera/CameraShakeBase.h"
 #include "Engine/Scene.h"
 #include "HAL/PlatformTime.h"
+#include "Camera/knightCameraModifier_Darkness.h"
+#include "Camera/knightCameraModifier_Deafen.h"
 #include "Camera/knightCameraModifier_RoarShockwave.h"
+#include "Engine/World.h"
 #include "Engine/LocalPlayer.h"
 #include "GameFramework/PlayerController.h"
 #include "Settings/knightSettingsSubsystem.h"
@@ -15,6 +18,8 @@ AknightPlayerCameraManager::AknightPlayerCameraManager()
 	ViewPitchMin = -70.f;
 	ViewPitchMax = 60.f;
 	RoarShockwaveClass = UknightCameraModifier_RoarShockwave::StaticClass();
+	DarknessClass = UknightCameraModifier_Darkness::StaticClass();
+	DeafenClass = UknightCameraModifier_Deafen::StaticClass();
 }
 
 void AknightPlayerCameraManager::UpdateViewTarget(FTViewTarget& OutVT, float DeltaTime)
@@ -258,5 +263,68 @@ void AknightPlayerCameraManager::StopRoarShockwave(const USceneComponent* Source
 	if (UknightCameraModifier_RoarShockwave* const Modifier = RoarShockwaveClass ? Cast<UknightCameraModifier_RoarShockwave>(FindCameraModifierByClass(RoarShockwaveClass)) : nullptr)
 	{
 		Modifier->StopRoar(Source);
+	}
+}
+
+namespace knightCamera
+{
+	template <typename ModifierType>
+	ModifierType* FindOrAddModifier(AknightPlayerCameraManager& Camera, TSubclassOf<ModifierType> Class)
+	{
+		if (!Class)
+		{
+			return nullptr;
+		}
+		ModifierType* Modifier = Cast<ModifierType>(Camera.FindCameraModifierByClass(Class));
+		return Modifier ? Modifier : Cast<ModifierType>(Camera.AddNewCameraModifier(Class));
+	}
+}
+
+void AknightPlayerCameraManager::StartDarkness(UPrimitiveComponent* Source)
+{
+	if (UknightCameraModifier_Darkness* const Modifier = knightCamera::FindOrAddModifier(*this, DarknessClass))
+	{
+		Modifier->StartDarkness(Source);
+	}
+}
+
+void AknightPlayerCameraManager::StopDarkness(const UPrimitiveComponent* Source)
+{
+	if (UknightCameraModifier_Darkness* const Modifier = DarknessClass ? Cast<UknightCameraModifier_Darkness>(FindCameraModifierByClass(DarknessClass)) : nullptr)
+	{
+		Modifier->StopDarkness(Source);
+	}
+}
+
+void AknightPlayerCameraManager::SetDarknessSilhouette(const UPrimitiveComponent* Source, bool bVisible)
+{
+	if (UknightCameraModifier_Darkness* const Modifier = DarknessClass ? Cast<UknightCameraModifier_Darkness>(FindCameraModifierByClass(DarknessClass)) : nullptr)
+	{
+		Modifier->SetSilhouette(Source, bVisible);
+	}
+}
+
+void AknightPlayerCameraManager::StartDeafen(float Seconds)
+{
+	if (UknightCameraModifier_Deafen* const Modifier = knightCamera::FindOrAddModifier(*this, DeafenClass))
+	{
+		Modifier->StartDeafen(Seconds);
+	}
+}
+
+void AknightPlayerCameraManager::ForEachLocalCamera(const UObject* WorldContext, TFunctionRef<void(AknightPlayerCameraManager&)> Function)
+{
+	UWorld* const World = WorldContext ? WorldContext->GetWorld() : nullptr;
+	if (!World || !World->IsGameWorld())
+	{
+		return;
+	}
+	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+	{
+		const APlayerController* const PC = It->Get();
+		if (AknightPlayerCameraManager* const Camera = PC && PC->IsLocalController() ? Cast<AknightPlayerCameraManager>(PC->PlayerCameraManager) : nullptr)
+		{
+			Function(*Camera);
+		}
 	}
 }

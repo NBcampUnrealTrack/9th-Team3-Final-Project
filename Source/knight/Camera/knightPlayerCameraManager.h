@@ -5,7 +5,10 @@
 #include "knightPlayerCameraManager.generated.h"
 
 class UCameraShakeBase;
+class UknightCameraModifier_Darkness;
+class UknightCameraModifier_Deafen;
 class UknightCameraModifier_RoarShockwave;
+class UPrimitiveComponent;
 
 /**
  * Global camera concerns only: pitch limits, combat shakes, and cinematic view targets (Sequencer camera
@@ -38,6 +41,19 @@ public:
 	/** Stops sending new ripple rings for Source. */
 	void StopRoarShockwave(const USceneComponent* Source);
 
+	/** Source(몬스터 메시)가 플레이어 둘레만 보이게 시야를 덮는다. See UknightCameraModifier_Darkness. */
+	void StartDarkness(UPrimitiveComponent* Source);
+	void StopDarkness(const UPrimitiveComponent* Source);
+	/** 어둠 속에서 Source의 윤곽선을 보이거나 숨긴다. */
+	void SetDarknessSilhouette(const UPrimitiveComponent* Source, bool bVisible);
+
+	/** Seconds 동안 소리가 줄고 화면이 흔들린다(초음파 피격). See UknightCameraModifier_Deafen. */
+	UFUNCTION(BlueprintCallable, Category="Knight|Camera")
+	void StartDeafen(float Seconds);
+
+	/** World의 로컬 플레이어 카메라마다 Function을 부른다. */
+	static void ForEachLocalCamera(const UObject* WorldContext, TFunctionRef<void(AknightPlayerCameraManager&)> Function);
+
 	/** Additive pre-hit zoom; holds at full weight until ReturnKnockdownZoom is called. */
 	void StartKnockdownZoom(AActor* InViewTarget, float Degrees, float EnterSeconds, double StartRealTime);
 	/** Ease out from the exact zoom weight reached at the hit or cancellation. */
@@ -59,6 +75,12 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Camera")
 	TSubclassOf<UknightCameraModifier_RoarShockwave> RoarShockwaveClass;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Camera")
+	TSubclassOf<UknightCameraModifier_Darkness> DarknessClass;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Camera")
+	TSubclassOf<UknightCameraModifier_Deafen> DeafenClass;
 
 private:
 	TWeakObjectPtr<AActor> KnockdownViewTarget;

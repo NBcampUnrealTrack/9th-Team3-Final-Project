@@ -108,6 +108,7 @@ void UknightGameplayAbility_MonsterProjectileAttack::Fire()
 	AknightMonsterSonicProjectile* const Projectile = World->SpawnActor<AknightMonsterSonicProjectile>(Muzzle, (Aim - Muzzle).Rotation(), Params);
 	if (Projectile)
 	{
+		Projectile->SetDeafenTime(DeafenTime);
 		Projectile->Launch(Monster, HitParams, Aim - Muzzle, ProjectileSpeed, ProjectileRadius, MaxDistance, ProjectileEffect);
 	}
 	UE_LOG(LogknightAI, Log, TEXT("%s: %s fires (%.0f cm to target)."), *GetNameSafe(Monster), *GetName(), FVector::Dist(Muzzle, Aim));

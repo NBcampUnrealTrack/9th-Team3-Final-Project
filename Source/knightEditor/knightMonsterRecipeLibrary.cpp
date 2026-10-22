@@ -1054,6 +1054,7 @@ namespace knightRecipe
 				SetValue<float>(PushOut, TEXT("BodyAxisHalfLength"), Recipe.PushOutBodyAxisHalfLength, Context.Log);
 			}
 			SetBool(PushOut, TEXT("bPushOutOfMesh"), Recipe.bPushOutOfMesh, Context.Log);
+			SetValue<TArray<FName>>(PushOut, TEXT("PassThroughBones"), Recipe.PushOutPassThroughBones, Context.Log);
 		}
 		if (UknightMonsterHoverComponent* const Hover = GetObject<UknightMonsterHoverComponent>(CDO, TEXT("Hover")))
 		{
@@ -1169,6 +1170,13 @@ TArray<FString> UknightMonsterRecipeLibrary::ValidateMonsterRecipe(const Uknight
 		if (Mesh && Mesh->GetRefSkeleton().FindBoneIndex(Bone) == INDEX_NONE)
 		{
 			Error(FString::Printf(TEXT("HoverFootBones: %s 뼈가 메시에 없습니다."), *Bone.ToString()));
+		}
+	}
+	for (const FName Bone : Recipe->PushOutPassThroughBones)
+	{
+		if (Mesh && Mesh->GetRefSkeleton().FindBoneIndex(Bone) == INDEX_NONE)
+		{
+			Error(FString::Printf(TEXT("PushOutPassThroughBones: %s 뼈가 메시에 없습니다."), *Bone.ToString()));
 		}
 	}
 	for (const FName Bone : Recipe->HoverBodyBones)
@@ -1683,6 +1691,7 @@ UknightMonsterRecipe* UknightMonsterRecipeLibrary::CreateRecipeFromMonster(TSubc
 	{
 		GetValue(PushOut, TEXT("BodyAxisHalfLength"), Recipe->PushOutBodyAxisHalfLength);
 		Recipe->bPushOutOfMesh = GetBool(PushOut, TEXT("bPushOutOfMesh"));
+		GetValue(PushOut, TEXT("PassThroughBones"), Recipe->PushOutPassThroughBones);
 	}
 	if (const UknightMonsterHoverComponent* const Hover = GetObject<UknightMonsterHoverComponent>(Monster, TEXT("Hover")))
 	{
