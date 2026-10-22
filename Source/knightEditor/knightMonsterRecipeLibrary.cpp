@@ -897,7 +897,7 @@ namespace knightRecipe
 				}
 			}
 		}
-		if (!Recipe.HoverWings.IsEmpty())
+		if (!Recipe.HoverWings.IsEmpty() || !Recipe.HoverTailRootBone.IsNone())
 		{
 			if (!WingGraphNode)
 			{
@@ -926,6 +926,9 @@ namespace knightRecipe
 					}
 				}
 				WingNode->Clearance = Recipe.HoverWingClearance;
+				WingNode->TailRootBone.BoneName = Recipe.HoverTailRootBone;
+				WingNode->TailTipBone.BoneName = Recipe.HoverTailTipBone;
+				WingNode->TailClearance = Recipe.HoverTailClearance;
 			}
 		}
 		else if (WingGraphNode)
@@ -934,6 +937,8 @@ namespace knightRecipe
 			{
 				WingGraphNode->Modify();
 				WingNode->Wings.Reset();
+				WingNode->TailRootBone.BoneName = NAME_None;
+				WingNode->TailTipBone.BoneName = NAME_None;
 			}
 		}
 		if (!bFoundBlendSpace)
@@ -1171,6 +1176,20 @@ TArray<FString> UknightMonsterRecipeLibrary::ValidateMonsterRecipe(const Uknight
 		if (Mesh && Mesh->GetRefSkeleton().FindBoneIndex(Bone) == INDEX_NONE)
 		{
 			Error(FString::Printf(TEXT("HoverBodyBones: %s 뼈가 메시에 없습니다."), *Bone.ToString()));
+		}
+	}
+	if (!Recipe->HoverTailRootBone.IsNone() && Mesh)
+	{
+		const FReferenceSkeleton& RefSkeleton = Mesh->GetRefSkeleton();
+		const int32 TailRoot = RefSkeleton.FindBoneIndex(Recipe->HoverTailRootBone);
+		const int32 TailTip = RefSkeleton.FindBoneIndex(Recipe->HoverTailTipBone);
+		if (TailRoot == INDEX_NONE || TailTip == INDEX_NONE)
+		{
+			Error(FString::Printf(TEXT("HoverTailRootBone/HoverTailTipBone: %s, %s 중 메시에 없는 뼈가 있습니다."), *Recipe->HoverTailRootBone.ToString(), *Recipe->HoverTailTipBone.ToString()));
+		}
+		else if (TailRoot == TailTip || RefSkeleton.GetDepthBetweenBones(TailTip, TailRoot) == INDEX_NONE)
+		{
+			Error(FString::Printf(TEXT("HoverTailTipBone: %s는 %s의 자손이어야 합니다."), *Recipe->HoverTailTipBone.ToString(), *Recipe->HoverTailRootBone.ToString()));
 		}
 	}
 	if (!Recipe->FootBones.IsEmpty() && Mesh && Mesh->GetRefSkeleton().FindBoneIndex(Recipe->PelvisBone) == INDEX_NONE)

@@ -5,6 +5,8 @@
 #include "BoneControllers/AnimNode_SkeletalControlBase.h"
 #include "knightAnimNode_WingClearance.generated.h"
 
+class UknightMonsterHoverComponent;
+
 /** 날개 하나. 어깨 뼈를 돌려 날개 전체를 들어 올린다. */
 USTRUCT(BlueprintType)
 struct KNIGHT_API FknightWingClearanceWing
@@ -31,6 +33,9 @@ struct KNIGHT_API FknightWingClearanceWing
  * 먼저 몸의 앞뒤 축으로 날개를 들어 올린다(날갯짓 방향). 날개 끝이 몸 앞뒤로 뻗어 이 축으로는 안 올라가면(물기처럼 날개를 앞으로 뻗음)
  * 가장 낮은 끝을 바로 위로 드는 축으로 돌린다.
  *
+ * 꼬리(TailRootBone~TailTipBone 사슬)는 뿌리부터 뼈마다 다음 뼈가 바닥 + TailClearance 위에 오는 만큼만 들어 올린다.
+ * 늘어뜨린 꼬리가 바닥을 뚫지 않고 바닥을 따라 깔린다. 바닥에 닿지 않는 프레임에는 애니메이션 그대로다.
+ *
  * 콘솔: knight.Anim.WingClearance 0 으로 끈다.
  */
 USTRUCT(BlueprintInternalUseOnly)
@@ -53,6 +58,18 @@ struct KNIGHT_API FAnimNode_knightWingClearance : public FAnimNode_SkeletalContr
 	UPROPERTY(EditAnywhere, Category="Wings", meta=(ClampMin=0, ClampMax=90, Units="deg"))
 	float MaxLiftAngle = 90.f;
 
+	/** 꼬리 뿌리 뼈. 비우면 꼬리는 보지 않는다. */
+	UPROPERTY(EditAnywhere, Category="Tail")
+	FBoneReference TailRootBone;
+
+	/** 꼬리 끝 뼈. TailRootBone의 자손이어야 한다. 그 사이 뼈를 모두 쓴다. */
+	UPROPERTY(EditAnywhere, Category="Tail")
+	FBoneReference TailTipBone;
+
+	/** 꼬리 뼈를 바닥에서 이만큼 위에 둔다(월드 cm). 꼬리는 가늘어서 날개보다 작게 둔다. */
+	UPROPERTY(EditAnywhere, Category="Tail", meta=(ClampMin=0, Units="cm"))
+	float TailClearance = 20.f;
+
 	virtual void InitializeBoneReferences(const FBoneContainer& RequiredBones) override;
 	virtual bool IsValidToEvaluate(const USkeleton* Skeleton, const FBoneContainer& RequiredBones) override;
 	virtual void PreUpdate(const UAnimInstance* InAnimInstance) override;
@@ -61,10 +78,13 @@ struct KNIGHT_API FAnimNode_knightWingClearance : public FAnimNode_SkeletalContr
 	virtual bool HasPreUpdate() const override { return true; }
 
 private:
+	void LiftTail(FComponentSpacePoseContext& Output, TArray<FBoneTransform>& OutBoneTransforms) const;
+
 	/** 바닥 높이(컴포넌트 공간, 메시 원점 기준). 게임 스레드(PreUpdate)에서 잰다. */
 	double GroundCS = 0.0;
 	/** 월드 cm를 컴포넌트 공간 단위로 바꾸는 배율(1 / 메시 배율). */
 	double WorldToComponent = 1.0;
 	bool bGroundValid = false;
 	float DeltaTime = 0.f;
+	TWeakObjectPtr<const UknightMonsterHoverComponent> Hover;
 };

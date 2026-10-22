@@ -84,6 +84,7 @@ void UknightMonsterHoverComponent::TickComponent(float DeltaTime, ELevelTick Tic
 	}
 
 	FVector Location = MeshComponent->GetRelativeLocation();
+	LastHeightDelta = Height - Location.Z;
 	if (!FMath::IsNearlyEqual(Location.Z, Height, 0.1f))
 	{
 		Location.Z = Height;

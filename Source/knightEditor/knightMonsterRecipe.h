@@ -315,6 +315,18 @@ public:
 	UPROPERTY(EditAnywhere, Category="Hover", meta=(ClampMin=0, Units="cm"))
 	float HoverWingClearance = 30.f;
 
+	/** 바닥 가까이에서 늘어뜨린 꼬리가 바닥을 뚫지 않게 뼈마다 들어 올린다(Knight Wing Clearance 노드). 비우면 꼬리는 보지 않는다. */
+	UPROPERTY(EditAnywhere, Category="Hover")
+	FName HoverTailRootBone;
+
+	/** 꼬리 끝 뼈. HoverTailRootBone의 자손이어야 한다. */
+	UPROPERTY(EditAnywhere, Category="Hover", meta=(EditCondition="HoverTailRootBone != None"))
+	FName HoverTailTipBone;
+
+	/** 꼬리 뼈를 바닥에서 띄우는 높이(cm). */
+	UPROPERTY(EditAnywhere, Category="Hover", meta=(ClampMin=0, Units="cm"))
+	float HoverTailClearance = 20.f;
+
 	/** 이동용 캡슐. 피격은 메시의 피직스 바디가 받으므로 몸보다 작게 둔다. 메시는 캡슐 바닥에 맞춘다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Body", meta=(ClampMin=1, Units="cm"))
 	float CapsuleRadius = 100.f;

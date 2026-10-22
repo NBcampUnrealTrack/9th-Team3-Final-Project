@@ -35,6 +35,12 @@ public:
 	/** 0 = 지상 높이, 1 = 공중 높이. */
 	float GetAirAlpha() const { return AirAlpha; }
 
+	/**
+	 * 지난 틱에 메시 높이를 바꾼 양(cm). 애님 노드는 이 컴포넌트가 높이를 바꾸기 전에 포즈를 정하므로, 이 값으로 이번 프레임 높이를 미리 잡는다.
+	 * 다운에서 일어날 때처럼 메시가 프레임마다 40cm씩 내려가면 그만큼 날개·꼬리가 바닥 아래로 들어간다.
+	 */
+	float GetLastHeightDelta() const { return LastHeightDelta; }
+
 protected:
 	/** 메시를 내리는 최대 높이(cm). 떠 있는 대기 자세에서 발이 바닥 바로 위에 오는 값. 0이면 쓰지 않는다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Hover", meta=(ClampMin=0, Units="Centimeters"))
@@ -80,4 +86,5 @@ private:
 	float AirAlpha = 0.f;
 	float AirAlphaTarget = 0.f;
 	float AirAlphaSpeed = 0.f;
+	float LastHeightDelta = 0.f;
 };

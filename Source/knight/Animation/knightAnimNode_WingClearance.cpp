@@ -5,7 +5,9 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/Character.h"
 #include "HAL/IConsoleManager.h"
+#include "Monster/knightMonsterHoverComponent.h"
 #include "Algo/MinElement.h"
+#include "Algo/Reverse.h"
 
 namespace knightWingClearance
 {
@@ -24,6 +26,8 @@ void FAnimNode_knightWingClearance::InitializeBoneReferences(const FBoneContaine
 		}
 		Wing.LiftRotation = FQuat::Identity;
 	}
+	TailRootBone.Initialize(RequiredBones);
+	TailTipBone.Initialize(RequiredBones);
 }
 
 bool FAnimNode_knightWingClearance::IsValidToEvaluate(const USkeleton* Skeleton, const FBoneContainer& RequiredBones)
@@ -32,10 +36,11 @@ bool FAnimNode_knightWingClearance::IsValidToEvaluate(const USkeleton* Skeleton,
 	{
 		return false;
 	}
-	return Wings.ContainsByPredicate([&RequiredBones](const FknightWingClearanceWing& Wing)
-	{
-		return Wing.RootBone.IsValidToEvaluate(RequiredBones) && !Wing.TipBones.IsEmpty();
-	});
+	return (TailRootBone.IsValidToEvaluate(RequiredBones) && TailTipBone.IsValidToEvaluate(RequiredBones))
+		|| Wings.ContainsByPredicate([&RequiredBones](const FknightWingClearanceWing& Wing)
+		{
+			return Wing.RootBone.IsValidToEvaluate(RequiredBones) && !Wing.TipBones.IsEmpty();
+		});
 }
 
 void FAnimNode_knightWingClearance::PreUpdate(const UAnimInstance* InAnimInstance)
@@ -51,7 +56,13 @@ void FAnimNode_knightWingClearance::PreUpdate(const UAnimInstance* InAnimInstanc
 	// 바닥 = 캡슐 바닥. 메시는 호버로 바닥 아래까지 내려가 있을 수 있으니 메시 원점이 아니라 캡슐로 잰다.
 	WorldToComponent = 1.0 / FMath::Max(FMath::Abs(Mesh->GetComponentScale().Z), UE_KINDA_SMALL_NUMBER);
 	const double GroundZ = Capsule->GetComponentLocation().Z - Capsule->GetScaledCapsuleHalfHeight();
-	GroundCS = (GroundZ - Mesh->GetComponentLocation().Z) * WorldToComponent;
+	// 호버는 이 포즈가 나온 뒤에 메시 높이를 바꾼다. 지난 틱만큼 또 바꾼다고 보고 바꾼 뒤의 메시 높이로 잰다.
+	if (!Hover.IsValid())
+	{
+		Hover = Character->FindComponentByClass<UknightMonsterHoverComponent>();
+	}
+	const double HoverDelta = Hover.IsValid() ? Hover->GetLastHeightDelta() : 0.0;
+	GroundCS = (GroundZ - Mesh->GetComponentLocation().Z - HoverDelta) * WorldToComponent;
 }
 
 void FAnimNode_knightWingClearance::UpdateInternal(const FAnimationUpdateContext& Context)
@@ -154,5 +165,91 @@ void FAnimNode_knightWingClearance::EvaluateSkeletalControl_AnyThread(FComponent
 		Lifted.SetRotation(Wing.LiftRotation * RootCS.GetRotation());
 		OutBoneTransforms.Add(FBoneTransform(RootIndex, Lifted));
 	}
+	LiftTail(Output, OutBoneTransforms);
 	OutBoneTransforms.Sort(FCompareBoneTransformIndex());
+}
+
+void FAnimNode_knightWingClearance::LiftTail(FComponentSpacePoseContext& Output, TArray<FBoneTransform>& OutBoneTransforms) const
+{
+	const FBoneContainer& BoneContainer = Output.Pose.GetPose().GetBoneContainer();
+	if (!TailRootBone.IsValidToEvaluate(BoneContainer) || !TailTipBone.IsValidToEvaluate(BoneContainer))
+	{
+		return;
+	}
+	// 끝에서 부모를 따라 뿌리까지 올라가 사슬을 만든다. 뿌리에 닿지 않으면 쓰지 않는다.
+	const FCompactPoseBoneIndex RootIndex = TailRootBone.GetCompactPoseIndex(BoneContainer);
+	TArray<FCompactPoseBoneIndex, TInlineAllocator<16>> Chain;
+	for (FCompactPoseBoneIndex Index = TailTipBone.GetCompactPoseIndex(BoneContainer); Index != INDEX_NONE; Index = BoneContainer.GetParentBoneIndex(Index))
+	{
+		Chain.Add(Index);
+		if (Index == RootIndex)
+		{
+			break;
+		}
+	}
+	if (Chain.Num() < 2 || Chain.Last() != RootIndex)
+	{
+		return;
+	}
+	Algo::Reverse(Chain);
+	TArray<FTransform, TInlineAllocator<16>> Transforms;
+	for (const FCompactPoseBoneIndex Index : Chain)
+	{
+		Transforms.Add(Output.Pose.GetComponentSpaceTransform(Index));
+	}
+
+	const double MinZ = GroundCS + TailClearance * WorldToComponent;
+	int32 FirstLifted = INDEX_NONE;
+	for (int32 i = 0; i + 1 < Chain.Num(); ++i)
+	{
+		const FVector Pivot = Transforms[i].GetLocation();
+		const FVector Offset = Transforms[i + 1].GetLocation() - Pivot;
+		const double Target = MinZ - Pivot.Z;
+		if (Offset.Z >= Target)
+		{
+			continue;
+		}
+		// 다음 뼈가 뻗은 수평 방향으로 세운다. 바로 아래로 늘어졌으면 앞 뼈에서 이 뼈로 오는 방향(꼬리 뒤쪽)으로 세운다.
+		FVector Horizontal(Offset.X, Offset.Y, 0.0);
+		if (Horizontal.IsNearlyZero() && i > 0)
+		{
+			const FVector Back = Pivot - Transforms[i - 1].GetLocation();
+			Horizontal = FVector(Back.X, Back.Y, 0.0);
+		}
+		const FVector Axis = FVector::CrossProduct(Horizontal, FVector::UpVector).GetSafeNormal();
+		if (Axis.IsNearlyZero())
+		{
+			continue;
+		}
+		// 축에 수직인 성분 U만 돈다: Z(a) = U.Z cos a + W.Z sin a = R cos(a - Phi). 다음 뼈가 Target에 닿는 가장 작은 각도를 쓴다.
+		// 위 축이면 W.Z >= 0이라 Phi는 0~180도이고, 닿을 수 없으면 Phi(가장 높이 든 각도)가 된다.
+		const FVector U = Offset - Axis * FVector::DotProduct(Offset, Axis);
+		const FVector W = FVector::CrossProduct(Axis, U);
+		const double R = FMath::Sqrt(FMath::Square(U.Z) + FMath::Square(W.Z));
+		if (R <= UE_KINDA_SMALL_NUMBER)
+		{
+			continue;
+		}
+		const double Angle = FMath::Atan2(W.Z, U.Z) - FMath::Acos(FMath::Clamp(Target / R, -1.0, 1.0));
+		if (Angle <= 0.0)
+		{
+			continue;
+		}
+		// 이 뼈를 돌리면 아래 뼈들도 함께 돈다.
+		const FQuat Lift(Axis, Angle);
+		Transforms[i].SetRotation(Lift * Transforms[i].GetRotation());
+		for (int32 j = i + 1; j < Chain.Num(); ++j)
+		{
+			Transforms[j].SetLocation(Pivot + Lift.RotateVector(Transforms[j].GetLocation() - Pivot));
+			Transforms[j].SetRotation(Lift * Transforms[j].GetRotation());
+		}
+		if (FirstLifted == INDEX_NONE)
+		{
+			FirstLifted = i;
+		}
+	}
+	for (int32 i = FirstLifted; FirstLifted != INDEX_NONE && i < Chain.Num(); ++i)
+	{
+		OutBoneTransforms.Add(FBoneTransform(Chain[i], Transforms[i]));
+	}
 }
