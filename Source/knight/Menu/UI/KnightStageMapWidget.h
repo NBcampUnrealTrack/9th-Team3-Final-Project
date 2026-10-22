@@ -34,7 +34,31 @@ struct KNIGHT_API FKnightMapMarker
 	bool bLocked = false;
 };
 
+/** Quest pin placed relative to a painted map region, independently from the raid StageId. */
+USTRUCT(BlueprintType)
+struct KNIGHT_API FKnightMapQuestMarker
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadWrite, Category="Knight|Map")
+	FName QuestId;
+
+	UPROPERTY(BlueprintReadWrite, Category="Knight|Map")
+	FName RegionId;
+
+	UPROPERTY(BlueprintReadWrite, Category="Knight|Map")
+	FText Label;
+
+	/** Absolute longitude/latitude, derived from the editorial offset and region centre. */
+	UPROPERTY(BlueprintReadWrite, Category="Knight|Map")
+	FVector2D Location = FVector2D::ZeroVector;
+
+	UPROPERTY(BlueprintReadWrite, Category="Knight|Map")
+	bool bLocked = false;
+};
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FKnightMapStageClicked, FName, StageId);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FKnightMapQuestClicked, FName, QuestId);
 
 /**
  * Stage-select map: a flat (equirectangular) dot map larger than the widget, panned by dragging and stopped at its edges.
@@ -58,6 +82,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|Map")
 	void SetMarkers(const TArray<FKnightMapMarker>& InMarkers);
 
+	UFUNCTION(BlueprintCallable, Category="Knight|Map")
+	void SetQuestMarkers(const TArray<FKnightMapQuestMarker>& InMarkers);
+
+	UFUNCTION(BlueprintCallable, Category="Knight|Map")
+	void SetSelectedQuest(FName QuestId);
+
 	/** NAME_None clears the selection. Does not broadcast OnStageClicked. */
 	UFUNCTION(BlueprintCallable, Category="Knight|Map")
 	void SetSelectedStage(FName StageId);
@@ -75,6 +105,9 @@ public:
 	UPROPERTY(BlueprintAssignable, Category="Knight|Map")
 	FKnightMapStageClicked OnStageClicked;
 
+	UPROPERTY(BlueprintAssignable, Category="Knight|Map")
+	FKnightMapQuestClicked OnQuestClicked;
+
 protected:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
@@ -83,6 +116,7 @@ protected:
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual FReply NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual FReply NativeOnMouseWheel(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual void NativeOnMouseLeave(const FPointerEvent& InMouseEvent) override;
 
 	/** UI-domain material with vector parameters ViewRect (u, v, width, height of the visible part), MapPixels, Region0..7 and scalar Blink. */
@@ -130,7 +164,9 @@ private:
 	FVector2D ClampCenter(const FVector2D& InCenter, const FMapView& View) const;
 	FVector2D ToLocal(const FVector2D& LocationDegrees, const FMapView& View) const;
 	int32 FindMarkerAt(const FVector2D& LocalPosition, const FVector2D& LocalSize) const;
+	int32 FindQuestMarkerAt(const FVector2D& LocalPosition, const FVector2D& LocalSize) const;
 	void SetHovered(int32 Index);
+	void SetHoveredQuest(int32 Index);
 	void ApplyToMaterial(const FVector2D& LocalSize);
 
 	UPROPERTY(Transient)
@@ -138,9 +174,12 @@ private:
 
 	FSlateBrush MapBrush;
 	TArray<FKnightMapMarker> Markers;
+	TArray<FKnightMapQuestMarker> QuestMarkers;
 	TWeakObjectPtr<UWidget> LeaderTarget;
 	FName SelectedStageId;
+	FName SelectedQuestId;
 	int32 HoveredIndex = INDEX_NONE;
+	int32 HoveredQuestIndex = INDEX_NONE;
 
 	/** Map centre in degrees (longitude, latitude), and its glide speed in degrees per second. */
 	FVector2D Center = FVector2D::ZeroVector;

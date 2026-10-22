@@ -14,6 +14,7 @@ class UKnightCodexWidget;
 class UKnightMaintenanceWidget;
 class UKnightInventoryWidget;
 class UKnightQuestMenuWidget;
+class UKnightQuestCatalog;
 class UCanvasPanel;
 class AKnightMaintenanceCameraRig;
 struct FStreamableHandle;
@@ -71,7 +72,7 @@ protected:
 	UPROPERTY(meta=(BindWidget))
 	TObjectPtr<UPanelWidget> Panel_Stage;
 
-	/** Responsive host added to the existing stage page in WBP_KnightMainMenu. */
+	/** Hit-test-transparent host for the map-side quest details in WBP_KnightMainMenu. */
 	UPROPERTY(meta=(BindWidgetOptional))
 	TObjectPtr<UCanvasPanel> Panel_QuestHost;
 
@@ -164,6 +165,9 @@ private:
 
 	UFUNCTION()
 	void HandleMapStageClicked(FName StageId);
+	UFUNCTION()
+	void HandleMapQuestClicked(FName QuestId);
+	void HandleQuestSelectionChanged(FName QuestId);
 
 	UFUNCTION()
 	void HandleLaunchStageClicked();
@@ -171,6 +175,8 @@ private:
 
 	bool ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDuringTravel);
 	bool RebuildMapMarkers();
+	void ShowSelectedRegionQuests();
+	void PlaceQuestPanel();
 	void RefreshStageDetails();
 	void RefreshRaidDetails();
 	void PlaceStageInfo();
@@ -192,6 +198,8 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UKnightQuestMenuWidget> QuestWidget;
 	UPROPERTY(Transient)
+	TObjectPtr<const UKnightQuestCatalog> MapQuestCatalog;
+	UPROPERTY(Transient)
 	TObjectPtr<UCanvasPanel> InventoryPanel;
 	TWeakObjectPtr<UWidget> FocusBeforeInventory;
 	bool bRestoreInventoryFocus = false;
@@ -201,6 +209,8 @@ private:
 
 	EKnightMainMenuPage CurrentPage = EKnightMainMenuPage::Home;
 	TArray<FName> StageOrder;
+	TMap<FName, FName> QuestRegionById;
+	TMap<FName, FText> RegionNames;
 	FName SelectedStageId;
 	bool bStageLaunchAvailable = false;
 	bool bQuestMode = false;

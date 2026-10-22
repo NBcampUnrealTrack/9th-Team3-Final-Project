@@ -7,10 +7,12 @@
 class UCommonButtonBase;
 class UCommonTextBlock;
 class UScrollBox;
+class UBorder;
 class UKnightQuestCatalog;
 class UKnightQuestDefinition;
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FKnightQuestLaunchRequested, FName);
+DECLARE_MULTICAST_DELEGATE_OneParam(FKnightQuestSelectionChanged, FName);
 
 /** Content of the existing main-menu stage page. No raid state changes while browsing. */
 UCLASS()
@@ -20,11 +22,14 @@ class KNIGHT_API UKnightQuestMenuWidget : public UUserWidget
 
 public:
 	void RefreshQuests();
+	/** Show only the quests on the selected map region. Does not change raid state. */
+	void SetRegionQuests(FName RegionId, const FText& RegionName, const TArray<FName>& QuestIds);
 	bool SelectQuest(FName QuestId);
 	bool CycleQuest(int32 Direction);
 	FName GetSelectedQuestId() const { return SelectedQuestId; }
 	UWidget* GetFocusButton() const;
 	FKnightQuestLaunchRequested OnLaunchRequested;
+	FKnightQuestSelectionChanged OnSelectionChanged;
 
 protected:
 	virtual void NativeOnInitialized() override;
@@ -42,6 +47,10 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UScrollBox> QuestList;
 	UPROPERTY(Transient)
+	TObjectPtr<UCommonTextBlock> RegionHeading;
+	UPROPERTY(Transient)
+	TObjectPtr<UBorder> DetailBorder;
+	UPROPERTY(Transient)
 	TObjectPtr<UCommonTextBlock> DetailTitle;
 	UPROPERTY(Transient)
 	TObjectPtr<UCommonTextBlock> DetailDescription;
@@ -56,5 +65,8 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UCommonButtonBase>> QuestButtons;
 	TArray<FName> QuestOrder;
+	TArray<FName> RegionQuestIds;
+	FName ActiveRegionId;
+	FText ActiveRegionName;
 	FName SelectedQuestId;
 };
