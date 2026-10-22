@@ -187,6 +187,17 @@ float UknightProgressionSubsystem::GetSocketEffectTotal(EKnightSocketEffect Effe
 	return FMath::IsFinite(Total) ? Total : 0.f;
 }
 
+int32 UknightProgressionSubsystem::GetSocketEffectCount(EKnightSocketEffect Effect) const
+{
+	int32 Total = 0;
+	for (int32 Index = 0, Count = GetUnlockedSharedSocketSlots(); Index < Count; ++Index)
+	{
+		const UknightSocketItemDefinition* const Item = GetEquippedSocketItem(Index);
+		Total += Item && Item->Effect == Effect ? 1 : 0;
+	}
+	return Total;
+}
+
 int32 UknightProgressionSubsystem::GetRepairKitCapacityBonus() const
 {
 	return FMath::Max(0, FMath::RoundToInt(GetSocketEffectTotal(EKnightSocketEffect::RepairKitCapacity)));

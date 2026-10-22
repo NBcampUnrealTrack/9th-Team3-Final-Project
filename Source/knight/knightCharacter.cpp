@@ -133,6 +133,14 @@ void AknightCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		AbilitySystemComponent->RemoveActiveGameplayEffect(SocketRepairCapacityHandle);
 	SocketRepairCapacityHandle.Invalidate();
 	SocketRepairCapacityEffect = nullptr;
+	for (FActiveGameplayEffectHandle* const Handle : { &SocketStatHandle, &SocketFullHealthAttackHandle })
+	{
+		if (AbilitySystemComponent && Handle->IsValid())
+			AbilitySystemComponent->RemoveActiveGameplayEffect(*Handle);
+		Handle->Invalidate();
+	}
+	SocketStatEffect = nullptr;
+	SocketFullHealthAttackEffect = nullptr;
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -164,6 +172,12 @@ void AknightCharacter::InitializeAbilitySystem()
 	AbilitySystemComponent->SetNumericAttributeBase(UknightCoreAttributeSet::GetPoiseRecoveryRateAttribute(), BasePoiseRecoveryRate);
 	AbilitySystemComponent->SetNumericAttributeBase(UknightCoreAttributeSet::GetGuardEfficiencyAttribute(), BaseGuardEfficiency);
 	AbilitySystemComponent->SetNumericAttributeBase(UknightCoreAttributeSet::GetCriticalDamageMultiplierAttribute(), BaseCriticalDamageMultiplier);
+
+	// (2026-10-22) 완전 출력 소켓: 체력·최대 체력이 바뀔 때마다 '가득 찼는지'를 다시 본다(아래 출격 시 가득 채우기도 여기로 들어온다).
+	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(UknightCoreAttributeSet::GetHealthAttribute())
+		.AddUObject(this, &ThisClass::HandleHealthChangedForSocket);
+	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(UknightCoreAttributeSet::GetMaxHealthAttribute())
+		.AddUObject(this, &ThisClass::HandleHealthChangedForSocket);
 
 	// 파츠는 ASC를 통해 스탯을 주므로, ASC가 준비된 뒤에 장착한다.
 	Parts->ApplyLoadout();
@@ -200,25 +214,102 @@ void AknightCharacter::RefreshSocketEffects()
 	const UknightProgressionSubsystem* const Progression = GetGameInstance()
 		? GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>() : nullptr;
 	const int32 Bonus = Progression ? Progression->GetRepairKitCapacityBonus() : 0;
-	if (Bonus == AppliedSocketRepairBonus) return;
-	if (SocketRepairCapacityHandle.IsValid())
-		AbilitySystemComponent->RemoveActiveGameplayEffect(SocketRepairCapacityHandle);
-	SocketRepairCapacityHandle.Invalidate();
-	SocketRepairCapacityEffect = nullptr;
-	AppliedSocketRepairBonus = Bonus;
-	if (Bonus > 0)
+	// (2026-10-22) 수리 키트 보너스가 그대로여도 아래 비율 소켓은 따로 갱신해야 해서, 바로 끝내지 않고 이 블록만 건너뛴다.
+	if (Bonus != AppliedSocketRepairBonus)
 	{
-		SocketRepairCapacityEffect = NewObject<UGameplayEffect>(this, NAME_None, RF_Transient);
-		SocketRepairCapacityEffect->DurationPolicy = EGameplayEffectDurationType::Infinite;
-		FGameplayModifierInfo& Modifier = SocketRepairCapacityEffect->Modifiers.AddDefaulted_GetRef();
-		Modifier.Attribute = UknightAttributeSet::GetMaxRepairKitCountAttribute();
-		Modifier.ModifierOp = EGameplayModOp::AddBase;
-		Modifier.ModifierMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(Bonus));
-		SocketRepairCapacityHandle = AbilitySystemComponent->ApplyGameplayEffectToSelf(
-			SocketRepairCapacityEffect, 1.f, AbilitySystemComponent->MakeEffectContext());
+		if (SocketRepairCapacityHandle.IsValid())
+			AbilitySystemComponent->RemoveActiveGameplayEffect(SocketRepairCapacityHandle);
+		SocketRepairCapacityHandle.Invalidate();
+		SocketRepairCapacityEffect = nullptr;
+		AppliedSocketRepairBonus = Bonus;
+		if (Bonus > 0)
+		{
+			SocketRepairCapacityEffect = NewObject<UGameplayEffect>(this, NAME_None, RF_Transient);
+			SocketRepairCapacityEffect->DurationPolicy = EGameplayEffectDurationType::Infinite;
+			FGameplayModifierInfo& Modifier = SocketRepairCapacityEffect->Modifiers.AddDefaulted_GetRef();
+			Modifier.Attribute = UknightAttributeSet::GetMaxRepairKitCountAttribute();
+			Modifier.ModifierOp = EGameplayModOp::AddBase;
+			Modifier.ModifierMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(Bonus));
+			SocketRepairCapacityHandle = AbilitySystemComponent->ApplyGameplayEffectToSelf(
+				SocketRepairCapacityEffect, 1.f, AbilitySystemComponent->MakeEffectContext());
+		}
+		if (MechAttributeSet->GetRepairKitCount() > MechAttributeSet->GetMaxRepairKitCount())
+			AbilitySystemComponent->SetNumericAttributeBase(UknightAttributeSet::GetRepairKitCountAttribute(), MechAttributeSet->GetMaxRepairKitCount());
 	}
-	if (MechAttributeSet->GetRepairKitCount() > MechAttributeSet->GetMaxRepairKitCount())
-		AbilitySystemComponent->SetNumericAttributeBase(UknightAttributeSet::GetRepairKitCountAttribute(), MechAttributeSet->GetMaxRepairKitCount());
+	RefreshSocketStatEffects(Progression);
+}
+
+void AknightCharacter::RefreshSocketStatEffects(const UknightProgressionSubsystem* Progression)
+{
+	// 적재 보강(LoadCapacity)·냉각 순환(StaminaRecovery): 최종 값 x(1 + 끼운 값 합). MultiplyAdditive는 크기 1.2가 x1.2다.
+	const float LoadBonus = Progression ? Progression->GetSocketEffectTotal(EKnightSocketEffect::LoadCapacity) : 0.f;
+	const float StaminaBonus = Progression ? Progression->GetSocketEffectTotal(EKnightSocketEffect::StaminaRecovery) : 0.f;
+	if (LoadBonus != AppliedSocketLoadBonus || StaminaBonus != AppliedSocketStaminaBonus)
+	{
+		if (SocketStatHandle.IsValid())
+			AbilitySystemComponent->RemoveActiveGameplayEffect(SocketStatHandle);
+		SocketStatHandle.Invalidate();
+		SocketStatEffect = nullptr;
+		AppliedSocketLoadBonus = LoadBonus;
+		AppliedSocketStaminaBonus = StaminaBonus;
+		if (LoadBonus > 0.f || StaminaBonus > 0.f)
+		{
+			SocketStatEffect = NewObject<UGameplayEffect>(this, NAME_None, RF_Transient);
+			SocketStatEffect->DurationPolicy = EGameplayEffectDurationType::Infinite;
+			const auto AddMultiplier = [this](const FGameplayAttribute& Attribute, float SocketBonus)
+			{
+				if (SocketBonus <= 0.f) return;
+				FGameplayModifierInfo& Modifier = SocketStatEffect->Modifiers.AddDefaulted_GetRef();
+				Modifier.Attribute = Attribute;
+				Modifier.ModifierOp = EGameplayModOp::MultiplyAdditive;
+				Modifier.ModifierMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(1.f + SocketBonus));
+			};
+			AddMultiplier(UknightAttributeSet::GetLoadCapacityAttribute(), LoadBonus);
+			AddMultiplier(UknightAttributeSet::GetBoostRecoveryRateAttribute(), StaminaBonus);
+			SocketStatHandle = AbilitySystemComponent->ApplyGameplayEffectToSelf(SocketStatEffect, 1.f, AbilitySystemComponent->MakeEffectContext());
+		}
+		UE_LOG(Logknight, Log, TEXT("%s: socket stats -> load capacity x%.2f (%.0f), stamina recovery x%.2f (%.1f/s)."), *GetNameSafe(this),
+			1.f + LoadBonus, MechAttributeSet->GetLoadCapacity(), 1.f + StaminaBonus, MechAttributeSet->GetBoostRecoveryRate());
+	}
+
+	// 완전 출력(FullHealthAttack): 값만 기억해 두고, 실제로 거는 건 체력에 따라 UpdateFullHealthAttackBonus가 한다.
+	SocketFullHealthAttackBonus = Progression ? Progression->GetSocketEffectTotal(EKnightSocketEffect::FullHealthAttack) : 0.f;
+	UpdateFullHealthAttackBonus();
+}
+
+void AknightCharacter::HandleHealthChangedForSocket(const FOnAttributeChangeData& Data)
+{
+	UpdateFullHealthAttackBonus();
+}
+
+void AknightCharacter::UpdateFullHealthAttackBonus()
+{
+	if (!AbilitySystemComponent || !CoreAttributeSet) return;
+	// 현재 체력이 최대 체력과 같을 때만(부동소수 오차 허용). 한 대라도 맞으면 꺼지고, 수리 키트로 가득 차면 다시 켜진다.
+	const float MaxHealth = CoreAttributeSet->GetMaxHealth();
+	const bool bWant = SocketFullHealthAttackBonus > 0.f && !IsDead() && MaxHealth > 0.f
+		&& CoreAttributeSet->GetHealth() >= MaxHealth - KINDA_SMALL_NUMBER;
+	const bool bApplied = SocketFullHealthAttackHandle.IsValid();
+	if (bWant == bApplied && (!bWant || AppliedFullHealthAttackBonus == SocketFullHealthAttackBonus)) return;
+
+	if (bApplied)
+		AbilitySystemComponent->RemoveActiveGameplayEffect(SocketFullHealthAttackHandle);
+	SocketFullHealthAttackHandle.Invalidate();
+	AppliedFullHealthAttackBonus = 0.f;
+	if (bWant)
+	{
+		SocketFullHealthAttackEffect = NewObject<UGameplayEffect>(this, NAME_None, RF_Transient);
+		SocketFullHealthAttackEffect->DurationPolicy = EGameplayEffectDurationType::Infinite;
+		FGameplayModifierInfo& Modifier = SocketFullHealthAttackEffect->Modifiers.AddDefaulted_GetRef();
+		Modifier.Attribute = UknightCoreAttributeSet::GetAttackPowerAttribute();
+		Modifier.ModifierOp = EGameplayModOp::MultiplyAdditive;
+		Modifier.ModifierMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(1.f + SocketFullHealthAttackBonus));
+		SocketFullHealthAttackHandle = AbilitySystemComponent->ApplyGameplayEffectToSelf(
+			SocketFullHealthAttackEffect, 1.f, AbilitySystemComponent->MakeEffectContext());
+		AppliedFullHealthAttackBonus = SocketFullHealthAttackBonus;
+	}
+	UE_LOG(Logknight, Log, TEXT("%s: full health attack socket %s (health %.1f / %.1f, attack power %.1f)."), *GetNameSafe(this),
+		bWant ? TEXT("on") : TEXT("off"), CoreAttributeSet->GetHealth(), MaxHealth, CoreAttributeSet->GetAttackPower());
 }
 
 void AknightCharacter::HandlePerfectGuard(const FGameplayEventData* Payload)
@@ -230,7 +321,14 @@ void AknightCharacter::HandlePerfectGuard(const FGameplayEventData* Payload)
 	{
 		return;
 	}
-	float Gauge = MechAttributeSet->GetRepairKitGauge() + RepairKitGaugePerPerfectGuard;
+	// (2026-10-22 사용자 결정) 충전 보조 소켓(SocketGaugeCharge) 1개마다 키트 하나에 필요한 퍼펙트 가드 수 -1 (기본 5번 → 4번).
+	// 소켓의 EffectValue(배율)는 쓰지 않고 끼운 개수만 센다. 최소 1번.
+	const UknightProgressionSubsystem* const Progression = GetGameInstance()
+		? GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>() : nullptr;
+	const int32 ChargeSockets = Progression ? Progression->GetSocketEffectCount(EKnightSocketEffect::SocketGaugeCharge) : 0;
+	const int32 BaseGuardsPerKit = FMath::CeilToInt(UknightAttributeSet::RepairKitGaugeFull / RepairKitGaugePerPerfectGuard);
+	const int32 GuardsPerKit = FMath::Max(1, BaseGuardsPerKit - ChargeSockets);
+	float Gauge = MechAttributeSet->GetRepairKitGauge() + UknightAttributeSet::RepairKitGaugeFull / GuardsPerKit;
 	float NewKitCount = KitCount;
 	if (Gauge >= UknightAttributeSet::RepairKitGaugeFull)
 	{
@@ -240,8 +338,8 @@ void AknightCharacter::HandlePerfectGuard(const FGameplayEventData* Payload)
 		AbilitySystemComponent->SetNumericAttributeBase(UknightAttributeSet::GetRepairKitCountAttribute(), NewKitCount);
 	}
 	AbilitySystemComponent->SetNumericAttributeBase(UknightAttributeSet::GetRepairKitGaugeAttribute(), Gauge);
-	UE_LOG(Logknight, Log, TEXT("%s: perfect guard -> repair kit gauge %.0f / %.0f, kits %.0f / %.0f."), *GetNameSafe(this),
-		Gauge, UknightAttributeSet::RepairKitGaugeFull, NewKitCount, MaxKitCount);
+	UE_LOG(Logknight, Log, TEXT("%s: perfect guard -> repair kit gauge %.0f / %.0f (%d guards per kit), kits %.0f / %.0f."), *GetNameSafe(this),
+		Gauge, UknightAttributeSet::RepairKitGaugeFull, GuardsPerKit, NewKitCount, MaxKitCount);
 }
 
 FGameplayTag AknightCharacter::ResolveHitPart(const FHitResult& Hit) const

@@ -122,6 +122,8 @@ protected:
 	/**
 	 * (2026-10-16 사용자 결정) 퍼펙트 가드 1번에 차는 수리 키트 게이지(메카 속성 RepairKitGauge, 100이면 키트 +1).
 	 * 기본 20 = 퍼펙트 가드 5번에 키트 1개. 키트가 최대 개수(MaxRepairKitCount)면 차지 않는다. 바뀔 수 있는 값.
+	 * (2026-10-22) 충전 보조 소켓 1개마다 필요한 퍼펙트 가드 수가 1번 줄어든다(5번 → 4번, 한 번에 25). 최소 1번.
+	 * 그래서 실제 한 번 충전량은 100 ÷ 필요 횟수(올림한 100 ÷ 이 값에서 소켓 수를 뺀 것)로 맞춘다.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|RepairKit", meta=(ClampMin=0))
 	float RepairKitGaugePerPerfectGuard = 20.f;
@@ -131,6 +133,21 @@ protected:
 	FActiveGameplayEffectHandle SocketRepairCapacityHandle;
 	int32 AppliedSocketRepairBonus = INDEX_NONE;
 	UFUNCTION() void HandleSocketProgressionChanged();
+
+	/** (2026-10-22) 비율 소켓(적재 한도·스테미너 회복) 효과. 끼운 값이 바뀔 때만 다시 건다. */
+	UPROPERTY(Transient) TObjectPtr<UGameplayEffect> SocketStatEffect;
+	FActiveGameplayEffectHandle SocketStatHandle;
+	float AppliedSocketLoadBonus = -1.f;
+	float AppliedSocketStaminaBonus = -1.f;
+
+	/** (2026-10-22) 완전 출력 소켓: 현재 체력이 최대일 때만 공격력 x(1 + 값). 체력이 바뀔 때마다 켜고 끈다. */
+	UPROPERTY(Transient) TObjectPtr<UGameplayEffect> SocketFullHealthAttackEffect;
+	FActiveGameplayEffectHandle SocketFullHealthAttackHandle;
+	float SocketFullHealthAttackBonus = 0.f;
+	float AppliedFullHealthAttackBonus = 0.f;
+	void RefreshSocketStatEffects(const class UknightProgressionSubsystem* Progression);
+	void UpdateFullHealthAttackBonus();
+	void HandleHealthChangedForSocket(const FOnAttributeChangeData& Data);
 
 	/**
 	 * (2026-10-20 사용자 결정) 기본 메카 스탯 중 속성 세트 기본값과 다른 것. 파츠를 입히기 전에 기본값(Base)으로 넣는다.

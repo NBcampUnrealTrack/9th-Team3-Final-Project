@@ -107,7 +107,11 @@ enum class EKnightSocketEffect : uint8
 {
 	RepairKitCapacity,
 	AttackStaminaCost,
-	SocketGaugeCharge
+	SocketGaugeCharge,
+	// (2026-10-22) 아래 3개는 EffectValue가 비율(0.2 = +20%)이고, 효과는 AknightCharacter::RefreshSocketEffects가 건다.
+	LoadCapacity,       // 적재 한도 x(1 + 값). 정비소 장착 판정(knightEquipmentStats)에도 들어간다.
+	StaminaRecovery,    // 행동 에너지(스테미너) 회복 속도 x(1 + 값)
+	FullHealthAttack    // 현재 체력이 최대일 때만 공격력 x(1 + 값)
 };
 
 /** A socket item remains in the item box while equipped. */
@@ -121,7 +125,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Socket")
 	EKnightSocketEffect Effect = EKnightSocketEffect::RepairKitCapacity;
 
-	/** Repair: flat kit capacity. Attack: fractional cost reduction. Gauge: fractional charge increase. */
+	/**
+	 * Repair: flat kit capacity. Attack: fractional cost reduction. Gauge: fractional charge increase.
+	 * (2026-10-22) Gauge는 이제 배율 대신 끼운 개수만큼 퍼펙트 가드 필요 횟수 -1(값은 안 씀). LoadCapacity·StaminaRecovery·FullHealthAttack: 비율.
+	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Socket", meta=(ClampMin=0))
 	float EffectValue = 0.f;
 

@@ -632,21 +632,45 @@ void UKnightMaintenanceWidget::RefreshSocketDetails()
 	if (Txt_ActiveSets) Txt_ActiveSets->SetVisibility(ESlateVisibility::Collapsed);
 	if (Txt_SetInfo) Txt_SetInfo->SetVisibility(ESlateVisibility::Collapsed);
 	TArray<FText> Lines;
+	// (2026-10-22) 소켓 효과 6종의 이름과 값. 충전 보조는 배율이 아니라 끼운 개수만큼 퍼펙트 가드 필요 횟수 -1(AknightCharacter::HandlePerfectGuard).
+	const auto EffectLabel = [](EKnightSocketEffect Effect)
+	{
+		switch (Effect)
+		{
+		case EKnightSocketEffect::RepairKitCapacity: return LOCTEXT("SocketKit", "수리키트 최대량");
+		case EKnightSocketEffect::AttackStaminaCost: return LOCTEXT("SocketAttack", "공격 스태미너 소모량");
+		case EKnightSocketEffect::SocketGaugeCharge: return LOCTEXT("SocketCharge", "수리키트 충전에 필요한 퍼펙트 가드");
+		case EKnightSocketEffect::LoadCapacity: return LOCTEXT("SocketLoad", "장비 중량 한계");
+		case EKnightSocketEffect::StaminaRecovery: return LOCTEXT("SocketStaminaRecovery", "스태미너 회복량");
+		case EKnightSocketEffect::FullHealthAttack: return LOCTEXT("SocketFullHealthAttack", "최대 체력일 때 공격력");
+		default: return FText::GetEmpty();
+		}
+	};
 	if (Item)
 	{
-		const FText Label = Item->Effect == EKnightSocketEffect::RepairKitCapacity ? LOCTEXT("SocketKit", "수리키트 최대량")
-			: Item->Effect == EKnightSocketEffect::AttackStaminaCost ? LOCTEXT("SocketAttack", "공격 스태미너 소모량")
-			: LOCTEXT("SocketCharge", "소켓 게이지 충전량");
-		Lines.Add(FText::Format(LOCTEXT("SocketSelectedEffect", "선택 효과: {0} {1}{2}"), Label,
-			Item->Effect == EKnightSocketEffect::AttackStaminaCost ? FText::FromString(TEXT("-")) : FText::FromString(TEXT("+")),
-			Item->Effect == EKnightSocketEffect::RepairKitCapacity ? FText::AsNumber(Item->EffectValue)
-				: FText::FromString(FString::Printf(TEXT("%.0f%%"), Item->EffectValue * 100.f))));
+		const FText Value = Item->Effect == EKnightSocketEffect::RepairKitCapacity ? FText::Format(LOCTEXT("SocketValueFlat", "+{0}"), FText::AsNumber(Item->EffectValue))
+			: Item->Effect == EKnightSocketEffect::SocketGaugeCharge ? LOCTEXT("SocketValueGuard", "-1회")
+			: FText::FromString(FString::Printf(TEXT("%s%.0f%%"), Item->Effect == EKnightSocketEffect::AttackStaminaCost ? TEXT("-") : TEXT("+"),
+				Item->EffectValue * 100.f));
+		Lines.Add(FText::Format(LOCTEXT("SocketSelectedEffect", "선택 효과: {0} {1}"), EffectLabel(Item->Effect), Value));
 	}
 	if (Progression)
 	{
-		Lines.Add(FText::Format(LOCTEXT("SocketSummary", "현재 활성 효과: 수리키트 최대 +{0} · 공격 비용 ×{1} · 소켓 충전 ×{2}"),
-			Progression->GetRepairKitCapacityBonus(), Progression->GetAttackStaminaCostMultiplier(),
-			Progression->GetSocketGaugeChargeMultiplier()));
+		// 끼운 효과만 나열한다. 하나도 없으면 '없음'.
+		TArray<FText> Active;
+		if (const int32 Kit = Progression->GetRepairKitCapacityBonus())
+			Active.Add(FText::Format(LOCTEXT("SocketActiveKit", "수리키트 최대 +{0}"), Kit));
+		if (const float Attack = Progression->GetSocketEffectTotal(EKnightSocketEffect::AttackStaminaCost); Attack > 0.f)
+			Active.Add(FText::Format(LOCTEXT("SocketActiveAttack", "공격 비용 -{0}%"), FMath::RoundToInt(Attack * 100.f)));
+		if (const int32 Charge = Progression->GetSocketEffectCount(EKnightSocketEffect::SocketGaugeCharge))
+			Active.Add(FText::Format(LOCTEXT("SocketActiveCharge", "퍼펙트 가드 -{0}회"), Charge));
+		for (const EKnightSocketEffect Effect : { EKnightSocketEffect::LoadCapacity, EKnightSocketEffect::StaminaRecovery, EKnightSocketEffect::FullHealthAttack })
+		{
+			if (const float Total = Progression->GetSocketEffectTotal(Effect); Total > 0.f)
+				Active.Add(FText::Format(LOCTEXT("SocketActivePercent", "{0} +{1}%"), EffectLabel(Effect), FMath::RoundToInt(Total * 100.f)));
+		}
+		Lines.Add(FText::Format(LOCTEXT("SocketSummary", "현재 활성 효과: {0}"),
+			Active.IsEmpty() ? LOCTEXT("SocketActiveNone", "없음") : FText::Join(FText::FromString(TEXT(" · ")), Active)));
 	}
 	if (Txt_Bonus)
 	{
