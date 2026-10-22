@@ -40,7 +40,25 @@ public:
 	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 		const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
 
+	/** (2026-10-22) bRequireWeaponInHand이면 칼이 등에 있을 때 발동하지 않는다. */
+	virtual bool CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+		const FGameplayTagContainer* SourceTags = nullptr, const FGameplayTagContainer* TargetTags = nullptr,
+		FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
+
 protected:
+	/**
+	 * (2026-10-22 사용자 요청) 칼이 손(WeaponHandSocket)에 있을 때만 돌진 베기를 쓴다. 칼이 등에 있으면 같은 공격 키의
+	 * 1타(DrawIgnoredBlockedTags = State.LockOn.Far)가 먼저 칼을 뽑는다. 예전에는 멀리 락온하면 뽑지 않고 바로 돌진해 베었다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Lunge|Weapon")
+	bool bRequireWeaponInHand = true;
+
+	UPROPERTY(EditDefaultsOnly, Category="Lunge|Weapon", meta=(EditCondition="bRequireWeaponInHand"))
+	FName WeaponHandSocket = TEXT("weapon_r");
+
+	UPROPERTY(EditDefaultsOnly, Category="Lunge|Weapon", meta=(EditCondition="bRequireWeaponInHand"))
+	FName WeaponComponentTag = TEXT("Weapon");
+
 	/**
 	 * 돌진할 수 있는 최대 거리(대상 표면 기준 도착 지점까지). 더 멀면 이 거리만큼만 간다.
 	 * (2026-10-18 사용자 결정 '돌진 사거리 감소') 1800 → 900, (2026-10-19 '조금 더') 900 → 700. 바뀔 수 있는 값(BP에서 시험 후 조절).

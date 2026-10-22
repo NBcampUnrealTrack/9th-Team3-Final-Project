@@ -54,6 +54,9 @@ public:
 	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 		const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
 
+	/** (2026-10-22) Avatar의 무기(WeaponComponentTag가 붙은 메시)가 HandSocket에 붙어 있는지. 무기가 없으면 true. */
+	static bool IsWeaponInHandFor(const AActor* Avatar, FName HandSocket = TEXT("weapon_r"), FName WeaponTag = TEXT("Weapon"));
+
 	/** 검을 뽑기만 하는 누름이면 행동 에너지를 쓰지 않는다. (2026-10-09) */
 	virtual void ApplyCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 		const FGameplayAbilityActivationInfo ActivationInfo) const override;
@@ -93,6 +96,21 @@ protected:
 	/** Montage time (s) at which the attack takes over from the draw, so the settle at its end is skipped. 0: when it blends out. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Draw", meta=(ClampMin=0, Units="s"))
 	float DrawAttackStartTime = 0.f;
+
+	/**
+	 * (2026-10-22 사용자 요청) 등에서 칼을 뽑는 동안 이동 입력을 막는다. 걷다가 뽑으면 발도 모션(상체)과 다리 걷기가 같이 나왔다.
+	 * 칼이 손에 들어오면(WeaponHandSocket) 바로 풀어 다시 움직일 수 있다. 끄면 예전처럼 걷며 뽑는다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Draw")
+	bool bLockMovementWhileDrawing = true;
+
+	/**
+	 * (2026-10-22 사용자 요청) 칼이 등에 있을 때(DrawMontage가 있고 손에 없을 때) ActivationBlockedTags에서 무시할 태그.
+	 * 예: 1타·달리기 공격 = State.LockOn.Far. 멀리 락온해도 칼이 등에 있으면 돌진 베기 대신 이 공격이 먼저 칼을 뽑는다.
+	 * (돌진 베기는 bRequireWeaponInHand로 칼이 등에 있으면 나가지 않는다.)
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Draw")
+	FGameplayTagContainer DrawIgnoredBlockedTags;
 
 	/** The weapon counts as drawn while it is attached to this socket. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Draw")
@@ -218,6 +236,9 @@ private:
 	/** 지금 스탠스에 맞는 공격 몽타주. */
 	UAnimMontage* GetStanceAttackMontage() const;
 	void CheckDrawMoveCancel();
+	/** (2026-10-22) 발도 중 이동 잠금(bLockMovementWhileDrawing). 칼이 손에 들어오거나 공격이 끝나면 푼다. */
+	void SetDrawMovementLocked(bool bLock);
+	bool bDrawMovementLocked = false;
 	bool IsWeaponInHand() const;
 	void CheckMoveCancel();
 

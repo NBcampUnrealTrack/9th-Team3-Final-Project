@@ -4,6 +4,7 @@
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "AbilitySystemComponent.h"
+#include "AbilitySystem/Abilities/knightGameplayAbility_MeleeAttack.h"
 #include "AbilitySystem/Abilities/knightGameplayAbility_StanceSwitch.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
@@ -44,6 +45,18 @@ UknightGameplayAbility_BoostLunge::UknightGameplayAbility_BoostLunge(const FObje
 	// (2026-10-15) 부스터를 쓰는 동안 State.Boosting → 전투 자세(CombatStance 트리거)로 들어간다.
 	// 없으면 몽타주의 Attach Weapon으로 칼만 손에 들리고 비전투 자세가 되어, 칼이 뜨고 넣지도 않았다.
 	ActivationOwnedTags.AddTag(knightGameplayTags::State_Boosting);
+}
+
+bool UknightGameplayAbility_BoostLunge::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
+{
+	// (2026-10-22) 칼이 등에 있으면 돌진하지 않는다 → 같은 키의 1타가 칼을 뽑는다.
+	if (bRequireWeaponInHand && ActorInfo
+		&& !UknightGameplayAbility_MeleeAttack::IsWeaponInHandFor(ActorInfo->AvatarActor.Get(), WeaponHandSocket, WeaponComponentTag))
+	{
+		return false;
+	}
+	return Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags);
 }
 
 UAnimMontage* UknightGameplayAbility_BoostLunge::PickStanceMontage(UAnimMontage* const TwoHanded, UAnimMontage* const OneHanded) const
