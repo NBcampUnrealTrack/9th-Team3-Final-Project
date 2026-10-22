@@ -123,12 +123,16 @@ struct FknightActivateAbilityTaskInstanceData
 	FDelegateHandle EndedDelegateHandle;
 	TWeakObjectPtr<UAbilitySystemComponent> AbilitySystem;
 	double FailAtTime = -1.0;
+	/** 발동한 몬스터 공격이 끝난 뒤 쉴 시간(MonsterDefinition의 AttackRestTime). 0이면 어빌리티가 끝나는 즉시 성공한다. */
+	float RestTime = 0.f;
+	double SucceedAtTime = -1.0;
 };
 
 /**
  * 액터의 GAS 어빌리티 하나를 발동하고, 그 어빌리티가 끝나면 성공한다(취소되었거나 아무것도 시작하지
  * 못하면 실패). 몬스터 공격(UknightGameplayAbility_MonsterAttack)은 Selection이 현재 타깃을 허용하는 것들 중
  * 가중치 랜덤으로 고른다. 조건에 맞는 다른 어빌리티는 가중치 1로 친다.
+ * 몬스터 공격은 끝난 뒤 MonsterDefinition의 AttackRestTime(2페이즈는 Phase2AttackRestTime)만큼 더 서 있다가 성공한다.
  */
 USTRUCT(meta=(DisplayName="Knight Activate Ability", Category="Knight"))
 struct KNIGHT_API FknightStateTreeActivateAbilityTask : public FStateTreeTaskCommonBase
@@ -137,7 +141,7 @@ struct KNIGHT_API FknightStateTreeActivateAbilityTask : public FStateTreeTaskCom
 
 	FknightStateTreeActivateAbilityTask()
 	{
-		// Tick은 재시도 대기를 끝내는 용도로만 쓴다. 실행 중인 어빌리티는 종료 델리게이트로 Task를 끝낸다.
+		// Tick은 재시도 대기와 공격 뒤 쉬는 시간을 끝내는 용도로만 쓴다. 실행 중인 어빌리티는 종료 델리게이트로 Task를 끝낸다.
 		bShouldCallTick = true;
 	}
 

@@ -230,6 +230,33 @@ void UknightGameplayAbility_MonsterReaction::EndAbility(const FGameplayAbilitySp
 		RestorePoise();
 	}
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
+
+	// 자기 Reacting 태그가 빠진 뒤에도 남아 있으면 다른 반응이 이어받은 것이다. 그 밖의 취소(사망 등)는 다시 실행하지 않는다.
+	if (bWasCancelled && bReplayIfInterrupted && ASC && !ReplayDelegateHandle.IsValid()
+		&& !ASC->HasMatchingGameplayTag(knightGameplayTags::State_Dead)
+		&& ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Reacting))
+	{
+		ReplayASC = ASC;
+		ReplayHandle = Handle;
+		ReplayDelegateHandle = ASC->RegisterGameplayTagEvent(knightGameplayTags::State_Monster_Reacting, EGameplayTagEventType::NewOrRemoved)
+			.AddUObject(this, &ThisClass::HandleReactingChangedForReplay);
+		UE_LOG(LogknightAI, Log, TEXT("%s: %s interrupted, replays after the current reaction."), *GetNameSafe(ASC->GetAvatarActor()), *GetName());
+	}
+}
+
+void UknightGameplayAbility_MonsterReaction::HandleReactingChangedForReplay(const FGameplayTag Tag, int32 NewCount)
+{
+	UAbilitySystemComponent* const ASC = ReplayASC.Get();
+	if (NewCount > 0 || !ASC)
+	{
+		return;
+	}
+	ASC->RegisterGameplayTagEvent(knightGameplayTags::State_Monster_Reacting, EGameplayTagEventType::NewOrRemoved).Remove(ReplayDelegateHandle);
+	ReplayDelegateHandle.Reset();
+	if (!ASC->HasMatchingGameplayTag(knightGameplayTags::State_Dead))
+	{
+		ASC->TryActivateAbility(ReplayHandle);
+	}
 }
 
 void UknightGameplayAbility_MonsterReaction::RestorePoise() const
