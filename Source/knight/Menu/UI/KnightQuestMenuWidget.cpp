@@ -5,8 +5,6 @@
 #include "CommonButtonBase.h"
 #include "CommonTextBlock.h"
 #include "Components/Border.h"
-#include "Components/HorizontalBox.h"
-#include "Components/HorizontalBoxSlot.h"
 #include "Components/ScrollBox.h"
 #include "Components/SizeBox.h"
 #include "Components/VerticalBox.h"
@@ -60,30 +58,25 @@ void UKnightQuestMenuWidget::NativeOnInitialized()
 void UKnightQuestMenuWidget::BuildLayout()
 {
 	if (!WidgetTree || WidgetTree->RootWidget) return;
-	UHorizontalBox* const Root = WidgetTree->ConstructWidget<UHorizontalBox>();
+	UBorder* const Root = WidgetTree->ConstructWidget<UBorder>();
+	Root->SetBrushColor(QuestPanelColor);
+	Root->SetPadding(FMargin(18, 16));
 	WidgetTree->RootWidget = Root;
-
-	USizeBox* const ListWidth = WidgetTree->ConstructWidget<USizeBox>();
-	ListWidth->SetWidthOverride(310.f);
-	UHorizontalBoxSlot* const ListRootSlot = Root->AddChildToHorizontalBox(ListWidth);
-	ListRootSlot->SetPadding(FMargin(0, 0, 18, 0));
-	ListRootSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
-	UBorder* const ListBorder = WidgetTree->ConstructWidget<UBorder>();
-	ListBorder->SetBrushColor(QuestPanelColor);
-	ListBorder->SetPadding(FMargin(18));
-	ListWidth->AddChild(ListBorder);
-	UVerticalBox* const ListColumn = WidgetTree->ConstructWidget<UVerticalBox>();
-	ListBorder->SetContent(ListColumn);
-	UCommonTextBlock* const ListHeading = NewQuestText(WidgetTree, TEXT("TS_Knight_Subhead"));
-	ListHeading->SetText(LOCTEXT("QuestList", "토벌 퀘스트"));
-	ListColumn->AddChildToVerticalBox(ListHeading)->SetPadding(FMargin(0, 0, 0, 14));
+	UVerticalBox* const Column = WidgetTree->ConstructWidget<UVerticalBox>();
+	Root->SetContent(Column);
+	RegionHeading = NewQuestText(WidgetTree, TEXT("TS_Knight_Subhead"));
+	RegionHeading->SetText(LOCTEXT("ChooseRegion", "지도에서 구역을 선택하세요"));
+	Column->AddChildToVerticalBox(RegionHeading)->SetPadding(FMargin(0, 0, 0, 12));
+	USizeBox* const ListHeight = WidgetTree->ConstructWidget<USizeBox>();
+	ListHeight->SetMaxDesiredHeight(160.f);
+	Column->AddChildToVerticalBox(ListHeight)->SetPadding(FMargin(0, 0, 0, 10));
 	QuestList = WidgetTree->ConstructWidget<UScrollBox>();
-	ListColumn->AddChildToVerticalBox(QuestList)->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+	ListHeight->AddChild(QuestList);
 
-	UBorder* const DetailBorder = WidgetTree->ConstructWidget<UBorder>();
+	DetailBorder = WidgetTree->ConstructWidget<UBorder>();
 	DetailBorder->SetBrushColor(QuestPanelColor);
-	DetailBorder->SetPadding(FMargin(22, 18));
-	Root->AddChildToHorizontalBox(DetailBorder)->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+	DetailBorder->SetPadding(FMargin(0));
+	Column->AddChildToVerticalBox(DetailBorder)->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 	UVerticalBox* const DetailColumn = WidgetTree->ConstructWidget<UVerticalBox>();
 	DetailBorder->SetContent(DetailColumn);
 	UScrollBox* const DetailScroll = WidgetTree->ConstructWidget<UScrollBox>();
@@ -107,6 +100,7 @@ void UKnightQuestMenuWidget::BuildLayout()
 		DetailColumn->AddChildToVerticalBox(LaunchButton);
 		LaunchButton->OnClicked().AddUObject(this, &ThisClass::HandleLaunchClicked);
 	}
+	DetailBorder->SetVisibility(ESlateVisibility::Collapsed);
 }
 
 void UKnightQuestMenuWidget::SetButtonLabel(UCommonButtonBase* Button, const FText& Label)
@@ -131,25 +125,36 @@ FText UKnightQuestMenuWidget::GetAvailability(const UKnightQuestDefinition* Ques
 void UKnightQuestMenuWidget::RefreshQuests()
 {
 	Catalog = UKnightQuestSettings::LoadCatalog();
+	SetRegionQuests(ActiveRegionId, ActiveRegionName, RegionQuestIds);
+}
+
+void UKnightQuestMenuWidget::SetRegionQuests(FName RegionId, const FText& RegionName, const TArray<FName>& QuestIds)
+{
+	ActiveRegionId = RegionId;
+	ActiveRegionName = RegionName;
+	RegionQuestIds = QuestIds;
 	QuestOrder.Reset();
 	QuestButtons.Reset();
 	if (QuestList) QuestList->ClearChildren();
-	if (!Catalog || !QuestList)
+	if (RegionHeading)
+	{
+		RegionHeading->SetText(RegionId.IsNone() ? LOCTEXT("ChooseRegion", "지도에서 구역을 선택하세요")
+			: RegionName.IsEmpty() ? FText::FromName(RegionId) : RegionName);
+	}
+	if (!Catalog || !QuestList || RegionId.IsNone())
 	{
 		SelectedQuestId = NAME_None;
 		RefreshDetails();
-		UE_LOG(Logknight, Error, TEXT("Quest menu cannot load QuestCatalog."));
+		if (!Catalog) UE_LOG(Logknight, Error, TEXT("Quest menu cannot load QuestCatalog."));
 		return;
 	}
-	TArray<UKnightQuestDefinition*> Quests;
-	Catalog->GetQuestDefinitions(Quests);
-	for (UKnightQuestDefinition* const Quest : Quests)
+	for (const FName QuestId : RegionQuestIds)
 	{
+		UKnightQuestDefinition* const Quest = Catalog->FindQuest(QuestId);
 		if (!Quest) continue;
 		UCommonButtonBase* const Button = NewQuestButton(GetOwningPlayer());
 		if (!Button) continue;
 		SetButtonLabel(Button, Quest->DisplayName);
-		const FName QuestId = Quest->QuestId;
 		Button->OnClicked().AddWeakLambda(this, [this, QuestId]() { SelectQuest(QuestId); });
 		UVerticalBox* const Row = WidgetTree->ConstructWidget<UVerticalBox>();
 		Row->AddChildToVerticalBox(Button);
@@ -170,15 +175,17 @@ void UKnightQuestMenuWidget::RefreshQuests()
 				*Quest->BossId.ToString(), *Quest->HardBossClass.ToString());
 		}
 	}
-	if (!QuestOrder.Contains(SelectedQuestId)) SelectedQuestId = QuestOrder.IsEmpty() ? NAME_None : QuestOrder[0];
+	if (!QuestOrder.Contains(SelectedQuestId)) SelectedQuestId = NAME_None;
 	RefreshDetails();
 }
 
 bool UKnightQuestMenuWidget::SelectQuest(FName QuestId)
 {
-	if (!QuestId.IsNone() && (!Catalog || !Catalog->FindQuest(QuestId))) return false;
+	if (!QuestId.IsNone() && (!Catalog || !QuestOrder.Contains(QuestId))) return false;
+	const bool bChanged = SelectedQuestId != QuestId;
 	SelectedQuestId = QuestId;
 	RefreshDetails();
+	if (bChanged) OnSelectionChanged.Broadcast(QuestId);
 	return true;
 }
 
@@ -197,7 +204,7 @@ UWidget* UKnightQuestMenuWidget::GetFocusButton() const
 {
 	const int32 Index = QuestOrder.IndexOfByKey(SelectedQuestId);
 	return QuestButtons.IsValidIndex(Index) ? QuestButtons[Index].Get()
-		: (QuestButtons.IsEmpty() ? LaunchButton.Get() : QuestButtons[0].Get());
+		: (QuestButtons.IsEmpty() ? nullptr : QuestButtons[0].Get());
 }
 
 FText UKnightQuestMenuWidget::FormatReward(const FknightRaidReward& Reward)
@@ -222,6 +229,7 @@ void UKnightQuestMenuWidget::RefreshDetails()
 	}
 	if (!Quest)
 	{
+		if (DetailBorder) DetailBorder->SetVisibility(ESlateVisibility::Collapsed);
 		if (DetailTitle) DetailTitle->SetText(LOCTEXT("SelectQuest", "퀘스트를 선택하세요"));
 		if (DetailDescription) DetailDescription->SetText(FText::GetEmpty());
 		if (DetailTarget) DetailTarget->SetText(FText::GetEmpty());
@@ -230,6 +238,7 @@ void UKnightQuestMenuWidget::RefreshDetails()
 		if (LaunchButton) LaunchButton->SetIsEnabled(false);
 		return;
 	}
+	if (DetailBorder) DetailBorder->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 	if (DetailTitle) DetailTitle->SetText(Quest->DisplayName);
 	if (DetailDescription) DetailDescription->SetText(Quest->Description);
 	FText BossName = FText::FromName(Quest->BossId);

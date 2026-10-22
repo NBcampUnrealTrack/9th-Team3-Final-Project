@@ -25,6 +25,7 @@
 #include "Menu/UI/KnightMaintenanceWidget.h"
 #include "Menu/UI/KnightInventoryWidget.h"
 #include "Menu/UI/KnightQuestMenuWidget.h"
+#include "Quest/KnightQuestData.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/CanvasPanel.h"
 #include "Components/Button.h"
@@ -61,6 +62,7 @@ void UKnightMainMenuWidget::NativeOnInitialized()
 	if (Map_Stages)
 	{
 		Map_Stages->OnStageClicked.AddUniqueDynamic(this, &ThisClass::HandleMapStageClicked);
+		Map_Stages->OnQuestClicked.AddUniqueDynamic(this, &ThisClass::HandleMapQuestClicked);
 		Map_Stages->SetLeaderTarget(Panel_StageInfo);
 	}
 }
@@ -111,7 +113,11 @@ void UKnightMainMenuWidget::NativeDestruct()
 		RaidDefinitionHandle->CancelHandle();
 		RaidDefinitionHandle.Reset();
 	}
-	if (QuestWidget) QuestWidget->OnLaunchRequested.RemoveAll(this);
+	if (QuestWidget)
+	{
+		QuestWidget->OnLaunchRequested.RemoveAll(this);
+		QuestWidget->OnSelectionChanged.RemoveAll(this);
+	}
 	Super::NativeDestruct();
 }
 
@@ -166,28 +172,21 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 	if (bEnteringStage)
 	{
 		SelectedStageId = NAME_None;
-		if (Map_Stages) Map_Stages->SetSelectedStage(NAME_None);
+		if (Map_Stages) { Map_Stages->SetSelectedStage(NAME_None); Map_Stages->SetSelectedQuest(NAME_None); }
 		EnsureQuestWidget();
-		bQuestMode = QuestWidget != nullptr;
-		if (Panel_QuestHost) Panel_QuestHost->SetVisibility(bQuestMode ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-		if (Map_Stages) Map_Stages->SetVisibility(bQuestMode ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+		bQuestMode = true;
+		if (Panel_QuestHost) Panel_QuestHost->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+		if (Map_Stages) Map_Stages->SetVisibility(ESlateVisibility::Visible);
 		if (UWidget* const Header = WidgetTree ? WidgetTree->FindWidget(TEXT("VerticalBox_StageHeader")) : nullptr)
-			Header->SetVisibility(bQuestMode ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+			Header->SetVisibility(ESlateVisibility::Visible);
 		if (UWidget* const Hints = WidgetTree ? WidgetTree->FindWidget(TEXT("Panel_StageHints")) : nullptr)
-			Hints->SetVisibility(bQuestMode ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
-		if (bQuestMode)
-		{
-			bStageLaunchAvailable = false;
-			if (Panel_StageInfo) Panel_StageInfo->SetVisibility(ESlateVisibility::Collapsed);
-			QuestWidget->RefreshQuests();
-		}
-		else
-		{
-			// Legacy map remains available if the quest view cannot be created.
-			bHasStages = RebuildMapMarkers();
-			RefreshStageDetails();
-			PlaceStageInfo();
-		}
+			Hints->SetVisibility(ESlateVisibility::Visible);
+		bStageLaunchAvailable = false;
+		if (Panel_StageInfo) Panel_StageInfo->SetVisibility(ESlateVisibility::Collapsed);
+		if (QuestWidget) QuestWidget->RefreshQuests();
+		bHasStages = RebuildMapMarkers();
+		ShowSelectedRegionQuests();
+		PlaceQuestPanel();
 	}
 	if (NewPage == EKnightMainMenuPage::Settings)
 	{
@@ -250,7 +249,7 @@ bool UKnightMainMenuWidget::HandleBackRequested()
 	if (CurrentPage == EKnightMainMenuPage::Settings && SettingsWidget) { SettingsWidget->RequestClose(); return true; }
 	if (CurrentPage == EKnightMainMenuPage::Codex) { HandleCodexClosed(); return true; }
 	if (CurrentPage == EKnightMainMenuPage::Maintenance && MaintenanceWidget && MaintenanceWidget->HandleBack()) return true;
-	if (CurrentPage == EKnightMainMenuPage::Stage && bQuestMode && QuestWidget
+	if (CurrentPage == EKnightMainMenuPage::Stage && QuestWidget
 		&& !QuestWidget->GetSelectedQuestId().IsNone()) return QuestWidget->SelectQuest(NAME_None);
 	// First Esc clears the selected region, the next one leaves the map.
 	if (CurrentPage == EKnightMainMenuPage::Stage && !SelectedStageId.IsNone())
@@ -297,8 +296,12 @@ FReply UKnightMainMenuWidget::NativeOnPreviewKeyDown(const FGeometry& InGeometry
 		const FKey Key = InKeyEvent.GetKey();
 		if (Key == EKeys::Left || Key == EKeys::A || Key == EKeys::Right || Key == EKeys::D)
 		{
-			if (bQuestMode && QuestWidget) QuestWidget->CycleQuest(Key == EKeys::Left || Key == EKeys::A ? -1 : 1);
-			else CycleStage(Key == EKeys::Left || Key == EKeys::A ? -1 : 1);
+			CycleStage(Key == EKeys::Left || Key == EKeys::A ? -1 : 1);
+			return FReply::Handled();
+		}
+		if ((Key == EKeys::Up || Key == EKeys::Down) && QuestWidget && !SelectedStageId.IsNone())
+		{
+			QuestWidget->CycleQuest(Key == EKeys::Up ? -1 : 1);
 			return FReply::Handled();
 		}
 	}
@@ -381,13 +384,19 @@ void UKnightMainMenuWidget::EnsureQuestWidget()
 	QuestSlot->SetAnchors(FAnchors(0, 0, 1, 1));
 	QuestSlot->SetOffsets(FMargin(0));
 	QuestWidget->OnLaunchRequested.AddUObject(this, &ThisClass::HandleQuestLaunchRequested);
+	QuestWidget->OnSelectionChanged.AddUObject(this, &ThisClass::HandleQuestSelectionChanged);
+	if (Map_Stages) Map_Stages->SetLeaderTarget(QuestWidget);
 }
 
 bool UKnightMainMenuWidget::SelectQuest(FName QuestId)
 {
 	if (IsTravelPending()) return false;
 	if (CurrentPage != EKnightMainMenuPage::Stage && !ShowPage(EKnightMainMenuPage::Stage)) return false;
-	return bQuestMode && QuestWidget && QuestWidget->SelectQuest(QuestId);
+	if (!QuestWidget) return false;
+	if (QuestId.IsNone()) return QuestWidget->SelectQuest(NAME_None);
+	const FName* const RegionId = QuestRegionById.Find(QuestId);
+	if (!RegionId || !SelectStage(*RegionId)) return false;
+	return QuestWidget->SelectQuest(QuestId);
 }
 
 void UKnightMainMenuWidget::HandleCodexClosed()
@@ -411,8 +420,9 @@ UWidget* UKnightMainMenuWidget::GetPreferredFocusTarget() const
 	{
 		return CodexWidget->GetFocusButton();
 	}
-	if (CurrentPage == EKnightMainMenuPage::Stage && bQuestMode && QuestWidget)
+	if (CurrentPage == EKnightMainMenuPage::Stage && QuestWidget && QuestWidget->GetFocusButton())
 		return QuestWidget->GetFocusButton();
+	if (CurrentPage == EKnightMainMenuPage::Stage && Map_Stages) return Map_Stages;
 	if (CurrentPage == EKnightMainMenuPage::Stage && !SelectedStageId.IsNone() && CanFocusButton(Button_LaunchStage))
 	{
 		return Button_LaunchStage;
@@ -472,29 +482,112 @@ void UKnightMainMenuWidget::HandleCodexClicked()
 bool UKnightMainMenuWidget::RebuildMapMarkers()
 {
 	StageOrder.Reset();
+	QuestRegionById.Reset();
+	RegionNames.Reset();
+	MapQuestCatalog = UKnightQuestSettings::LoadCatalog();
 	UKnightGameFlowSubsystem* const Flow = GetFlow();
 	TArray<FKnightStageDefinition> Stages;
-	if (!Map_Stages || !Flow || !Flow->GetStageDefinitions(Stages))
+	if (!Map_Stages)
 	{
-		if (Map_Stages) Map_Stages->SetMarkers({});
 		return false;
 	}
+	if (Flow) Flow->GetStageDefinitions(Stages);
 	TArray<FKnightMapMarker> Markers;
 	for (const FKnightStageDefinition& Stage : Stages)
 	{
+		if (Markers.Num() >= 8) break; // The existing UI material has eight region parameters.
 		FKnightMapMarker& Marker = Markers.AddDefaulted_GetRef();
 		Marker.StageId = Stage.StageId;
-		// The map names the region; the stage name is in the info panel.
 		const FText& Name = Stage.RegionName.IsEmpty() ? Stage.DisplayName : Stage.RegionName;
 		Marker.Label = Stage.bDevelopmentOnly ? FText::Format(LOCTEXT("DevStageName", "[DEV] {0}"), Name) : Name;
 		Marker.Location = Stage.GlobeLocation;
 		Marker.RegionRadius = Stage.GlobeRegionRadius;
-		FText Reason;
-		Marker.bLocked = !Flow->CanLaunchStage(Stage.StageId, Reason);
+		Marker.bLocked = true;
 		StageOrder.Add(Stage.StageId);
+		RegionNames.Add(Stage.StageId, Marker.Label);
+	}
+	if (MapQuestCatalog)
+	{
+		for (const FKnightQuestMapRegion& Region : MapQuestCatalog->AdditionalMapRegions)
+		{
+			if (Region.RegionId.IsNone() || StageOrder.Contains(Region.RegionId) || Markers.Num() >= 8)
+			{
+				UE_LOG(Logknight, Error, TEXT("Invalid or excess quest map region %s."), *Region.RegionId.ToString());
+				continue;
+			}
+			FKnightMapMarker& Marker = Markers.AddDefaulted_GetRef();
+			Marker.StageId = Region.RegionId;
+			Marker.Label = Region.DisplayName;
+			Marker.Location = Region.GlobeLocation;
+			Marker.RegionRadius = Region.GlobeRegionRadius;
+			Marker.bLocked = true;
+			StageOrder.Add(Region.RegionId);
+			RegionNames.Add(Region.RegionId, Region.DisplayName);
+		}
+	}
+	TArray<FKnightMapQuestMarker> QuestMarkers;
+	if (MapQuestCatalog)
+	{
+		for (const FKnightQuestMapPlacement& Placement : MapQuestCatalog->MapPlacements)
+		{
+			const UKnightQuestDefinition* const Quest = MapQuestCatalog->FindQuest(Placement.QuestId);
+			const FKnightMapMarker* const Region = Markers.FindByPredicate(
+				[&Placement](const FKnightMapMarker& Entry) { return Entry.StageId == Placement.RegionId; });
+			if (!Quest || !Region || QuestRegionById.Contains(Placement.QuestId))
+			{
+				UE_LOG(Logknight, Error, TEXT("Invalid or duplicate quest map placement %s -> %s."),
+					*Placement.QuestId.ToString(), *Placement.RegionId.ToString());
+				continue;
+			}
+			FText Reason;
+			const bool bCanLaunch = MapQuestCatalog->CanSelectQuest(Quest->QuestId, GetGameInstance(), Reason);
+			FKnightMapQuestMarker& Pin = QuestMarkers.AddDefaulted_GetRef();
+			Pin.QuestId = Quest->QuestId;
+			Pin.RegionId = Placement.RegionId;
+			Pin.Label = Quest->Difficulty == EKnightQuestDifficulty::Hard ? LOCTEXT("MapHard", "어려움") : LOCTEXT("MapNormal", "일반");
+			Pin.Location = Region->Location + Placement.MarkerOffset;
+			Pin.bLocked = !bCanLaunch;
+			QuestRegionById.Add(Quest->QuestId, Placement.RegionId);
+			if (bCanLaunch)
+			{
+				for (FKnightMapMarker& MapRegion : Markers)
+				{
+					if (MapRegion.StageId == Placement.RegionId) { MapRegion.bLocked = false; break; }
+				}
+			}
+		}
 	}
 	Map_Stages->SetMarkers(Markers);
+	Map_Stages->SetQuestMarkers(QuestMarkers);
 	return !StageOrder.IsEmpty();
+}
+
+void UKnightMainMenuWidget::ShowSelectedRegionQuests()
+{
+	if (!QuestWidget) return;
+	TArray<FName> QuestIds;
+	if (MapQuestCatalog)
+	{
+		for (const FKnightQuestMapPlacement& Placement : MapQuestCatalog->MapPlacements)
+		{
+			if (Placement.RegionId == SelectedStageId && QuestRegionById.Contains(Placement.QuestId))
+				QuestIds.Add(Placement.QuestId);
+		}
+	}
+	QuestWidget->SetRegionQuests(SelectedStageId, RegionNames.FindRef(SelectedStageId), QuestIds);
+	if (Map_Stages) Map_Stages->SetSelectedQuest(NAME_None);
+}
+
+void UKnightMainMenuWidget::PlaceQuestPanel()
+{
+	if (!QuestWidget) return;
+	if (UCanvasPanelSlot* const QuestCanvasSlot = Cast<UCanvasPanelSlot>(QuestWidget->Slot))
+	{
+		// The map and detail stay side by side; the empty host area passes clicks to the map.
+		QuestCanvasSlot->SetAnchors(FAnchors(0.69f, 0.04f, 1.f, 0.96f));
+		QuestCanvasSlot->SetAlignment(FVector2D::ZeroVector);
+		QuestCanvasSlot->SetOffsets(FMargin(0.f, 0.f, 24.f, 0.f));
+	}
 }
 
 bool UKnightMainMenuWidget::SelectStage(FName StageId)
@@ -505,10 +598,9 @@ bool UKnightMainMenuWidget::SelectStage(FName StageId)
 		SetStatusText(LOCTEXT("CannotSelectNow", "지금 스테이지를 선택할 수 없습니다."));
 		return false;
 	}
-	FKnightStageDefinition Stage;
-	if (!StageId.IsNone() && !Flow->FindStageDefinition(StageId, Stage))
+	if (!StageId.IsNone() && !StageOrder.Contains(StageId))
 	{
-		SetStatusText(LOCTEXT("UnknownStage", "스테이지 정보를 확인할 수 없습니다."));
+		SetStatusText(LOCTEXT("UnknownRegion", "지도 구역 정보를 확인할 수 없습니다."));
 		return false;
 	}
 	if (CurrentPage != EKnightMainMenuPage::Stage && !ShowPage(EKnightMainMenuPage::Stage))
@@ -518,8 +610,7 @@ bool UKnightMainMenuWidget::SelectStage(FName StageId)
 	SelectedStageId = StageId;
 	if (Map_Stages) Map_Stages->SetSelectedStage(StageId);
 	ClearStatus();
-	RefreshStageDetails();
-	PlaceStageInfo();
+	ShowSelectedRegionQuests();
 	FocusCurrentPage();
 	return true;
 }
@@ -641,7 +732,17 @@ void UKnightMainMenuWidget::RefreshRaidDetails()
 
 void UKnightMainMenuWidget::HandleMapStageClicked(FName StageId)
 {
-	if (!bQuestMode) SelectStage(StageId);
+	SelectStage(StageId);
+}
+
+void UKnightMainMenuWidget::HandleMapQuestClicked(FName QuestId)
+{
+	SelectQuest(QuestId);
+}
+
+void UKnightMainMenuWidget::HandleQuestSelectionChanged(FName QuestId)
+{
+	if (Map_Stages) Map_Stages->SetSelectedQuest(QuestId);
 }
 
 void UKnightMainMenuWidget::HandleLaunchStageClicked()
