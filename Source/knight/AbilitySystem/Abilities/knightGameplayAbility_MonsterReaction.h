@@ -12,9 +12,10 @@ class UAnimMontage;
  * 클래스는 하나이고, 트리거와 타이밍만 다른 Blueprint 하위 클래스 여러 개로 쓴다.
  *   다운          Triggers: Event.PoiseBroken                     StateTag State.HitReact.Knockdown, bRestorePoise
  *   부위 파괴 경직 Triggers: Event.PartBroken                      StateTag State.HitReact.Stagger
- *   분노 포효     Triggers: State.Monster.Enraged (When Tag Is Added)  StateTag State.SuperArmor
+ *   분노 포효     Triggers: State.Monster.Enraged (When Tag Is Added)  StateTag State.SuperArmor, bReplayIfInterrupted
  *   2페이즈 포효  Triggers: State.Monster.Phase2 (When Tag Is Added)   StateTag State.SuperArmor, bReplayIfInterrupted
- *   (부위 파괴 경직은 ActivationBlockedTags에 State.SuperArmor를 두어 포효를 덮지 않는다. 다운은 포효를 끊는다.)
+ *   (부위 파괴 경직·패링 반동은 ActivationBlockedTags에 State.SuperArmor와 State.HitReact.Knockdown을 두어 포효·다운을
+ *    덮지 않는다. 다운은 포효를 끊고, 끊긴 포효는 기상 뒤 다시 나온다.)
  *
  * 실행 중에는 몬스터에 State.Monster.Reacting과 StateTag가 붙고 공격이 취소·차단된다. StateTree는
  * bIsReacting(Knight Monster Target)이 true인 동안 반응 상태에서 기다려야 한다. 이 어빌리티는 현재 기술을
@@ -57,8 +58,8 @@ protected:
 	bool bCancelOtherReactions = false;
 
 	/**
-	 * 다른 반응(다운 등)에 취소되면 그 반응이 끝난 뒤(State.Monster.Reacting이 모두 빠진 뒤) 처음부터 다시 실행한다.
-	 * 태그 트리거는 태그가 붙는 순간 한 번만 켜지므로, 2페이즈 전환 포효처럼 놓치면 다시 볼 수 없는 반응에 켠다.
+	 * 다른 반응(다운 등)에 취소되거나 다른 반응 중에 켜지면, 그 반응이 끝난 뒤(State.Monster.Reacting이 모두 빠진 뒤) 처음부터
+	 * 다시 실행한다. 태그 트리거는 태그가 붙는 순간 한 번만 켜지므로, 페이즈·분노 포효처럼 놓치면 다시 볼 수 없는 반응에 켠다.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Reaction")
 	bool bReplayIfInterrupted = false;
