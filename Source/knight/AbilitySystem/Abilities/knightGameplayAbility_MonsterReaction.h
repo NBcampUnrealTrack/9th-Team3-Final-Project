@@ -13,6 +13,8 @@ class UAnimMontage;
  *   다운          Triggers: Event.PoiseBroken                     StateTag State.HitReact.Knockdown, bRestorePoise
  *   부위 파괴 경직 Triggers: Event.PartBroken                      StateTag State.HitReact.Stagger
  *   분노 포효     Triggers: State.Monster.Enraged (When Tag Is Added)  StateTag State.SuperArmor
+ *   2페이즈 포효  Triggers: State.Monster.Phase2 (When Tag Is Added)   StateTag State.SuperArmor, bReplayIfInterrupted
+ *   (부위 파괴 경직은 ActivationBlockedTags에 State.SuperArmor를 두어 포효를 덮지 않는다. 다운은 포효를 끊는다.)
  *
  * 실행 중에는 몬스터에 State.Monster.Reacting과 StateTag가 붙고 공격이 취소·차단된다. StateTree는
  * bIsReacting(Knight Monster Target)이 true인 동안 반응 상태에서 기다려야 한다. 이 어빌리티는 현재 기술을
@@ -53,6 +55,13 @@ protected:
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Reaction")
 	bool bCancelOtherReactions = false;
+
+	/**
+	 * 다른 반응(다운 등)에 취소되면 그 반응이 끝난 뒤(State.Monster.Reacting이 모두 빠진 뒤) 처음부터 다시 실행한다.
+	 * 태그 트리거는 태그가 붙는 순간 한 번만 켜지므로, 2페이즈 전환 포효처럼 놓치면 다시 볼 수 없는 반응에 켠다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Reaction")
+	bool bReplayIfInterrupted = false;
 
 	/** RecoverMontage가 설정되지 않았을 때 쓴다. */
 	UPROPERTY(EditDefaultsOnly, Category="Reaction", meta=(ClampMin=0, Units="s"))
@@ -110,6 +119,13 @@ private:
 	void HandleRecoverFinished();
 
 	void RestorePoise() const;
+
+	/** bReplayIfInterrupted: 끼어든 반응이 모두 끝나면 다시 실행한다. */
+	void HandleReactingChangedForReplay(const FGameplayTag Tag, int32 NewCount);
+
+	TWeakObjectPtr<UAbilitySystemComponent> ReplayASC;
+	FGameplayAbilitySpecHandle ReplayHandle;
+	FDelegateHandle ReplayDelegateHandle;
 
 	/** (2026-10-20) 처음 회복할 때의 MaxPoise(상한 기준). 어빌리티는 액터당 하나라 몬스터가 살아 있는 동안 유지된다. */
 	mutable float InitialMaxPoise = -1.f;

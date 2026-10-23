@@ -54,7 +54,7 @@ void UknightGameplayAbility_MonsterChargeAttack::ActivateAbility(const FGameplay
 	bStopping = false;
 	bMontageEnded = false;
 	bHitTarget = false;
-	KnockbackRemaining = 0.f;
+	Knockback.Reset();
 	LastLocation = GetAvatarActorFromActorInfo()->GetActorLocation();
 
 	UAbilityTask_PlayMontageAndWait* const MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, Montage, 1.f, StartSection);
@@ -93,7 +93,7 @@ void UknightGameplayAbility_MonsterChargeAttack::HandleTick(int32 ActionNumber)
 	}
 
 	const float DeltaTime = knightMonsterCharge::TickInterval;
-	TickKnockback(DeltaTime);
+	Knockback.Tick(DeltaTime);
 	const FName Section = AnimInstance->Montage_GetCurrentSection(Montage);
 	const float Position = AnimInstance->Montage_GetPosition(Montage);
 	float SectionStart = 0.f;
@@ -211,7 +211,7 @@ void UknightGameplayAbility_MonsterChargeAttack::ApplyHits()
 			bHitTarget |= Targeting && Targeting->GetCurrentTarget() == &Target;
 			if (Outcome == EknightHitOutcome::Hit || Outcome == EknightHitOutcome::Guarded)
 			{
-				Knockback(*Avatar, Target, Outcome == EknightHitOutcome::Guarded ? GuardKnockbackScale : 1.f);
+				Knockback.Start(*Avatar, Target, KnockbackSpeed * (Outcome == EknightHitOutcome::Guarded ? GuardKnockbackScale : 1.f), KnockbackTime);
 			}
 		});
 
@@ -221,65 +221,6 @@ void UknightGameplayAbility_MonsterChargeAttack::ApplyHits()
 		DrawDebugSphere(World, Center, HitRadius, 16, NewHits == 0 ? FColor::Red : FColor::Magenta, false, knightMonsterCharge::TickInterval, 0, 3.f);
 	}
 #endif
-}
-
-void UknightGameplayAbility_MonsterChargeAttack::Knockback(const AActor& Avatar, AActor& Target, float Scale)
-{
-	if (KnockbackSpeed <= 0.f || KnockbackTime <= 0.f)
-	{
-		return;
-	}
-	// 주로 돌진 경로 밖(타깃이 있던 쪽)으로 날려 보낸다. 몬스터가 계속 달려오므로 앞쪽 성분만으로는 다시 몸에 걸린다.
-	const FVector Forward = Avatar.GetActorForwardVector().GetSafeNormal2D();
-	const FVector Right = Avatar.GetActorRightVector().GetSafeNormal2D();
-	const FVector Side = FVector::DotProduct(Target.GetActorLocation() - Avatar.GetActorLocation(), Right) >= 0.f ? Right : -Right;
-	KnockbackActor = &Target;
-	KnockbackSide = Side;
-	bKnockbackFlipped = false;
-	KnockbackVelocity = (Side * 2.f + Forward).GetSafeNormal() * KnockbackSpeed * Scale;
-	KnockbackRemaining = KnockbackTime;
-	UE_LOG(LogknightAI, Verbose, TEXT("%s: knockback %s at %.0f cm/s for %.2fs."), *GetName(), *GetNameSafe(&Target), KnockbackSpeed * Scale, KnockbackTime);
-}
-
-void UknightGameplayAbility_MonsterChargeAttack::TickKnockback(float DeltaTime)
-{
-	AActor* const Target = KnockbackActor.Get();
-	if (!Target || KnockbackRemaining <= 0.f)
-	{
-		KnockbackRemaining = 0.f;
-		return;
-	}
-	// 플레이어 피격 몽타주의 루트 모션이 캐릭터 무브먼트의 속도(LaunchCharacter, 루트 모션 소스)보다 우선하므로
-	// 위치를 직접 옮긴다. 스윕해서 벽은 뚫지 않는다.
-	const float Step = FMath::Min(DeltaTime, KnockbackRemaining);
-	const FVector Delta = KnockbackVelocity * Step;
-	FHitResult Blocked;
-	// 캐릭터는 무브먼트로 옮겨 경사진 지형은 타고 넘고, 벽에서만 막히게 한다.
-	ACharacter* const Character = Cast<ACharacter>(Target);
-	UCharacterMovementComponent* const Movement = Character ? Character->GetCharacterMovement() : nullptr;
-	if (Movement && Movement->UpdatedComponent)
-	{
-		Movement->SafeMoveUpdatedComponent(Delta, Movement->UpdatedComponent->GetComponentQuat(), true, Blocked);
-		if (Blocked.IsValidBlockingHit() && Movement->IsWalkable(Blocked))
-		{
-			// 오르막 지형이면 남은 이동을 경사면에 붙여 다시 옮긴다. 벽(걸을 수 없는 면)만 막힌 것으로 본다.
-			const FVector Rest = FVector::VectorPlaneProject(Delta * (1.f - Blocked.Time), Blocked.Normal);
-			Movement->SafeMoveUpdatedComponent(Rest, Movement->UpdatedComponent->GetComponentQuat(), true, Blocked);
-			Blocked.bBlockingHit = Blocked.bBlockingHit && !Movement->IsWalkable(Blocked);
-		}
-	}
-	else
-	{
-		Target->AddActorWorldOffset(Delta, true, &Blocked);
-	}
-	// 한쪽이 벽에 막혔으면 반대쪽으로 한 번 바꿔 날린다. 몸 앞에 붙은 채 밀려가지 않게 한다.
-	if (Blocked.bBlockingHit && !bKnockbackFlipped)
-	{
-		bKnockbackFlipped = true;
-		KnockbackVelocity -= 2.f * FVector::DotProduct(KnockbackVelocity, KnockbackSide) * KnockbackSide;
-		UE_LOG(LogknightAI, Verbose, TEXT("%s: knockback blocked by %s, flipped side."), *GetName(), *GetNameSafe(Blocked.GetActor()));
-	}
-	KnockbackRemaining -= Step;
 }
 
 void UknightGameplayAbility_MonsterChargeAttack::HandleMontageEnded()
