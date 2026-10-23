@@ -207,17 +207,11 @@ namespace
 	{
 		if (!Catalog) return FText::GetEmpty();
 		TArray<FText> Lines;
-		TSet<FGameplayTag> Seen;
-		for (const UknightEquipmentSetDefinition* Set : Catalog->Sets)
+		for (const FknightActiveSetBonus& Bonus : knightEquipmentStats::GetActiveSetBonuses(Current, Catalog))
 		{
-			if (!Set || !Set->SetTag.IsValid() || Seen.Contains(Set->SetTag)) continue;
-			Seen.Add(Set->SetTag);
-			const int32 Count = Current.SetCounts.FindRef(Set->SetTag);
-			for (const FknightSetTier* Tier : { &Set->TwoPiece, &Set->FourPiece })
-			{
-				if (Tier->StatModifiers.IsEmpty() || Count < Tier->RequiredCount) continue;
-				Lines.Add(FText::Format(LOCTEXT("ActiveSetLine", "{0} {1}세트 · {2}"), SetName(Set), Tier->RequiredCount, TierEffectText(*Tier)));
-			}
+			const FknightSetTier& Tier = Bonus.bFourPiece ? Bonus.Set->FourPiece : Bonus.Set->TwoPiece;
+			Lines.Add(FText::Format(LOCTEXT("ActiveSetLine", "{0} {1}세트 · {2}"),
+				SetName(Bonus.Set), Tier.RequiredCount, TierEffectText(Tier)));
 		}
 		if (Lines.IsEmpty()) return LOCTEXT("NoActiveSets", "활성 세트 없음");
 		return FText::Join(FText::FromString(TEXT("\n")), Lines);
@@ -982,21 +976,19 @@ void UKnightMaintenanceWidget::RefreshDetails()
 	UknightProgressionSubsystem* Progression = GetProgression();
 	const UknightMaintenanceCatalog* Catalog = UknightEquipmentSettings::LoadCatalog();
 	const knightEquipmentStats::FLoadout Loadout = knightEquipmentStats::ReadLoadout(Progression, Catalog);
-	const FknightEquipmentStats Current = knightEquipmentStats::Calculate(Loadout, Catalog, Progression);
 	const UknightPartItemDefinition* Equipped = Loadout.FindRef(Slot);
 	// 선택 없음: 현재 장착 장비 표시.
 	const UknightPartItemDefinition* Shown = SelectedPart ? SelectedPart.Get() : Equipped;
 	const bool bShownEquipped = Shown && Shown == Equipped;
 
-	FknightEquipmentStats Predicted;
-	bool bHasPrediction = false;
-	if (SelectedPart && !bShownEquipped)
-	{
-		auto Changed = Loadout;
-		Changed.Add(SelectedPart->SlotTag, SelectedPart);
-		Predicted = knightEquipmentStats::Calculate(Changed, Catalog, Progression);
-		bHasPrediction = Current.bComplete && Predicted.bComplete;
-	}
+	const bool bWantPrediction = SelectedPart && !bShownEquipped;
+	const FknightEquipmentComparison Comparison = bWantPrediction
+		? knightEquipmentStats::CompareReplacement(Loadout, SelectedPart->SlotTag, SelectedPart, Catalog, Progression)
+		: FknightEquipmentComparison();
+	const FknightEquipmentStats Current = bWantPrediction ? Comparison.Current
+		: knightEquipmentStats::Calculate(Loadout, Catalog, Progression);
+	const FknightEquipmentStats& Predicted = Comparison.Replacement;
+	const bool bHasPrediction = bWantPrediction && Comparison.bExact;
 
 	if (Txt_PartName) Txt_PartName->SetText(Shown ? PartName(Shown) : LOCTEXT("NothingEquipped", "장착된 장비 없음"));
 	if (Txt_PartState)

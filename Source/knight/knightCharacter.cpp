@@ -325,9 +325,9 @@ void AknightCharacter::HandlePerfectGuard(const FGameplayEventData* Payload)
 	// 소켓의 EffectValue(배율)는 쓰지 않고 끼운 개수만 센다. 최소 1번.
 	const UknightProgressionSubsystem* const Progression = GetGameInstance()
 		? GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>() : nullptr;
-	const int32 ChargeSockets = Progression ? Progression->GetSocketEffectCount(EKnightSocketEffect::SocketGaugeCharge) : 0;
 	const int32 BaseGuardsPerKit = FMath::CeilToInt(UknightAttributeSet::RepairKitGaugeFull / RepairKitGaugePerPerfectGuard);
-	const int32 GuardsPerKit = FMath::Max(1, BaseGuardsPerKit - ChargeSockets);
+	const int32 GuardsPerKit = Progression ? Progression->GetSocketGaugeGuardsPerKit(BaseGuardsPerKit)
+		: FMath::Max(1, BaseGuardsPerKit);
 	float Gauge = MechAttributeSet->GetRepairKitGauge() + UknightAttributeSet::RepairKitGaugeFull / GuardsPerKit;
 	float NewKitCount = KitCount;
 	if (Gauge >= UknightAttributeSet::RepairKitGaugeFull)

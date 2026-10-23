@@ -171,3 +171,78 @@ FknightEquipmentStats knightEquipmentStats::Calculate(const FLoadout& Loadout, c
 	for (const auto& Entry : Aggregators) Result.Values.Add(Entry.Key, Entry.Value->Evaluate(Params));
 	return Result;
 }
+
+FknightEquipmentComparison knightEquipmentStats::CompareReplacement(const FLoadout& CurrentLoadout, FGameplayTag Slot,
+	const UknightPartItemDefinition* Replacement, const UknightMaintenanceCatalog* Catalog,
+	const UknightProgressionSubsystem* Progression)
+{
+	FknightEquipmentComparison Result;
+	Result.Current = Calculate(CurrentLoadout, Catalog, Progression);
+	if (!Slot.IsValid() || (Replacement && Replacement->SlotTag != Slot))
+	{
+		Result.IncompleteReason = TEXT("교체 슬롯과 장비 슬롯이 일치하지 않습니다.");
+		return Result;
+	}
+	Result.bValidReplacement = true;
+	FLoadout Changed = CurrentLoadout;
+	if (Replacement) Changed.Add(Slot, Replacement);
+	else Changed.Remove(Slot);
+	Result.Replacement = Calculate(Changed, Catalog, Progression);
+	if (!Catalog || !Result.Current.bComplete || !Result.Replacement.bComplete)
+	{
+		Result.IncompleteReason = !Catalog ? TEXT("장비 카탈로그를 읽을 수 없어 세트 효과가 불확실합니다.")
+			: !Result.Current.bComplete ? Result.Current.IncompleteReason : Result.Replacement.IncompleteReason;
+		return Result;
+	}
+	Result.bExact = true;
+	for (const auto& Entry : Result.Current.Values)
+		Result.Deltas.Add(Entry.Key, Result.Replacement.Values.FindRef(Entry.Key) - Entry.Value);
+	return Result;
+}
+
+FknightItemContribution knightEquipmentStats::CalculateItemContribution(const UknightPartItemDefinition* Part,
+	const UknightProgressionSubsystem* Progression)
+{
+	FknightItemContribution Result;
+	if (!Part || !Part->SlotTag.IsValid())
+	{
+		Result.bComplete = false;
+		Result.IncompleteReason = TEXT("장비 또는 슬롯이 유효하지 않습니다.");
+		return Result;
+	}
+	FLoadout ItemLoadout;
+	ItemLoadout.Add(Part->SlotTag, Part);
+	const FknightEquipmentStats Empty = Calculate({}, nullptr, Progression);
+	const FknightEquipmentStats Item = Calculate(ItemLoadout, nullptr, Progression);
+	Result.bComplete = Empty.bComplete && Item.bComplete;
+	Result.IncompleteReason = !Empty.bComplete ? Empty.IncompleteReason : Item.IncompleteReason;
+	if (!Result.bComplete) return Result;
+	for (const auto& Entry : Item.Values)
+		Result.Values.Add(Entry.Key, Entry.Value - Empty.Values.FindRef(Entry.Key));
+	return Result;
+}
+
+TArray<FknightActiveSetBonus> knightEquipmentStats::GetActiveSetBonuses(const FknightEquipmentStats& Stats,
+	const UknightMaintenanceCatalog* Catalog)
+{
+	TArray<FknightActiveSetBonus> Result;
+	if (!Catalog) return Result;
+	TSet<FGameplayTag> Seen;
+	for (const UknightEquipmentSetDefinition* Set : Catalog->Sets)
+	{
+		if (!Set || !Set->SetTag.IsValid() || Seen.Contains(Set->SetTag)) continue;
+		Seen.Add(Set->SetTag);
+		const int32 Count = Stats.SetCounts.FindRef(Set->SetTag);
+		if (Count >= Set->TwoPiece.RequiredCount && !Set->TwoPiece.StatModifiers.IsEmpty())
+			Result.Add({ Set, Count, false });
+		if (Count >= Set->FourPiece.RequiredCount && !Set->FourPiece.StatModifiers.IsEmpty())
+			Result.Add({ Set, Count, true });
+	}
+	Result.Sort([](const FknightActiveSetBonus& A, const FknightActiveSetBonus& B)
+	{
+		const FString ATag = A.Set->SetTag.ToString();
+		const FString BTag = B.Set->SetTag.ToString();
+		return ATag == BTag ? !A.bFourPiece && B.bFourPiece : ATag < BTag;
+	});
+	return Result;
+}

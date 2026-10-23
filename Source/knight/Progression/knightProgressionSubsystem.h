@@ -49,6 +49,8 @@ struct KNIGHT_API FKnightWeaponUpgradeQuote
 	UPROPERTY(BlueprintReadOnly, Category="Upgrade") float BaseSuccessChance = 0.f;
 	UPROPERTY(BlueprintReadOnly, Category="Upgrade") float CurrentWeaponAttack = 0.f;
 	UPROPERTY(BlueprintReadOnly, Category="Upgrade") float NextWeaponAttack = 0.f;
+	/** Weapon-only attack gained on success; derived from the same upgrade steps as NextWeaponAttack. */
+	UPROPERTY(BlueprintReadOnly, Category="Upgrade") float NextWeaponAttackIncrease = 0.f;
 	UPROPERTY(BlueprintReadOnly, Category="Upgrade") TObjectPtr<const UknightMaterialItemDefinition> GateMaterial;
 	UPROPERTY(BlueprintReadOnly, Category="Upgrade") int32 GateMaterialNeeded = 0;
 	UPROPERTY(BlueprintReadOnly, Category="Upgrade") int32 GateMaterialOwned = 0;
@@ -67,6 +69,25 @@ struct KNIGHT_API FKnightWeaponUpgradeReceipt
 	UPROPERTY(BlueprintReadOnly, Category="Upgrade") int32 NewLevel = 0;
 	UPROPERTY(BlueprintReadOnly, Category="Upgrade") int64 MoneySpent = 0;
 	UPROPERTY(BlueprintReadOnly, Category="Upgrade") int32 MaterialConsumed = 0;
+};
+
+/** One of the five visible equipment slots. Part is null when this slot is empty. */
+USTRUCT(BlueprintType)
+struct KNIGHT_API FKnightMainEquipmentSlot
+{
+	GENERATED_BODY()
+	UPROPERTY(BlueprintReadOnly, Category="Equipment") FGameplayTag SlotTag;
+	UPROPERTY(BlueprintReadOnly, Category="Equipment") TObjectPtr<const UknightPartItemDefinition> Part;
+};
+
+/** One unlocked saved socket slot. A valid ItemId with null Item is unresolved, not an empty slot. */
+USTRUCT(BlueprintType)
+struct KNIGHT_API FKnightSocketAssignment
+{
+	GENERATED_BODY()
+	UPROPERTY(BlueprintReadOnly, Category="Socket") int32 SlotIndex = INDEX_NONE;
+	UPROPERTY(BlueprintReadOnly, Category="Socket") FPrimaryAssetId ItemId;
+	UPROPERTY(BlueprintReadOnly, Category="Socket") TObjectPtr<const UknightSocketItemDefinition> Item;
 };
 
 /**
@@ -175,6 +196,25 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|Progression")
 	void GetOwnedItems(TArray<FknightItemStack>& OutItems) const;
 
+	/** Active profile only. False means no profile or at least one owned definition could not be resolved. */
+	UFUNCTION(BlueprintCallable, Category="Knight|Progression|Queries")
+	bool GetOwnedMaterials(TArray<FknightItemStack>& OutMaterials) const;
+
+	/** Asset-ID ownership; selecting an entry does not equip it. */
+	UFUNCTION(BlueprintCallable, Category="Knight|Progression|Queries")
+	bool GetOwnedWeapons(TArray<FknightItemStack>& OutWeapons) const;
+
+	UFUNCTION(BlueprintCallable, Category="Knight|Progression|Queries")
+	bool GetOwnedSockets(TArray<FknightItemStack>& OutSockets) const;
+
+	/** Returns all unlocked saved assignments without imposing a three-slot UI limit. */
+	UFUNCTION(BlueprintCallable, Category="Knight|Progression|Queries")
+	bool GetSocketAssignments(TArray<FKnightSocketAssignment>& OutAssignments) const;
+
+	/** Weapon, Head, Torso (the Body UI slot), Arms, Legs, including empty slots. */
+	UFUNCTION(BlueprintCallable, Category="Knight|Progression|Queries")
+	bool GetMainEquipmentSlots(TArray<FKnightMainEquipmentSlot>& OutSlots) const;
+
 	// Upgrades
 	UFUNCTION(BlueprintPure, Category="Knight|Progression")
 	int32 GetUpgradeLevel(const UknightItemDefinition* Item) const;
@@ -215,6 +255,10 @@ public:
 	const UknightPartItemDefinition* GetEquippedPart(FGameplayTag SlotTag) const;
 
 	bool IsSlotExplicitlyEmpty(FGameplayTag SlotTag) const;
+
+	/** Current combat behavior: each charge socket removes one required perfect guard, minimum one. */
+	UFUNCTION(BlueprintPure, Category="Knight|Progression|Socket")
+	int32 GetSocketGaugeGuardsPerKit(int32 BaseGuardsPerKit) const;
 
 	/** Equips an owned part into its slot. Returns false if it is not owned. */
 	UFUNCTION(BlueprintCallable, Category="Knight|Progression")
