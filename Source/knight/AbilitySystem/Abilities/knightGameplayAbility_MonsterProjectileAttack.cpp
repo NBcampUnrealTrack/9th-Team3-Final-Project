@@ -40,6 +40,7 @@ void UknightGameplayAbility_MonsterProjectileAttack::ActivateAbility(const FGame
 	const UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();
 	const bool bEnraged = ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Enraged);
 	ShotsLeft = FMath::Max(1, bEnraged ? EnragedShotCount : ShotCount);
+	ShotEffect = bEnraged && EnragedProjectileEffect ? EnragedProjectileEffect.Get() : ProjectileEffect.Get();
 	Elapsed = 0.f;
 	NextShotTime = FireTime;
 	EndTime = FireTime + (ShotsLeft - 1) * ShotInterval + RecoveryTime;
@@ -109,7 +110,8 @@ void UknightGameplayAbility_MonsterProjectileAttack::Fire()
 	if (Projectile)
 	{
 		Projectile->SetDeafenTime(DeafenTime);
-		Projectile->Launch(Monster, HitParams, Aim - Muzzle, ProjectileSpeed, ProjectileRadius, MaxDistance, ProjectileEffect);
+		Projectile->SetImpactEffects(ImpactEffects);
+		Projectile->Launch(Monster, HitParams, Aim - Muzzle, ProjectileSpeed, ProjectileRadius, MaxDistance, ShotEffect);
 	}
 	UE_LOG(LogknightAI, Log, TEXT("%s: %s fires (%.0f cm to target)."), *GetNameSafe(Monster), *GetName(), FVector::Dist(Muzzle, Aim));
 }
