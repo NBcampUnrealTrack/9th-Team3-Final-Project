@@ -23,6 +23,7 @@ AKnightFlowTestPlayerController::AKnightFlowTestPlayerController()
 void AKnightFlowTestPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
+#if !UE_BUILD_SHIPPING
 	if (!IsLocalController() || ReturnWidget)
 	{
 		return;
@@ -60,6 +61,7 @@ void AKnightFlowTestPlayerController::BeginPlay()
 	SetInputMode(InputMode);
 	bShowMouseCursor = true;
 	ReturnWidget->FocusReturnButton();
+#endif
 }
 
 void AKnightFlowTestPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)

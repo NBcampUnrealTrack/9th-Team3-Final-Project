@@ -23,5 +23,20 @@ void FMechPartAttachment::Apply(UMeshComponent* PartMesh, USkeletalMeshComponent
 		SkeletalPart->SetLeaderPoseComponent(nullptr);
 	}
 	PartMesh->AttachToComponent(MechMesh, FAttachmentTransformRules::SnapToTargetIncludingScale, AttachSocket);
-	PartMesh->SetRelativeTransform(RelativeTransform);
+	// 회전은 FRotator 그대로 넘긴다(쿼터니언을 거치면 입력한 각도와 다른 조합으로 바뀐다).
+	PartMesh->SetRelativeLocationAndRotation(RelativeLocation, RelativeRotation);
+	PartMesh->SetRelativeScale3D(RelativeScale);
+}
+
+void FMechPartAttachment::PostSerialize(const FArchive& Ar)
+{
+	// (2026-10-23) 예전 형식(FTransform 하나)으로 저장된 에셋: 값을 위치·회전·크기로 옮기고 비운다.
+	// 비워 두므로 다음에 불러올 때(되돌리기 포함)는 다시 옮기지 않는다. 다음에 저장하면 새 형식만 남는다.
+	if (Ar.IsLoading() && !RelativeTransform.Equals(FTransform::Identity))
+	{
+		RelativeLocation = RelativeTransform.GetLocation();
+		RelativeRotation = RelativeTransform.Rotator();
+		RelativeScale = RelativeTransform.GetScale3D();
+		RelativeTransform = FTransform::Identity;
+	}
 }

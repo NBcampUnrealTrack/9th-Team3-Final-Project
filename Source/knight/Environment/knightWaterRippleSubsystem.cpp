@@ -225,6 +225,7 @@ void UknightWaterRippleSubsystem::Tick(float DeltaTime)
 		NextTestPulse = Now + PulseInterval;
 		AddImpulse(Pawn->GetActorLocation() + Pawn->GetActorForwardVector() * 600.f, 200.f, -10.f);
 	}
+#if !UE_BUILD_SHIPPING
 	const int32 DebugMode = knightWaterRipple::CVarDebug.GetValueOnGameThread();
 	if (DebugMode != 0)
 	{
@@ -244,6 +245,7 @@ void UknightWaterRippleSubsystem::Tick(float DeltaTime)
 		}
 		UE_LOG(Logknight, Log, TEXT("Water ripple: center (%.0f, %.0f) pending %d"), Center.X, Center.Y, PendingImpulses.Num());
 	}
+#endif
 
 	for (int32 Step = 0; Step < Steps; ++Step)
 	{
@@ -547,6 +549,7 @@ void UknightWaterRippleSubsystem::SpawnSplash(const FVector& Location, float Siz
 	{
 		UGameplayStatics::PlaySoundAtLocation(World, SplashSound, Location, Settings->SplashVolume);
 	}
+#if !UE_BUILD_SHIPPING
 	const int32 DebugMode = knightWaterRipple::CVarDebug.GetValueOnGameThread();
 	if (DebugMode != 0)
 	{
@@ -556,6 +559,7 @@ void UknightWaterRippleSubsystem::SpawnSplash(const FVector& Location, float Siz
 	{
 		UE_LOG(Logknight, Log, TEXT("Water splash at (%.0f, %.0f, %.0f) scale %.2f"), Location.X, Location.Y, Location.Z, SizeScale);
 	}
+#endif
 }
 
 bool UknightWaterRippleSubsystem::ClaimSplash(FTrackedCharacter& Tracked, const FVector& Location, float Radius, double Now) const
