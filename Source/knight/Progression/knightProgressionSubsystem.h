@@ -204,6 +204,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|Progression|Queries")
 	bool GetOwnedWeapons(TArray<FknightItemStack>& OutWeapons) const;
 
+	/** Active profile's owned armor for one main slot. False also reports unresolved owned definitions. */
+	UFUNCTION(BlueprintCallable, Category="Knight|Progression|Queries")
+	bool GetOwnedArmorForSlot(UPARAM(meta=(Categories="Equipment.Slot")) FGameplayTag SlotTag,
+		TArray<FknightItemStack>& OutArmor) const;
+
 	UFUNCTION(BlueprintCallable, Category="Knight|Progression|Queries")
 	bool GetOwnedSockets(TArray<FknightItemStack>& OutSockets) const;
 

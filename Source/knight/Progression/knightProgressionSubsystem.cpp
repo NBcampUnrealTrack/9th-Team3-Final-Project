@@ -554,6 +554,33 @@ bool UknightProgressionSubsystem::GetOwnedWeapons(TArray<FknightItemStack>& OutW
 	return bComplete;
 }
 
+bool UknightProgressionSubsystem::GetOwnedArmorForSlot(FGameplayTag SlotTag, TArray<FknightItemStack>& OutArmor) const
+{
+	OutArmor.Reset();
+	if (SlotTag != knightGameplayTags::Equipment_Slot_Head && SlotTag != knightGameplayTags::Equipment_Slot_Torso
+		&& SlotTag != knightGameplayTags::Equipment_Slot_Arms && SlotTag != knightGameplayTags::Equipment_Slot_Legs)
+		return false;
+	const UknightSaveSubsystem* Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	TArray<FknightItemStack> All;
+	bool bComplete = ResolveOwnedDefinitions(Saves && Saves->HasSelectedSlot() ? GetSave() : nullptr, All);
+	for (const FknightItemStack& Stack : All)
+	{
+		const UknightPartItemDefinition* Part = Cast<UknightPartItemDefinition>(Stack.Item);
+		if (!Part || Part->SlotTag != SlotTag) continue;
+		if (Part->ItemType == knightGameplayTags::Item_Type_Part && !Part->IsA<UknightWeaponItemDefinition>()) OutArmor.Add(Stack);
+		else
+		{
+			bComplete = false;
+			UE_LOG(Logknight, Warning, TEXT("Owned armor slot/type mismatch: %s"), *Part->GetPrimaryAssetId().ToString());
+		}
+	}
+	OutArmor.Sort([](const FknightItemStack& A, const FknightItemStack& B)
+	{
+		return A.Item->GetPrimaryAssetId().ToString() < B.Item->GetPrimaryAssetId().ToString();
+	});
+	return bComplete;
+}
+
 bool UknightProgressionSubsystem::GetOwnedSockets(TArray<FknightItemStack>& OutSockets) const
 {
 	const UknightSaveSubsystem* Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();

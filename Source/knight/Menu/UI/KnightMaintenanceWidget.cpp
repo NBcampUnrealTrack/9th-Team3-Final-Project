@@ -178,6 +178,24 @@ namespace
 		return Part->DisplayName.IsEmpty() ? FText::FromString(Part->GetName()) : Part->DisplayName;
 	}
 
+	const TArray<FGameplayTag>& MainEquipmentSlotTags()
+	{
+		static const TArray<FGameplayTag> Tags = { knightGameplayTags::Equipment_Slot_Weapon,
+			knightGameplayTags::Equipment_Slot_Head, knightGameplayTags::Equipment_Slot_Torso,
+			knightGameplayTags::Equipment_Slot_Arms, knightGameplayTags::Equipment_Slot_Legs };
+		return Tags;
+	}
+
+	FText MainEquipmentSlotLabel(FGameplayTag Tag)
+	{
+		if (Tag == knightGameplayTags::Equipment_Slot_Weapon) return LOCTEXT("EquipmentWeapon", "무기");
+		if (Tag == knightGameplayTags::Equipment_Slot_Head) return LOCTEXT("EquipmentHead", "머리");
+		if (Tag == knightGameplayTags::Equipment_Slot_Torso) return LOCTEXT("EquipmentTorso", "몸");
+		if (Tag == knightGameplayTags::Equipment_Slot_Arms) return LOCTEXT("EquipmentArms", "팔");
+		if (Tag == knightGameplayTags::Equipment_Slot_Legs) return LOCTEXT("EquipmentLegs", "다리");
+		return FText::FromString(Tag.ToString());
+	}
+
 	FText SetName(const UknightEquipmentSetDefinition* Set)
 	{
 		const FText Name = Set->DisplayName.IsEmpty() ? FText::FromString(Set->SetTag.ToString()) : Set->DisplayName;
@@ -379,14 +397,42 @@ void UKnightMaintenanceWidget::NativeOnInitialized()
 	if (Btn_Unequip) Btn_Unequip->OnClicked().AddWeakLambda(this, [this]() { UnequipSelection(); });
 	if (Btn_Execute) Btn_Execute->OnLockClicked().AddWeakLambda(this, [this]() { if (Txt_Status) Txt_Status->SetText(ExecuteLockReason); });
 	if (Btn_Unequip) Btn_Unequip->OnLockClicked().AddWeakLambda(this, [this]() { if (Txt_Status) Txt_Status->SetText(UnequipLockReason); });
-	if (Btn_ConfirmOk) Btn_ConfirmOk->OnClicked().AddWeakLambda(this, [this]() { ShowConfirm(false); ExecuteSelection(); });
-	if (Btn_ConfirmCancel) Btn_ConfirmCancel->OnClicked().AddWeakLambda(this, [this]() { ShowConfirm(false); });
+	if (UVerticalBox* const ConfirmColumn = WidgetTree ? Cast<UVerticalBox>(WidgetTree->FindWidget(TEXT("VerticalBox_Confirm"))) : nullptr)
+	{
+		UWidget* const Buttons = WidgetTree->FindWidget(TEXT("Row_ConfirmButtons"));
+		if (Buttons) ConfirmColumn->RemoveChild(Buttons);
+		USizeBox* const PickerFrame = WidgetTree->ConstructWidget<USizeBox>();
+		PickerFrame->SetHeightOverride(250.f);
+		EquipmentPickerList = WidgetTree->ConstructWidget<UScrollBox>();
+		PickerFrame->AddChild(EquipmentPickerList);
+		ConfirmColumn->AddChildToVerticalBox(PickerFrame)->SetPadding(FMargin(0.f, 16.f, 0.f, 0.f));
+		PickerFrame->SetVisibility(ESlateVisibility::Collapsed);
+		if (Buttons)
+		{
+			UVerticalBoxSlot* const ButtonsSlot = ConfirmColumn->AddChildToVerticalBox(Buttons);
+			ButtonsSlot->SetPadding(FMargin(0.f, 28.f, 0.f, 0.f));
+			ButtonsSlot->SetHorizontalAlignment(HAlign_Right);
+		}
+	}
+	if (Btn_ConfirmOk) Btn_ConfirmOk->OnClicked().AddWeakLambda(this, [this]()
+	{
+		if (bEquipmentPickerOpen) ConfirmEquipmentReplacement();
+		else { ShowConfirm(false); ExecuteSelection(); }
+	});
+	if (Btn_ConfirmCancel) Btn_ConfirmCancel->OnClicked().AddWeakLambda(this, [this]()
+	{
+		if (bEquipmentPickerOpen) CloseEquipmentPicker(true);
+		else ShowConfirm(false);
+	});
 	ShowConfirm(false);
 	if (UknightProgressionSubsystem* Progression = GetProgression())
 		Progression->OnProgressionChanged.AddUniqueDynamic(this, &ThisClass::HandleProgressionChanged);
 	if (UGameInstance* const GI = GetGameInstance())
 		if (UknightSaveSubsystem* const Saves = GI->GetSubsystem<UknightSaveSubsystem>())
+		{
 			Saves->OnActiveSlotChanged.AddUniqueDynamic(this, &ThisClass::HandleActiveSlotChanged);
+			Saves->OnSaveFinished.AddUniqueDynamic(this, &ThisClass::HandleSaveFinished);
+		}
 }
 
 void UKnightMaintenanceWidget::NativeDestruct()
@@ -395,7 +441,10 @@ void UKnightMaintenanceWidget::NativeDestruct()
 		Progression->OnProgressionChanged.RemoveDynamic(this, &ThisClass::HandleProgressionChanged);
 	if (UGameInstance* const GI = GetGameInstance())
 		if (UknightSaveSubsystem* const Saves = GI->GetSubsystem<UknightSaveSubsystem>())
+		{
 			Saves->OnActiveSlotChanged.RemoveDynamic(this, &ThisClass::HandleActiveSlotChanged);
+			Saves->OnSaveFinished.RemoveDynamic(this, &ThisClass::HandleSaveFinished);
+		}
 	Super::NativeDestruct();
 }
 
@@ -406,6 +455,7 @@ UknightProgressionSubsystem* UKnightMaintenanceWidget::GetProgression() const
 
 void UKnightMaintenanceWidget::Open(EKnightMaintenanceDestination InDestination)
 {
+	CloseEquipmentPicker(false);
 	ShowConfirm(false);
 	Destination = InDestination;
 	InfoTab = InDestination == EKnightMaintenanceDestination::Crafting ? InfoMaterial : InfoSpec;
@@ -424,7 +474,9 @@ void UKnightMaintenanceWidget::Open(EKnightMaintenanceDestination InDestination)
 
 void UKnightMaintenanceWidget::Close()
 {
+	CloseEquipmentPicker(false);
 	ShowConfirm(false);
+	SelectedEquipmentSlot = FGameplayTag();
 	SelectedPart = nullptr;
 	SelectedRecipe = nullptr;
 	SelectedSocketItem = nullptr;
@@ -442,10 +494,14 @@ UWidget* UKnightMaintenanceWidget::GetFocusButton() const
 
 void UKnightMaintenanceWidget::SetCategory(int32 NewCategory, bool bFromPlayer)
 {
+	if (bEquipmentPickerOpen && bFromPlayer) return;
 	if (Destination == EKnightMaintenanceDestination::Crafting && NewCategory != 0 && NewCategory != 2 && NewCategory != 4) return;
 	if (Destination == EKnightMaintenanceDestination::Enhancement && NewCategory != 1) return;
 	if (Destination == EKnightMaintenanceDestination::Sockets && NewCategory != 3) return;
+	CloseEquipmentPicker(false);
 	Category = NewCategory;
+	SelectedEquipmentSlot = FGameplayTag();
+	EquipmentSlotButtons.Reset();
 	// Enhancement is weapon-only. Equipment includes all five slots.
 	if (Category == 1) Slot = knightGameplayTags::Equipment_Slot_Weapon;
 	else if (!Slot.IsValid()) Slot = knightGameplayTags::Equipment_Slot_Head;
@@ -455,27 +511,27 @@ void UKnightMaintenanceWidget::SetCategory(int32 NewCategory, bool bFromPlayer)
 	if (Category != 3) { SelectedSocketItem = nullptr; SelectedSocketSlot = INDEX_NONE; }
 	UpgradeResultMessage = FText::GetEmpty();
 	if (UWidget* const Slots = WidgetTree ? WidgetTree->FindWidget(TEXT("Row_Slots")) : nullptr)
-		Slots->SetVisibility(Category == 1 || Category == 3 || Category == 4 ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
-	if (Btn_SlotWeapon) Btn_SlotWeapon->SetVisibility(Category == 0 || Category == 2 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+		Slots->SetVisibility(Category == 0 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	if (Btn_SlotWeapon) Btn_SlotWeapon->SetVisibility(Category == 0 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	for (UCommonButtonBase* Button : { Btn_Head.Get(), Btn_Torso.Get(), Btn_Legs.Get(), Btn_Arms.Get() })
-		if (Button) Button->SetVisibility(Category == 1 || Category == 3 || Category == 4 ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+		if (Button) Button->SetVisibility(Category == 0 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	if (UWidget* const Tabs = WidgetTree ? WidgetTree->FindWidget(TEXT("Row_InfoTabs")) : nullptr)
-		Tabs->SetVisibility(Category == 4 ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+		Tabs->SetVisibility(Category == 0 || Category == 1 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	if (Switcher_Info) Switcher_Info->SetVisibility(Category == 4 ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 	if (Btn_InfoSet) Btn_InfoSet->SetVisibility(Category == 0 || Category == 3 ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 	if (Btn_InfoSpec) Btn_InfoSpec->SetVisibility(Category == 3 ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 	if (Btn_InfoMaterial) Btn_InfoMaterial->SetVisibility(Category == 0 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-	if (InfoPreviousButton) InfoPreviousButton->SetVisibility(Category == 0 || Category == 1 || Category == 2 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-	if (InfoNextButton) InfoNextButton->SetVisibility(Category == 0 || Category == 1 || Category == 2 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	if (InfoPreviousButton) InfoPreviousButton->SetVisibility(Category == 0 || Category == 1 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	if (InfoNextButton) InfoNextButton->SetVisibility(Category == 0 || Category == 1 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	InfoTab = Category == 0 ? InfoMaterial : InfoSpec;
 	if (Switcher_Info) Switcher_Info->SetActiveWidgetIndex(InfoTab);
 	RebuildList(false);
-	if (bFromPlayer && Category != 3) OnSlotFocused.ExecuteIfBound(Category == 4 ? FGameplayTag() : Slot);
+	if (bFromPlayer && Category != 3) OnSlotFocused.ExecuteIfBound(Category == 4 || Category == 2 ? FGameplayTag() : Slot);
 }
 
 void UKnightMaintenanceWidget::SetSlot(FGameplayTag NewSlot, bool bFromPlayer)
 {
-	if (Category == 1 || Category == 3 || Category == 4) return;
+	if (Category != 0) return;
 	Slot = NewSlot;
 	SelectedPart = nullptr;
 	SelectedRecipe = nullptr;
@@ -489,17 +545,15 @@ void UKnightMaintenanceWidget::SetSlot(FGameplayTag NewSlot, bool bFromPlayer)
 void UKnightMaintenanceWidget::SetInfoTab(int32 NewTab)
 {
 	InfoTab = Category == 0 ? (NewTab == InfoSpec ? InfoSpec : InfoMaterial)
-		: Category == 3 || Category == 4 ? InfoSpec : (NewTab == InfoSet ? InfoSet : InfoSpec);
+		: Category == 1 && NewTab == InfoSet ? InfoSet : InfoSpec;
 	if (Switcher_Info) Switcher_Info->SetActiveWidgetIndex(InfoTab);
 	RefreshTabButtons();
 }
 
 void UKnightMaintenanceWidget::CycleInfoTab(int32 Direction)
 {
-	if (Direction == 0 || Category == 4) return;
-	if (Category == 3) return;
-	if (Category == 0) SetInfoTab(InfoTab == InfoMaterial ? InfoSpec : InfoMaterial);
-	else SetInfoTab(InfoTab == InfoSpec ? InfoSet : InfoSpec);
+	if (Direction == 0 || Category != 0 || bEquipmentPickerOpen || (Panel_Confirm && Panel_Confirm->IsVisible())) return;
+	SetInfoTab(InfoTab == InfoMaterial ? InfoSpec : InfoMaterial);
 }
 
 void UKnightMaintenanceWidget::RefreshCurrency()
@@ -563,11 +617,11 @@ void UKnightMaintenanceWidget::RefreshTabButtons()
 	Select(Btn_Craft, Category == 0);
 	Select(Btn_Weapon, Category == 2);
 	Select(Btn_Armor, Category == 4);
-	Select(Btn_Head, Slot == knightGameplayTags::Equipment_Slot_Head);
-	Select(Btn_Torso, Slot == knightGameplayTags::Equipment_Slot_Torso);
-	Select(Btn_Legs, Slot == knightGameplayTags::Equipment_Slot_Legs);
-	Select(Btn_Arms, Slot == knightGameplayTags::Equipment_Slot_Arms);
-	Select(Btn_SlotWeapon, Slot == knightGameplayTags::Equipment_Slot_Weapon);
+	Select(Btn_Head, Category == 0 && Slot == knightGameplayTags::Equipment_Slot_Head);
+	Select(Btn_Torso, Category == 0 && Slot == knightGameplayTags::Equipment_Slot_Torso);
+	Select(Btn_Legs, Category == 0 && Slot == knightGameplayTags::Equipment_Slot_Legs);
+	Select(Btn_Arms, Category == 0 && Slot == knightGameplayTags::Equipment_Slot_Arms);
+	Select(Btn_SlotWeapon, Category == 0 && Slot == knightGameplayTags::Equipment_Slot_Weapon);
 	Select(Btn_InfoSpec, InfoTab == InfoSpec);
 	Select(Btn_InfoSet, InfoTab == InfoSet);
 	Select(Btn_InfoMaterial, InfoTab == InfoMaterial);
@@ -576,6 +630,7 @@ void UKnightMaintenanceWidget::RefreshTabButtons()
 void UKnightMaintenanceWidget::RebuildList(bool bRestoreFocus)
 {
 	if (!List_Items) return;
+	if (Category == 2) { RebuildEquipmentSlots(bRestoreFocus); return; }
 	if (Category == 3) { RebuildSocketList(); return; }
 	if (Category == 4) { RefreshMaterialContainer(); return; }
 	// 줄을 다시 만들면 포커스가 사라지므로 기억했다가 복원.
@@ -653,6 +708,234 @@ void UKnightMaintenanceWidget::RebuildList(bool bRestoreFocus)
 		for (UKnightMaintenanceEntryWidget* Entry : Entries)
 			if (Entry && Entry->GetPart() == FocusedPart) { Entry->SetFocus(); break; }
 	}
+}
+
+void UKnightMaintenanceWidget::RebuildEquipmentSlots(bool bRestoreFocus)
+{
+	if (!List_Items || !WidgetTree) return;
+	FGameplayTag FocusedSlot;
+	if (bRestoreFocus)
+		for (int32 Index = 0; Index < EquipmentSlotButtons.Num() && Index < MainEquipmentSlotTags().Num(); ++Index)
+			if (EquipmentSlotButtons[Index] && (EquipmentSlotButtons[Index]->HasAnyUserFocus()
+				|| EquipmentSlotButtons[Index]->HasFocusedDescendants())) FocusedSlot = MainEquipmentSlotTags()[Index];
+	List_Items->ClearChildren();
+	EquipmentSlotButtons.Reset();
+	Entries.Reset();
+	SocketListButtons.Reset();
+	TArray<FKnightMainEquipmentSlot> Slots;
+	const bool bComplete = GetProgression() && GetProgression()->GetMainEquipmentSlots(Slots);
+	const TSubclassOf<UCommonButtonBase> ButtonClass = LoadClass<UCommonButtonBase>(nullptr,
+		TEXT("/Game/Knight/UI/Common/WBP_KnightButton.WBP_KnightButton_C"));
+	if (!ButtonClass || !GetOwningPlayer())
+	{
+		if (Txt_Status) Txt_Status->SetText(LOCTEXT("EquipmentButtonMissing", "장비 슬롯 버튼을 불러올 수 없습니다."));
+		return;
+	}
+	for (const FGameplayTag Tag : MainEquipmentSlotTags())
+	{
+		const FKnightMainEquipmentSlot* Entry = Slots.FindByPredicate([Tag](const FKnightMainEquipmentSlot& Item) { return Item.SlotTag == Tag; });
+		const FText PartLabel = Entry && Entry->Part ? PartName(Entry->Part)
+			: bComplete ? LOCTEXT("EquipmentEmpty", "빈 슬롯") : LOCTEXT("EquipmentUnresolved", "확인 불가");
+		UCommonButtonBase* const Button = CreateWidget<UCommonButtonBase>(GetOwningPlayer(), ButtonClass);
+		if (!Button) continue;
+		SetButtonLabel(Button, FText::Format(LOCTEXT("EquipmentSlotRow", "{0}  ·  {1}"), MainEquipmentSlotLabel(Tag), PartLabel));
+		Button->SetIsSelectable(true);
+		Button->SetIsInteractableWhenSelected(true);
+		Button->OnClicked().AddWeakLambda(this, [this, Tag]() { SelectEquipmentSlot(Tag); });
+		SetSelected(Button, SelectedEquipmentSlot == Tag);
+		if (UScrollBoxSlot* const Row = Cast<UScrollBoxSlot>(List_Items->AddChild(Button)))
+			Row->SetPadding(FMargin(0.f, 0.f, 10.f, 6.f));
+		EquipmentSlotButtons.Add(Button);
+	}
+	if (Txt_Status && !bComplete) Txt_Status->SetText(LOCTEXT("EquipmentLoadIncomplete", "일부 장비 데이터를 확인할 수 없습니다. 저장 슬롯과 에셋을 확인하세요."));
+	RefreshTabButtons();
+	RefreshEquipmentDetails();
+	if (bEquipmentPickerOpen) RebuildEquipmentPicker();
+	if (FocusedSlot.IsValid())
+		for (int32 Index = 0; Index < EquipmentSlotButtons.Num() && Index < MainEquipmentSlotTags().Num(); ++Index)
+			if (MainEquipmentSlotTags()[Index] == FocusedSlot) { EquipmentSlotButtons[Index]->SetFocus(); break; }
+}
+
+void UKnightMaintenanceWidget::SelectEquipmentSlot(FGameplayTag SlotTag)
+{
+	if (Category != 2 || bEquipmentPickerOpen || !MainEquipmentSlotTags().Contains(SlotTag)) return;
+	SelectedEquipmentSlot = SelectedEquipmentSlot == SlotTag ? FGameplayTag() : SlotTag;
+	for (int32 Index = 0; Index < EquipmentSlotButtons.Num() && Index < MainEquipmentSlotTags().Num(); ++Index)
+		SetSelected(EquipmentSlotButtons[Index], SelectedEquipmentSlot == MainEquipmentSlotTags()[Index]);
+	if (Txt_Status) Txt_Status->SetText(FText::GetEmpty());
+	RefreshEquipmentDetails();
+	OnSlotFocused.ExecuteIfBound(SelectedEquipmentSlot);
+}
+
+const UknightPartItemDefinition* UKnightMaintenanceWidget::GetEquippedInSelectedSlot(bool& bComplete) const
+{
+	TArray<FKnightMainEquipmentSlot> Slots;
+	bComplete = GetProgression() && GetProgression()->GetMainEquipmentSlots(Slots);
+	const FKnightMainEquipmentSlot* Entry = Slots.FindByPredicate([this](const FKnightMainEquipmentSlot& Item)
+	{
+		return Item.SlotTag == SelectedEquipmentSlot;
+	});
+	return Entry ? Entry->Part.Get() : nullptr;
+}
+
+bool UKnightMaintenanceWidget::GetCompatibleOwnedEquipment(FGameplayTag SlotTag,
+	TArray<const UknightPartItemDefinition*>& OutParts) const
+{
+	OutParts.Reset();
+	UknightProgressionSubsystem* const Progression = GetProgression();
+	if (!Progression || !MainEquipmentSlotTags().Contains(SlotTag)) return false;
+	TArray<FknightItemStack> Owned;
+	const bool bComplete = SlotTag == knightGameplayTags::Equipment_Slot_Weapon
+		? Progression->GetOwnedWeapons(Owned) : Progression->GetOwnedArmorForSlot(SlotTag, Owned);
+	for (const FknightItemStack& Stack : Owned)
+	{
+		const UknightPartItemDefinition* Part = Cast<UknightPartItemDefinition>(Stack.Item);
+		if (Stack.Count > 0 && Part && Part->SlotTag == SlotTag) OutParts.Add(Part);
+	}
+	return bComplete;
+}
+
+void UKnightMaintenanceWidget::OpenEquipmentPicker()
+{
+	if (Category != 2 || !SelectedEquipmentSlot.IsValid() || !Panel_Confirm || !EquipmentPickerList || bBusy) return;
+	bEquipmentPickerOpen = true;
+	EquipmentPickerCandidate = nullptr;
+	if (UWidget* const Frame = EquipmentPickerList->GetParent()) Frame->SetVisibility(ESlateVisibility::Visible);
+	if (Txt_ConfirmTitle) Txt_ConfirmTitle->SetText(FText::Format(LOCTEXT("EquipmentPickerTitle", "{0} 교체"),
+		MainEquipmentSlotLabel(SelectedEquipmentSlot)));
+	SetButtonLabel(Btn_ConfirmOk, LOCTEXT("EquipmentPickerEquip", "장착"));
+	RebuildEquipmentPicker();
+	ShowConfirm(true);
+	if (!EquipmentPickerButtons.IsEmpty()) EquipmentPickerButtons[0]->SetFocus();
+	else if (Btn_ConfirmCancel) Btn_ConfirmCancel->SetFocus();
+}
+
+void UKnightMaintenanceWidget::RebuildEquipmentPicker()
+{
+	if (!bEquipmentPickerOpen || !EquipmentPickerList || !WidgetTree) return;
+	EquipmentPickerList->ClearChildren();
+	EquipmentPickerButtons.Reset();
+	EquipmentPickerParts.Reset();
+	TArray<const UknightPartItemDefinition*> Owned;
+	const bool bComplete = GetCompatibleOwnedEquipment(SelectedEquipmentSlot, Owned);
+	if (EquipmentPickerCandidate && !Owned.Contains(EquipmentPickerCandidate.Get())) EquipmentPickerCandidate = nullptr;
+	const TSubclassOf<UCommonButtonBase> ButtonClass = LoadClass<UCommonButtonBase>(nullptr,
+		TEXT("/Game/Knight/UI/Common/WBP_KnightButton.WBP_KnightButton_C"));
+	if (ButtonClass && GetOwningPlayer())
+		for (const UknightPartItemDefinition* Part : Owned)
+		{
+			UCommonButtonBase* const Button = CreateWidget<UCommonButtonBase>(GetOwningPlayer(), ButtonClass);
+			if (!Button) continue;
+			SetButtonLabel(Button, FText::Format(LOCTEXT("EquipmentPickerRow", "{0}  ·  보유 {1}"),
+				PartName(Part), GetProgression() ? GetProgression()->GetItemCount(Part) : 0));
+			Button->SetIsSelectable(true);
+			Button->SetIsInteractableWhenSelected(true);
+			TWeakObjectPtr<const UknightPartItemDefinition> WeakPart(Part);
+			Button->OnClicked().AddWeakLambda(this, [this, WeakPart]()
+			{
+				if (!bEquipmentPickerOpen || !WeakPart.IsValid()) return;
+				EquipmentPickerCandidate = WeakPart.Get();
+				RefreshEquipmentPickerPreview();
+			});
+			SetSelected(Button, EquipmentPickerCandidate == Part);
+			if (UScrollBoxSlot* const Row = Cast<UScrollBoxSlot>(EquipmentPickerList->AddChild(Button)))
+				Row->SetPadding(FMargin(0.f, 0.f, 10.f, 6.f));
+			EquipmentPickerButtons.Add(Button);
+			EquipmentPickerParts.Add(Part);
+		}
+	if (!bComplete || Owned.IsEmpty())
+	{
+		UCommonTextBlock* const Message = NewRowText(WidgetTree, BodyStyle(), ETextJustify::Left);
+		Message->SetText(!bComplete ? LOCTEXT("EquipmentPickerUnresolved", "보유 장비 정의를 모두 확인할 수 없습니다. 장착을 잠시 사용할 수 없습니다.")
+			: LOCTEXT("EquipmentPickerEmpty", "이 슬롯에 장착할 보유 장비가 없습니다."));
+		EquipmentPickerList->AddChild(Message);
+	}
+	RefreshEquipmentPickerPreview();
+}
+
+void UKnightMaintenanceWidget::RefreshEquipmentPickerPreview()
+{
+	if (!bEquipmentPickerOpen) return;
+	TArray<const UknightPartItemDefinition*> Owned;
+	const bool bComplete = GetCompatibleOwnedEquipment(SelectedEquipmentSlot, Owned);
+	if (EquipmentPickerCandidate && !Owned.Contains(EquipmentPickerCandidate.Get())) EquipmentPickerCandidate = nullptr;
+	for (int32 Index = 0; Index < EquipmentPickerButtons.Num() && Index < EquipmentPickerParts.Num(); ++Index)
+		SetSelected(EquipmentPickerButtons[Index], EquipmentPickerCandidate == EquipmentPickerParts[Index]);
+	bool bSlotComplete = false;
+	const UknightPartItemDefinition* const Equipped = GetEquippedInSelectedSlot(bSlotComplete);
+	const UknightPartItemDefinition* const Candidate = EquipmentPickerCandidate.Get();
+	if (Txt_ConfirmBody)
+	{
+		FText Detail = LOCTEXT("EquipmentPickerPrompt", "보유 장비를 선택한 뒤 장착을 누르세요. 선택만으로 장비와 저장값은 바뀌지 않습니다.");
+		if (Candidate)
+		{
+			const UknightMaintenanceCatalog* const Catalog = UknightEquipmentSettings::LoadCatalog();
+			const FknightEquipmentComparison Comparison = knightEquipmentStats::CompareReplacement(
+				knightEquipmentStats::ReadLoadout(GetProgression(), Catalog), SelectedEquipmentSlot, Candidate, Catalog, GetProgression());
+			TArray<FText> Changes;
+			if (Comparison.bExact)
+				for (const FStatRow& Row : StatRows())
+				{
+					const int32 Delta = DisplayNumber(Comparison.Deltas.FindRef(Row.Attribute), Row.bPercent);
+					if (Delta != 0) Changes.Add(FText::Format(LOCTEXT("EquipmentPickerDelta", "{0} {1}"),
+						Row.Label, FormatNumber(Delta, Row.bPercent, true)));
+				}
+			Detail = FText::Format(LOCTEXT("EquipmentPickerComparison", "{0}\n교체 후 변화: {1}"), PartName(Candidate),
+				Comparison.bExact ? (Changes.IsEmpty() ? LOCTEXT("EquipmentPickerNoChange", "표시 스탯 변화 없음")
+					: FText::Join(FText::FromString(TEXT(" · ")), Changes))
+					: FText::Format(LOCTEXT("EquipmentPickerUnknown", "정확한 계산 불가: {0}"), FText::FromString(Comparison.IncompleteReason)));
+		}
+		Txt_ConfirmBody->SetText(Detail);
+	}
+	const UknightSaveSubsystem* const Saves = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
+	SetButtonLocked(Btn_ConfirmOk, !bComplete || !bSlotComplete || !Candidate || Candidate == Equipped
+		|| !Saves || !Saves->CanStartAtomicTransaction(),
+		LOCTEXT("EquipmentPickerBlocked", "장비 선택·보유 상태·저장 상태를 확인하세요."));
+	if (Candidate)
+		for (int32 Index = 0; Index < EquipmentPickerParts.Num() && Index < EquipmentPickerButtons.Num(); ++Index)
+			if (EquipmentPickerParts[Index] == Candidate) { EquipmentPickerButtons[Index]->SetFocus(); break; }
+	else if (Panel_Confirm && Panel_Confirm->IsVisible())
+	{
+		if (!EquipmentPickerButtons.IsEmpty()) EquipmentPickerButtons[0]->SetFocus();
+		else if (Btn_ConfirmCancel) Btn_ConfirmCancel->SetFocus();
+	}
+}
+
+void UKnightMaintenanceWidget::CloseEquipmentPicker(bool bRestoreFocus)
+{
+	if (!bEquipmentPickerOpen) return;
+	bEquipmentPickerOpen = false;
+	EquipmentPickerCandidate = nullptr;
+	if (EquipmentPickerList)
+	{
+		EquipmentPickerList->ClearChildren();
+		if (UWidget* const Frame = EquipmentPickerList->GetParent()) Frame->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	EquipmentPickerButtons.Reset();
+	EquipmentPickerParts.Reset();
+	ShowConfirm(false);
+	SetButtonLabel(Btn_ConfirmOk, LOCTEXT("ConfirmCraftLabel", "제작"));
+	if (bRestoreFocus)
+		for (int32 Index = 0; Index < EquipmentSlotButtons.Num() && Index < MainEquipmentSlotTags().Num(); ++Index)
+			if (MainEquipmentSlotTags()[Index] == SelectedEquipmentSlot) { EquipmentSlotButtons[Index]->SetFocus(); break; }
+}
+
+void UKnightMaintenanceWidget::ConfirmEquipmentReplacement()
+{
+	if (!bEquipmentPickerOpen || !EquipmentPickerCandidate || bBusy) return;
+	TArray<const UknightPartItemDefinition*> Owned;
+	bool bSlotComplete = false;
+	const UknightPartItemDefinition* const Current = GetEquippedInSelectedSlot(bSlotComplete);
+	const UknightSaveSubsystem* const Saves = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
+	if (!GetCompatibleOwnedEquipment(SelectedEquipmentSlot, Owned) || !bSlotComplete
+		|| !Owned.Contains(EquipmentPickerCandidate.Get()) || EquipmentPickerCandidate == Current
+		|| !Saves || !Saves->CanStartAtomicTransaction())
+	{
+		if (Txt_Status) Txt_Status->SetText(LOCTEXT("EquipmentPickerStale", "보유·장착 또는 저장 상태가 변경되었습니다. 다시 선택하세요."));
+		RebuildEquipmentPicker();
+		return;
+	}
+	ExecuteSelection();
 }
 
 void UKnightMaintenanceWidget::RebuildSocketList()
@@ -830,6 +1113,7 @@ void UKnightMaintenanceWidget::HandleEntryFocused(UKnightMaintenanceEntryWidget*
 bool UKnightMaintenanceWidget::HandleConfirmKey()
 {
 	if (Panel_Confirm && Panel_Confirm->IsVisible()) return false;
+	if (Category == 2) return false; // Fixed slot selection is never an equip request.
 	if (Category == 3)
 	{
 		for (UCommonButtonBase* Button : SocketListButtons)
@@ -850,6 +1134,7 @@ bool UKnightMaintenanceWidget::HandleConfirmKey()
 
 bool UKnightMaintenanceWidget::HandleBack()
 {
+	if (bEquipmentPickerOpen) { CloseEquipmentPicker(true); return true; }
 	if (!Panel_Confirm || !Panel_Confirm->IsVisible()) return false;
 	ShowConfirm(false);
 	return true;
@@ -874,6 +1159,13 @@ void UKnightMaintenanceWidget::ShowConfirm(bool bShow)
 
 void UKnightMaintenanceWidget::RequestExecute()
 {
+	if (Category == 2)
+	{
+		if (bEquipmentPickerOpen) return;
+		if (!bBusy && SelectedEquipmentSlot.IsValid() && ExecuteLockReason.IsEmpty()) OpenEquipmentPicker();
+		else if (Txt_Status) Txt_Status->SetText(ExecuteLockReason);
+		return;
+	}
 	if (Category == 3)
 	{
 		if (!bBusy && SelectedSocketItem && SelectedSocketSlot != INDEX_NONE) ExecuteSelection();
@@ -1107,6 +1399,7 @@ void UKnightMaintenanceWidget::RefreshMaterials(const UknightCraftRecipeDefiniti
 void UKnightMaintenanceWidget::RefreshDetails()
 {
 	if (Category == 3) { RefreshSocketDetails(); return; }
+	if (Category == 2) { RefreshEquipmentDetails(); return; }
 	const bool bCraftingSelectionMissing = Category == 0 && !SelectedRecipe;
 	if (Stats_Rows) Stats_Rows->SetVisibility(bCraftingSelectionMissing ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 	if (Txt_SetInfo) Txt_SetInfo->SetVisibility(ESlateVisibility::Visible);
@@ -1210,6 +1503,8 @@ void UKnightMaintenanceWidget::RefreshDetails()
 		if (Text && Text->GetParent()) Text->GetParent()->SetVisibility(Category == 0 ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 	for (UCommonTextBlock* Text : StatAfterTexts)
 		if (Text && Text->GetParent()) Text->GetParent()->SetVisibility(Category == 0 ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+	for (UCommonTextBlock* Text : StatDeltaTexts)
+		if (Text && Text->GetParent()) Text->GetParent()->SetVisibility(ESlateVisibility::Visible);
 
 	if (Txt_SetInfo)
 	{
@@ -1248,6 +1543,131 @@ void UKnightMaintenanceWidget::RefreshDetails()
 	}
 }
 
+void UKnightMaintenanceWidget::RefreshEquipmentDetails()
+{
+	if (Category != 2) return;
+	if (Switcher_Info) Switcher_Info->SetActiveWidgetIndex(InfoSpec);
+	if (Stats_Rows) Stats_Rows->SetVisibility(ESlateVisibility::Visible);
+	EnsureStatRows();
+	UknightProgressionSubsystem* const Progression = GetProgression();
+	const UknightSaveSubsystem* const Saves = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
+	const bool bCanMutate = Saves && Saves->CanStartAtomicTransaction();
+	const UknightMaintenanceCatalog* const Catalog = UknightEquipmentSettings::LoadCatalog();
+	bool bSlotsComplete = false;
+	const UknightPartItemDefinition* const Part = SelectedEquipmentSlot.IsValid()
+		? GetEquippedInSelectedSlot(bSlotsComplete) : nullptr;
+	if (!SelectedEquipmentSlot.IsValid())
+	{
+		TArray<FKnightMainEquipmentSlot> Slots;
+		bSlotsComplete = Progression && Progression->GetMainEquipmentSlots(Slots);
+	}
+	const FknightEquipmentStats Overall = knightEquipmentStats::Calculate(
+		knightEquipmentStats::ReadLoadout(Progression, Catalog), Catalog, Progression);
+	const FknightItemContribution Individual = Part
+		? knightEquipmentStats::CalculateItemContribution(Part, Progression) : FknightItemContribution();
+	const bool bIndividual = SelectedEquipmentSlot.IsValid();
+	const bool bKnown = bIndividual ? (Part && Individual.bComplete) : (bSlotsComplete && Catalog && Overall.bComplete);
+	if (Txt_PartName) Txt_PartName->SetText(!bIndividual ? LOCTEXT("EquipmentOverview", "현재 장비")
+		: Part ? PartName(Part) : MainEquipmentSlotLabel(SelectedEquipmentSlot));
+	if (Txt_PartState)
+	{
+		Txt_PartState->SetText(!bIndividual ? LOCTEXT("EquipmentFiveSlots", "무기 · 머리 · 몸 · 팔 · 다리")
+			: Part ? LOCTEXT("EquipmentSelectedEquipped", "장착 중")
+			: bSlotsComplete ? LOCTEXT("EquipmentSelectedEmpty", "빈 슬롯") : LOCTEXT("EquipmentSelectedUnknown", "장착 정보 확인 불가"));
+		Txt_PartState->SetVisibility(ESlateVisibility::HitTestInvisible);
+	}
+	if (Txt_PartDesc)
+	{
+		Txt_PartDesc->SetText(!bIndividual ? LOCTEXT("EquipmentOverviewHint", "왼쪽 슬롯을 선택하면 해당 장비의 개별 기여를 볼 수 있습니다.")
+			: Part ? LOCTEXT("EquipmentIndividualHint", "개별 장비 기여입니다. 세트 보너스는 포함하지 않습니다.")
+			: bSlotsComplete ? LOCTEXT("EquipmentEmptyHint", "장착한 장비가 없습니다. 교체에서 보유 장비를 선택하세요.")
+			: LOCTEXT("EquipmentUnknownHint", "저장 슬롯 또는 장비 정의를 확인하세요."));
+		Txt_PartDesc->SetVisibility(ESlateVisibility::HitTestInvisible);
+	}
+	if (Img_Selected)
+	{
+		UTexture2D* const Icon = Part ? Part->Icon.LoadSynchronous() : nullptr;
+		if (Icon) Img_Selected->SetBrushFromTexture(Icon);
+		Img_Selected->SetVisibility(Icon ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	}
+	if (Txt_Bonus)
+	{
+		TArray<FText> Extra;
+		if (bIndividual && bKnown)
+			for (const TPair<FGameplayAttribute, float>& Entry : Individual.Values)
+			{
+				if (FindStatRow(Entry.Key) || FMath::IsNearlyZero(Entry.Value)) continue;
+				const FExtraStat* const Info = FindExtraStat(Entry.Key);
+				FText Number;
+				if (Info && Info->bDecimal)
+				{
+					FNumberFormattingOptions Options;
+					Options.AlwaysSign = true;
+					Options.MaximumFractionalDigits = 1;
+					Number = FText::AsNumber(Entry.Value, &Options);
+				}
+				else Number = FormatNumber(DisplayNumber(Entry.Value, IsPercentStat(Entry.Key)), IsPercentStat(Entry.Key), true);
+				Extra.Add(FText::Format(LOCTEXT("EquipmentExtraStat", "{0} {1}"), StatLabel(Entry.Key), Number));
+			}
+		Txt_Bonus->SetText(FText::Join(FText::FromString(TEXT(" · ")), Extra));
+		Txt_Bonus->SetVisibility(Extra.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+	}
+	if (PreviewStatusText)
+	{
+		FText Warning;
+		if (!bSlotsComplete) Warning = LOCTEXT("EquipmentIncompleteLoadout", "장착 정보가 불완전합니다. 일부 정의 또는 세이브 슬롯을 확인하세요.");
+		else if (bIndividual && Part && !Individual.bComplete)
+			Warning = FText::Format(LOCTEXT("EquipmentIncompleteItem", "개별 효과 계산 불가: {0}"), FText::FromString(Individual.IncompleteReason));
+		else if (!bIndividual && !Overall.bComplete)
+			Warning = FText::Format(LOCTEXT("EquipmentIncompleteOverall", "전체 스탯 계산 불가: {0}"), FText::FromString(Overall.IncompleteReason));
+		PreviewStatusText->SetText(Warning);
+		PreviewStatusText->SetVisibility(Warning.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+	}
+	for (int32 Index = 0; Index < StatRows().Num() && Index < StatCurrentTexts.Num(); ++Index)
+	{
+		const FStatRow& Row = StatRows()[Index];
+		const float Value = bIndividual ? Individual.Values.FindRef(Row.Attribute) : Overall.Values.FindRef(Row.Attribute);
+		const int32 Rounded = DisplayNumber(Value, Row.bPercent);
+		StatCurrentTexts[Index]->SetText(!bKnown || (bIndividual && Rounded == 0) ? LOCTEXT("EquipmentStatDash", "—")
+			: FormatNumber(Rounded, Row.bPercent, bIndividual));
+		StatLabelTexts[Index]->SetColorAndOpacity(FSlateColor(Mist));
+		StatArrowTexts[Index]->SetVisibility(ESlateVisibility::Collapsed);
+		StatAfterTexts[Index]->SetText(FText::GetEmpty());
+		StatDeltaTexts[Index]->SetText(FText::GetEmpty());
+	}
+	for (UCommonTextBlock* Text : StatArrowTexts) if (Text && Text->GetParent()) Text->GetParent()->SetVisibility(ESlateVisibility::Collapsed);
+	for (UCommonTextBlock* Text : StatAfterTexts) if (Text && Text->GetParent()) Text->GetParent()->SetVisibility(ESlateVisibility::Collapsed);
+	for (UCommonTextBlock* Text : StatDeltaTexts) if (Text && Text->GetParent()) Text->GetParent()->SetVisibility(ESlateVisibility::Collapsed);
+	if (UpgradePanel) UpgradePanel->SetVisibility(ESlateVisibility::Collapsed);
+	if (SelectedSetFooterText)
+	{
+		const FText Sets = bSlotsComplete && Catalog && Overall.bComplete ? ActiveSetsText(Catalog, Overall) : FText::GetEmpty();
+		SelectedSetFooterText->SetText(Sets.IsEmpty() ? FText::GetEmpty()
+			: FText::Format(LOCTEXT("EquipmentActiveSets", "현재 활성 세트\n{0}"), Sets));
+		SelectedSetFooterText->SetVisibility(Sets.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+	}
+	if (Txt_ActiveSets) Txt_ActiveSets->SetText(bSlotsComplete && Catalog && Overall.bComplete ? ActiveSetsText(Catalog, Overall) : FText::GetEmpty());
+	if (Btn_Execute)
+	{
+		SetButtonLabel(Btn_Execute, LOCTEXT("EquipmentReplace", "교체"));
+		Btn_Execute->SetVisibility(bIndividual ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+		TArray<const UknightPartItemDefinition*> Owned;
+		const bool bOwnedComplete = bIndividual && GetCompatibleOwnedEquipment(SelectedEquipmentSlot, Owned);
+		ExecuteLockReason = !bSlotsComplete || !bOwnedComplete ? LOCTEXT("EquipmentUnavailable", "장착 또는 보유 장비 정보가 불완전합니다.")
+			: !bCanMutate ? LOCTEXT("EquipmentSaveBusy", "저장 처리 중입니다. 잠시 후 다시 시도하세요.")
+			: Owned.IsEmpty() ? LOCTEXT("EquipmentNoOwned", "이 슬롯에 장착할 보유 장비가 없습니다.") : FText::GetEmpty();
+		SetButtonLocked(Btn_Execute, bBusy || !ExecuteLockReason.IsEmpty(), ExecuteLockReason);
+	}
+	if (Btn_Unequip)
+	{
+		Btn_Unequip->SetVisibility(bIndividual ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+		UnequipLockReason = !bSlotsComplete ? LOCTEXT("EquipmentUnequipUnknown", "장착 정보를 확인할 수 없습니다.")
+			: !bCanMutate ? LOCTEXT("EquipmentUnequipSaveBusy", "저장 처리 중입니다. 잠시 후 다시 시도하세요.")
+			: !Part ? LOCTEXT("EquipmentNothingToUnequip", "선택한 슬롯이 비어 있습니다.") : FText::GetEmpty();
+		SetButtonLocked(Btn_Unequip, bBusy || !UnequipLockReason.IsEmpty(), UnequipLockReason);
+	}
+}
+
 void UKnightMaintenanceWidget::ExecuteSelection()
 {
 	if (Category == 3)
@@ -1260,16 +1680,17 @@ void UKnightMaintenanceWidget::ExecuteSelection()
 		RebuildSocketList();
 		return;
 	}
-	if (bBusy || !SelectedPart) return;
+	const UknightPartItemDefinition* const ActionPart = Category == 2 ? EquipmentPickerCandidate.Get() : SelectedPart.Get();
+	if (bBusy || !ActionPart || (Category == 2 && (!bEquipmentPickerOpen || ActionPart->SlotTag != SelectedEquipmentSlot))) return;
 	UknightProgressionSubsystem* Progression = GetProgression();
 	if (!Progression) return;
 	bBusy = true;
 	bool bSuccess = false;
 	if (Category == 0) bSuccess = SelectedRecipe && Progression->CraftPart(SelectedRecipe);
-	else if (Progression->GetItemCount(SelectedPart) > 0)
+	else if (Progression->GetItemCount(ActionPart) > 0)
 	{
 		UknightPartsComponent* LiveParts = GetOwningPlayerPawn() ? GetOwningPlayerPawn()->FindComponentByClass<UknightPartsComponent>() : nullptr;
-		bool bCanEquip = LiveParts && LiveParts->CanEquipPart(SelectedPart);
+		bool bCanEquip = LiveParts && LiveParts->CanEquipPart(ActionPart);
 		if (!LiveParts)
 		{
 			// 로비에는 폰이 없음. 저장 전 적재 한도 직접 확인.
@@ -1281,28 +1702,29 @@ void UKnightMaintenanceWidget::ExecuteSelection()
 				float TotalWeight = 0.f;
 				for (const auto& Entry : Loadout)
 					if (Entry.Value) TotalWeight += Entry.Value->Weight;
-				const UknightPartItemDefinition* Replaced = Loadout.FindRef(SelectedPart->SlotTag);
+				const UknightPartItemDefinition* Replaced = Loadout.FindRef(ActionPart->SlotTag);
 				const float Capacity = Stats.Values.FindRef(UknightAttributeSet::GetLoadCapacityAttribute());
 				bCanEquip = Stats.bComplete && knightPartsLoad::FitsLoadCapacity(
-					TotalWeight, Replaced ? Replaced->Weight : 0.f, SelectedPart->Weight, Capacity);
+					TotalWeight, Replaced ? Replaced->Weight : 0.f, ActionPart->Weight, Capacity);
 			}
 		}
 		if (bCanEquip)
 		{
-			const UknightPartItemDefinition* PreviousLivePart = LiveParts ? LiveParts->GetEquippedPart(SelectedPart->SlotTag) : nullptr;
-			bSuccess = !LiveParts || LiveParts->EquipPart(SelectedPart, Progression->GetUpgradeLevel(SelectedPart));
-			if (bSuccess && !Progression->SetEquippedPart(SelectedPart))
+			const UknightPartItemDefinition* PreviousLivePart = LiveParts ? LiveParts->GetEquippedPart(ActionPart->SlotTag) : nullptr;
+			bSuccess = !LiveParts || LiveParts->EquipPart(ActionPart, Progression->GetUpgradeLevel(ActionPart));
+			if (bSuccess && !Progression->SetEquippedPart(ActionPart))
 			{
 				if (LiveParts)
 				{
 					if (PreviousLivePart) LiveParts->EquipPart(PreviousLivePart, Progression->GetUpgradeLevel(PreviousLivePart));
-					else LiveParts->UnequipSlot(SelectedPart->SlotTag);
+					else LiveParts->UnequipSlot(ActionPart->SlotTag);
 				}
 				bSuccess = false;
 			}
 		}
 	}
 	bBusy = false;
+	if (Category == 2 && bSuccess) CloseEquipmentPicker(true);
 	RebuildList();
 	if (Txt_Status)
 	{
@@ -1313,6 +1735,7 @@ void UKnightMaintenanceWidget::ExecuteSelection()
 
 void UKnightMaintenanceWidget::UnequipSelection()
 {
+	if (bEquipmentPickerOpen) return;
 	if (Category == 3)
 	{
 		UknightProgressionSubsystem* const Progression = GetProgression();
@@ -1324,8 +1747,11 @@ void UKnightMaintenanceWidget::UnequipSelection()
 	}
 	UknightProgressionSubsystem* Progression = GetProgression();
 	const knightEquipmentStats::FLoadout Loadout = knightEquipmentStats::ReadLoadout(Progression, UknightEquipmentSettings::LoadCatalog());
-	// 선택 장비, 없으면 현재 장착 장비 대상.
-	const UknightPartItemDefinition* Target = SelectedPart ? SelectedPart.Get() : Loadout.FindRef(Slot);
+	bool bSlotComplete = false;
+	const UknightPartItemDefinition* Target = Category == 2 ? GetEquippedInSelectedSlot(bSlotComplete)
+		: SelectedPart ? SelectedPart.Get() : Loadout.FindRef(Slot);
+	const UknightSaveSubsystem* const Saves = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
+	if (Category == 2 && (!SelectedEquipmentSlot.IsValid() || !bSlotComplete || !Saves || !Saves->CanStartAtomicTransaction())) return;
 	if (bBusy || !Target || Category == 0 || !Progression || Loadout.FindRef(Target->SlotTag) != Target) return;
 	bBusy = true;
 	if (UknightPartsComponent* LiveParts = GetOwningPlayerPawn() ? GetOwningPlayerPawn()->FindComponentByClass<UknightPartsComponent>() : nullptr)
@@ -1345,6 +1771,8 @@ void UKnightMaintenanceWidget::HandleProgressionChanged()
 
 void UKnightMaintenanceWidget::HandleActiveSlotChanged(const FString& SlotId)
 {
+	CloseEquipmentPicker(false);
+	SelectedEquipmentSlot = FGameplayTag();
 	RefreshCurrency();
 	SelectedPart = nullptr;
 	SelectedRecipe = nullptr;
@@ -1355,6 +1783,14 @@ void UKnightMaintenanceWidget::HandleActiveSlotChanged(const FString& SlotId)
 	if (Txt_Status) Txt_Status->SetText(FText::GetEmpty());
 	RebuildList(false);
 	if (Category == 0 && Btn_Craft) Btn_Craft->SetFocus();
+	else if (Category == 2 && Btn_Weapon) Btn_Weapon->SetFocus();
+}
+
+void UKnightMaintenanceWidget::HandleSaveFinished(bool bSuccess)
+{
+	if (Category != 2 || bBusy) return;
+	RefreshEquipmentDetails();
+	if (bEquipmentPickerOpen) RefreshEquipmentPickerPreview();
 }
 
 #undef LOCTEXT_NAMESPACE

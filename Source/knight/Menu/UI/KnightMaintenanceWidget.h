@@ -95,6 +95,7 @@ private:
 	void ShowConfirm(bool bShow);
 	UFUNCTION() void HandleProgressionChanged();
 	UFUNCTION() void HandleActiveSlotChanged(const FString& SlotId);
+	UFUNCTION() void HandleSaveFinished(bool bSuccess);
 	void SetCategory(int32 NewCategory, bool bFromPlayer);
 	void SetSlot(FGameplayTag NewSlot, bool bFromPlayer);
 	void SetInfoTab(int32 NewTab);
@@ -107,6 +108,16 @@ private:
 	void RefreshSocketDetails();
 	void RequestWeaponUpgrade();
 	void RefreshTabButtons();
+	void RebuildEquipmentSlots(bool bRestoreFocus);
+	void SelectEquipmentSlot(FGameplayTag SlotTag);
+	void RefreshEquipmentDetails();
+	void OpenEquipmentPicker();
+	void RebuildEquipmentPicker();
+	void RefreshEquipmentPickerPreview();
+	void CloseEquipmentPicker(bool bRestoreFocus);
+	void ConfirmEquipmentReplacement();
+	bool GetCompatibleOwnedEquipment(FGameplayTag SlotTag, TArray<const UknightPartItemDefinition*>& OutParts) const;
+	const UknightPartItemDefinition* GetEquippedInSelectedSlot(bool& bComplete) const;
 	void RefreshCurrency();
 	void RefreshMaterialContainer();
 	void SelectEntry(UKnightMaintenanceEntryWidget* Entry);
@@ -138,6 +149,13 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UCommonButtonBase> InfoNextButton;
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> PreviewStatusText;
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> SelectedSetFooterText;
+	UPROPERTY(Transient) TArray<TObjectPtr<UCommonButtonBase>> EquipmentSlotButtons;
+	UPROPERTY(Transient) TArray<TObjectPtr<UCommonButtonBase>> EquipmentPickerButtons;
+	UPROPERTY(Transient) TArray<TObjectPtr<const UknightPartItemDefinition>> EquipmentPickerParts;
+	UPROPERTY(Transient) TObjectPtr<UScrollBox> EquipmentPickerList;
+	UPROPERTY(Transient) TObjectPtr<const UknightPartItemDefinition> EquipmentPickerCandidate;
+	FGameplayTag SelectedEquipmentSlot;
+	bool bEquipmentPickerOpen = false;
 	UPROPERTY(Transient) TArray<TObjectPtr<UCommonButtonBase>> SocketListButtons;
 	UPROPERTY(Transient) TObjectPtr<const UknightSocketItemDefinition> SelectedSocketItem;
 	int32 SelectedSocketSlot = INDEX_NONE;
