@@ -37,7 +37,7 @@ namespace
 
 	UCommonButtonBase* NewQuestButton(APlayerController* Owner)
 	{
-		static const TSubclassOf<UCommonButtonBase> ButtonClass = LoadClass<UCommonButtonBase>(nullptr,
+		const TSubclassOf<UCommonButtonBase> ButtonClass = LoadClass<UCommonButtonBase>(nullptr,
 			TEXT("/Game/Knight/UI/Common/WBP_KnightButton.WBP_KnightButton_C"));
 		return Owner && ButtonClass ? CreateWidget<UCommonButtonBase>(Owner, ButtonClass) : nullptr;
 	}
