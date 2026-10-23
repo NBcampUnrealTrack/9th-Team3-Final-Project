@@ -47,9 +47,13 @@ public:
 	FGameplayTag GetBufferedInputTag() const { return BufferedTag; }
 
 protected:
-	/** Seconds a press stays buffered. */
+	/**
+	 * Seconds a press stays buffered.
+	 * (2026-10-23 사용자 결정) 0.35 → 0.5: 공격 판정 끝에서 가드·이동·점프까지 약 0.47초(양손)라, 판정 직후 미리 누른 입력이
+	 * 기다리는 동안 사라져 다시 눌러야 했다. 바뀔 수 있는 값.
+	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Input", meta=(ClampMin=0, Units="s"))
-	float BufferDuration = 0.35f;
+	float BufferDuration = 0.5f;
 
 private:
 	bool IsExpired() const;

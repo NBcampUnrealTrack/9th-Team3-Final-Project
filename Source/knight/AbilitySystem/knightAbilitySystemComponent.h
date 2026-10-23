@@ -137,6 +137,9 @@ public:
 	 */
 	bool IsAttackRecoveryDashOnly() const;
 
+	/** (2026-10-23) 지금 후딜이라 다음 공격도 막혀 있는지(퀵스텝만 되는 후딜이면서 bAttacksCancelAttackRecovery가 꺼져 있을 때). */
+	bool IsAttackRecoveryBlockingAttacks() const { return !bAttacksCancelAttackRecovery && IsAttackRecoveryDashOnly(); }
+
 	/**
 	 * (2026-10-14) 공격 몽타주 재생 속도 배율. 공격 어빌리티가 PlayRate x 행동 속도에 곱한다(발도·가드 몽타주는 제외).
 	 * 기본 0.75(10-15. 1이면 몽타주 원래 속도). PIE에서 knight.Player.AttackSpeed로 바꿔 시험한다(새로 시작하는 공격부터 적용).
@@ -270,6 +273,14 @@ protected:
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack", meta=(ClampMin=0, Units="s", EditCondition="bOnlyDashCancelsAttackRecovery"))
 	float AttackRecoveryDashOnlyTime = 0.25f;
+
+	/**
+	 * (2026-10-23 사용자 결정) 위 후딜 시간에 퀵스텝뿐 아니라 다음 공격(Ability.Attack)도 허용한다. 가드·이동·점프는 그대로 기다린다.
+	 * 1~3타는 콤보 창으로 이미 이어지지만, 콤보 창이 없는 공격(4타·대쉬공격·패링 반격·돌진 베기·점프 공격)은
+	 * 다음 공격까지 판정 끝에서 약 0.47초(양손)가 걸려 느렸다 → 퀵스텝과 같은 약 0.22초. 끄면 예전처럼 퀵스텝만. 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack", meta=(EditCondition="bOnlyDashCancelsAttackRecovery"))
+	bool bAttacksCancelAttackRecovery = true;
 
 	/** (2026-10-14) Window.Cancel 태그 수가 늘 때(창이 열릴 때) 시각을 기록한다. */
 	void HandleCancelWindowChanged(const FGameplayTag Tag, int32 NewCount);
