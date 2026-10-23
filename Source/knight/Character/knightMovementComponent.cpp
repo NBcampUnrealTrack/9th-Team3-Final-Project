@@ -23,7 +23,8 @@ namespace
 	UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_State_Combat_Movement, "State.Combat");
 
 	// 락온 중 뒤로 이동(백스텝)할 때는 Shift를 눌러도 달리지 않고 걷는다.
-	bool IsMovingBackwardWhileLockedOn(const UCharacterMovementComponent& Movement)
+	// (2026-10-23) 옆으로만 갈 때도 걷는다: 앞과 MinForwardDot 이상 겹칠 때만 달린다(UknightMovementComponent::LockOnRunMinForwardDot).
+	bool IsMovingBackwardWhileLockedOn(const UCharacterMovementComponent& Movement, float MinForwardDot)
 	{
 		const ACharacter* const Character = Movement.GetCharacterOwner();
 		const UAbilitySystemComponent* const ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Character);
@@ -34,7 +35,7 @@ namespace
 		const FVector Forward = Character->GetActorForwardVector().GetSafeNormal2D();
 		const FVector InputDir = Movement.GetCurrentAcceleration().GetSafeNormal2D();
 		const FVector MoveDir = !InputDir.IsNearlyZero() ? InputDir : Movement.Velocity.GetSafeNormal2D();
-		return !MoveDir.IsNearlyZero() && FVector::DotProduct(MoveDir, Forward) < -0.1f;
+		return !MoveDir.IsNearlyZero() && FVector::DotProduct(MoveDir, Forward) < MinForwardDot;
 	}
 }
 
@@ -143,7 +144,7 @@ float UknightMovementComponent::GetMaxSpeed() const
 	}
 
 	// 달리기 잠금(수리 키트 사용 중) 또는 락온 후진 중에는 달리기 키를 누르고 있어도 걷기 기준.
-	const bool bRun = bWantsToRun && RunLockCount == 0 && !IsMovingBackwardWhileLockedOn(*this);
+	const bool bRun = bWantsToRun && RunLockCount == 0 && !IsMovingBackwardWhileLockedOn(*this, LockOnRunMinForwardDot);
 	const float BaseSpeed = bRun ? BaseRunSpeed : BaseWalkSpeed;
 	const float SpeedScale = bRun
 		? GetMechAttributeValue(UknightAttributeSet::GetRunSpeedAttribute(), 1.f)
@@ -154,7 +155,7 @@ float UknightMovementComponent::GetMaxSpeed() const
 bool UknightMovementComponent::IsRunning() const
 {
 	return bWantsToRun && RunLockCount == 0 && MoveInputLockCount == 0 && IsMovingOnGround()
-		&& !GetCurrentAcceleration().IsNearlyZero() && !IsMovingBackwardWhileLockedOn(*this);
+		&& !GetCurrentAcceleration().IsNearlyZero() && !IsMovingBackwardWhileLockedOn(*this, LockOnRunMinForwardDot);
 }
 
 float UknightMovementComponent::GetMaxAcceleration() const
@@ -265,7 +266,7 @@ void UknightMovementComponent::OnMovementModeChanged(EMovementMode PreviousMovem
 
 bool UknightMovementComponent::ShouldHaveSprintTag() const
 {
-	if (!bWantsToRun || RunLockCount > 0 || !IsMovingOnGround() || IsMovingBackwardWhileLockedOn(*this))
+	if (!bWantsToRun || RunLockCount > 0 || !IsMovingOnGround() || IsMovingBackwardWhileLockedOn(*this, LockOnRunMinForwardDot))
 	{
 		return false;
 	}
