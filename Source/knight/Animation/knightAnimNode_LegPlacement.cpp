@@ -7,6 +7,7 @@
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/Volume.h"
 #include "HAL/IConsoleManager.h"
 #include "TwoBoneIK.h"
 #include "WaterBodyActor.h"
@@ -141,13 +142,15 @@ void FAnimNode_knightLegPlacement::PreUpdate(const UAnimInstance* InAnimInstance
 			FHitResult Hit;
 			FCollisionQueryParams QueryParams(BaseQueryParams);
 			bool bHit = false;
-			// WaterBody collision is WorldStatic in this map, so the first sweep hits the lake surface.
-			// Ignore only water actors and continue to the actual walkable ground below them.
+			// 밟는 땅이 아닌 WorldStatic은 건너뛰고 그 아래 땅을 찾는다.
+			// - WaterBody: 이 맵에서 WorldStatic이라 첫 스윕이 호수 수면에 맞는다.
+			// - 볼륨(경기장 경계 BlockingVolume 등): 몸이 캡슐보다 커서 경계 옆 경사에서는 발이 볼륨 안에 들어간다. 스윕이 볼륨 안에서
+			//   시작하면 시작점(MaxStepUp 위)을 땅으로 읽어 발과 몸이 떠오른다.
 			for (int32 Attempt = 0; Attempt < 16; ++Attempt)
 			{
 				bHit = World->SweepSingleByObjectType(Hit, Start, End, FQuat::Identity, ObjectParams,
 					FCollisionShape::MakeSphere(TraceRadius), QueryParams);
-				if (!bHit || !Cast<AWaterBody>(Hit.GetActor()))
+				if (!bHit || !(Cast<AWaterBody>(Hit.GetActor()) || Cast<AVolume>(Hit.GetActor())))
 				{
 					break;
 				}

@@ -50,6 +50,15 @@ void UknightGameplayAbility_MonsterReaction::ActivateAbility(const FGameplayAbil
 	}
 	KNIGHT_PERF_COUNT("Monster.Reactions", 1);
 
+	// 다른 반응(다운 등) 중에 켜졌으면 그 몽타주를 덮지 않고 물러났다가, 그 반응이 끝난 뒤 EndAbility의 다시 실행 경로로 켜진다.
+	// Reacting은 자기 ActivationOwnedTags로도 하나 붙어 있으므로 1보다 많아야 다른 반응이 있는 것이다.
+	if (bReplayIfInterrupted && ASC->GetTagCount(knightGameplayTags::State_Monster_Reacting) > 1)
+	{
+		UE_LOG(LogknightAI, Log, TEXT("%s: %s waits for the current reaction."), *GetNameSafe(Character), *GetName());
+		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
+		return;
+	}
+
 	if (bCancelOtherReactions)
 	{
 		// 취소된 반응의 몽타주는 자기 블렌드 아웃으로 빠지고, 아래 유지 몽타주가 블렌드 인으로 이어받는다.

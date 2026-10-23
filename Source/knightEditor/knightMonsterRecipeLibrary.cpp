@@ -509,8 +509,12 @@ namespace knightRecipe
 		bool bCancelOtherReactions = false;
 		FGameplayTag TriggerTag;
 		EGameplayAbilityTriggerSource::Type TriggerSource = EGameplayAbilityTriggerSource::GameplayEvent;
-		/** 경직 반응(패링·부위 파괴)은 State.Monster.NoFlinch 동안 시작하지 않는다(다이브가 패링을 직접 처리). */
+		/**
+		 * 경직 반응(패링·부위 파괴)은 State.Monster.NoFlinch 동안 시작하지 않는다(다이브가 패링을 직접 처리).
+		 * 포효·이륙·착지(SuperArmor)와 다운 중에도 시작하지 않는다. 서 있는 경직 몽타주가 그 몽타주를 덮기 때문이다.
+		 */
 		bool bFlinch = false;
+		bool bReplayIfInterrupted = false;
 	};
 
 	TSubclassOf<UGameplayAbility> BuildReactionAbility(FContext& Context, const FReactionSettings& Settings)
@@ -528,10 +532,13 @@ namespace knightRecipe
 		SetBool(CDO, TEXT("bRestorePoise"), Settings.bRestorePoise, Log);
 		SetValue<float>(CDO, TEXT("MaxPoiseGrowth"), Settings.MaxPoiseGrowth, Log);
 		SetBool(CDO, TEXT("bCancelOtherReactions"), Settings.bCancelOtherReactions, Log);
+		SetBool(CDO, TEXT("bReplayIfInterrupted"), Settings.bReplayIfInterrupted, Log);
 		FGameplayTagContainer Blocked(Tag(TEXT("State.Dead")));
 		if (Settings.bFlinch)
 		{
 			Blocked.AddTag(Tag(TEXT("State.Monster.NoFlinch")));
+			Blocked.AddTag(Tag(TEXT("State.SuperArmor")));
+			Blocked.AddTag(Tag(TEXT("State.HitReact.Knockdown")));
 		}
 		SetValue(CDO, TEXT("ActivationBlockedTags"), Blocked, Log);
 
@@ -609,6 +616,8 @@ namespace knightRecipe
 			Enrage.HoldMontage = EnrageStart;
 			Enrage.TriggerTag = Tag(TEXT("State.Monster.Enraged"));
 			Enrage.TriggerSource = EGameplayAbilityTriggerSource::OwnedTagAdded;
+			// 태그 트리거는 한 번뿐이라, 다운 중에 분노하거나 다운에 끊기면 기상 뒤에 다시 포효한다.
+			Enrage.bReplayIfInterrupted = true;
 			OutAbilities.Add(BuildReactionAbility(Context, Enrage));
 		}
 
