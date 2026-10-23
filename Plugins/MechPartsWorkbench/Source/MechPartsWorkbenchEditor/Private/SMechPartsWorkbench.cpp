@@ -822,7 +822,9 @@ void SMechPartsWorkbench::PastePlacement()
 	Asset->Modify();
 	FMechPartAttachment& Attachment = *AttachmentProperty->ContainerPtrToValuePtr<FMechPartAttachment>(Asset);
 	Attachment.AttachSocket = CopiedPlacement->AttachSocket;
-	Attachment.RelativeTransform = CopiedPlacement->RelativeTransform;
+	Attachment.RelativeLocation = CopiedPlacement->RelativeLocation;
+	Attachment.RelativeRotation = CopiedPlacement->RelativeRotation;
+	Attachment.RelativeScale = CopiedPlacement->RelativeScale;
 	FPropertyChangedEvent Changed(AttachmentProperty);
 	Asset->PostEditChangeProperty(Changed);
 	PartDetails->ForceRefresh();
