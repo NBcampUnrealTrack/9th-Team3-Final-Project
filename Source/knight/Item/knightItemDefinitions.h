@@ -38,7 +38,7 @@ struct KNIGHT_API FknightUpgradeStep
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Upgrade", meta=(ClampMin=0))
 	int64 MoneyCost = 0;
 
-	/** 0..1; only this base rate is shown to players. */
+	/** 0..1 base chance; the UI can also show the effective chance after failure compensation. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Upgrade", meta=(ClampMin=0, ClampMax=1))
 	float BaseSuccessChance = 1.f;
 

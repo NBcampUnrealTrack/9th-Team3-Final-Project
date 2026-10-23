@@ -47,6 +47,8 @@ struct KNIGHT_API FKnightWeaponUpgradeQuote
 	UPROPERTY(BlueprintReadOnly, Category="Upgrade") int32 TargetLevel = 0;
 	UPROPERTY(BlueprintReadOnly, Category="Upgrade") int64 MoneyCost = 0;
 	UPROPERTY(BlueprintReadOnly, Category="Upgrade") float BaseSuccessChance = 0.f;
+	/** Chance used by the next roll, after saved failure compensation. */
+	UPROPERTY(BlueprintReadOnly, Category="Upgrade") double EffectiveSuccessChance = 0.0;
 	UPROPERTY(BlueprintReadOnly, Category="Upgrade") float CurrentWeaponAttack = 0.f;
 	UPROPERTY(BlueprintReadOnly, Category="Upgrade") float NextWeaponAttack = 0.f;
 	/** Weapon-only attack gained on success; derived from the same upgrade steps as NextWeaponAttack. */
@@ -232,7 +234,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|Progression")
 	bool UpgradePart(const UknightPartItemDefinition* Part);
 
-	/** Read-only next-step quote. Failure correction is intentionally absent from player-facing data. */
+	/** Read-only next-step quote, including the chance actually used by the next roll. */
 	UFUNCTION(BlueprintCallable, Category="Knight|Progression|Weapon Upgrade")
 	void GetWeaponUpgradeQuote(const UknightWeaponItemDefinition* Weapon, FKnightWeaponUpgradeQuote& OutQuote) const;
 

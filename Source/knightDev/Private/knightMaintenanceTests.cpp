@@ -19,6 +19,7 @@
 #include "Progression/knightProgressionSubsystem.h"
 #include "Progression/knightSaveGame.h"
 #include "Progression/knightSaveSubsystem.h"
+#include "System/knightGameplayTags.h"
 #include "knightDev.h"
 
 #if WITH_EDITOR
@@ -35,6 +36,182 @@ namespace
 		UknightProgressionSubsystem* Progression = World && World->GetGameInstance()
 			? World->GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>() : nullptr;
 		if (!Progression || Args.IsEmpty()) return;
+		if (Args[0] == TEXT("UpgradeCases"))
+		{
+			const FString Mode = Args.Num() > 1 ? Args[1] : TEXT("Reject");
+			int32 Failures = 0;
+			auto Check = [&Failures, &Mode](bool bPassed, const TCHAR* Case)
+			{
+				if (!bPassed) ++Failures;
+				UE_LOG(LogknightDev, Log, TEXT("Phase7 UpgradeCases %s %s: %s"), *Mode,
+					bPassed ? TEXT("PASS") : TEXT("FAIL"), Case);
+			};
+			UknightSaveSubsystem* const Saves = World->GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+			const UknightWeaponItemDefinition* const Weapon = LoadObject<UknightWeaponItemDefinition>(nullptr,
+				TEXT("/Game/Knight/Data/Equipment/Janyeol/DA_Equipment_Janyeol_Weapon.DA_Equipment_Janyeol_Weapon"));
+			const UknightWeaponItemDefinition* const Other = LoadObject<UknightWeaponItemDefinition>(nullptr,
+				TEXT("/Game/Knight/Data/Equipment/Janhyang/DA_Equipment_Janhyang_Weapon.DA_Equipment_Janhyang_Weapon"));
+			if (!Saves || !Weapon || !Other || Weapon->UpgradeSteps.Num() != 15 || !Saves->SelectSlot(TEXT("Phase7") + Mode))
+			{
+				UE_LOG(LogknightDev, Error, TEXT("Phase7 UpgradeCases setup failed mode=%s"), *Mode);
+				return;
+			}
+			UknightSaveGame* const Save = Saves->GetSaveGame();
+			if (!Save) { UE_LOG(LogknightDev, Error, TEXT("Phase7 UpgradeCases save unavailable")); return; }
+			const FPrimaryAssetId WeaponId = Weapon->GetPrimaryAssetId();
+			const FPrimaryAssetId OtherId = Other->GetPrimaryAssetId();
+			Save->ItemCounts.Reset();
+			Save->EquippedItems.Reset();
+			Save->ItemUpgradeLevels.Reset();
+			Save->WeaponUpgradeFailures.Reset();
+			Save->Money = 10000;
+			Save->ItemCounts.Add(WeaponId, 1);
+			Save->ItemCounts.Add(OtherId, 1);
+			const int32 Level = Mode == TEXT("SuccessUnequipped") ? 0 : Mode == TEXT("SuccessFinal") ? 14 : 9;
+			Save->ItemUpgradeLevels.Add(WeaponId, Level);
+			Save->WeaponUpgradeFailures.Add(WeaponId, 2);
+			Save->EquippedItems.Add(knightGameplayTags::Equipment_Slot_Weapon,
+				Mode == TEXT("SuccessUnequipped") ? OtherId : WeaponId);
+			const FknightUpgradeStep& Step = Weapon->UpgradeSteps[Level];
+			const UknightMaterialItemDefinition* const Gate = Step.Costs.IsEmpty() ? nullptr
+				: Cast<UknightMaterialItemDefinition>(Step.Costs[0].Item.Get());
+			if (Gate) Save->ItemCounts.Add(Gate->GetPrimaryAssetId(), Step.Costs[0].Count);
+			FKnightWeaponUpgradeQuote Quote;
+			Progression->GetWeaponUpgradeQuote(Weapon, Quote);
+			const double ExpectedChance = FMath::Clamp(static_cast<double>(Step.BaseSuccessChance)
+				+ 2.0 * Step.FailureBonusPerAttempt, 0.0, 1.0);
+			Check(Quote.Availability == EKnightWeaponUpgradeAvailability::Ready
+				&& Quote.CurrentLevel == Level && Quote.TargetLevel == Level + 1
+				&& Quote.MoneyCost == Step.MoneyCost, TEXT("owned weapon quote matches step and cost"));
+			Check(FMath::IsNearlyEqual(Quote.EffectiveSuccessChance, ExpectedChance)
+				&& FMath::IsNearlyEqual(Quote.NextWeaponAttackIncrease, Step.AttackIncrease),
+				TEXT("effective chance and next weapon attack come from transaction rules"));
+			if (Mode == TEXT("Widget"))
+			{
+				APlayerController* const Player = UGameplayStatics::GetPlayerController(World, 0);
+				UKnightMaintenanceWidget* const Widget = Player ? CreateWidget<UKnightMaintenanceWidget>(
+					Player, UKnightMaintenanceWidget::GetSharedWidgetClass()) : nullptr;
+				if (!Widget || !Widget->WidgetTree)
+				{
+					UE_LOG(LogknightDev, Error, TEXT("Phase7 UpgradeCases Widget WBP construction failed"));
+					return;
+				}
+				Widget->Open(EKnightMaintenanceDestination::Enhancement);
+				UCommonButtonBase* Target = Cast<UCommonButtonBase>(Widget->WidgetTree->FindWidget(TEXT("Phase7_EnhancementTarget")));
+				UCommonButtonBase* const Cancel = Cast<UCommonButtonBase>(Widget->WidgetTree->FindWidget(TEXT("Btn_ConfirmCancel")));
+				UCommonButtonBase* const Confirm = Cast<UCommonButtonBase>(Widget->WidgetTree->FindWidget(TEXT("Btn_ConfirmOk")));
+				UScrollBox* const Picker = Cast<UScrollBox>(Widget->WidgetTree->FindWidget(TEXT("RuntimeEquipmentPickerList")));
+				UWidgetSwitcher* const Switcher = Cast<UWidgetSwitcher>(Widget->WidgetTree->FindWidget(TEXT("Switcher_Info")));
+				UWidget* const DetailPage = Widget->WidgetTree->FindWidget(TEXT("Phase7_EnhancementDetailPage"));
+				UTextBlock* const DetailName = Cast<UTextBlock>(Widget->WidgetTree->FindWidget(TEXT("Txt_PartName")));
+				if (!Target || !Cancel || !Confirm || !Picker || !Switcher || !DetailPage || !DetailName)
+				{
+					UE_LOG(LogknightDev, Error, TEXT("Phase7 UpgradeCases Widget controls missing"));
+					return;
+				}
+				Check(Switcher->GetActiveWidget() == DetailPage && DetailName->GetText().ToString().Contains(TEXT("없음")),
+					TEXT("fresh enhancement entry has empty target and separate quote page"));
+				Target->OnClicked().Broadcast();
+				Cancel->OnClicked().Broadcast();
+				Check(DetailName->GetText().ToString().Contains(TEXT("없음")) && Save->Money == 10000
+					&& Save->ItemUpgradeLevels.FindRef(WeaponId) == Level,
+					TEXT("picker cancellation leaves target and progression unchanged"));
+				Target->OnClicked().Broadcast();
+				UCommonButtonBase* const First = Picker->GetChildrenCount() > 0 ? Cast<UCommonButtonBase>(Picker->GetChildAt(0)) : nullptr;
+				if (First) First->OnClicked().Broadcast();
+				Confirm->OnClicked().Broadcast();
+				const FString SelectedName = DetailName->GetText().ToString();
+				Check(First && !SelectedName.Contains(TEXT("없음")) && Save->Money == 10000
+					&& Save->ItemUpgradeLevels.FindRef(WeaponId) == Level && Save->EquippedItems.FindRef(knightGameplayTags::Equipment_Slot_Weapon) == WeaponId,
+					TEXT("target selection does not equip or write progression"));
+				Progression->OnProgressionChanged.Broadcast();
+				Check(DetailName->GetText().ToString() == SelectedName, TEXT("refresh preserves target by item ID"));
+				Target = Cast<UCommonButtonBase>(Widget->WidgetTree->FindWidget(TEXT("Phase7_EnhancementTarget")));
+				if (Target) Target->OnClicked().Broadcast();
+				Check(Saves->SelectSlot(TEXT("Phase7WidgetOther")), TEXT("profile changes while picker is open"));
+				Check(DetailName->GetText().ToString().Contains(TEXT("없음"))
+					&& Save->ItemUpgradeLevels.FindRef(WeaponId) == Level, TEXT("profile change invalidates target without mutation"));
+				Widget->Close();
+			}
+			else if (Mode == TEXT("Reject"))
+			{
+				Save->Money = 0;
+				Progression->GetWeaponUpgradeQuote(Weapon, Quote);
+				FKnightWeaponUpgradeReceipt Receipt;
+				Check(Quote.Availability == EKnightWeaponUpgradeAvailability::InsufficientMoney
+					&& Progression->TryUpgradeWeapon(Weapon, Receipt) == EKnightWeaponUpgradeOutcome::Rejected
+					&& Save->ItemUpgradeLevels.FindRef(WeaponId) == Level && Save->WeaponUpgradeFailures.FindRef(WeaponId) == 2,
+					TEXT("insufficient currency rejects without mutation"));
+				Save->Money = 10000;
+				if (Gate) Save->ItemCounts.Remove(Gate->GetPrimaryAssetId());
+				Progression->GetWeaponUpgradeQuote(Weapon, Quote);
+				Check(Gate && Quote.Availability == EKnightWeaponUpgradeAvailability::MissingMaterial
+					&& Progression->TryUpgradeWeapon(Weapon, Receipt) == EKnightWeaponUpgradeOutcome::Rejected
+					&& Save->Money == 10000, TEXT("gateway material shortage rejects without cost"));
+				Save->ItemUpgradeLevels.Add(WeaponId, 15);
+				Progression->GetWeaponUpgradeQuote(Weapon, Quote);
+				Check(Quote.Availability == EKnightWeaponUpgradeAvailability::MaxLevel && Quote.TargetLevel == 0
+					&& Progression->TryUpgradeWeapon(Weapon, Receipt) == EKnightWeaponUpgradeOutcome::Rejected,
+					TEXT("maximum level is inspectable but cannot upgrade"));
+				Save->ItemCounts.Remove(OtherId);
+				Progression->GetWeaponUpgradeQuote(Other, Quote);
+				Check(Quote.Availability == EKnightWeaponUpgradeAvailability::NotOwned,
+					TEXT("unowned weapon cannot be upgraded"));
+			}
+			else
+			{
+				const UknightMaintenanceCatalog* const Catalog = UknightEquipmentSettings::LoadCatalog();
+				const auto Before = knightEquipmentStats::Calculate(knightEquipmentStats::ReadLoadout(Progression, Catalog), Catalog, Progression);
+				const int64 MoneyBefore = Save->Money;
+				const int32 GateBefore = Gate ? Save->ItemCounts.FindRef(Gate->GetPrimaryAssetId()) : 0;
+				Progression->SetDebugNextWeaponUpgradeOutcome(Mode == TEXT("Failure") ? 0 : 1);
+				FKnightWeaponUpgradeReceipt Receipt;
+				const EKnightWeaponUpgradeOutcome Outcome = Progression->TryUpgradeWeapon(Weapon, Receipt);
+				Check(Outcome == (Mode == TEXT("Failure") ? EKnightWeaponUpgradeOutcome::ChanceFailed : EKnightWeaponUpgradeOutcome::Success),
+					TEXT("test-only forced roll produces requested outcome"));
+				Check(Save->Money == MoneyBefore - Quote.MoneyCost && Receipt.MoneySpent == Quote.MoneyCost,
+					TEXT("one accepted attempt charges exact money once"));
+				Check(Save->ItemUpgradeLevels.FindRef(WeaponId) == (Mode == TEXT("Failure") ? Level : Level + 1)
+					&& Save->WeaponUpgradeFailures.FindRef(WeaponId) == (Mode == TEXT("Failure") ? 3 : 0),
+					TEXT("level and failure compensation follow outcome"));
+				Check(!Gate || Save->ItemCounts.FindRef(Gate->GetPrimaryAssetId()) == GateBefore
+					- (Mode == TEXT("Failure") ? 0 : Quote.GateMaterialNeeded),
+					TEXT("gateway material is consumed only on success"));
+				const auto After = knightEquipmentStats::Calculate(knightEquipmentStats::ReadLoadout(Progression, Catalog), Catalog, Progression);
+				const float AttackDelta = After.Values.FindRef(UknightCoreAttributeSet::GetAttackPowerAttribute())
+					- Before.Values.FindRef(UknightCoreAttributeSet::GetAttackPowerAttribute());
+				const float ExpectedDelta = Mode == TEXT("Failure") || Mode == TEXT("SuccessUnequipped") ? 0.f : Quote.NextWeaponAttackIncrease;
+				Check(Before.bComplete && After.bComplete && FMath::IsNearlyEqual(AttackDelta, ExpectedDelta, 0.01f),
+					TEXT("equipped and unequipped upgrade stat changes follow shared calculation"));
+				if (Mode == TEXT("Failure"))
+				{
+				FKnightWeaponUpgradeQuote Next;
+					Progression->GetWeaponUpgradeQuote(Weapon, Next);
+					Check(FMath::IsNearlyEqual(Next.EffectiveSuccessChance, FMath::Clamp(
+						static_cast<double>(Step.BaseSuccessChance) + 3.0 * Step.FailureBonusPerAttempt, 0.0, 1.0)),
+						TEXT("failed roll increases next effective chance"));
+				}
+				if (Mode == TEXT("SuccessFinal"))
+				{
+					FKnightWeaponUpgradeQuote Next;
+					Progression->GetWeaponUpgradeQuote(Weapon, Next);
+					Check(Next.Availability == EKnightWeaponUpgradeAvailability::MaxLevel,
+						TEXT("final success reaches maximum level"));
+				}
+				Saves->OnSaveFinished.Broadcast(true);
+				Check(Save->Money == MoneyBefore - Quote.MoneyCost && Save->ItemUpgradeLevels.FindRef(WeaponId)
+					== (Mode == TEXT("Failure") ? Level : Level + 1), TEXT("save completion callback does not repeat attempt"));
+			}
+			if (Failures)
+			{
+				UE_LOG(LogknightDev, Error, TEXT("Phase7 UpgradeCases SUMMARY mode=%s failures=%d"), *Mode, Failures);
+			}
+			else
+			{
+				UE_LOG(LogknightDev, Log, TEXT("Phase7 UpgradeCases SUMMARY mode=%s failures=0"), *Mode);
+			}
+			return;
+		}
 		if (Args[0] == TEXT("MaterialWidgetCases"))
 		{
 			int32 Failures = 0;
@@ -461,7 +638,7 @@ namespace
 	}
 
 	FAutoConsoleCommandWithWorldAndArgs MaintenanceTestCommand(
-		TEXT("knight.MaintenanceTest"), TEXT("Grant <asset> <count> | Snapshot | PureCases | AssetCases | MaterialSaleCases Partial|Final | MaterialWidgetCases; requires editor test save namespace."),
+		TEXT("knight.MaintenanceTest"), TEXT("Grant <asset> <count> | Snapshot | PureCases | AssetCases | MaterialSaleCases Partial|Final | MaterialWidgetCases | UpgradeCases Widget|Reject|Failure|SuccessEquipped|SuccessUnequipped|SuccessFinal; requires editor test save namespace."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&MaintenanceTest), ECVF_Cheat);
 }
 #endif

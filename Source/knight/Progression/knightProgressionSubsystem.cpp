@@ -688,6 +688,9 @@ void UknightProgressionSubsystem::GetWeaponUpgradeQuote(const UknightWeaponItemD
 	OutQuote.TargetLevel = Level + 1;
 	OutQuote.MoneyCost = Step.MoneyCost;
 	OutQuote.BaseSuccessChance = Step.BaseSuccessChance;
+	const int32 Failures = FMath::Max(0, Save->WeaponUpgradeFailures.FindRef(OutQuote.WeaponId));
+	OutQuote.EffectiveSuccessChance = FMath::Clamp(
+		static_cast<double>(Step.BaseSuccessChance) + static_cast<double>(Failures) * Step.FailureBonusPerAttempt, 0.0, 1.0);
 	OutQuote.NextWeaponAttack = Weapon->GetWeaponAttackAtLevel(Level + 1);
 	OutQuote.NextWeaponAttackIncrease = OutQuote.NextWeaponAttack - OutQuote.CurrentWeaponAttack;
 	if (!Step.Costs.IsEmpty())
@@ -716,10 +719,7 @@ EKnightWeaponUpgradeOutcome UknightProgressionSubsystem::TryUpgradeWeapon(
 	if (Quote.Availability != EKnightWeaponUpgradeAvailability::Ready) return OutReceipt.Outcome;
 	UknightSaveGame* const Save = GetSave();
 	const int32 Failures = Save->WeaponUpgradeFailures.FindRef(Quote.WeaponId);
-	const FknightUpgradeStep& Step = Weapon->UpgradeSteps[Quote.CurrentLevel];
-	const double Chance = FMath::Clamp(static_cast<double>(Step.BaseSuccessChance)
-		+ static_cast<double>(Failures) * Step.FailureBonusPerAttempt, 0.0, 1.0);
-	bool bSuccess = FMath::FRand() < Chance;
+	bool bSuccess = FMath::FRand() < Quote.EffectiveSuccessChance;
 #if WITH_EDITOR
 	if (DebugNextWeaponUpgradeOutcome >= 0)
 	{
