@@ -98,7 +98,7 @@ private:
 	void SetCategory(int32 NewCategory, bool bFromPlayer);
 	void SetSlot(FGameplayTag NewSlot, bool bFromPlayer);
 	void SetInfoTab(int32 NewTab);
-	void RebuildList();
+	void RebuildList(bool bRestoreFocus = true);
 	void EnsureStatRows();
 	void RefreshDetails();
 	void RefreshMaterials(const UknightCraftRecipeDefinition* Recipe, UknightProgressionSubsystem* Progression);
@@ -134,6 +134,10 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> UpgradeResult;
 	UPROPERTY(Transient) TObjectPtr<UCommonButtonBase> UpgradeButton;
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> CurrencyText;
+	UPROPERTY(Transient) TObjectPtr<UCommonButtonBase> InfoPreviousButton;
+	UPROPERTY(Transient) TObjectPtr<UCommonButtonBase> InfoNextButton;
+	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> PreviewStatusText;
+	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> SelectedSetFooterText;
 	UPROPERTY(Transient) TArray<TObjectPtr<UCommonButtonBase>> SocketListButtons;
 	UPROPERTY(Transient) TObjectPtr<const UknightSocketItemDefinition> SelectedSocketItem;
 	int32 SelectedSocketSlot = INDEX_NONE;

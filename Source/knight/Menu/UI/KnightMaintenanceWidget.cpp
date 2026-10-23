@@ -234,7 +234,7 @@ namespace
 			: FText::Format(LOCTEXT("SetHeaderChange", "{0} · 장착 {1}개 → {2}개"), SetName(Set), CurrentCount, PredictedCount));
 		for (const FknightSetTier* Tier : { &Set->TwoPiece, &Set->FourPiece })
 		{
-			if (Tier->StatModifiers.IsEmpty()) continue;
+			if (Tier->StatModifiers.IsEmpty() && Tier->Description.IsEmpty()) continue;
 			const bool bNow = CurrentCount >= Tier->RequiredCount;
 			const bool bAfter = PredictedCount >= Tier->RequiredCount;
 			const FText State = bNow == bAfter
@@ -339,6 +339,42 @@ void UKnightMaintenanceWidget::NativeOnInitialized()
 	if (Btn_InfoSpec) Btn_InfoSpec->OnClicked().AddWeakLambda(this, [this]() { SetInfoTab(InfoSpec); });
 	if (Btn_InfoSet) Btn_InfoSet->OnClicked().AddWeakLambda(this, [this]() { SetInfoTab(InfoSet); });
 	if (Btn_InfoMaterial) Btn_InfoMaterial->OnClicked().AddWeakLambda(this, [this]() { SetInfoTab(InfoMaterial); });
+	// Keep the WBP's existing pages/buttons. Reorder their runtime row and add two
+	// CommonUI arrows; the original Q/E hints are still handled by the menu controller.
+	if (UHorizontalBox* const InfoRow = WidgetTree ? Cast<UHorizontalBox>(WidgetTree->FindWidget(TEXT("Row_InfoTabs"))) : nullptr)
+	{
+		const TSubclassOf<UCommonButtonBase> ButtonClass = LoadClass<UCommonButtonBase>(nullptr,
+			TEXT("/Game/Knight/UI/Common/WBP_KnightButton.WBP_KnightButton_C"));
+		if (ButtonClass && GetOwningPlayer() && Btn_InfoMaterial && Btn_InfoSpec && Btn_InfoSet)
+		{
+			InfoPreviousButton = CreateWidget<UCommonButtonBase>(GetOwningPlayer(), ButtonClass);
+			InfoNextButton = CreateWidget<UCommonButtonBase>(GetOwningPlayer(), ButtonClass);
+			if (InfoPreviousButton && InfoNextButton)
+			{
+				InfoRow->ClearChildren();
+				SetButtonLabel(InfoPreviousButton, LOCTEXT("InfoPrevious", "←"));
+				SetButtonLabel(InfoNextButton, LOCTEXT("InfoNext", "→"));
+				InfoPreviousButton->OnClicked().AddWeakLambda(this, [this]() { CycleInfoTab(-1); });
+				InfoNextButton->OnClicked().AddWeakLambda(this, [this]() { CycleInfoTab(1); });
+				auto AddArrow = [this, InfoRow](UCommonButtonBase* Button)
+				{
+					USizeBox* const Frame = WidgetTree->ConstructWidget<USizeBox>();
+					Frame->SetWidthOverride(56.f);
+					Frame->AddChild(Button);
+					InfoRow->AddChildToHorizontalBox(Frame)->SetPadding(FMargin(3.f, 0.f));
+				};
+				AddArrow(InfoPreviousButton);
+				for (UCommonButtonBase* Button : { Btn_InfoMaterial.Get(), Btn_InfoSpec.Get(), Btn_InfoSet.Get() })
+				{
+					UHorizontalBoxSlot* const ButtonSlot = InfoRow->AddChildToHorizontalBox(Button);
+					ButtonSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+					ButtonSlot->SetVerticalAlignment(VAlign_Center);
+					ButtonSlot->SetPadding(FMargin(3.f, 0.f));
+				}
+				AddArrow(InfoNextButton);
+			}
+		}
+	}
 	if (Btn_Execute) Btn_Execute->OnClicked().AddWeakLambda(this, [this]() { RequestExecute(); });
 	if (Btn_Unequip) Btn_Unequip->OnClicked().AddWeakLambda(this, [this]() { UnequipSelection(); });
 	if (Btn_Execute) Btn_Execute->OnLockClicked().AddWeakLambda(this, [this]() { if (Txt_Status) Txt_Status->SetText(ExecuteLockReason); });
@@ -372,7 +408,7 @@ void UKnightMaintenanceWidget::Open(EKnightMaintenanceDestination InDestination)
 {
 	ShowConfirm(false);
 	Destination = InDestination;
-	InfoTab = InfoSpec;
+	InfoTab = InDestination == EKnightMaintenanceDestination::Crafting ? InfoMaterial : InfoSpec;
 	if (Txt_Status) Txt_Status->SetText(FText::GetEmpty());
 	const bool bCrafting = Destination == EKnightMaintenanceDestination::Crafting;
 	if (UTextBlock* const Heading = WidgetTree ? Cast<UTextBlock>(WidgetTree->FindWidget(TEXT("Txt_Header"))) : nullptr)
@@ -426,12 +462,14 @@ void UKnightMaintenanceWidget::SetCategory(int32 NewCategory, bool bFromPlayer)
 	if (UWidget* const Tabs = WidgetTree ? WidgetTree->FindWidget(TEXT("Row_InfoTabs")) : nullptr)
 		Tabs->SetVisibility(Category == 4 ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 	if (Switcher_Info) Switcher_Info->SetVisibility(Category == 4 ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
-	if (Btn_InfoSet) Btn_InfoSet->SetVisibility(Category == 3 ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+	if (Btn_InfoSet) Btn_InfoSet->SetVisibility(Category == 0 || Category == 3 ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 	if (Btn_InfoSpec) Btn_InfoSpec->SetVisibility(Category == 3 ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 	if (Btn_InfoMaterial) Btn_InfoMaterial->SetVisibility(Category == 0 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-	if (Category == 3 || (InfoTab == InfoMaterial && Category != 0)) InfoTab = InfoSpec;
+	if (InfoPreviousButton) InfoPreviousButton->SetVisibility(Category == 0 || Category == 1 || Category == 2 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	if (InfoNextButton) InfoNextButton->SetVisibility(Category == 0 || Category == 1 || Category == 2 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	InfoTab = Category == 0 ? InfoMaterial : InfoSpec;
 	if (Switcher_Info) Switcher_Info->SetActiveWidgetIndex(InfoTab);
-	RebuildList();
+	RebuildList(false);
 	if (bFromPlayer && Category != 3) OnSlotFocused.ExecuteIfBound(Category == 4 ? FGameplayTag() : Slot);
 }
 
@@ -441,24 +479,27 @@ void UKnightMaintenanceWidget::SetSlot(FGameplayTag NewSlot, bool bFromPlayer)
 	Slot = NewSlot;
 	SelectedPart = nullptr;
 	SelectedRecipe = nullptr;
+	if (Category == 0) SetInfoTab(InfoMaterial);
 	if (Txt_Status) Txt_Status->SetText(FText::GetEmpty());
 	UpgradeResultMessage = FText::GetEmpty();
-	RebuildList();
+	RebuildList(false);
 	if (bFromPlayer) OnSlotFocused.ExecuteIfBound(Slot);
 }
 
 void UKnightMaintenanceWidget::SetInfoTab(int32 NewTab)
 {
-	InfoTab = Category == 3 || (NewTab == InfoMaterial && Category != 0) ? InfoSpec : FMath::Clamp(NewTab, 0, 2);
+	InfoTab = Category == 0 ? (NewTab == InfoSpec ? InfoSpec : InfoMaterial)
+		: Category == 3 || Category == 4 ? InfoSpec : (NewTab == InfoSet ? InfoSet : InfoSpec);
 	if (Switcher_Info) Switcher_Info->SetActiveWidgetIndex(InfoTab);
 	RefreshTabButtons();
 }
 
 void UKnightMaintenanceWidget::CycleInfoTab(int32 Direction)
 {
-	if (Category == 4) return;
-	const int32 Count = Category == 3 ? 1 : Category == 0 ? 3 : 2;
-	SetInfoTab(((InfoTab + Direction) % Count + Count) % Count);
+	if (Direction == 0 || Category == 4) return;
+	if (Category == 3) return;
+	if (Category == 0) SetInfoTab(InfoTab == InfoMaterial ? InfoSpec : InfoMaterial);
+	else SetInfoTab(InfoTab == InfoSpec ? InfoSet : InfoSpec);
 }
 
 void UKnightMaintenanceWidget::RefreshCurrency()
@@ -532,15 +573,16 @@ void UKnightMaintenanceWidget::RefreshTabButtons()
 	Select(Btn_InfoMaterial, InfoTab == InfoMaterial);
 }
 
-void UKnightMaintenanceWidget::RebuildList()
+void UKnightMaintenanceWidget::RebuildList(bool bRestoreFocus)
 {
 	if (!List_Items) return;
 	if (Category == 3) { RebuildSocketList(); return; }
 	if (Category == 4) { RefreshMaterialContainer(); return; }
 	// 줄을 다시 만들면 포커스가 사라지므로 기억했다가 복원.
 	const UknightPartItemDefinition* FocusedPart = nullptr;
-	for (const UKnightMaintenanceEntryWidget* Entry : Entries)
-		if (Entry && (Entry->HasAnyUserFocus() || Entry->HasFocusedDescendants())) FocusedPart = Entry->GetPart();
+	if (bRestoreFocus)
+		for (const UKnightMaintenanceEntryWidget* Entry : Entries)
+			if (Entry && (Entry->HasAnyUserFocus() || Entry->HasFocusedDescendants())) FocusedPart = Entry->GetPart();
 	List_Items->ClearChildren();
 	Entries.Reset();
 	SocketListButtons.Reset();
@@ -765,8 +807,10 @@ void UKnightMaintenanceWidget::RefreshSocketDetails()
 void UKnightMaintenanceWidget::SelectEntry(UKnightMaintenanceEntryWidget* Entry)
 {
 	if (SelectedPart != (Entry ? Entry->GetPart() : nullptr)) UpgradeResultMessage = FText::GetEmpty();
+	const bool bDifferentRecipe = Category == 0 && SelectedRecipe != (Entry ? Entry->GetRecipe() : nullptr);
 	SelectedPart = Entry ? Entry->GetPart() : nullptr;
 	SelectedRecipe = Entry ? Entry->GetRecipe() : nullptr;
+	if (bDifferentRecipe) SetInfoTab(InfoMaterial);
 	for (UKnightMaintenanceEntryWidget* Candidate : Entries)
 		SetSelected(Candidate, Candidate == Entry);
 	if (Txt_Status) Txt_Status->SetText(FText::GetEmpty());
@@ -867,7 +911,7 @@ void UKnightMaintenanceWidget::EnsureStatRows()
 {
 	if (!Stats_Rows || !WidgetTree) return;
 	const int32 RowCount = StatRows().Num();
-	if (StatCurrentTexts.Num() == RowCount && Stats_Rows->GetChildrenCount() == RowCount + 1) return;
+	if (StatCurrentTexts.Num() == RowCount && Stats_Rows->GetChildrenCount() == RowCount + 3) return;
 	Stats_Rows->ClearChildren();
 	StatLabelTexts.Reset();
 	StatCurrentTexts.Reset();
@@ -901,6 +945,13 @@ void UKnightMaintenanceWidget::EnsureStatRows()
 		StatAfterTexts.Add(AfterText);
 		StatDeltaTexts.Add(DeltaText);
 	}
+	PreviewStatusText = NewRowText(WidgetTree, TextStyle, ETextJustify::Left);
+	PreviewStatusText->SetAutoWrapText(true);
+	PreviewStatusText->SetColorAndOpacity(FSlateColor(Alert));
+	Stats_Rows->AddChildToVerticalBox(PreviewStatusText)->SetPadding(FMargin(0.f, 12.f, 12.f, 0.f));
+	SelectedSetFooterText = NewRowText(WidgetTree, TextStyle, ETextJustify::Left);
+	SelectedSetFooterText->SetAutoWrapText(true);
+	Stats_Rows->AddChildToVerticalBox(SelectedSetFooterText)->SetPadding(FMargin(0.f, 18.f, 12.f, 6.f));
 	UpgradePanel = WidgetTree->ConstructWidget<UVerticalBox>();
 	Stats_Rows->AddChildToVerticalBox(UpgradePanel)->SetPadding(FMargin(0.f, 18.f, 12.f, 6.f));
 	auto AddUpgradeText = [this, TextStyle](TObjectPtr<UCommonTextBlock>& Target)
@@ -992,6 +1043,8 @@ void UKnightMaintenanceWidget::RefreshMaterials(const UknightCraftRecipeDefiniti
 {
 	if (!Box_Materials || !WidgetTree) return;
 	Box_Materials->ClearChildren();
+	const UknightSaveSubsystem* const Saves = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
+	const bool bCanReadOwned = Progression && Saves && Saves->HasSelectedSlot();
 	const TSubclassOf<UCommonTextStyle> TextStyle = BodyStyle();
 	auto AddLine = [this, &TextStyle](const FText& Left, const FText& Right, const FLinearColor& RightColor)
 	{
@@ -1017,9 +1070,21 @@ void UKnightMaintenanceWidget::RefreshMaterials(const UknightCraftRecipeDefiniti
 	}
 	for (const FknightItemCost& Cost : Recipe ? Recipe->Costs : TArray<FknightItemCost>())
 	{
-		const int32 Have = Progression && Cost.Item ? Progression->GetItemCount(Cost.Item) : 0;
-		AddLine(Cost.Item ? Cost.Item->DisplayName : LOCTEXT("MissingItem", "없는 아이템"),
-			FText::Format(LOCTEXT("MaterialCount", "{0} / {1}"), Have, Cost.Count), Have >= Cost.Count ? White : Alert);
+		if (!Cost.Item || !Cost.Item->GetPrimaryAssetId().IsValid() || Cost.Count <= 0)
+		{
+			AddLine(LOCTEXT("InvalidCost", "재료 정의를 확인할 수 없습니다."),
+				LOCTEXT("CostUnavailable", "이용 불가"), Alert);
+			continue;
+		}
+		const FText Name = Cost.Item->DisplayName.IsEmpty() ? FText::FromString(Cost.Item->GetName()) : Cost.Item->DisplayName;
+		if (!bCanReadOwned)
+		{
+			AddLine(Name, FText::Format(LOCTEXT("OwnedUnavailable", "보유 확인 불가 / 필요 {0}"), Cost.Count), Alert);
+			continue;
+		}
+		const int32 Have = Progression->GetItemCount(Cost.Item);
+		AddLine(Name, FText::Format(LOCTEXT("MaterialCount", "보유 {0} / 필요 {1}"), Have, Cost.Count),
+			Have >= Cost.Count ? White : Alert);
 	}
 	if (Txt_StageReq)
 	{
@@ -1042,15 +1107,16 @@ void UKnightMaintenanceWidget::RefreshMaterials(const UknightCraftRecipeDefiniti
 void UKnightMaintenanceWidget::RefreshDetails()
 {
 	if (Category == 3) { RefreshSocketDetails(); return; }
-	if (Stats_Rows) Stats_Rows->SetVisibility(ESlateVisibility::Visible);
+	const bool bCraftingSelectionMissing = Category == 0 && !SelectedRecipe;
+	if (Stats_Rows) Stats_Rows->SetVisibility(bCraftingSelectionMissing ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 	if (Txt_SetInfo) Txt_SetInfo->SetVisibility(ESlateVisibility::Visible);
 	if (Txt_ActiveSets) Txt_ActiveSets->SetVisibility(ESlateVisibility::Visible);
 	UknightProgressionSubsystem* Progression = GetProgression();
 	const UknightMaintenanceCatalog* Catalog = UknightEquipmentSettings::LoadCatalog();
 	const knightEquipmentStats::FLoadout Loadout = knightEquipmentStats::ReadLoadout(Progression, Catalog);
 	const UknightPartItemDefinition* Equipped = Loadout.FindRef(Slot);
-	// 선택 없음: 현재 장착 장비 표시.
-	const UknightPartItemDefinition* Shown = SelectedPart ? SelectedPart.Get() : Equipped;
+	// 제작에는 레시피를 선택하기 전 장착 장비 정보를 섞어 보여주지 않는다.
+	const UknightPartItemDefinition* Shown = SelectedPart ? SelectedPart.Get() : Category == 0 ? nullptr : Equipped;
 	const bool bShownEquipped = Shown && Shown == Equipped;
 
 	const bool bWantPrediction = SelectedPart && !bShownEquipped;
@@ -1062,7 +1128,8 @@ void UKnightMaintenanceWidget::RefreshDetails()
 	const FknightEquipmentStats& Predicted = Comparison.Replacement;
 	const bool bHasPrediction = bWantPrediction && Comparison.bExact;
 
-	if (Txt_PartName) Txt_PartName->SetText(Shown ? PartName(Shown) : LOCTEXT("NothingEquipped", "장착된 장비 없음"));
+	if (Txt_PartName) Txt_PartName->SetText(Shown ? PartName(Shown) : Category == 0
+		? LOCTEXT("PickCraftRecipe", "제작할 장비를 선택하세요.") : LOCTEXT("NothingEquipped", "장착된 장비 없음"));
 	if (Txt_PartState)
 	{
 		FText State;
@@ -1099,16 +1166,34 @@ void UKnightMaintenanceWidget::RefreshDetails()
 
 	// 스펙: 현재값, 다른 장비 선택 시 변경 후 값.
 	EnsureStatRows();
+	if (PreviewStatusText)
+	{
+		FText Status;
+		if (Category == 0 && !bCraftingSelectionMissing && !Current.bComplete)
+			Status = FText::Format(LOCTEXT("CurrentCalculationIncomplete", "현재 스탯 계산 불가: {0}"), FText::FromString(Current.IncompleteReason));
+		else if (Category == 0 && bWantPrediction && !Comparison.bExact)
+			Status = FText::Format(LOCTEXT("ReplacementCalculationIncomplete", "교체 예상치 계산 불가: {0}"), FText::FromString(Comparison.IncompleteReason));
+		PreviewStatusText->SetText(Status);
+		PreviewStatusText->SetVisibility(Status.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+	}
+	if (SelectedSetFooterText)
+	{
+		const FText SetDetails = Category == 0 && Shown ? SetInfoText(Shown, Catalog, Current,
+			bHasPrediction ? &Predicted : nullptr) : FText::GetEmpty();
+		SelectedSetFooterText->SetText(SetDetails.IsEmpty() ? FText::GetEmpty()
+			: FText::Format(LOCTEXT("SelectedSetFooter", "선택 장비 세트\n{0}"), SetDetails));
+		SelectedSetFooterText->SetVisibility(SetDetails.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+	}
 	const TArray<FStatRow>& Rows = StatRows();
 	for (int32 Index = 0; Index < Rows.Num() && Index < StatCurrentTexts.Num(); ++Index)
 	{
 		const FStatRow& Stat = Rows[Index];
 		if (!Current.bComplete)
 		{
-			StatCurrentTexts[Index]->SetText(FText::GetEmpty());
+			StatCurrentTexts[Index]->SetText(Category == 0 ? LOCTEXT("StatUnknown", "—") : FText::GetEmpty());
 			StatArrowTexts[Index]->SetVisibility(ESlateVisibility::Hidden);
 			StatAfterTexts[Index]->SetText(FText::GetEmpty());
-			StatDeltaTexts[Index]->SetText(Index == 0 ? FText::Format(LOCTEXT("StatsUnavailable", "계산 불가: {0}"), FText::FromString(Current.IncompleteReason)) : FText::GetEmpty());
+			StatDeltaTexts[Index]->SetText(Category != 0 && Index == 0 ? FText::Format(LOCTEXT("StatsUnavailable", "계산 불가: {0}"), FText::FromString(Current.IncompleteReason)) : FText::GetEmpty());
 			continue;
 		}
 		const int32 Now = DisplayNumber(Current.Values.FindRef(Stat.Attribute), Stat.bPercent);
@@ -1121,6 +1206,10 @@ void UKnightMaintenanceWidget::RefreshDetails()
 		StatDeltaTexts[Index]->SetText(Delta != 0 ? FormatNumber(Delta, Stat.bPercent, true) : FText::GetEmpty());
 		StatDeltaTexts[Index]->SetColorAndOpacity(FSlateColor(Delta > 0 ? Increase : Alert));
 	}
+	for (UCommonTextBlock* Text : StatArrowTexts)
+		if (Text && Text->GetParent()) Text->GetParent()->SetVisibility(Category == 0 ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+	for (UCommonTextBlock* Text : StatAfterTexts)
+		if (Text && Text->GetParent()) Text->GetParent()->SetVisibility(Category == 0 ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 
 	if (Txt_SetInfo)
 	{
@@ -1259,11 +1348,13 @@ void UKnightMaintenanceWidget::HandleActiveSlotChanged(const FString& SlotId)
 	RefreshCurrency();
 	SelectedPart = nullptr;
 	SelectedRecipe = nullptr;
+	if (Category == 0) SetInfoTab(InfoMaterial);
 	SelectedSocketItem = nullptr;
 	SelectedSocketSlot = INDEX_NONE;
 	UpgradeResultMessage = FText::GetEmpty();
 	if (Txt_Status) Txt_Status->SetText(FText::GetEmpty());
-	RebuildList();
+	RebuildList(false);
+	if (Category == 0 && Btn_Craft) Btn_Craft->SetFocus();
 }
 
 #undef LOCTEXT_NAMESPACE
