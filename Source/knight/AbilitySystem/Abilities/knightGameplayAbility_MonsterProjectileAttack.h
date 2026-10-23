@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "AbilitySystem/Abilities/knightGameplayAbility_MonsterAttack.h"
 #include "Combat/knightCombatTypes.h"
+#include "Monster/knightMonsterSonicProjectile.h"
 #include "knightGameplayAbility_MonsterProjectileAttack.generated.h"
 
 class UAbilityTask_Repeat;
@@ -69,6 +70,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Projectile")
 	TObjectPtr<UNiagaraSystem> ProjectileEffect;
 
+	/** 선택 사항. State.Monster.Enraged일 때 쏘는 투사체의 외형(잔향 공명해방). 없으면 ProjectileEffect를 쓴다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Projectile")
+	TObjectPtr<UNiagaraSystem> EnragedProjectileEffect;
+
+	/** 투사체가 맞거나 막히거나 벽·물에 닿았을 때 남기는 이펙트. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Projectile")
+	FknightSonicImpactEffects ImpactEffects;
+
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Projectile", meta=(ClampMin=0, Units="deg"))
 	float AimTurnRate = 180.f;
 
@@ -89,5 +98,8 @@ private:
 	float Elapsed = 0.f;
 	float NextShotTime = 0.f;
 	int32 ShotsLeft = 0;
+	/** 발동할 때 분노 여부로 고른 외형. 연발 도중 분노가 바뀌어도 한 번의 공격은 같은 외형으로 쏜다. */
+	UPROPERTY()
+	TObjectPtr<UNiagaraSystem> ShotEffect;
 	float EndTime = 0.f;
 };

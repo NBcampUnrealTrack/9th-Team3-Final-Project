@@ -4,6 +4,7 @@
 #include "Materials/MaterialInterface.h"
 #include "Misc/PackageName.h"
 #include "NiagaraDecalRendererProperties.h"
+#include "NiagaraMeshRendererProperties.h"
 #include "NiagaraSpriteRendererProperties.h"
 #include "NiagaraSystem.h"
 #include "Stateless/Modules/NiagaraStatelessModule_AccelerationForce.h"
@@ -13,6 +14,7 @@
 #include "Stateless/Modules/NiagaraStatelessModule_Drag.h"
 #include "Stateless/Modules/NiagaraStatelessModule_InitializeParticle.h"
 #include "Stateless/Modules/NiagaraStatelessModule_ScaleColor.h"
+#include "Stateless/Modules/NiagaraStatelessModule_ScaleMeshSize.h"
 #include "Stateless/Modules/NiagaraStatelessModule_ScaleSpriteSize.h"
 #include "Stateless/Modules/NiagaraStatelessModule_ShapeLocation.h"
 #include "Stateless/Modules/NiagaraStatelessModule_SpriteFacingAndAlignment.h"
@@ -145,6 +147,33 @@ namespace knightMonsterFX
 			SetCurve(Curve.ChannelCurves[3], { {0.f, 0.f}, {Peak, PeakAlpha}, {1.f, 0.f} });
 			Curve.UpdateValuesFromDistribution();
 		}
+	}
+
+	/** 스프라이트 렌더러를 메시 렌더러 하나로 바꾼다(다시 구울 때는 있는 메시 렌더러를 그대로 쓴다). */
+	void SetMeshRenderer(UNiagaraStatelessEmitter& Emitter, UStaticMesh* Mesh, UMaterialInterface* Material)
+	{
+		UNiagaraMeshRendererProperties* MeshRenderer = nullptr;
+		for (UNiagaraRendererProperties* const Renderer : TArray<UNiagaraRendererProperties*>(Emitter.GetRenderers()))
+		{
+			if (UNiagaraMeshRendererProperties* const Existing = Cast<UNiagaraMeshRendererProperties>(Renderer))
+			{
+				MeshRenderer = Existing;
+			}
+			else if (Renderer)
+			{
+				Emitter.RemoveRenderer(Renderer, FGuid());
+			}
+		}
+		if (!MeshRenderer)
+		{
+			MeshRenderer = NewObject<UNiagaraMeshRendererProperties>(&Emitter, NAME_None, RF_Transactional);
+			Emitter.AddRenderer(MeshRenderer, FGuid());
+		}
+		MeshRenderer->Meshes.SetNum(1);
+		MeshRenderer->Meshes[0].Mesh = Mesh;
+		MeshRenderer->bOverrideMaterials = true;
+		MeshRenderer->OverrideMaterials.SetNum(1);
+		MeshRenderer->OverrideMaterials[0].ExplicitMat = Material;
 	}
 
 	UNiagaraSystem* Finish(UNiagaraSystem* System, bool bCreated)
@@ -863,6 +892,258 @@ UNiagaraSystem* UknightMonsterFXBuilder::BuildWindStreakSystem(const FString& Pa
 		Emitter->PostEditChange();
 	}
 	return Finish(System, bCreated);
+}
+
+UNiagaraSystem* UknightMonsterFXBuilder::BuildSonicWaveSystem(const FString& PackagePath, UStaticMesh* WaveMesh, UMaterialInterface* WaveMaterial,
+	UMaterialInterface* StreakMaterial, UMaterialInterface* WispMaterial, float WaveRadius, FLinearColor Tint)
+{
+	using namespace knightMonsterFX;
+	if (!WaveMesh || !WaveMaterial)
+	{
+		return nullptr;
+	}
+	// 파면 메시(SM_Janhyang_SonicWave)는 테두리 반지름이 약 82cm다.
+	const float MeshScale = WaveRadius / 82.f;
+	constexpr float WaveLife = 2.f;
+
+	// 첫 레이어는 자리만 잡는다(아래에서 메시 렌더러로 바꾼다). 나머지 둘은 테두리 링에서 나와 뒤로 흐른다.
+	FSpriteLayer Layers[3];
+	Layers[0].Name = TEXT("Wave");
+	Layers[0].Material = WaveMaterial;
+	Layers[0].Rate = 1.f;
+	Layers[0].Life = FVector2f(WaveLife);
+	Layers[0].SizeMin = Layers[0].SizeMax = FVector2f(1.f);
+	Layers[0].ColorKeys = { {0.f, 1.f}, {1.f, 1.f} };
+	Layers[0].AlphaKeys = { {0.f, 0.f}, {0.03f, 1.f}, {1.f, 1.f} };
+	Layers[0].SizeKeys = { {0.f, 1.f}, {1.f, 1.f} };
+	Layers[0].SortOrder = 0;
+
+	// 바람결: 가늘고 긴 속도 정렬 줄기가 테두리에서 벗겨져 뒤로 짧게 흐른다.
+	Layers[1].Name = TEXT("Streaks");
+	Layers[1].Material = StreakMaterial;
+	Layers[1].Rate = 150.f;
+	Layers[1].Life = FVector2f(0.18f, 0.32f);
+	Layers[1].SizeMin = FVector2f(4.f, 110.f);
+	Layers[1].SizeMax = FVector2f(8.f, 260.f);
+	Layers[1].ColorKeys = { {0.f, 1.f}, {1.f, 1.f} };
+	Layers[1].AlphaKeys = { {0.f, 0.f}, {0.2f, 0.3f}, {0.6f, 0.15f}, {1.f, 0.f} };
+	Layers[1].SizeKeys = { {0.f, 0.4f}, {0.35f, 1.f}, {1.f, 1.15f} };
+	Layers[1].Alignment = ENiagaraSpriteAlignment::VelocityAligned;
+	Layers[1].SortOrder = 1;
+
+	// 흩날림: 바람결을 따라 천천히 벗겨지며 커지는 옅은 회색 연기 결(몸 주위 잔상과 같은 톤).
+	Layers[2].Name = TEXT("Wisps");
+	Layers[2].Material = WispMaterial;
+	Layers[2].Rate = 30.f;
+	Layers[2].Life = FVector2f(0.6f, 1.1f);
+	Layers[2].SizeMin = FVector2f(100.f);
+	Layers[2].SizeMax = FVector2f(220.f);
+	Layers[2].CurlStrength = 300.f;
+	Layers[2].CurlFrequency = 0.004f;
+	Layers[2].Drag = 1.5f;
+	Layers[2].ColorKeys = { {0.f, 1.f}, {1.f, 1.f} };
+	Layers[2].AlphaKeys = { {0.f, 0.f}, {0.25f, 0.12f}, {1.f, 0.f} };
+	Layers[2].SizeKeys = { {0.f, 0.6f}, {1.f, 2.5f} };
+	Layers[2].SortOrder = 2;
+
+	const FVector BoundsMin(-1500.f, -WaveRadius * 3.f, -WaveRadius * 3.f);
+	const FVector BoundsMax(WaveRadius * 2.f, WaveRadius * 3.f, WaveRadius * 3.f);
+	UNiagaraSystem* const System = BuildLayeredSystem(PackagePath, Layers, 0.f, 1.f, BoundsMin, BoundsMax);
+	if (!System)
+	{
+		return nullptr;
+	}
+
+	for (int32 Index = 0; Index < System->GetEmitterHandles().Num(); ++Index)
+	{
+		UNiagaraStatelessEmitter* const Emitter = System->GetEmitterHandle(Index).GetStatelessEmitter();
+		if (!Emitter || !Layers[FMath::Min(Index, 2)].Material)
+		{
+			continue;
+		}
+		if (Index == 0)
+		{
+			// 파면 하나: 로컬 +X(날아가는 방향)로 볼록하게 붙어 날아가며 조금씩 커진다.
+			EnableOnly(*Emitter, { UNiagaraStatelessModule_InitializeParticle::StaticClass(), UNiagaraStatelessModule_ShapeLocation::StaticClass(),
+				UNiagaraStatelessModule_ScaleColor::StaticClass(), UNiagaraStatelessModule_ScaleMeshSize::StaticClass() });
+			SetBurst(*Emitter, 1, 1, WaveLife);
+			if (UNiagaraStatelessModule_InitializeParticle* const Init = Get<UNiagaraStatelessModule_InitializeParticle>(*Emitter))
+			{
+				Init->MeshScaleDistribution.InitConstant(FVector3f(MeshScale));
+			}
+			if (UNiagaraStatelessModule_ShapeLocation* const Shape = Get<UNiagaraStatelessModule_ShapeLocation>(*Emitter))
+			{
+				Shape->ShapePrimitive = ENSM_ShapePrimitive::Sphere;
+				Shape->SphereRadius.InitConstant(0.f);
+			}
+			if (UNiagaraStatelessModule_ScaleMeshSize* const Size = Get<UNiagaraStatelessModule_ScaleMeshSize>(*Emitter))
+			{
+				FNiagaraDistributionVector3& Curve = Size->ScaleDistribution;
+				Curve.Mode = ENiagaraDistributionMode::NonUniformCurve;
+				Curve.ChannelCurves.SetNum(3);
+				for (int32 Channel = 0; Channel < 3; ++Channel)
+				{
+					SetCurve(Curve.ChannelCurves[Channel], { {0.f, 0.8f}, {0.3f, 1.f}, {1.f, 1.25f} });
+				}
+				Curve.UpdateValuesFromDistribution();
+			}
+			SetMeshRenderer(*Emitter, WaveMesh, WaveMaterial);
+		}
+		else
+		{
+			// 테두리 링(로컬 X축이 링의 축)에서 생겨, 파면 앞쪽 한 점에서 멀어지는 방향(뒤로, 조금 바깥으로)으로 흐른다.
+			if (UNiagaraStatelessModule_ShapeLocation* const Shape = Get<UNiagaraStatelessModule_ShapeLocation>(*Emitter))
+			{
+				Shape->ShapePrimitive = ENSM_ShapePrimitive::Ring;
+				Shape->RingRadius.InitRange(WaveRadius * 0.9f, WaveRadius * 1.05f);
+				Shape->DiscCoverage.InitConstant(0.f);
+				Shape->ShapeRotation.InitConstant(FRotator3f(90.f, 0.f, 0.f));
+			}
+			if (UNiagaraStatelessModule_AddVelocity* const Velocity = Get<UNiagaraStatelessModule_AddVelocity>(*Emitter))
+			{
+				Velocity->VelocityType = ENSM_VelocityType::FromPoint;
+				Velocity->CoordinateSpace = ENiagaraCoordinateSpace::Local;
+				Velocity->PointOrigin = FVector3f(WaveRadius * (Index == 1 ? 3.3f : 5.f), 0.f, 0.f);
+				Velocity->PointVelocityDistribution.InitRange(Index == 1 ? 1500.f : 500.f, Index == 1 ? 2500.f : 900.f);
+				Velocity->PointVelocityScale.InitConstant(1.f);
+			}
+			if (UNiagaraStatelessModule_InitializeParticle* const Init = Get<UNiagaraStatelessModule_InitializeParticle>(*Emitter))
+			{
+				Init->ColorDistribution = FNiagaraDistributionColor(Tint);
+			}
+		}
+		Emitter->PostEditChange();
+	}
+	return Finish(System, false);
+}
+
+UNiagaraSystem* UknightMonsterFXBuilder::BuildSonicImpactSystem(const FString& PackagePath, UStaticMesh* WaveMesh, UMaterialInterface* RingMaterial,
+	UMaterialInterface* ShardMaterial, UMaterialInterface* GustMaterial, UMaterialInterface* FlashMaterial, float Radius, int32 ShardCount,
+	int32 GustCount, float RingGrow, bool bSideways)
+{
+	using namespace knightMonsterFX;
+	if (!WaveMesh || !RingMaterial)
+	{
+		return nullptr;
+	}
+	constexpr float RingLife = 0.35f;
+
+	FSpriteLayer Layers[4];
+	// 파면 링: 부딪힌 파면이 납작하게 퍼지며 사라진다(배경을 한 번 크게 일그러뜨리는 충격파).
+	Layers[0].Name = TEXT("Ring");
+	Layers[0].Material = RingMaterial;
+	Layers[0].Life = FVector2f(RingLife);
+	Layers[0].SizeMin = Layers[0].SizeMax = FVector2f(1.f);
+	Layers[0].ColorKeys = { {0.f, 1.f}, {1.f, 1.f} };
+	Layers[0].AlphaKeys = { {0.f, 1.f}, {0.5f, 0.6f}, {1.f, 0.f} };
+	Layers[0].SizeKeys = { {0.f, 1.f}, {1.f, 1.f} };
+
+	// 파편: 테두리가 깨져 바깥으로 튀는 짧고 밝은 줄기. 금방 느려지며 사라진다.
+	Layers[1].Name = TEXT("Shards");
+	Layers[1].Material = ShardCount > 0 ? ShardMaterial : nullptr;
+	Layers[1].Life = FVector2f(0.2f, 0.35f);
+	Layers[1].SizeMin = FVector2f(10.f, 120.f);
+	Layers[1].SizeMax = FVector2f(20.f, 300.f);
+	Layers[1].Drag = 6.f;
+	Layers[1].ColorKeys = { {0.f, 3.f}, {1.f, 1.5f} };
+	Layers[1].AlphaKeys = { {0.f, 1.f}, {0.5f, 0.7f}, {1.f, 0.f} };
+	Layers[1].SizeKeys = { {0.f, 1.f}, {1.f, 0.6f} };
+	Layers[1].Alignment = ENiagaraSpriteAlignment::VelocityAligned;
+	Layers[1].SortOrder = 2;
+
+	// 돌풍: 파편 뒤로 회색 바람이 사방으로 터지며 퍼진다.
+	Layers[2].Name = TEXT("Gust");
+	Layers[2].Material = GustCount > 0 ? GustMaterial : nullptr;
+	Layers[2].Life = FVector2f(0.45f, 0.8f);
+	Layers[2].SizeMin = FVector2f(160.f);
+	Layers[2].SizeMax = FVector2f(320.f);
+	Layers[2].Drag = 3.f;
+	Layers[2].CurlStrength = 400.f;
+	Layers[2].CurlFrequency = 0.004f;
+	Layers[2].ColorKeys = { {0.f, 2.f}, {1.f, 1.5f} };
+	Layers[2].AlphaKeys = { {0.f, 0.f}, {0.15f, 0.35f}, {1.f, 0.f} };
+	Layers[2].SizeKeys = { {0.f, 0.5f}, {1.f, 2.6f} };
+	Layers[2].SortOrder = 1;
+
+	Layers[3].Name = TEXT("Flash");
+	Layers[3].Material = FlashMaterial;
+	Layers[3].Life = FVector2f(0.1f, 0.12f);
+	Layers[3].SizeMin = FVector2f(Radius * 2.2f);
+	Layers[3].SizeMax = FVector2f(Radius * 2.6f);
+	Layers[3].SpawnRadius = 0.f;
+	Layers[3].ColorKeys = { {0.f, 3.f}, {1.f, 3.f} };
+	Layers[3].AlphaKeys = { {0.f, 1.f}, {1.f, 0.f} };
+	Layers[3].SizeKeys = { {0.f, 0.8f}, {1.f, 1.2f} };
+	Layers[3].SortOrder = 3;
+
+	const FVector Extent(Radius * 6.f);
+	UNiagaraSystem* const System = BuildLayeredSystem(PackagePath, Layers, 0.f, 1.f, -Extent, Extent, 1.f);
+	if (!System)
+	{
+		return nullptr;
+	}
+	const int32 Counts[4] = { 1, ShardCount, GustCount, 1 };
+	for (int32 Index = 0; Index < FMath::Min(System->GetEmitterHandles().Num(), 4); ++Index)
+	{
+		UNiagaraStatelessEmitter* const Emitter = System->GetEmitterHandle(Index).GetStatelessEmitter();
+		if (!Emitter || !Layers[Index].Material)
+		{
+			continue;
+		}
+		SetBurst(*Emitter, Counts[Index], Counts[Index], Layers[Index].Life.Y);
+		if (Index == 0)
+		{
+			EnableOnly(*Emitter, { UNiagaraStatelessModule_InitializeParticle::StaticClass(), UNiagaraStatelessModule_ShapeLocation::StaticClass(),
+				UNiagaraStatelessModule_ScaleColor::StaticClass(), UNiagaraStatelessModule_ScaleMeshSize::StaticClass() });
+			if (UNiagaraStatelessModule_InitializeParticle* const Init = Get<UNiagaraStatelessModule_InitializeParticle>(*Emitter))
+			{
+				// 파면 메시(SM_Janhyang_SonicWave)는 테두리 반지름이 약 82cm다.
+				Init->MeshScaleDistribution.InitConstant(FVector3f(Radius / 82.f));
+			}
+			if (UNiagaraStatelessModule_ShapeLocation* const Shape = Get<UNiagaraStatelessModule_ShapeLocation>(*Emitter))
+			{
+				Shape->ShapePrimitive = ENSM_ShapePrimitive::Sphere;
+				Shape->SphereRadius.InitConstant(0.f);
+			}
+			if (UNiagaraStatelessModule_ScaleMeshSize* const Size = Get<UNiagaraStatelessModule_ScaleMeshSize>(*Emitter))
+			{
+				// 앞뒤(X)로는 납작해지고 옆으로 빠르게 퍼진다.
+				FNiagaraDistributionVector3& Curve = Size->ScaleDistribution;
+				Curve.Mode = ENiagaraDistributionMode::NonUniformCurve;
+				Curve.ChannelCurves.SetNum(3);
+				SetCurve(Curve.ChannelCurves[0], { {0.f, 1.f}, {1.f, 0.35f} });
+				for (int32 Channel = 1; Channel < 3; ++Channel)
+				{
+					SetCurve(Curve.ChannelCurves[Channel], { {0.f, 1.f}, {0.3f, 1.f + (RingGrow - 1.f) * 0.7f}, {1.f, RingGrow} });
+				}
+				Curve.UpdateValuesFromDistribution();
+			}
+			SetMeshRenderer(*Emitter, WaveMesh, RingMaterial);
+		}
+		else if (Index == 1 || Index == 2)
+		{
+			// 맞은 자리 둘레에서 생겨, 조금 뒤의 한 점에서 멀어지는 방향(바깥으로, 조금 앞으로)으로 튄다.
+			// 기본은 날아온 축에 수직인 링(위아래·좌우 모두), bSideways면 좌우로 눌린 링이라 옆으로만 갈라진다.
+			if (UNiagaraStatelessModule_ShapeLocation* const Shape = Get<UNiagaraStatelessModule_ShapeLocation>(*Emitter))
+			{
+				Shape->ShapePrimitive = ENSM_ShapePrimitive::Ring;
+				Shape->RingRadius.InitRange(Radius * 0.25f, Radius * 0.45f);
+				Shape->DiscCoverage.InitConstant(0.f);
+				Shape->ShapeRotation.InitConstant(bSideways ? FRotator3f::ZeroRotator : FRotator3f(90.f, 0.f, 0.f));
+				Shape->ShapeScale.InitConstant(bSideways ? FVector3f(0.25f, 1.f, 1.f) : FVector3f::OneVector);
+			}
+			if (UNiagaraStatelessModule_AddVelocity* const Velocity = Get<UNiagaraStatelessModule_AddVelocity>(*Emitter))
+			{
+				Velocity->VelocityType = ENSM_VelocityType::FromPoint;
+				Velocity->CoordinateSpace = ENiagaraCoordinateSpace::Local;
+				Velocity->PointOrigin = FVector3f(-Radius * 0.6f, 0.f, 0.f);
+				Velocity->PointVelocityDistribution.InitRange(Index == 1 ? 1800.f : 800.f, Index == 1 ? 3200.f : 1400.f);
+				Velocity->PointVelocityScale.InitConstant(1.f);
+			}
+		}
+		Emitter->PostEditChange();
+	}
+	return Finish(System, false);
 }
 
 UNiagaraSystem* UknightMonsterFXBuilder::BuildFireBurstSystem(const FString& PackagePath, UMaterialInterface* Material, float Height)

@@ -51,6 +51,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|Camera")
 	void StartDeafen(float Seconds);
 
+	/** 초음파가 맞지 않고 가까이 스쳤다. 화면 가장자리 색만 짧게 갈라진다. See UknightCameraModifier_Deafen. */
+	void StartSonicNearMiss();
+
 	/** World의 로컬 플레이어 카메라마다 Function을 부른다. */
 	static void ForEachLocalCamera(const UObject* WorldContext, TFunctionRef<void(AknightPlayerCameraManager&)> Function);
 

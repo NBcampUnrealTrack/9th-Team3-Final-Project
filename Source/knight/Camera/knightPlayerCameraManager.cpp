@@ -312,6 +312,14 @@ void AknightPlayerCameraManager::StartDeafen(float Seconds)
 	}
 }
 
+void AknightPlayerCameraManager::StartSonicNearMiss()
+{
+	if (UknightCameraModifier_Deafen* const Modifier = knightCamera::FindOrAddModifier(*this, DeafenClass))
+	{
+		Modifier->StartNearMiss();
+	}
+}
+
 void AknightPlayerCameraManager::ForEachLocalCamera(const UObject* WorldContext, TFunctionRef<void(AknightPlayerCameraManager&)> Function)
 {
 	UWorld* const World = WorldContext ? WorldContext->GetWorld() : nullptr;

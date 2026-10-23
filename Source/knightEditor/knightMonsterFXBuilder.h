@@ -6,6 +6,7 @@
 
 class UMaterialInterface;
 class UNiagaraSystem;
+class UStaticMesh;
 
 /**
  * 몬스터 연출용 경량 Niagara 시스템을 만든다. 엔진의 FountainLightweight 템플릿을 복제해 모듈 값을 채우므로 같은 경로로
@@ -71,6 +72,26 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|FX")
 	static UNiagaraSystem* BuildWindStreakSystem(const FString& PackagePath, UMaterialInterface* Material, FVector BoxCenter, FVector BoxExtent,
 		float Speed = 3500.f, float StreakLength = 450.f);
+
+	/**
+	 * 날아가는 음파(잔향 초음파): 로컬 +X로 볼록한 파면 메시 하나와, 파면 테두리에서 뒤로 벗겨져 흐르는 가는 바람결, 바람결을
+	 * 따라 흩날리는 회색 연기 결. 투사체처럼 스케일 1인 컴포넌트에 붙여 함께 날아가므로 cm 그대로다.
+	 * WaveRadius(cm)는 파면 테두리 반지름, Tint는 바람결·연기 색 배율(공명해방은 푸르게).
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|FX")
+	static UNiagaraSystem* BuildSonicWaveSystem(const FString& PackagePath, UStaticMesh* WaveMesh, UMaterialInterface* WaveMaterial,
+		UMaterialInterface* StreakMaterial, UMaterialInterface* WispMaterial, float WaveRadius = 180.f, FLinearColor Tint = FLinearColor::White);
+
+	/**
+	 * 음파가 부서지는 한 번(잔향 초음파 착탄). 로컬 +X가 음파가 날아온 방향이고, 월드에 스폰하는 일회성이라 cm 그대로다.
+	 * 레이어: 빠르게 퍼지며 사라지는 파면 링(RingMaterial, RingGrow배까지 커짐), 바깥으로 튀는 휜 파편 줄기(ShardCount개),
+	 * 뒤이어 사방으로 터지는 회색 돌풍(GustCount개), 맞은 순간의 짧은 섬광. 머티리얼이 없거나 개수가 0인 레이어는 끈다.
+	 * bSideways면 파편과 돌풍이 위아래 대신 좌우로만 갈라진다(가드에 막혀 옆으로 흘러감).
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|FX")
+	static UNiagaraSystem* BuildSonicImpactSystem(const FString& PackagePath, UStaticMesh* WaveMesh, UMaterialInterface* RingMaterial,
+		UMaterialInterface* ShardMaterial, UMaterialInterface* GustMaterial, UMaterialInterface* FlashMaterial, float Radius = 180.f,
+		int32 ShardCount = 14, int32 GustCount = 10, float RingGrow = 2.6f, bool bSideways = false);
 
 	/** 위로 솟구치는 불꽃 한 번(가시 발사). 월드에 스폰하는 용도라 cm 그대로다. */
 	UFUNCTION(BlueprintCallable, Category="Knight|FX")
