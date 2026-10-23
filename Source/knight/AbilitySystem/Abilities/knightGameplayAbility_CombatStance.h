@@ -82,6 +82,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Combat Stance", meta=(ClampMin=0, Units="s", EditCondition="bKeepDrawnWhileMoving"))
 	float StillTimeBeforeSheathe = 1.f;
 
+	/** (2026-10-23) 게임 시작 시(스폰 시) 바로 발도(전투 대기) 상태로 시작할지 여부 */
+	UPROPERTY(EditDefaultsOnly, Category="Combat Stance")
+	bool bStartInCombat = true;
+
+	/** (2026-10-23) 비전투 상태로 일정 시간 대기 시 자동으로 납도(칼을 등에 넣음)할지 여부 */
+	UPROPERTY(EditDefaultsOnly, Category="Combat Stance")
+	bool bAutoSheathe = false;
+
 	UPROPERTY(EditDefaultsOnly, Category="Combat Stance")
 	FName BackSocket = TEXT("weapon_back");
 
