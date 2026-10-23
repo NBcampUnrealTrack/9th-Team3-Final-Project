@@ -9,6 +9,7 @@
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
+#include "Components/EditableTextBox.h"
 #include "Components/Image.h"
 #include "Components/ScrollBox.h"
 #include "Components/ScrollBoxSlot.h"
@@ -27,6 +28,7 @@
 #include "Item/knightEquipmentStats.h"
 #include "Item/knightPartsComponent.h"
 #include "Menu/UI/KnightMaintenanceEntryWidget.h"
+#include "Menu/UI/KnightInventoryWidget.h"
 #include "Progression/knightProgressionSubsystem.h"
 #include "Progression/knightSaveSubsystem.h"
 #include "System/knightGameplayTags.h"
@@ -393,6 +395,57 @@ void UKnightMaintenanceWidget::NativeOnInitialized()
 			}
 		}
 	}
+	// The existing WBP owns the Crafting pages. Materials gets its own page so
+	// recipe Materials/Specs controls and their contents are never repurposed.
+	if (Switcher_Info && WidgetTree && GetOwningPlayer())
+	{
+		MaterialSalePage = WidgetTree->ConstructWidget<UScrollBox>(UScrollBox::StaticClass(), TEXT("Phase6_MaterialSalePage"));
+		UVerticalBox* const Body = WidgetTree->ConstructWidget<UVerticalBox>();
+		MaterialSalePage->AddChild(Body);
+		Switcher_Info->AddChild(MaterialSalePage);
+		const TSubclassOf<UCommonTextStyle> TextStyle = BodyStyle();
+		MaterialOwnedText = NewRowText(WidgetTree, TextStyle, ETextJustify::Left);
+		Body->AddChildToVerticalBox(MaterialOwnedText)->SetPadding(FMargin(0.f, 0.f, 12.f, 10.f));
+		MaterialUnitPriceText = NewRowText(WidgetTree, TextStyle, ETextJustify::Left);
+		Body->AddChildToVerticalBox(MaterialUnitPriceText)->SetPadding(FMargin(0.f, 0.f, 12.f, 14.f));
+		UHorizontalBox* const QuantityRow = WidgetTree->ConstructWidget<UHorizontalBox>();
+		Body->AddChildToVerticalBox(QuantityRow)->SetPadding(FMargin(0.f, 0.f, 12.f, 12.f));
+		UCommonTextBlock* const QuantityLabel = NewRowText(WidgetTree, TextStyle, ETextJustify::Left);
+		QuantityLabel->SetText(LOCTEXT("MaterialSaleQuantity", "판매 수량"));
+		UHorizontalBoxSlot* const QuantityLabelSlot = QuantityRow->AddChildToHorizontalBox(QuantityLabel);
+		QuantityLabelSlot->SetVerticalAlignment(VAlign_Center);
+		QuantityLabelSlot->SetPadding(FMargin(0.f, 0.f, 12.f, 0.f));
+		const TSubclassOf<UCommonButtonBase> ButtonClass = LoadClass<UCommonButtonBase>(nullptr,
+			TEXT("/Game/Knight/UI/Common/WBP_KnightButton.WBP_KnightButton_C"));
+		auto AddQuantityButton = [this, QuantityRow, ButtonClass](const FText& Label, TFunction<void()> Action)
+		{
+			if (!ButtonClass) return;
+			UCommonButtonBase* const Button = CreateWidget<UCommonButtonBase>(GetOwningPlayer(), ButtonClass);
+			if (!Button) return;
+			SetButtonLabel(Button, Label);
+			Button->OnClicked().AddWeakLambda(this, [Action = MoveTemp(Action)]() { Action(); });
+			USizeBox* const Frame = WidgetTree->ConstructWidget<USizeBox>();
+			Frame->SetWidthOverride(64.f);
+			Frame->AddChild(Button);
+			QuantityRow->AddChildToHorizontalBox(Frame)->SetPadding(FMargin(0.f, 0.f, 8.f, 0.f));
+		};
+		AddQuantityButton(LOCTEXT("MaterialSaleMinus", "−"), [this]() { ChangeMaterialSaleQuantity(-1); });
+		MaterialQuantityInput = WidgetTree->ConstructWidget<UEditableTextBox>(UEditableTextBox::StaticClass(), TEXT("Phase6_MaterialQuantityInput"));
+		MaterialQuantityInput->SetHintText(LOCTEXT("MaterialQuantityHint", "수량"));
+		MaterialQuantityInput->OnTextCommitted.AddUniqueDynamic(this, &ThisClass::HandleMaterialQuantityCommitted);
+		AddFixed(QuantityRow, WidgetTree, MaterialQuantityInput, 84.f);
+		AddQuantityButton(LOCTEXT("MaterialSalePlus", "+"), [this]() { ChangeMaterialSaleQuantity(1); });
+		AddQuantityButton(LOCTEXT("MaterialSaleMax", "최대"), [this]()
+		{
+			const UknightMaterialItemDefinition* const Material = GetSelectedMaterial();
+			SetMaterialSaleQuantity(Material && GetProgression() ? GetProgression()->GetItemCount(Material) : 0);
+		});
+		MaterialTotalText = NewRowText(WidgetTree, TextStyle, ETextJustify::Left);
+		Body->AddChildToVerticalBox(MaterialTotalText)->SetPadding(FMargin(0.f, 0.f, 12.f, 10.f));
+		MaterialFeedbackText = NewRowText(WidgetTree, TextStyle, ETextJustify::Left);
+		MaterialFeedbackText->SetAutoWrapText(true);
+		Body->AddChildToVerticalBox(MaterialFeedbackText)->SetPadding(FMargin(0.f, 0.f, 12.f, 8.f));
+	}
 	if (Btn_Execute) Btn_Execute->OnClicked().AddWeakLambda(this, [this]() { RequestExecute(); });
 	if (Btn_Unequip) Btn_Unequip->OnClicked().AddWeakLambda(this, [this]() { UnequipSelection(); });
 	if (Btn_Execute) Btn_Execute->OnLockClicked().AddWeakLambda(this, [this]() { if (Txt_Status) Txt_Status->SetText(ExecuteLockReason); });
@@ -417,11 +470,13 @@ void UKnightMaintenanceWidget::NativeOnInitialized()
 	if (Btn_ConfirmOk) Btn_ConfirmOk->OnClicked().AddWeakLambda(this, [this]()
 	{
 		if (bEquipmentPickerOpen) ConfirmEquipmentReplacement();
+		else if (bMaterialSaleConfirmOpen) ConfirmMaterialSale();
 		else { ShowConfirm(false); ExecuteSelection(); }
 	});
 	if (Btn_ConfirmCancel) Btn_ConfirmCancel->OnClicked().AddWeakLambda(this, [this]()
 	{
 		if (bEquipmentPickerOpen) CloseEquipmentPicker(true);
+		else if (bMaterialSaleConfirmOpen) CloseMaterialSaleConfirmation(true);
 		else ShowConfirm(false);
 	});
 	ShowConfirm(false);
@@ -455,6 +510,7 @@ UknightProgressionSubsystem* UKnightMaintenanceWidget::GetProgression() const
 
 void UKnightMaintenanceWidget::Open(EKnightMaintenanceDestination InDestination)
 {
+	CloseMaterialSaleConfirmation(false);
 	CloseEquipmentPicker(false);
 	ShowConfirm(false);
 	Destination = InDestination;
@@ -474,8 +530,15 @@ void UKnightMaintenanceWidget::Open(EKnightMaintenanceDestination InDestination)
 
 void UKnightMaintenanceWidget::Close()
 {
+	CloseMaterialSaleConfirmation(false);
 	CloseEquipmentPicker(false);
 	ShowConfirm(false);
+	SelectedMaterialId = FPrimaryAssetId();
+	MaterialEntries.Reset();
+	MaterialSaleQuantity = 0;
+	MaterialSaleFeedback = FText::GetEmpty();
+	bMaterialSaleSaveFailureShown = false;
+	bAwaitingMaterialSaleSave = false;
 	SelectedEquipmentSlot = FGameplayTag();
 	SelectedPart = nullptr;
 	SelectedRecipe = nullptr;
@@ -494,11 +557,19 @@ UWidget* UKnightMaintenanceWidget::GetFocusButton() const
 
 void UKnightMaintenanceWidget::SetCategory(int32 NewCategory, bool bFromPlayer)
 {
-	if (bEquipmentPickerOpen && bFromPlayer) return;
+	if ((bEquipmentPickerOpen || bMaterialSaleConfirmOpen) && bFromPlayer) return;
 	if (Destination == EKnightMaintenanceDestination::Crafting && NewCategory != 0 && NewCategory != 2 && NewCategory != 4) return;
 	if (Destination == EKnightMaintenanceDestination::Enhancement && NewCategory != 1) return;
 	if (Destination == EKnightMaintenanceDestination::Sockets && NewCategory != 3) return;
+	CloseMaterialSaleConfirmation(false);
 	CloseEquipmentPicker(false);
+	if (NewCategory != 4)
+	{
+		SelectedMaterialId = FPrimaryAssetId();
+		MaterialEntries.Reset();
+		MaterialSaleQuantity = 0;
+		MaterialSaleFeedback = FText::GetEmpty();
+	}
 	Category = NewCategory;
 	SelectedEquipmentSlot = FGameplayTag();
 	EquipmentSlotButtons.Reset();
@@ -517,14 +588,18 @@ void UKnightMaintenanceWidget::SetCategory(int32 NewCategory, bool bFromPlayer)
 		if (Button) Button->SetVisibility(Category == 0 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	if (UWidget* const Tabs = WidgetTree ? WidgetTree->FindWidget(TEXT("Row_InfoTabs")) : nullptr)
 		Tabs->SetVisibility(Category == 0 || Category == 1 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-	if (Switcher_Info) Switcher_Info->SetVisibility(Category == 4 ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+	if (Switcher_Info) Switcher_Info->SetVisibility(ESlateVisibility::Visible);
 	if (Btn_InfoSet) Btn_InfoSet->SetVisibility(Category == 0 || Category == 3 ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 	if (Btn_InfoSpec) Btn_InfoSpec->SetVisibility(Category == 3 ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 	if (Btn_InfoMaterial) Btn_InfoMaterial->SetVisibility(Category == 0 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	if (InfoPreviousButton) InfoPreviousButton->SetVisibility(Category == 0 || Category == 1 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	if (InfoNextButton) InfoNextButton->SetVisibility(Category == 0 || Category == 1 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	InfoTab = Category == 0 ? InfoMaterial : InfoSpec;
-	if (Switcher_Info) Switcher_Info->SetActiveWidgetIndex(InfoTab);
+	if (Switcher_Info)
+	{
+		if (Category == 4 && MaterialSalePage) Switcher_Info->SetActiveWidget(MaterialSalePage);
+		else Switcher_Info->SetActiveWidgetIndex(InfoTab);
+	}
 	RebuildList(false);
 	if (bFromPlayer && Category != 3) OnSlotFocused.ExecuteIfBound(Category == 4 || Category == 2 ? FGameplayTag() : Slot);
 }
@@ -572,42 +647,262 @@ void UKnightMaintenanceWidget::RefreshMaterialContainer()
 	List_Items->ClearChildren();
 	Entries.Reset();
 	SocketListButtons.Reset();
+	MaterialEntries.Reset();
 	SelectedPart = nullptr;
 	SelectedRecipe = nullptr;
-	if (Txt_PartName) Txt_PartName->SetText(LOCTEXT("MaterialsHeading", "소재"));
-	if (Txt_PartState) Txt_PartState->SetVisibility(ESlateVisibility::Collapsed);
-	if (Txt_PartDesc)
-	{
-		Txt_PartDesc->SetText(LOCTEXT("MaterialsNextPhase", "보유 소재 목록입니다. 판매는 현재 I 키 인벤토리에서 이용할 수 있습니다."));
-		Txt_PartDesc->SetVisibility(ESlateVisibility::HitTestInvisible);
-	}
-	if (Txt_Bonus) Txt_Bonus->SetVisibility(ESlateVisibility::Collapsed);
-	if (Img_Selected) Img_Selected->SetVisibility(ESlateVisibility::Collapsed);
-	if (Btn_Execute) Btn_Execute->SetVisibility(ESlateVisibility::Collapsed);
-	if (Btn_Unequip) Btn_Unequip->SetVisibility(ESlateVisibility::Collapsed);
+	const UknightSaveSubsystem* const Saves = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
+	const bool bHasProfile = Saves && Saves->HasSelectedSlot();
 	TArray<FknightItemStack> Materials;
 	const bool bLoaded = GetProgression() && GetProgression()->GetOwnedMaterials(Materials);
-	if (!bLoaded || Materials.IsEmpty())
+	bool bSelectionStillOwned = false;
+	for (const FknightItemStack& Stack : Materials)
+	{
+		const UknightMaterialItemDefinition* const Material = Cast<UknightMaterialItemDefinition>(Stack.Item);
+		if (!Material || Stack.Count <= 0) continue;
+		const FPrimaryAssetId ItemId = Material->GetPrimaryAssetId();
+		UKnightInventoryEntryWidget* const Row = CreateWidget<UKnightInventoryEntryWidget>(
+			GetOwningPlayer(), UKnightInventoryEntryWidget::StaticClass());
+		if (!Row) continue;
+		const FLinearColor NameColor = Material->bHardModeExclusive ? FLinearColor(FColor(225, 93, 93))
+			: Material->Rarity > 1 ? FLinearColor(FColor(97, 166, 239)) : White;
+		Row->Configure(Material, Stack.Count, false, NameColor);
+		Row->OnSelected.AddUObject(this, &ThisClass::SelectMaterial);
+		Row->SetSelected(ItemId == SelectedMaterialId);
+		if (UScrollBoxSlot* const SlotRow = Cast<UScrollBoxSlot>(List_Items->AddChild(Row)))
+			SlotRow->SetPadding(FMargin(0.f, 0.f, 10.f, 6.f));
+		MaterialEntries.Add(Row);
+		if (ItemId == SelectedMaterialId) bSelectionStillOwned = true;
+	}
+	if (MaterialEntries.IsEmpty())
 	{
 		UCommonTextBlock* const Empty = NewRowText(WidgetTree, BodyStyle(), ETextJustify::Left);
-		Empty->SetText(bLoaded ? LOCTEXT("NoOwnedMaterials", "보유 소재가 없습니다.")
-			: LOCTEXT("MaterialsUnavailable", "현재 슬롯의 소재를 불러올 수 없습니다."));
+		Empty->SetText(!bHasProfile ? LOCTEXT("MaterialsNoProfile", "저장 슬롯을 선택해 주세요.")
+			: bLoaded ? LOCTEXT("NoOwnedMaterials", "보유 소재가 없습니다.")
+			: LOCTEXT("MaterialsUnavailable", "소재 정의를 모두 확인할 수 없습니다."));
 		List_Items->AddChild(Empty);
 	}
-	else
+	if (!bSelectionStillOwned)
 	{
-		for (const FknightItemStack& Stack : Materials)
-		{
-			if (!Stack.Item || Stack.Count <= 0) continue;
-			UCommonTextBlock* const Row = NewRowText(WidgetTree, BodyStyle(), ETextJustify::Left);
-			Row->SetText(FText::Format(LOCTEXT("OwnedMaterialRow", "{0}  ×{1}"),
-				Stack.Item->DisplayName.IsEmpty() ? FText::FromString(Stack.Item->GetName()) : Stack.Item->DisplayName,
-				FText::AsNumber(Stack.Count)));
-			if (UScrollBoxSlot* const RowSlot = Cast<UScrollBoxSlot>(List_Items->AddChild(Row)))
-				RowSlot->SetPadding(FMargin(0.f, 0.f, 10.f, 8.f));
-		}
+		SelectedMaterialId = FPrimaryAssetId();
+		MaterialSaleQuantity = 0;
 	}
+	else SetMaterialSaleQuantity(MaterialSaleQuantity);
+	if (Txt_Status) Txt_Status->SetText(bHasProfile && !bLoaded
+		? LOCTEXT("MaterialQueryIncomplete", "일부 보유 아이템 정의를 확인할 수 없습니다. 미확인 기록은 유지됩니다.") : FText::GetEmpty());
 	RefreshTabButtons();
+	RefreshMaterialDetails();
+}
+
+const UknightMaterialItemDefinition* UKnightMaintenanceWidget::GetSelectedMaterial() const
+{
+	for (const UKnightInventoryEntryWidget* const Row : MaterialEntries)
+		if (Row && Row->GetItem() && Row->GetItem()->GetPrimaryAssetId() == SelectedMaterialId)
+			return Cast<UknightMaterialItemDefinition>(Row->GetItem());
+	return nullptr;
+}
+
+void UKnightMaintenanceWidget::SelectMaterial(const UknightItemDefinition* Item)
+{
+	if (Category != 4 || bMaterialSaleConfirmOpen || bBusy) return;
+	const UknightMaterialItemDefinition* const Material = Cast<UknightMaterialItemDefinition>(Item);
+	const FPrimaryAssetId NewId = Material ? Material->GetPrimaryAssetId() : FPrimaryAssetId();
+	if (NewId != SelectedMaterialId)
+	{
+		SelectedMaterialId = NewId;
+		MaterialSaleQuantity = NewId.IsValid() ? 1 : 0;
+		MaterialSaleFeedback = FText::GetEmpty();
+	}
+	for (UKnightInventoryEntryWidget* const Row : MaterialEntries)
+		if (Row && Row->GetItem()) Row->SetSelected(Row->GetItem()->GetPrimaryAssetId() == SelectedMaterialId);
+	RefreshMaterialDetails();
+}
+
+void UKnightMaintenanceWidget::SetMaterialSaleQuantity(int32 Quantity)
+{
+	const UknightMaterialItemDefinition* const Material = GetSelectedMaterial();
+	const int32 Owned = Material && GetProgression() ? GetProgression()->GetItemCount(Material) : 0;
+	MaterialSaleQuantity = Owned > 0 ? FMath::Clamp(Quantity, 1, Owned) : 0;
+	if (MaterialQuantityInput) MaterialQuantityInput->SetText(MaterialSaleQuantity > 0
+		? FText::AsNumber(MaterialSaleQuantity) : FText::GetEmpty());
+	RefreshMaterialDetails();
+}
+
+void UKnightMaintenanceWidget::ChangeMaterialSaleQuantity(int32 Delta)
+{
+	if (Category == 4 && !bMaterialSaleConfirmOpen && !bBusy)
+		SetMaterialSaleQuantity(MaterialSaleQuantity + Delta);
+}
+
+void UKnightMaintenanceWidget::HandleMaterialQuantityCommitted(const FText& Text, ETextCommit::Type CommitMethod)
+{
+	if (Category != 4 || bMaterialSaleConfirmOpen || bBusy) return;
+	const UknightMaterialItemDefinition* const Material = GetSelectedMaterial();
+	const int32 Owned = Material && GetProgression() ? GetProgression()->GetItemCount(Material) : 0;
+	int32 Parsed = 0;
+	if (!LexTryParseString(Parsed, *Text.ToString().TrimStartAndEnd()) || Parsed < 1 || Parsed > Owned)
+	{
+		MaterialSaleFeedback = LOCTEXT("MaterialInvalidQuantity", "보유 수량 안에서 판매 수량을 입력하세요.");
+		SetMaterialSaleQuantity(MaterialSaleQuantity);
+		return;
+	}
+	MaterialSaleFeedback = FText::GetEmpty();
+	SetMaterialSaleQuantity(Parsed);
+}
+
+void UKnightMaintenanceWidget::RefreshMaterialDetails()
+{
+	if (Category != 4) return;
+	const UknightMaterialItemDefinition* const Material = GetSelectedMaterial();
+	UknightProgressionSubsystem* const Progression = GetProgression();
+	const int32 Owned = Material && Progression ? Progression->GetItemCount(Material) : 0;
+	if (Material && Owned > 0 && (MaterialSaleQuantity < 1 || MaterialSaleQuantity > Owned))
+		MaterialSaleQuantity = FMath::Clamp(MaterialSaleQuantity, 1, Owned);
+	if (MaterialQuantityInput)
+	{
+		MaterialQuantityInput->SetIsEnabled(Material && Owned > 0);
+		MaterialQuantityInput->SetText(Material && Owned > 0 ? FText::AsNumber(MaterialSaleQuantity) : FText::GetEmpty());
+	}
+	if (Txt_PartName) Txt_PartName->SetText(!Material ? LOCTEXT("MaterialSelectPrompt", "소재를 선택하세요.")
+		: Material->DisplayName.IsEmpty() ? LOCTEXT("MaterialNameMissing", "이름 미설정") : Material->DisplayName);
+	if (Txt_PartState)
+	{
+		Txt_PartState->SetText(Material ? FText::Format(LOCTEXT("MaterialOwned", "보유 {0}개 · 희귀도 {1}"), Owned, Material->Rarity)
+			: FText::GetEmpty());
+		Txt_PartState->SetVisibility(Material ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	}
+	if (Txt_PartDesc)
+	{
+		Txt_PartDesc->SetText(Material ? (Material->Description.IsEmpty() ? LOCTEXT("MaterialDescriptionMissing", "설명 미설정")
+			: Material->Description) : FText::GetEmpty());
+		Txt_PartDesc->SetVisibility(Material ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	}
+	if (Img_Selected)
+	{
+		UTexture2D* const Icon = Material ? Material->Icon.LoadSynchronous() : nullptr;
+		if (Icon) Img_Selected->SetBrushFromTexture(Icon);
+		Img_Selected->SetVisibility(Icon ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	}
+	if (Txt_Bonus) Txt_Bonus->SetVisibility(ESlateVisibility::Collapsed);
+	if (Btn_Unequip) Btn_Unequip->SetVisibility(ESlateVisibility::Collapsed);
+	if (MaterialOwnedText) MaterialOwnedText->SetText(Material
+		? FText::Format(LOCTEXT("MaterialSaleSelected", "선택 소재 · 보유 {0}개"), Owned)
+		: LOCTEXT("MaterialSaleChoose", "왼쪽 목록에서 소재를 선택하세요."));
+	if (MaterialUnitPriceText) MaterialUnitPriceText->SetText(Material && Material->bSellable && Material->SellPrice > 0
+		? FText::Format(LOCTEXT("MaterialSaleUnitPrice", "개당 판매 가격: {0}"), FText::AsNumber(Material->SellPrice))
+		: Material ? LOCTEXT("MaterialNotSellable", "판매 불가") : FText::GetEmpty());
+	FKnightMaterialSaleReceipt Quote;
+	const bool bCanSell = !bBusy && !bMaterialSaleConfirmOpen && Material && Progression
+		&& Progression->GetMaterialSaleQuote(SelectedMaterialId, MaterialSaleQuantity, Quote);
+	if (MaterialTotalText) MaterialTotalText->SetText(bCanSell
+		? FText::Format(LOCTEXT("MaterialSaleTotal", "총 판매 금액: {0}"), FText::AsNumber(Quote.TotalMoney))
+		: Material ? LOCTEXT("MaterialSaleTotalUnknown", "총 판매 금액: —") : FText::GetEmpty());
+	if (MaterialFeedbackText) MaterialFeedbackText->SetText(MaterialSaleFeedback);
+	if (Btn_Execute)
+	{
+		SetButtonLabel(Btn_Execute, LOCTEXT("MaterialSaleAction", "판매"));
+		Btn_Execute->SetVisibility(ESlateVisibility::Visible);
+		ExecuteLockReason = !Material ? LOCTEXT("MaterialPickFirst", "판매할 소재를 선택하세요.")
+			: !Material->bSellable || Material->SellPrice <= 0 ? LOCTEXT("MaterialCannotSell", "판매 불가")
+			: !bCanSell ? LOCTEXT("MaterialSaleBlocked", "수량 또는 저장 상태를 확인하세요.") : FText::GetEmpty();
+		SetButtonLocked(Btn_Execute, !ExecuteLockReason.IsEmpty(), ExecuteLockReason);
+	}
+}
+
+void UKnightMaintenanceWidget::OpenMaterialSaleConfirmation()
+{
+	if (Category != 4 || bBusy || bMaterialSaleConfirmOpen || !Panel_Confirm) return;
+	const UknightMaterialItemDefinition* const Material = GetSelectedMaterial();
+	const UknightSaveSubsystem* const Saves = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
+	int32 Requested = 0;
+	const FString Raw = MaterialQuantityInput ? MaterialQuantityInput->GetText().ToString().TrimStartAndEnd() : FString();
+	const int32 Owned = Material && GetProgression() ? GetProgression()->GetItemCount(Material) : 0;
+	if (!Material || !Saves || !Saves->CanStartAtomicTransaction()
+		|| !LexTryParseString(Requested, *Raw) || Requested < 1 || Requested > Owned)
+	{
+		MaterialSaleFeedback = LOCTEXT("MaterialSaleInvalidRequest", "소재 보유량, 입력 수량 또는 저장 상태를 확인하세요.");
+		RefreshMaterialDetails();
+		return;
+	}
+	FKnightMaterialSaleReceipt Quote;
+	if (!GetProgression()->GetMaterialSaleQuote(SelectedMaterialId, Requested, Quote))
+	{
+		MaterialSaleFeedback = LOCTEXT("MaterialSaleQuoteRejected", "판매 불가: 소재 정의와 수량을 확인하세요.");
+		RefreshMaterialDetails();
+		return;
+	}
+	MaterialSaleQuantity = Requested;
+	PendingMaterialId = SelectedMaterialId;
+	PendingMaterialQuantity = Requested;
+	PendingMaterialProfileId = Saves->GetActiveSlotId();
+	bMaterialSaleConfirmOpen = true;
+	if (Txt_ConfirmTitle) Txt_ConfirmTitle->SetText(LOCTEXT("MaterialSaleConfirmTitle", "소재 판매"));
+	if (Txt_ConfirmBody) Txt_ConfirmBody->SetText(FText::Format(
+		LOCTEXT("MaterialSaleConfirmBody", "{0} {1}개를 {2}에 판매하시겠습니까?"),
+		Material->DisplayName.IsEmpty() ? LOCTEXT("MaterialNameMissingConfirm", "이름 미설정") : Material->DisplayName,
+		Requested, FText::AsNumber(Quote.TotalMoney)));
+	SetButtonLabel(Btn_ConfirmOk, LOCTEXT("MaterialSaleConfirmButton", "판매"));
+	ShowConfirm(true);
+}
+
+void UKnightMaintenanceWidget::RestoreMaterialFocus()
+{
+	if (!GetOwningPlayer()) return;
+	for (UKnightInventoryEntryWidget* const Row : MaterialEntries)
+		if (Row && Row->GetItem() && Row->GetItem()->GetPrimaryAssetId() == SelectedMaterialId && Row->GetButton())
+		{
+			Row->GetButton()->SetUserFocus(GetOwningPlayer());
+			return;
+		}
+	if (Btn_Armor) Btn_Armor->SetUserFocus(GetOwningPlayer());
+}
+
+void UKnightMaintenanceWidget::CloseMaterialSaleConfirmation(bool bRestoreFocus)
+{
+	if (!bMaterialSaleConfirmOpen) return;
+	bMaterialSaleConfirmOpen = false;
+	PendingMaterialId = FPrimaryAssetId();
+	PendingMaterialQuantity = 0;
+	PendingMaterialProfileId.Reset();
+	ShowConfirm(false);
+	SetButtonLabel(Btn_ConfirmOk, LOCTEXT("ConfirmCraftLabel", "제작"));
+	if (bRestoreFocus) RestoreMaterialFocus();
+	RefreshMaterialDetails();
+}
+
+void UKnightMaintenanceWidget::ConfirmMaterialSale()
+{
+	if (!bMaterialSaleConfirmOpen || bBusy || Category != 4) return;
+	UknightProgressionSubsystem* const Progression = GetProgression();
+	const UknightSaveSubsystem* const Saves = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
+	const UknightMaterialItemDefinition* const Material = GetSelectedMaterial();
+	FKnightMaterialSaleReceipt Quote;
+	if (!Progression || !Saves || !Saves->CanStartAtomicTransaction()
+		|| Saves->GetActiveSlotId() != PendingMaterialProfileId
+		|| !Material || SelectedMaterialId != PendingMaterialId
+		|| PendingMaterialQuantity < 1 || Progression->GetItemCount(Material) < PendingMaterialQuantity
+		|| !Progression->GetMaterialSaleQuote(PendingMaterialId, PendingMaterialQuantity, Quote))
+	{
+		CloseMaterialSaleConfirmation(true);
+		MaterialSaleFeedback = LOCTEXT("MaterialSaleStale", "보유량이나 저장 슬롯이 바뀌었습니다. 다시 확인하세요.");
+		RefreshMaterialContainer();
+		return;
+	}
+	bBusy = true; // CommitChange broadcasts synchronously; rebuild exactly once after SellMaterial returns.
+	FKnightMaterialSaleReceipt Receipt;
+	const bool bSold = Progression->SellMaterial(PendingMaterialId, PendingMaterialQuantity, Receipt);
+	bBusy = false;
+	CloseMaterialSaleConfirmation(false);
+	if (bSold)
+	{
+		bAwaitingMaterialSaleSave = true;
+		bMaterialSaleSaveFailureShown = false;
+		MaterialSaleFeedback = FText::Format(LOCTEXT("MaterialSaleSuccess", "{0}개 판매 완료 · +{1}"),
+			Receipt.Count, FText::AsNumber(Receipt.TotalMoney));
+	}
+	else MaterialSaleFeedback = LOCTEXT("MaterialSaleRejected", "판매하지 못했습니다. 소재·수량·저장 상태를 확인하세요.");
+	RefreshCurrency();
+	RefreshMaterialContainer();
+	RestoreMaterialFocus();
 }
 
 void UKnightMaintenanceWidget::RefreshTabButtons()
@@ -1134,6 +1429,7 @@ bool UKnightMaintenanceWidget::HandleConfirmKey()
 
 bool UKnightMaintenanceWidget::HandleBack()
 {
+	if (bMaterialSaleConfirmOpen) { CloseMaterialSaleConfirmation(true); return true; }
 	if (bEquipmentPickerOpen) { CloseEquipmentPicker(true); return true; }
 	if (!Panel_Confirm || !Panel_Confirm->IsVisible()) return false;
 	ShowConfirm(false);
@@ -1159,6 +1455,11 @@ void UKnightMaintenanceWidget::ShowConfirm(bool bShow)
 
 void UKnightMaintenanceWidget::RequestExecute()
 {
+	if (Category == 4)
+	{
+		OpenMaterialSaleConfirmation();
+		return;
+	}
 	if (Category == 2)
 	{
 		if (bEquipmentPickerOpen) return;
@@ -1771,6 +2072,12 @@ void UKnightMaintenanceWidget::HandleProgressionChanged()
 
 void UKnightMaintenanceWidget::HandleActiveSlotChanged(const FString& SlotId)
 {
+	CloseMaterialSaleConfirmation(false);
+	SelectedMaterialId = FPrimaryAssetId();
+	MaterialSaleQuantity = 0;
+	MaterialSaleFeedback = FText::GetEmpty();
+	bMaterialSaleSaveFailureShown = false;
+	bAwaitingMaterialSaleSave = false;
 	CloseEquipmentPicker(false);
 	SelectedEquipmentSlot = FGameplayTag();
 	RefreshCurrency();
@@ -1788,9 +2095,27 @@ void UKnightMaintenanceWidget::HandleActiveSlotChanged(const FString& SlotId)
 
 void UKnightMaintenanceWidget::HandleSaveFinished(bool bSuccess)
 {
-	if (Category != 2 || bBusy) return;
-	RefreshEquipmentDetails();
-	if (bEquipmentPickerOpen) RefreshEquipmentPickerPreview();
+	if (bAwaitingMaterialSaleSave)
+	{
+		if (bSuccess)
+		{
+			if (bMaterialSaleSaveFailureShown) MaterialSaleFeedback = LOCTEXT("MaterialSaleSaveRecovered", "판매 저장 완료");
+			bMaterialSaleSaveFailureShown = false;
+			bAwaitingMaterialSaleSave = false;
+		}
+		else
+		{
+			MaterialSaleFeedback = LOCTEXT("MaterialSaleSaveFailed", "판매가 메모리에 반영됐지만 저장에 실패했습니다. 저장 재시도가 필요합니다.");
+			bMaterialSaleSaveFailureShown = true;
+		}
+	}
+	if (bBusy) return;
+	if (Category == 4) { RefreshMaterialDetails(); return; }
+	if (Category == 2)
+	{
+		RefreshEquipmentDetails();
+		if (bEquipmentPickerOpen) RefreshEquipmentPickerPreview();
+	}
 }
 
 #undef LOCTEXT_NAMESPACE

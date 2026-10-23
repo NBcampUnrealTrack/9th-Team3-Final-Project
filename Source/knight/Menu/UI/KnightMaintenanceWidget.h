@@ -3,6 +3,8 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "GameplayTagContainer.h"
+#include "UObject/PrimaryAssetId.h"
+#include "Types/SlateEnums.h"
 #include "KnightMaintenanceWidget.generated.h"
 
 class UCommonButtonBase;
@@ -19,6 +21,10 @@ class UknightSocketItemDefinition;
 class UKnightMaintenanceEntryWidget;
 class UknightProgressionSubsystem;
 class UCanvasPanel;
+class UEditableTextBox;
+class UKnightInventoryEntryWidget;
+class UknightItemDefinition;
+class UknightMaterialItemDefinition;
 
 enum class EKnightMaintenanceDestination : uint8
 {
@@ -96,6 +102,7 @@ private:
 	UFUNCTION() void HandleProgressionChanged();
 	UFUNCTION() void HandleActiveSlotChanged(const FString& SlotId);
 	UFUNCTION() void HandleSaveFinished(bool bSuccess);
+	UFUNCTION() void HandleMaterialQuantityCommitted(const FText& Text, ETextCommit::Type CommitMethod);
 	void SetCategory(int32 NewCategory, bool bFromPlayer);
 	void SetSlot(FGameplayTag NewSlot, bool bFromPlayer);
 	void SetInfoTab(int32 NewTab);
@@ -120,6 +127,15 @@ private:
 	const UknightPartItemDefinition* GetEquippedInSelectedSlot(bool& bComplete) const;
 	void RefreshCurrency();
 	void RefreshMaterialContainer();
+	void RefreshMaterialDetails();
+	void SelectMaterial(const UknightItemDefinition* Item);
+	void SetMaterialSaleQuantity(int32 Quantity);
+	void ChangeMaterialSaleQuantity(int32 Delta);
+	void OpenMaterialSaleConfirmation();
+	void CloseMaterialSaleConfirmation(bool bRestoreFocus);
+	void ConfirmMaterialSale();
+	void RestoreMaterialFocus();
+	const UknightMaterialItemDefinition* GetSelectedMaterial() const;
 	void SelectEntry(UKnightMaintenanceEntryWidget* Entry);
 	void HandleEntryClicked(UKnightMaintenanceEntryWidget* Entry);
 	void HandleEntryFocused(UKnightMaintenanceEntryWidget* Entry);
@@ -145,6 +161,22 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> UpgradeResult;
 	UPROPERTY(Transient) TObjectPtr<UCommonButtonBase> UpgradeButton;
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> CurrencyText;
+	UPROPERTY(Transient) TObjectPtr<UScrollBox> MaterialSalePage;
+	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> MaterialOwnedText;
+	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> MaterialUnitPriceText;
+	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> MaterialTotalText;
+	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> MaterialFeedbackText;
+	UPROPERTY(Transient) TObjectPtr<UEditableTextBox> MaterialQuantityInput;
+	UPROPERTY(Transient) TArray<TObjectPtr<UKnightInventoryEntryWidget>> MaterialEntries;
+	FPrimaryAssetId SelectedMaterialId;
+	FPrimaryAssetId PendingMaterialId;
+	FString PendingMaterialProfileId;
+	int32 MaterialSaleQuantity = 0;
+	int32 PendingMaterialQuantity = 0;
+	bool bMaterialSaleConfirmOpen = false;
+	bool bMaterialSaleSaveFailureShown = false;
+	bool bAwaitingMaterialSaleSave = false;
+	FText MaterialSaleFeedback;
 	UPROPERTY(Transient) TObjectPtr<UCommonButtonBase> InfoPreviousButton;
 	UPROPERTY(Transient) TObjectPtr<UCommonButtonBase> InfoNextButton;
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> PreviewStatusText;

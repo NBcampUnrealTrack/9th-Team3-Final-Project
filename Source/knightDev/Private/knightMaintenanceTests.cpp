@@ -1,14 +1,24 @@
 // Editor-only smoke hooks for an isolated -KnightSaveTestNamespace. Never accept a production save.
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
 #include "AbilitySystem/Attributes/knightAttributeSet.h"
+#include "Blueprint/WidgetTree.h"
+#include "CommonButtonBase.h"
+#include "Components/ScrollBox.h"
+#include "Components/TextBlock.h"
+#include "Components/WidgetSwitcher.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "HAL/IConsoleManager.h"
+#include "Kismet/GameplayStatics.h"
 #include "Item/knightEquipmentData.h"
 #include "Item/knightEquipmentStats.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+#include "Menu/UI/KnightInventoryWidget.h"
+#include "Menu/UI/KnightMaintenanceWidget.h"
 #include "Progression/knightProgressionSubsystem.h"
+#include "Progression/knightSaveGame.h"
+#include "Progression/knightSaveSubsystem.h"
 #include "knightDev.h"
 
 #if WITH_EDITOR
@@ -25,6 +35,183 @@ namespace
 		UknightProgressionSubsystem* Progression = World && World->GetGameInstance()
 			? World->GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>() : nullptr;
 		if (!Progression || Args.IsEmpty()) return;
+		if (Args[0] == TEXT("MaterialWidgetCases"))
+		{
+			int32 Failures = 0;
+			auto Check = [&Failures](bool bPassed, const TCHAR* Case)
+			{
+				if (!bPassed) ++Failures;
+				UE_LOG(LogknightDev, Log, TEXT("Phase6 MaterialWidgetCases %s: %s"), bPassed ? TEXT("PASS") : TEXT("FAIL"), Case);
+			};
+			UknightSaveSubsystem* const Saves = World->GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+			const UknightMaterialItemDefinition* const Material = LoadObject<UknightMaterialItemDefinition>(nullptr,
+				TEXT("/Game/Knight/Items/Materials/Janyeol/DA_Material_Janyeol_Hide.DA_Material_Janyeol_Hide"));
+			APlayerController* const Player = UGameplayStatics::GetPlayerController(World, 0);
+			if (!Saves || !Material || !Player || !Saves->SelectSlot(TEXT("Phase6Widget")))
+			{
+				UE_LOG(LogknightDev, Error, TEXT("Phase6 MaterialWidgetCases setup failed."));
+				return;
+			}
+			UknightSaveGame* const Save = Saves->GetSaveGame();
+			if (!Save) { UE_LOG(LogknightDev, Error, TEXT("Phase6 MaterialWidgetCases save unavailable.")); return; }
+			Save->ItemCounts.Add(Material->GetPrimaryAssetId(), 3);
+			Save->Money = 123;
+			UKnightMaintenanceWidget* const Widget = CreateWidget<UKnightMaintenanceWidget>(
+				Player, UKnightMaintenanceWidget::GetSharedWidgetClass());
+			if (!Widget || !Widget->WidgetTree)
+			{
+				UE_LOG(LogknightDev, Error, TEXT("Phase6 MaterialWidgetCases WBP failed to construct."));
+				return;
+			}
+			Widget->Open(EKnightMaintenanceDestination::Crafting);
+			UCommonButtonBase* const MaterialsTab = Cast<UCommonButtonBase>(Widget->WidgetTree->FindWidget(TEXT("Btn_Armor")));
+			UCommonButtonBase* const SellButton = Cast<UCommonButtonBase>(Widget->WidgetTree->FindWidget(TEXT("Btn_Execute")));
+			UCommonButtonBase* const CancelButton = Cast<UCommonButtonBase>(Widget->WidgetTree->FindWidget(TEXT("Btn_ConfirmCancel")));
+			UTextBlock* const DetailName = Cast<UTextBlock>(Widget->WidgetTree->FindWidget(TEXT("Txt_PartName")));
+			UScrollBox* const List = Cast<UScrollBox>(Widget->WidgetTree->FindWidget(TEXT("List_Items")));
+			UWidgetSwitcher* const Switcher = Cast<UWidgetSwitcher>(Widget->WidgetTree->FindWidget(TEXT("Switcher_Info")));
+			UWidget* const MaterialPage = Widget->WidgetTree->FindWidget(TEXT("Phase6_MaterialSalePage"));
+			if (!MaterialsTab || !SellButton || !CancelButton || !DetailName || !List || !Switcher || !MaterialPage)
+			{
+				UE_LOG(LogknightDev, Error, TEXT("Phase6 MaterialWidgetCases required controls missing."));
+				return;
+			}
+			MaterialsTab->OnClicked().Broadcast();
+			Check(Switcher->GetActiveWidget() == MaterialPage, TEXT("Materials uses separate detail page"));
+			auto FindMaterialRow = [List, Material]() -> UKnightInventoryEntryWidget*
+			{
+				for (UWidget* const Child : List->GetAllChildren())
+					if (UKnightInventoryEntryWidget* const Row = Cast<UKnightInventoryEntryWidget>(Child))
+						if (Row->GetItem() == Material) return Row;
+				return nullptr;
+			};
+			UKnightInventoryEntryWidget* Row = FindMaterialRow();
+			Check(Row != nullptr, TEXT("owned material appears in Materials list"));
+			if (Row) Row->OnSelected.Broadcast(Material);
+			Check(DetailName->GetText().EqualTo(Material->DisplayName), TEXT("selection resolves material display name"));
+			Progression->OnProgressionChanged.Broadcast();
+			Check(DetailName->GetText().EqualTo(Material->DisplayName) && FindMaterialRow() != nullptr,
+				TEXT("unrelated refresh preserves selected material ID"));
+			SellButton->OnClicked().Broadcast();
+			CancelButton->OnClicked().Broadcast();
+			Check(Save->ItemCounts.FindRef(Material->GetPrimaryAssetId()) == 3 && Save->Money == 123,
+				TEXT("confirmation cancellation does not mutate inventory or currency"));
+			SellButton->OnClicked().Broadcast();
+			Check(Saves->SelectSlot(TEXT("Phase6WidgetOther")), TEXT("active profile changes while confirmation is open"));
+			Check(DetailName->GetText().ToString().Contains(TEXT("선택"))
+				&& Progression->GetItemCount(Material) == 0,
+				TEXT("profile change clears stale material selection and does not sell"));
+			Widget->Close();
+			if (Failures)
+			{
+				UE_LOG(LogknightDev, Error, TEXT("Phase6 MaterialWidgetCases SUMMARY failures=%d"), Failures);
+			}
+			else
+			{
+				UE_LOG(LogknightDev, Log, TEXT("Phase6 MaterialWidgetCases SUMMARY failures=0"));
+			}
+			return;
+		}
+		if (Args[0] == TEXT("MaterialSaleCases"))
+		{
+			const bool bFinalStack = Args.Num() > 1 && Args[1] == TEXT("Final");
+			UknightSaveSubsystem* const Saves = World->GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+			const UknightMaterialItemDefinition* const Material = LoadObject<UknightMaterialItemDefinition>(nullptr,
+				TEXT("/Game/Knight/Items/Materials/Janyeol/DA_Material_Janyeol_Hide.DA_Material_Janyeol_Hide"));
+			const UknightMaterialItemDefinition* const Rare = LoadObject<UknightMaterialItemDefinition>(nullptr,
+				TEXT("/Game/Knight/Items/Materials/Janyeol/DA_Material_Janyeol_Essence.DA_Material_Janyeol_Essence"));
+			const UknightMaterialItemDefinition* const Unsellable = LoadObject<UknightMaterialItemDefinition>(nullptr,
+				TEXT("/Game/Knight/Items/Dev/DA_CoreTestMaterial.DA_CoreTestMaterial"));
+			int32 Failures = 0;
+			auto Check = [&Failures](bool bPassed, const TCHAR* Case)
+			{
+				if (!bPassed) ++Failures;
+				UE_LOG(LogknightDev, Log, TEXT("Phase6 MaterialSaleCases %s: %s"), bPassed ? TEXT("PASS") : TEXT("FAIL"), Case);
+			};
+			if (!Saves || !Material || !Rare || !Unsellable || !Material->bSellable || Material->SellPrice <= 0
+				|| Unsellable->bSellable || Unsellable->SellPrice > 0)
+			{
+				UE_LOG(LogknightDev, Error, TEXT("Phase6 MaterialSaleCases setup failed: save or material definitions unavailable."));
+				return;
+			}
+			const FString Slot = bFinalStack ? TEXT("Phase6Final") : TEXT("Phase6Partial");
+			Check(Saves->SelectSlot(Slot), TEXT("isolated test profile selected"));
+			UknightSaveGame* Save = Saves->GetSaveGame();
+			if (!Save) { UE_LOG(LogknightDev, Error, TEXT("Phase6 MaterialSaleCases save unavailable.")); return; }
+			const FPrimaryAssetId Id = Material->GetPrimaryAssetId();
+			const FPrimaryAssetId RareId = Rare->GetPrimaryAssetId();
+			const FPrimaryAssetId UnsellableId = Unsellable->GetPrimaryAssetId();
+			const int32 InitialCount = bFinalStack ? 1 : 3;
+			const int32 SaleCount = bFinalStack ? 1 : 2;
+			Save->ItemCounts.Add(Id, InitialCount);
+			Save->ItemCounts.Add(RareId, 2);
+			Save->ItemCounts.Add(UnsellableId, 1);
+			Save->Money = 123;
+			TArray<FknightItemStack> Owned;
+			Check(Progression->GetOwnedMaterials(Owned), TEXT("owned material query complete"));
+			Check(Owned.Num() == 3, TEXT("positive owned materials include non-sellable item"));
+			bool bSorted = true;
+			for (int32 Index = 1; Index < Owned.Num(); ++Index)
+			{
+				if (Owned[Index - 1].Item->Rarity < Owned[Index].Item->Rarity
+					|| (Owned[Index - 1].Item->Rarity == Owned[Index].Item->Rarity
+						&& Owned[Index - 1].Item->GetPrimaryAssetId().ToString() > Owned[Index].Item->GetPrimaryAssetId().ToString()))
+					bSorted = false;
+			}
+			Check(bSorted, TEXT("rarity descending and stable item-ID order"));
+			FKnightMaterialSaleReceipt Quote;
+			Check(!Progression->GetMaterialSaleQuote(Id, 0, Quote)
+				&& !Progression->GetMaterialSaleQuote(Id, -1, Quote)
+				&& !Progression->GetMaterialSaleQuote(Id, InitialCount + 1, Quote),
+				TEXT("zero negative and excess quantities rejected"));
+			Check(!Progression->GetMaterialSaleQuote(UnsellableId, 1, Quote), TEXT("non-sellable definition rejected"));
+			Check(Progression->GetMaterialSaleQuote(Id, SaleCount, Quote)
+				&& Quote.UnitPrice == Material->SellPrice
+				&& Quote.TotalMoney == static_cast<int64>(Material->SellPrice) * SaleCount,
+				TEXT("quote uses asset price and exact total"));
+			Check(Save->ItemCounts.FindRef(Id) == InitialCount && Save->Money == 123,
+				TEXT("quote and rejected requests leave inventory and money unchanged"));
+			Save->Money = MAX_int64;
+			Check(!Progression->GetMaterialSaleQuote(Id, 1, Quote), TEXT("currency overflow rejected"));
+			Save->Money = 123;
+			Check(Saves->SelectSlot(Slot + TEXT("Other")), TEXT("other isolated profile selected"));
+			FKnightMaterialSaleReceipt StaleReceipt;
+			Check(!Progression->SellMaterial(Id, SaleCount, StaleReceipt)
+				&& Progression->GetItemCount(Material) == 0,
+				TEXT("old profile material request rejected in new profile"));
+			Check(Saves->SelectSlot(Slot), TEXT("original isolated profile reselected"));
+			Save = Saves->GetSaveGame();
+			if (!Save) { UE_LOG(LogknightDev, Error, TEXT("Phase6 MaterialSaleCases profile reload failed.")); return; }
+			Save->ItemCounts.Add(Id, InitialCount);
+			Save->ItemCounts.Add(RareId, 2);
+			Save->ItemCounts.Add(UnsellableId, 1);
+			Save->Money = 123;
+			FKnightMaterialSaleReceipt Receipt;
+			Check(Progression->SellMaterial(Id, SaleCount, Receipt), TEXT("valid sale accepted"));
+			Check(Save->ItemCounts.FindRef(Id) == InitialCount - SaleCount
+				&& Save->Money == 123 + static_cast<int64>(Material->SellPrice) * SaleCount,
+				TEXT("one transaction changes material and money exactly once"));
+			Check(!Progression->SellMaterial(Id, SaleCount, Receipt), TEXT("immediate duplicate request rejected"));
+			Owned.Reset();
+			Check(Progression->GetOwnedMaterials(Owned), TEXT("post-sale owned query complete"));
+			const FknightItemStack* Remaining = Owned.FindByPredicate([Id](const FknightItemStack& Stack)
+			{
+				return Stack.Item && Stack.Item->GetPrimaryAssetId() == Id;
+			});
+			Check(bFinalStack ? Remaining == nullptr : Remaining && Remaining->Count == 1,
+				bFinalStack ? TEXT("final stack removed from list") : TEXT("partial sale retains item with updated count"));
+			if (Failures)
+			{
+				UE_LOG(LogknightDev, Error, TEXT("Phase6 MaterialSaleCases SUMMARY mode=%s failures=%d"),
+					bFinalStack ? TEXT("Final") : TEXT("Partial"), Failures);
+			}
+			else
+			{
+				UE_LOG(LogknightDev, Log, TEXT("Phase6 MaterialSaleCases SUMMARY mode=%s failures=0"),
+					bFinalStack ? TEXT("Final") : TEXT("Partial"));
+			}
+			return;
+		}
 		if (Args[0] == TEXT("Grant") && Args.Num() >= 3)
 		{
 			const UknightItemDefinition* Item = LoadObject<UknightItemDefinition>(nullptr, *Args[1]);
@@ -274,7 +461,7 @@ namespace
 	}
 
 	FAutoConsoleCommandWithWorldAndArgs MaintenanceTestCommand(
-		TEXT("knight.MaintenanceTest"), TEXT("Grant <asset> <count> | Snapshot | PureCases | AssetCases; requires editor test save namespace."),
+		TEXT("knight.MaintenanceTest"), TEXT("Grant <asset> <count> | Snapshot | PureCases | AssetCases | MaterialSaleCases Partial|Final | MaterialWidgetCases; requires editor test save namespace."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&MaintenanceTest), ECVF_Cheat);
 }
 #endif
