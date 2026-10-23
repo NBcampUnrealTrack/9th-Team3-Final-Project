@@ -227,6 +227,7 @@ void AknightPlayerController::CloseSettings()
 
 void AknightPlayerController::ToggleRaidReturnMenu()
 {
+#if WITH_EDITOR
 	if (!IsLocalController() || !RaidReturnWidgetClass || !GetWorld()
 		|| !GetWorld()->GetAuthGameMode<AknightRaidGameMode>()) return;
 	CancelKnockdownPresentation();
@@ -249,6 +250,7 @@ void AknightPlayerController::ToggleRaidReturnMenu()
 	bShowMouseCursor = true;
 	RaidReturnWidget->FocusReturnButton();
 	UE_LOG(Logknight, Log, TEXT("Raid return overlay opened; paused=%d cursor=%d"), GetWorld()->IsPaused(), bShowMouseCursor);
+#endif
 }
 
 void AknightPlayerController::CloseRaidReturnMenu()

@@ -123,12 +123,14 @@ void UknightAnimInstance::UpdateFootsteps(const float DeltaSeconds, const AChara
 		Foot.MinHeight = FMath::Min(Foot.MinHeight + Shrink, Height);
 		Foot.MaxHeight = FMath::Max(Foot.MaxHeight - Shrink, Height);
 		const float Range = Foot.MaxHeight - Foot.MinHeight;
+#if !UE_BUILD_SHIPPING
 		if (CVarDebugFootsteps.GetValueOnGameThread() > 0 && GEngine)
 		{
 			GEngine->AddOnScreenDebugMessage(static_cast<uint64>(GetUniqueID()) * 4 + Index, 0.f, FColor::Cyan,
 				FString::Printf(TEXT("%s height %.1f  min %.1f  max %.1f  lifted %d  active %d"), *FootstepBones[Index].ToString(),
 					Height, Foot.MinHeight, Foot.MaxHeight, Foot.bLifted ? 1 : 0, bActive ? 1 : 0));
 		}
+#endif
 		if (!bActive)
 		{
 			Foot.bLifted = false;
@@ -150,11 +152,13 @@ void UknightAnimInstance::UpdateFootsteps(const float DeltaSeconds, const AChara
 			{
 				Foot.LastStepTime = Now;
 				UGameplayStatics::PlaySoundAtLocation(&Character, Sound, FootLocation, FootstepVolume);
+#if !UE_BUILD_SHIPPING
 				if (CVarDebugFootsteps.GetValueOnGameThread() > 0)
 				{
 					DrawDebugSphere(World, FootLocation, 12.f, 8, FColor::Green, false, 0.5f);
 					UE_LOG(LogTemp, Log, TEXT("[Footstep] %s %s"), *FootstepBones[Index].ToString(), *GetNameSafe(Sound));
 				}
+#endif
 			}
 		}
 	}
