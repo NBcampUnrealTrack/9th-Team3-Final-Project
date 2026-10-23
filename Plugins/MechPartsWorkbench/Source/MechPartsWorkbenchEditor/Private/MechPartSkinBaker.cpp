@@ -969,7 +969,7 @@ namespace MechPartSkinBaker
 			OutError = GetFirstError(Debug, LOCTEXT("BakePartFailed", "파츠 스태틱 메시를 읽지 못했습니다."));
 			return nullptr;
 		}
-		const FTransform PartToMech = Attachment.RelativeTransform * GetRefPoseAttachTransform(MechMesh, Attachment.AttachSocket);
+		const FTransform PartToMech = Attachment.GetRelativeTransform() * GetRefPoseAttachTransform(MechMesh, Attachment.AttachSocket);
 		UGeometryScriptLibrary_MeshTransformFunctions::TransformMesh(PartDynamicMesh, PartToMech, true, Debug);
 
 		// 몸의 스킨 가중치를 옮긴다 (겹쳐 입는 옷용). 뼈 목록도 몸에서 같이 복사된다.

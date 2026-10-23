@@ -50,9 +50,33 @@ struct MECHPARTSWORKBENCHRUNTIME_API FMechPartAttachment
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Attachment", meta=(EditCondition="AttachMode==EMechPartAttachMode::Socket"))
 	FName AttachSocket;
 
-	/** Offset from the socket. Used in Socket mode. */
+	/**
+	 * Offset from the socket. Used in Socket mode.
+	 * (2026-10-23) 위치·회전·크기를 따로 저장한다. 예전 FTransform은 회전을 쿼터니언으로 저장해서, 디테일 패널에서 각도 하나를
+	 * 바꾸면 같은 회전의 다른 각도 조합으로 다시 계산돼 나머지 축이 같이 바뀌었다(예: Y 120 → X 180, Y 60, Z 180).
+	 * FRotator는 입력한 각도를 그대로 들고 있다(엔진 씬 컴포넌트의 RelativeRotation과 같은 방식).
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Attachment", meta=(EditCondition="AttachMode==EMechPartAttachMode::Socket"))
+	FVector RelativeLocation = FVector::ZeroVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Attachment", meta=(EditCondition="AttachMode==EMechPartAttachMode::Socket"))
+	FRotator RelativeRotation = FRotator::ZeroRotator;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Attachment", meta=(EditCondition="AttachMode==EMechPartAttachMode::Socket"))
+	FVector RelativeScale = FVector::OneVector;
+
+	/**
+	 * (2026-10-23까지의 저장 형식) 예전 에셋을 불러오면 PostSerialize가 위의 위치·회전·크기로 옮기고 Identity로 비운다.
+	 * 편집하지 않는다. 이름을 그대로 둬야 예전 에셋의 저장 값이 여기로 읽힌다.
+	 */
+	UPROPERTY()
 	FTransform RelativeTransform = FTransform::Identity;
+
+	/** 위치·회전·크기를 합친 소켓 기준 변환. */
+	FTransform GetRelativeTransform() const { return FTransform(RelativeRotation, RelativeLocation, RelativeScale); }
+
+	/** 예전 RelativeTransform 값을 새 형식으로 옮긴다. */
+	void PostSerialize(const FArchive& Ar);
 
 	/**
 	 * (2026-10-13) 이 파츠를 끼는 동안 숨길 원본 메카 부위. 비우면 원본 위에 겹쳐 입는다(원본 유지).
@@ -69,4 +93,10 @@ struct MECHPARTSWORKBENCHRUNTIME_API FMechPartAttachment
 	 * AttachMode가 LeaderPose여도 Socket 방식(AttachSocket + RelativeTransform)으로 붙인다.
 	 */
 	void Apply(UMeshComponent* PartMesh, USkeletalMeshComponent* MechMesh) const;
+};
+
+template<>
+struct TStructOpsTypeTraits<FMechPartAttachment> : public TStructOpsTypeTraitsBase2<FMechPartAttachment>
+{
+	enum { WithPostSerialize = true };
 };
