@@ -9,6 +9,7 @@ class UAnimMontage;
 class UCurveFloat;
 class UNiagaraComponent;
 class UNiagaraSystem;
+class USoundBase;
 
 /**
  * 부스트 대시 / 회피 부스트(퀵스텝). 현재 이동 입력 방향으로(입력이 없으면 뒤로) 일정한 힘의
@@ -124,6 +125,13 @@ protected:
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Dash", meta=(Categories="GameplayCue"))
 	FGameplayTag DashCueTag;
+
+	/** (2026-10-22) 퀵스텝을 시작할 때 나는 부스터 소리. 비우면 나지 않는다(DashCueTag에 연결된 큐 에셋이 없어 여기서 낸다). */
+	UPROPERTY(EditDefaultsOnly, Category="Dash|Effects")
+	TObjectPtr<USoundBase> DashSound;
+
+	UPROPERTY(EditDefaultsOnly, Category="Dash|Effects", meta=(ClampMin=0))
+	float DashSoundVolume = 1.f;
 
 	/**
 	 * 등 부스터 (2026-10-12). 대시 이동 동안 등에서 대시 반대 방향으로 뿜는다. 이펙트는 로컬 -Z로 뿜는 시스템(NS_Knight_Thruster).

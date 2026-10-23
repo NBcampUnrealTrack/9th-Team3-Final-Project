@@ -10,6 +10,8 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 #include "TimerManager.h"
 #include "System/knightGameplayTags.h"
 
@@ -222,6 +224,13 @@ void UknightMovementComponent::HandleLandingImpact(float ImpactSpeed)
 		{
 			PC->ClientStartCameraShake(LandingShake, FMath::Lerp(LandingShakeMinScale, LandingShakeMaxScale, Alpha));
 		}
+	}
+
+	// (2026-10-22) 착지 소리: 발 밑(캡슐 바닥)에서, 세게 떨어질수록 크게.
+	if (LandingSound)
+	{
+		const FVector Feet = CharacterOwner->GetActorLocation() - FVector(0.f, 0.f, CharacterOwner->GetSimpleCollisionHalfHeight());
+		UGameplayStatics::PlaySoundAtLocation(CharacterOwner, LandingSound, Feet, FMath::Lerp(LandingSoundMinVolume, LandingSoundMaxVolume, Alpha));
 	}
 
 	// 세게 떨어지면 무게를 받아내느라 잠깐 출발하지 못한다. 퀵스텝·가드 잠금(MoveInputLockCount)과는 따로 둔다.

@@ -11,6 +11,8 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/RootMotionSource.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
@@ -166,6 +168,10 @@ void UknightGameplayAbility_BoostDash::StartDash(ACharacter& Character)
 		CueParams.Normal = Direction;
 		CueParams.Instigator = &Character;
 		ASC->ExecuteGameplayCue(DashCueTag, CueParams);
+	}
+	if (DashSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(&Character, DashSound, Character.GetActorLocation(), DashSoundVolume);
 	}
 
 	// 추진기는 시끄럽다: 아직 나이트를 못 본 몬스터도 소리를 들을 수 있다 (AI 청각).
