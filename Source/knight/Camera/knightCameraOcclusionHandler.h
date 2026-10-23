@@ -22,6 +22,9 @@ public:
 	/** Returns the camera location after occlusion. */
 	FVector ResolveCameraLocation(const AActor* ViewOwner, const FVector& Pivot, const FVector& DesiredLocation, float DeltaTime);
 
+	/** (2026-10-23) 벽에 막혀 카메라가 당겨진 만큼 넓힐 시야각(도). 카메라 컴포넌트가 모드의 시야각에 더한다. */
+	float GetCloseUpExtraFOV() const { return CloseUpExtraFOV * (1.f - CurrentFraction); }
+
 protected:
 	UPROPERTY(EditAnywhere, Category="Occlusion", meta=(ClampMin=1, Units="cm"))
 	float ProbeRadius = 20.f;
@@ -35,6 +38,24 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category="Occlusion")
 	bool bIgnoreTargetableActors = true;
+
+	/**
+	 * (2026-10-23) 게임에서 보이지 않는 충돌(맵 경계 볼륨·투명벽)은 무시한다. 맵 끝에서 보이지도 않는 벽에 카메라가
+	 * 걸려 캐릭터 바로 뒤로 당겨지던 문제. 지형·건물처럼 보이는 것은 그대로 막는다.
+	 */
+	UPROPERTY(EditAnywhere, Category="Occlusion")
+	bool bIgnoreInvisibleBlockers = true;
+
+	/**
+	 * (2026-10-23) 벽에 막혀 카메라가 당겨지면, 당겨진 비율만큼(다 당겨지면 이 값 전부) 시야각을 넓힌다.
+	 * 벽 앞에서 캐릭터가 화면을 꽉 채우던 것을 줄인다. 0이면 끈다. 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditAnywhere, Category="Occlusion|Close Up", meta=(ClampMin=0, ClampMax=40, Units="deg"))
+	float CloseUpExtraFOV = 12.f;
+
+	/** (2026-10-23) 같은 비율로 카메라를 이만큼까지 올린다(위가 막히면 덜). 캐릭터가 화면 아래쪽으로 내려가 앞이 보인다. 0이면 끈다. 바뀔 수 있는 값. */
+	UPROPERTY(EditAnywhere, Category="Occlusion|Close Up", meta=(ClampMin=0, Units="cm"))
+	float CloseUpRaise = 40.f;
 
 	/**
 	 * (2026-10-20) 카메라가 물(워터 바디) 속으로 들어가지 않게 수면 + MinHeightAboveWater 아래로는 내리지 않는다.
