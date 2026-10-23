@@ -18,12 +18,20 @@ class UknightWeaponItemDefinition;
 class UknightSocketItemDefinition;
 class UKnightMaintenanceEntryWidget;
 class UknightProgressionSubsystem;
+class UCanvasPanel;
+
+enum class EKnightMaintenanceDestination : uint8
+{
+	Crafting,
+	Enhancement,
+	Sockets
+};
 
 DECLARE_DELEGATE_OneParam(FKnightMaintenanceSlotFocused, FGameplayTag);
 
 /**
- * 로비 정비 화면. 왼쪽 목록(분류, 부위, 장비), 오른쪽 상세 패널.
- * 상세: 선택 장비(없으면 장착 장비) + 탭 [스펙(현재 → 변경 후) | 세트 | 재료(제작만)].
+ * 로비 정비 목적지에서 재사용하는 화면. 제작 목적지는 제작/장비/소재 탭을 제공하고,
+ * 강화와 소켓은 각각 기존 기능 패널만 연다.
  */
 UCLASS()
 class KNIGHT_API UKnightMaintenanceWidget : public UUserWidget
@@ -31,8 +39,9 @@ class KNIGHT_API UKnightMaintenanceWidget : public UUserWidget
 	GENERATED_BODY()
 public:
 	static TSubclassOf<UKnightMaintenanceWidget> GetSharedWidgetClass();
-	void Open();
+	void Open(EKnightMaintenanceDestination InDestination);
 	void Close();
+	EKnightMaintenanceDestination GetDestination() const { return Destination; }
 	/** Q/E, LB/RB. 제작이 아니면 재료 탭 건너뜀. */
 	void CycleInfoTab(int32 Direction);
 	/** 목록 줄에서 Enter = 실행. false면 키를 그대로 넘긴다. */
@@ -98,6 +107,8 @@ private:
 	void RefreshSocketDetails();
 	void RequestWeaponUpgrade();
 	void RefreshTabButtons();
+	void RefreshCurrency();
+	void RefreshMaterialContainer();
 	void SelectEntry(UKnightMaintenanceEntryWidget* Entry);
 	void HandleEntryClicked(UKnightMaintenanceEntryWidget* Entry);
 	void HandleEntryFocused(UKnightMaintenanceEntryWidget* Entry);
@@ -106,7 +117,8 @@ private:
 	void UnequipSelection();
 	UknightProgressionSubsystem* GetProgression() const;
 
-	int32 Category = 0; // 0 제작, 1 무기, 2 방어구, 3 소켓
+	int32 Category = 0; // 0 제작, 1 강화, 2 장비, 3 소켓, 4 소재(후속 단계용 컨테이너)
+	EKnightMaintenanceDestination Destination = EKnightMaintenanceDestination::Crafting;
 	int32 InfoTab = 0;  // 0 스펙, 1 세트, 2 재료
 	FGameplayTag Slot;
 	bool bBusy = false;
@@ -121,7 +133,7 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> UpgradeChance;
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> UpgradeResult;
 	UPROPERTY(Transient) TObjectPtr<UCommonButtonBase> UpgradeButton;
-	UPROPERTY(Transient) TObjectPtr<UCommonButtonBase> SocketCategoryButton;
+	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> CurrencyText;
 	UPROPERTY(Transient) TArray<TObjectPtr<UCommonButtonBase>> SocketListButtons;
 	UPROPERTY(Transient) TObjectPtr<const UknightSocketItemDefinition> SelectedSocketItem;
 	int32 SelectedSocketSlot = INDEX_NONE;

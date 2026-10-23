@@ -2,6 +2,7 @@
 
 #include "GameFlow/KnightGameFlowSubsystem.h"
 #include "CommonButtonBase.h"
+#include "CommonTextBlock.h"
 #include "Engine/AssetManager.h"
 #include "Engine/GameInstance.h"
 #include "Engine/Texture2D.h"
@@ -26,13 +27,30 @@
 #include "Menu/UI/KnightInventoryWidget.h"
 #include "Menu/UI/KnightQuestMenuWidget.h"
 #include "Quest/KnightQuestData.h"
+#include "System/knightGameplayTags.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/CanvasPanel.h"
+#include "Components/Border.h"
 #include "Components/Button.h"
+#include "Components/SizeBox.h"
+#include "Components/VerticalBox.h"
 #include "Components/WidgetSwitcher.h"
 #include "EngineUtils.h"
 
 #define LOCTEXT_NAMESPACE "KnightMainMenu"
+
+namespace
+{
+	void SetMaintenanceButtonLabel(UCommonButtonBase* Button, const FText& Label)
+	{
+		if (!Button) return;
+		if (UFunction* const Function = Button->FindFunction(TEXT("SetButtonText")))
+		{
+			struct FParams { FText Text; } Params { Label };
+			Button->ProcessEvent(Function, &Params);
+		}
+	}
+}
 
 void UKnightMainMenuWidget::NativeOnInitialized()
 {
@@ -207,7 +225,6 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 	if (NewPage == EKnightMainMenuPage::Maintenance)
 	{
 		EnsureMaintenanceWidget();
-		if (MaintenanceWidget) MaintenanceWidget->Open();
 		if (!MaintenanceCameraRig.IsValid() && GetWorld())
 		{
 			for (TActorIterator<AKnightMaintenanceCameraRig> It(GetWorld()); It; ++It)
@@ -217,6 +234,7 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 			}
 		}
 		if (MaintenanceCameraRig.IsValid()) MaintenanceCameraRig->SetMaintenanceView(true);
+		ShowMaintenanceSelection();
 	}
 	if (NewPage == EKnightMainMenuPage::Inventory && InventoryWidget) InventoryWidget->Open();
 	// Settings and the codex bring their own close buttons.
@@ -236,8 +254,8 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 	{
 		CodexWidget->GetFocusButton()->SetUserFocus(GetOwningPlayer());
 	}
-	if (NewPage == EKnightMainMenuPage::Maintenance && MaintenanceWidget && MaintenanceWidget->GetFocusButton())
-		MaintenanceWidget->GetFocusButton()->SetUserFocus(GetOwningPlayer());
+	if (NewPage == EKnightMainMenuPage::Maintenance)
+		if (UWidget* const Focus = GetPreferredFocusTarget()) Focus->SetUserFocus(GetOwningPlayer());
 	if (NewPage == EKnightMainMenuPage::Inventory && InventoryWidget && InventoryWidget->GetFocusButton())
 		InventoryWidget->GetFocusButton()->SetUserFocus(GetOwningPlayer());
 	return true;
@@ -248,7 +266,12 @@ bool UKnightMainMenuWidget::HandleBackRequested()
 	if (CurrentPage == EKnightMainMenuPage::Inventory) return ShowPage(EKnightMainMenuPage::Home);
 	if (CurrentPage == EKnightMainMenuPage::Settings && SettingsWidget) { SettingsWidget->RequestClose(); return true; }
 	if (CurrentPage == EKnightMainMenuPage::Codex) { HandleCodexClosed(); return true; }
-	if (CurrentPage == EKnightMainMenuPage::Maintenance && MaintenanceWidget && MaintenanceWidget->HandleBack()) return true;
+	if (CurrentPage == EKnightMainMenuPage::Maintenance)
+	{
+		if (IsMaintenanceDestinationOpen() && MaintenanceWidget && MaintenanceWidget->HandleBack()) return true;
+		if (IsMaintenanceDestinationOpen()) { ShowMaintenanceSelection(); return true; }
+		return ShowPage(EKnightMainMenuPage::Home);
+	}
 	if (CurrentPage == EKnightMainMenuPage::Stage && QuestWidget
 		&& !QuestWidget->GetSelectedQuestId().IsNone()) return QuestWidget->SelectQuest(NAME_None);
 	// First Esc clears the selected region, the next one leaves the map.
@@ -276,7 +299,7 @@ FReply UKnightMainMenuWidget::NativeOnPreviewKeyDown(const FGeometry& InGeometry
 		ShowPage(CurrentPage == EKnightMainMenuPage::Inventory ? EKnightMainMenuPage::Home : EKnightMainMenuPage::Inventory);
 		return FReply::Handled();
 	}
-	if (CurrentPage == EKnightMainMenuPage::Maintenance && MaintenanceWidget && !IsTravelPending())
+	if (CurrentPage == EKnightMainMenuPage::Maintenance && IsMaintenanceDestinationOpen() && MaintenanceWidget && !IsTravelPending())
 	{
 		const FKey Key = InKeyEvent.GetKey();
 		// 방향키는 포커스 이동. Q/E 정보 탭, 목록 줄에서 Enter 실행.
@@ -350,17 +373,85 @@ void UKnightMainMenuWidget::EnsureCodexWidget()
 
 void UKnightMainMenuWidget::EnsureMaintenanceWidget()
 {
-	if (MaintenanceWidget || !Panel_Maintenance || !GetOwningPlayer()) return;
+	if (MaintenanceWidget || !Panel_Maintenance || !GetOwningPlayer() || !WidgetTree) return;
+	MaintenanceSwitcher = WidgetTree->ConstructWidget<UWidgetSwitcher>(UWidgetSwitcher::StaticClass(), TEXT("Switcher_MaintenanceRuntime"));
+	MaintenanceSelectionPanel = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("Panel_MaintenanceSelectionRuntime"));
+	UBorder* const Card = WidgetTree->ConstructWidget<UBorder>();
+	Card->SetBrushColor(FLinearColor(0.035f, 0.065f, 0.1f, 0.92f));
+	Card->SetPadding(FMargin(26.f, 24.f));
+	UCanvasPanelSlot* const CardSlot = MaintenanceSelectionPanel->AddChildToCanvas(Card);
+	CardSlot->SetAnchors(FAnchors(0.5f, 0.5f));
+	CardSlot->SetAlignment(FVector2D(0.5f, 0.5f));
+	CardSlot->SetSize(FVector2D(520.f, 360.f));
+	UVerticalBox* const Options = WidgetTree->ConstructWidget<UVerticalBox>();
+	Card->SetContent(Options);
+	UCommonTextBlock* const Heading = WidgetTree->ConstructWidget<UCommonTextBlock>();
+	Heading->SetText(LOCTEXT("MaintenanceSelectionHeading", "정비"));
+	if (const TSubclassOf<UCommonTextStyle> Style = LoadClass<UCommonTextStyle>(nullptr,
+		TEXT("/Game/Knight/UI/Style/TS_Knight_Subhead.TS_Knight_Subhead_C"))) Heading->SetStyle(Style);
+	Options->AddChildToVerticalBox(Heading)->SetPadding(FMargin(0.f, 0.f, 0.f, 18.f));
+	const TSubclassOf<UCommonButtonBase> ButtonClass = LoadClass<UCommonButtonBase>(nullptr,
+		TEXT("/Game/Knight/UI/Common/WBP_KnightButton.WBP_KnightButton_C"));
+	auto AddChoice = [this, Options, ButtonClass](const FText& Label, EKnightMaintenanceDestination Destination) -> UCommonButtonBase*
+	{
+		if (!ButtonClass) return nullptr;
+		UCommonButtonBase* const Button = CreateWidget<UCommonButtonBase>(GetOwningPlayer(), ButtonClass);
+		if (!Button) return nullptr;
+		SetMaintenanceButtonLabel(Button, Label);
+		Button->SetIsSelectable(true);
+		Button->SetIsInteractableWhenSelected(true);
+		USizeBox* const Height = WidgetTree->ConstructWidget<USizeBox>();
+		Height->SetHeightOverride(70.f);
+		Height->AddChild(Button);
+		Options->AddChildToVerticalBox(Height)->SetPadding(FMargin(0.f, 0.f, 0.f, 12.f));
+		Button->OnClicked().AddWeakLambda(this, [this, Destination]() { OpenMaintenanceDestination(Destination); });
+		return Button;
+	};
+	MaintenanceCraftingButton = AddChoice(LOCTEXT("MaintenanceChoiceCrafting", "제작"), EKnightMaintenanceDestination::Crafting);
+	MaintenanceEnhancementButton = AddChoice(LOCTEXT("MaintenanceChoiceEnhancement", "강화"), EKnightMaintenanceDestination::Enhancement);
+	MaintenanceSocketsButton = AddChoice(LOCTEXT("MaintenanceChoiceSockets", "소켓"), EKnightMaintenanceDestination::Sockets);
+	MaintenanceSwitcher->AddChild(MaintenanceSelectionPanel);
 	MaintenanceWidget = CreateWidget<UKnightMaintenanceWidget>(GetOwningPlayer(), UKnightMaintenanceWidget::GetSharedWidgetClass());
 	if (!MaintenanceWidget) return;
+	MaintenanceSwitcher->AddChild(MaintenanceWidget);
 	Panel_Maintenance->ClearChildren();
-	UPanelSlot* AddedSlot = Panel_Maintenance->AddChild(MaintenanceWidget);
+	UPanelSlot* AddedSlot = Panel_Maintenance->AddChild(MaintenanceSwitcher);
 	if (UVerticalBoxSlot* MaintenanceSlot = Cast<UVerticalBoxSlot>(AddedSlot))
 		MaintenanceSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+	else if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(AddedSlot))
+	{
+		CanvasSlot->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f));
+		CanvasSlot->SetOffsets(FMargin(0.f));
+	}
 	MaintenanceWidget->OnSlotFocused.BindWeakLambda(this, [this](FGameplayTag FocusedSlot)
 	{
 		if (MaintenanceCameraRig.IsValid()) MaintenanceCameraRig->FocusSlot(FocusedSlot);
 	});
+}
+
+bool UKnightMainMenuWidget::IsMaintenanceDestinationOpen() const
+{
+	return MaintenanceSwitcher && MaintenanceWidget && MaintenanceSwitcher->GetActiveWidget() == MaintenanceWidget;
+}
+
+void UKnightMainMenuWidget::ShowMaintenanceSelection()
+{
+	if (!MaintenanceSwitcher || !MaintenanceSelectionPanel) return;
+	if (MaintenanceWidget) MaintenanceWidget->Close();
+	MaintenanceSwitcher->SetActiveWidget(MaintenanceSelectionPanel);
+	if (MaintenanceCameraRig.IsValid()) MaintenanceCameraRig->FocusSlot(FGameplayTag());
+	if (CurrentPage == EKnightMainMenuPage::Maintenance && GetOwningPlayer() && MaintenanceCraftingButton)
+		MaintenanceCraftingButton->SetUserFocus(GetOwningPlayer());
+}
+
+void UKnightMainMenuWidget::OpenMaintenanceDestination(EKnightMaintenanceDestination Destination)
+{
+	if (CurrentPage != EKnightMainMenuPage::Maintenance || IsTravelPending() || !MaintenanceSwitcher || !MaintenanceWidget) return;
+	MaintenanceWidget->Open(Destination);
+	MaintenanceSwitcher->SetActiveWidget(MaintenanceWidget);
+	if (MaintenanceCameraRig.IsValid()) MaintenanceCameraRig->FocusSlot(
+		Destination == EKnightMaintenanceDestination::Enhancement ? knightGameplayTags::Equipment_Slot_Weapon : FGameplayTag());
+	FocusCurrentPage();
 }
 
 void UKnightMainMenuWidget::EnsureInventoryWidget()
@@ -411,7 +502,8 @@ UWidget* UKnightMainMenuWidget::GetPreferredFocusTarget() const
 		return FocusBeforeInventory.Get();
 	if (CurrentPage == EKnightMainMenuPage::Inventory && InventoryWidget) return InventoryWidget->GetFocusButton();
 	if (CurrentPage == EKnightMainMenuPage::Home && bRestoreMaintenanceFocus && Button_Maintenance) return Button_Maintenance;
-	if (CurrentPage == EKnightMainMenuPage::Maintenance && MaintenanceWidget) return MaintenanceWidget->GetFocusButton();
+	if (CurrentPage == EKnightMainMenuPage::Maintenance)
+		return IsMaintenanceDestinationOpen() && MaintenanceWidget ? MaintenanceWidget->GetFocusButton() : MaintenanceCraftingButton.Get();
 	if (CurrentPage == EKnightMainMenuPage::Home && bRestoreCodexFocus && Button_Codex)
 	{
 		return Button_Codex;

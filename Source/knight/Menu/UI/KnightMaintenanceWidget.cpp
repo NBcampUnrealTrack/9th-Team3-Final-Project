@@ -7,6 +7,8 @@
 #include "Blueprint/WidgetTree.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
+#include "Components/CanvasPanel.h"
+#include "Components/CanvasPanelSlot.h"
 #include "Components/Image.h"
 #include "Components/ScrollBox.h"
 #include "Components/ScrollBoxSlot.h"
@@ -312,34 +314,22 @@ void UKnightMaintenanceWidget::NativeOnInitialized()
 		Button->SetIsInteractableWhenSelected(true);
 	}
 	if (Btn_Craft) Btn_Craft->OnClicked().AddWeakLambda(this, [this]() { SetCategory(0, true); });
-	if (Btn_Weapon) Btn_Weapon->OnClicked().AddWeakLambda(this, [this]() { SetCategory(1, true); });
-	if (Btn_Armor) Btn_Armor->OnClicked().AddWeakLambda(this, [this]() { SetCategory(2, true); });
-	// Extend the existing tab row at runtime so the same WBP layout, button class and focus rules are used.
-	if (WidgetTree && Btn_Craft && Btn_Weapon && Btn_Armor)
+	if (Btn_Weapon) Btn_Weapon->OnClicked().AddWeakLambda(this, [this]() { SetCategory(2, true); });
+	if (Btn_Armor) Btn_Armor->OnClicked().AddWeakLambda(this, [this]() { SetCategory(4, true); });
+	// The WBP owns the three existing tab buttons. Their labels and routes now belong to Crafting.
+	SetButtonLabel(Btn_Weapon, LOCTEXT("EquipmentTab", "장비"));
+	SetButtonLabel(Btn_Armor, LOCTEXT("MaterialsTab", "소재"));
+	if (UCanvasPanel* const Root = WidgetTree ? Cast<UCanvasPanel>(WidgetTree->RootWidget) : nullptr)
 	{
-		UPanelWidget* TabParent = nullptr;
-		for (UPanelWidget* Candidate = Btn_Armor->GetParent(); Candidate; Candidate = Candidate->GetParent())
-		{
-			auto IsDescendant = [Candidate](const UWidget* Widget)
-			{
-				for (const UWidget* Parent = Widget; Parent; Parent = Parent->GetParent())
-					if (Parent == Candidate) return true;
-				return false;
-			};
-			if (IsDescendant(Btn_Craft) && IsDescendant(Btn_Weapon)) { TabParent = Candidate; break; }
-		}
-		const TSubclassOf<UCommonButtonBase> ButtonClass = LoadClass<UCommonButtonBase>(nullptr,
-			TEXT("/Game/Knight/UI/Common/WBP_KnightButton.WBP_KnightButton_C"));
-		SocketCategoryButton = TabParent && ButtonClass && GetOwningPlayer()
-			? CreateWidget<UCommonButtonBase>(GetOwningPlayer(), ButtonClass) : nullptr;
-		if (SocketCategoryButton)
-		{
-			SetButtonLabel(SocketCategoryButton, LOCTEXT("SocketTab", "소켓"));
-			SocketCategoryButton->SetIsSelectable(true);
-			SocketCategoryButton->SetIsInteractableWhenSelected(true);
-			TabParent->AddChild(SocketCategoryButton);
-			SocketCategoryButton->OnClicked().AddWeakLambda(this, [this]() { SetCategory(3, false); });
-		}
+		CurrencyText = NewRowText(WidgetTree, BodyStyle(), ETextJustify::Right);
+		UCanvasPanelSlot* const CurrencySlot = Root->AddChildToCanvas(CurrencyText);
+		CurrencySlot->SetAnchors(FAnchors(1.f, 0.f));
+		CurrencySlot->SetAlignment(FVector2D(1.f, 0.f));
+		CurrencySlot->SetPosition(FVector2D(-96.f, 64.f));
+		CurrencySlot->SetAutoSize(true);
+		RefreshCurrency();
+		if (UWidget* const Confirm = WidgetTree->FindWidget(TEXT("Panel_Confirm")))
+			if (UCanvasPanelSlot* const ConfirmSlot = Cast<UCanvasPanelSlot>(Confirm->Slot)) ConfirmSlot->SetZOrder(100);
 	}
 	if (Btn_Head) Btn_Head->OnClicked().AddWeakLambda(this, [this]() { SetSlot(knightGameplayTags::Equipment_Slot_Head, true); });
 	if (Btn_Torso) Btn_Torso->OnClicked().AddWeakLambda(this, [this]() { SetSlot(knightGameplayTags::Equipment_Slot_Torso, true); });
@@ -378,12 +368,22 @@ UknightProgressionSubsystem* UKnightMaintenanceWidget::GetProgression() const
 	return GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>() : nullptr;
 }
 
-void UKnightMaintenanceWidget::Open()
+void UKnightMaintenanceWidget::Open(EKnightMaintenanceDestination InDestination)
 {
 	ShowConfirm(false);
+	Destination = InDestination;
 	InfoTab = InfoSpec;
 	if (Txt_Status) Txt_Status->SetText(FText::GetEmpty());
-	SetCategory(0, false);
+	const bool bCrafting = Destination == EKnightMaintenanceDestination::Crafting;
+	if (UTextBlock* const Heading = WidgetTree ? Cast<UTextBlock>(WidgetTree->FindWidget(TEXT("Txt_Header"))) : nullptr)
+		Heading->SetText(bCrafting ? LOCTEXT("CraftingDestination", "제작")
+			: Destination == EKnightMaintenanceDestination::Enhancement ? LOCTEXT("EnhancementDestination", "강화")
+			: LOCTEXT("SocketsDestination", "소켓"));
+	for (UCommonButtonBase* const Button : { Btn_Craft.Get(), Btn_Weapon.Get(), Btn_Armor.Get() })
+		if (Button) Button->SetVisibility(bCrafting ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	if (CurrencyText) CurrencyText->SetVisibility(bCrafting ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	RefreshCurrency();
+	SetCategory(bCrafting ? 0 : Destination == EKnightMaintenanceDestination::Enhancement ? 1 : 3, false);
 }
 
 void UKnightMaintenanceWidget::Close()
@@ -396,36 +396,52 @@ void UKnightMaintenanceWidget::Close()
 	UpgradeResultMessage = FText::GetEmpty();
 }
 
-UWidget* UKnightMaintenanceWidget::GetFocusButton() const { return Btn_Craft; }
+UWidget* UKnightMaintenanceWidget::GetFocusButton() const
+{
+	if (Destination == EKnightMaintenanceDestination::Crafting)
+		return Category == 4 ? Btn_Armor.Get() : Category == 2 ? Btn_Weapon.Get() : Btn_Craft.Get();
+	if (Category == 3) return SocketListButtons.IsEmpty() ? static_cast<UWidget*>(Btn_Execute.Get()) : SocketListButtons[0].Get();
+	return Entries.IsEmpty() ? static_cast<UWidget*>(Btn_Execute.Get()) : Entries[0].Get();
+}
 
 void UKnightMaintenanceWidget::SetCategory(int32 NewCategory, bool bFromPlayer)
 {
-	Category = FMath::Clamp(NewCategory, 0, 3);
-	// 무기는 무기 부위만, 방어구는 무기 부위 제외. 가능하면 현재 부위 유지.
+	if (Destination == EKnightMaintenanceDestination::Crafting && NewCategory != 0 && NewCategory != 2 && NewCategory != 4) return;
+	if (Destination == EKnightMaintenanceDestination::Enhancement && NewCategory != 1) return;
+	if (Destination == EKnightMaintenanceDestination::Sockets && NewCategory != 3) return;
+	Category = NewCategory;
+	// Enhancement is weapon-only. Equipment includes all five slots.
 	if (Category == 1) Slot = knightGameplayTags::Equipment_Slot_Weapon;
-	else if (!Slot.IsValid() || (Category == 2 && Slot == knightGameplayTags::Equipment_Slot_Weapon)) Slot = knightGameplayTags::Equipment_Slot_Head;
+	else if (!Slot.IsValid()) Slot = knightGameplayTags::Equipment_Slot_Head;
 	SelectedPart = nullptr;
 	SelectedRecipe = nullptr;
+	if (Txt_Status) Txt_Status->SetText(FText::GetEmpty());
 	if (Category != 3) { SelectedSocketItem = nullptr; SelectedSocketSlot = INDEX_NONE; }
 	UpgradeResultMessage = FText::GetEmpty();
-	if (Btn_SlotWeapon) Btn_SlotWeapon->SetVisibility(Category == 0 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	if (UWidget* const Slots = WidgetTree ? WidgetTree->FindWidget(TEXT("Row_Slots")) : nullptr)
+		Slots->SetVisibility(Category == 1 || Category == 3 || Category == 4 ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+	if (Btn_SlotWeapon) Btn_SlotWeapon->SetVisibility(Category == 0 || Category == 2 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	for (UCommonButtonBase* Button : { Btn_Head.Get(), Btn_Torso.Get(), Btn_Legs.Get(), Btn_Arms.Get() })
-		if (Button) Button->SetVisibility(Category == 1 || Category == 3 ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+		if (Button) Button->SetVisibility(Category == 1 || Category == 3 || Category == 4 ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+	if (UWidget* const Tabs = WidgetTree ? WidgetTree->FindWidget(TEXT("Row_InfoTabs")) : nullptr)
+		Tabs->SetVisibility(Category == 4 ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+	if (Switcher_Info) Switcher_Info->SetVisibility(Category == 4 ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 	if (Btn_InfoSet) Btn_InfoSet->SetVisibility(Category == 3 ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 	if (Btn_InfoSpec) Btn_InfoSpec->SetVisibility(Category == 3 ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 	if (Btn_InfoMaterial) Btn_InfoMaterial->SetVisibility(Category == 0 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	if (Category == 3 || (InfoTab == InfoMaterial && Category != 0)) InfoTab = InfoSpec;
 	if (Switcher_Info) Switcher_Info->SetActiveWidgetIndex(InfoTab);
 	RebuildList();
-	if (bFromPlayer && Category != 3) OnSlotFocused.ExecuteIfBound(Slot);
+	if (bFromPlayer && Category != 3) OnSlotFocused.ExecuteIfBound(Category == 4 ? FGameplayTag() : Slot);
 }
 
 void UKnightMaintenanceWidget::SetSlot(FGameplayTag NewSlot, bool bFromPlayer)
 {
-	if (Category == 1 || Category == 3 || (Category == 2 && NewSlot == knightGameplayTags::Equipment_Slot_Weapon)) return;
+	if (Category == 1 || Category == 3 || Category == 4) return;
 	Slot = NewSlot;
 	SelectedPart = nullptr;
 	SelectedRecipe = nullptr;
+	if (Txt_Status) Txt_Status->SetText(FText::GetEmpty());
 	UpgradeResultMessage = FText::GetEmpty();
 	RebuildList();
 	if (bFromPlayer) OnSlotFocused.ExecuteIfBound(Slot);
@@ -440,8 +456,63 @@ void UKnightMaintenanceWidget::SetInfoTab(int32 NewTab)
 
 void UKnightMaintenanceWidget::CycleInfoTab(int32 Direction)
 {
+	if (Category == 4) return;
 	const int32 Count = Category == 3 ? 1 : Category == 0 ? 3 : 2;
 	SetInfoTab(((InfoTab + Direction) % Count + Count) % Count);
+}
+
+void UKnightMaintenanceWidget::RefreshCurrency()
+{
+	if (!CurrencyText) return;
+	const UknightSaveSubsystem* const Saves = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
+	const UknightProgressionSubsystem* const Progression = GetProgression();
+	CurrencyText->SetText(Saves && Saves->HasSelectedSlot() && Progression
+		? FText::Format(LOCTEXT("CraftingMoney", "보유 돈  {0}"), FText::AsNumber(Progression->GetMoney()))
+		: LOCTEXT("CraftingMoneyNoProfile", "보유 돈  —"));
+}
+
+void UKnightMaintenanceWidget::RefreshMaterialContainer()
+{
+	if (!List_Items || !WidgetTree) return;
+	List_Items->ClearChildren();
+	Entries.Reset();
+	SocketListButtons.Reset();
+	SelectedPart = nullptr;
+	SelectedRecipe = nullptr;
+	if (Txt_PartName) Txt_PartName->SetText(LOCTEXT("MaterialsHeading", "소재"));
+	if (Txt_PartState) Txt_PartState->SetVisibility(ESlateVisibility::Collapsed);
+	if (Txt_PartDesc)
+	{
+		Txt_PartDesc->SetText(LOCTEXT("MaterialsNextPhase", "보유 소재 목록입니다. 판매는 현재 I 키 인벤토리에서 이용할 수 있습니다."));
+		Txt_PartDesc->SetVisibility(ESlateVisibility::HitTestInvisible);
+	}
+	if (Txt_Bonus) Txt_Bonus->SetVisibility(ESlateVisibility::Collapsed);
+	if (Img_Selected) Img_Selected->SetVisibility(ESlateVisibility::Collapsed);
+	if (Btn_Execute) Btn_Execute->SetVisibility(ESlateVisibility::Collapsed);
+	if (Btn_Unequip) Btn_Unequip->SetVisibility(ESlateVisibility::Collapsed);
+	TArray<FknightItemStack> Materials;
+	const bool bLoaded = GetProgression() && GetProgression()->GetOwnedMaterials(Materials);
+	if (!bLoaded || Materials.IsEmpty())
+	{
+		UCommonTextBlock* const Empty = NewRowText(WidgetTree, BodyStyle(), ETextJustify::Left);
+		Empty->SetText(bLoaded ? LOCTEXT("NoOwnedMaterials", "보유 소재가 없습니다.")
+			: LOCTEXT("MaterialsUnavailable", "현재 슬롯의 소재를 불러올 수 없습니다."));
+		List_Items->AddChild(Empty);
+	}
+	else
+	{
+		for (const FknightItemStack& Stack : Materials)
+		{
+			if (!Stack.Item || Stack.Count <= 0) continue;
+			UCommonTextBlock* const Row = NewRowText(WidgetTree, BodyStyle(), ETextJustify::Left);
+			Row->SetText(FText::Format(LOCTEXT("OwnedMaterialRow", "{0}  ×{1}"),
+				Stack.Item->DisplayName.IsEmpty() ? FText::FromString(Stack.Item->GetName()) : Stack.Item->DisplayName,
+				FText::AsNumber(Stack.Count)));
+			if (UScrollBoxSlot* const RowSlot = Cast<UScrollBoxSlot>(List_Items->AddChild(Row)))
+				RowSlot->SetPadding(FMargin(0.f, 0.f, 10.f, 8.f));
+		}
+	}
+	RefreshTabButtons();
 }
 
 void UKnightMaintenanceWidget::RefreshTabButtons()
@@ -449,9 +520,8 @@ void UKnightMaintenanceWidget::RefreshTabButtons()
 	const auto Select = [](UCommonButtonBase* Button, bool bSelected) { SetSelected(Button, bSelected); };
 
 	Select(Btn_Craft, Category == 0);
-	Select(Btn_Weapon, Category == 1);
-	Select(Btn_Armor, Category == 2);
-	Select(SocketCategoryButton, Category == 3);
+	Select(Btn_Weapon, Category == 2);
+	Select(Btn_Armor, Category == 4);
 	Select(Btn_Head, Slot == knightGameplayTags::Equipment_Slot_Head);
 	Select(Btn_Torso, Slot == knightGameplayTags::Equipment_Slot_Torso);
 	Select(Btn_Legs, Slot == knightGameplayTags::Equipment_Slot_Legs);
@@ -466,6 +536,7 @@ void UKnightMaintenanceWidget::RebuildList()
 {
 	if (!List_Items) return;
 	if (Category == 3) { RebuildSocketList(); return; }
+	if (Category == 4) { RefreshMaterialContainer(); return; }
 	// 줄을 다시 만들면 포커스가 사라지므로 기억했다가 복원.
 	const UknightPartItemDefinition* FocusedPart = nullptr;
 	for (const UKnightMaintenanceEntryWidget* Entry : Entries)
@@ -546,6 +617,7 @@ void UKnightMaintenanceWidget::RebuildSocketList()
 {
 	if (!List_Items || !WidgetTree) return;
 	List_Items->ClearChildren();
+	Entries.Reset();
 	SocketListButtons.Reset();
 	UknightProgressionSubsystem* const Progression = GetProgression();
 	const int32 Slots = Progression ? Progression->GetUnlockedSharedSocketSlots() : 0;
@@ -1177,12 +1249,14 @@ void UKnightMaintenanceWidget::UnequipSelection()
 
 void UKnightMaintenanceWidget::HandleProgressionChanged()
 {
+	RefreshCurrency();
 	if (bBusy) return;
 	RebuildList();
 }
 
 void UKnightMaintenanceWidget::HandleActiveSlotChanged(const FString& SlotId)
 {
+	RefreshCurrency();
 	SelectedPart = nullptr;
 	SelectedRecipe = nullptr;
 	SelectedSocketItem = nullptr;

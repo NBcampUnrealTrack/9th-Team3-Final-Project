@@ -17,6 +17,7 @@ class UKnightQuestMenuWidget;
 class UKnightQuestCatalog;
 class UCanvasPanel;
 class AKnightMaintenanceCameraRig;
+enum class EKnightMaintenanceDestination : uint8;
 struct FStreamableHandle;
 
 UENUM(BlueprintType)
@@ -184,6 +185,9 @@ private:
 	void EnsureSettingsWidget();
 	void EnsureCodexWidget();
 	void EnsureMaintenanceWidget();
+	void ShowMaintenanceSelection();
+	void OpenMaintenanceDestination(EKnightMaintenanceDestination Destination);
+	bool IsMaintenanceDestinationOpen() const;
 	void EnsureInventoryWidget();
 	void EnsureQuestWidget();
 
@@ -193,6 +197,16 @@ private:
 	TObjectPtr<UKnightCodexWidget> CodexWidget;
 	UPROPERTY(Transient)
 	TObjectPtr<UKnightMaintenanceWidget> MaintenanceWidget;
+	UPROPERTY(Transient)
+	TObjectPtr<UWidgetSwitcher> MaintenanceSwitcher;
+	UPROPERTY(Transient)
+	TObjectPtr<UCanvasPanel> MaintenanceSelectionPanel;
+	UPROPERTY(Transient)
+	TObjectPtr<UCommonButtonBase> MaintenanceCraftingButton;
+	UPROPERTY(Transient)
+	TObjectPtr<UCommonButtonBase> MaintenanceEnhancementButton;
+	UPROPERTY(Transient)
+	TObjectPtr<UCommonButtonBase> MaintenanceSocketsButton;
 	UPROPERTY(Transient)
 	TObjectPtr<UKnightInventoryWidget> InventoryWidget;
 	UPROPERTY(Transient)
