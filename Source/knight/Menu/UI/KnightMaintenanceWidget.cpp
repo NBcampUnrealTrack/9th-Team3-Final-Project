@@ -567,7 +567,7 @@ UknightProgressionSubsystem* UKnightMaintenanceWidget::GetProgression() const
 	return GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>() : nullptr;
 }
 
-void UKnightMaintenanceWidget::Open(EKnightMaintenanceDestination InDestination)
+void UKnightMaintenanceWidget::Open(EKnightMaintenanceDestination InDestination, bool bStartInMaterials)
 {
 	SelectedSocketSlot = INDEX_NONE;
 	SelectedSocketItem = nullptr;
@@ -601,7 +601,13 @@ void UKnightMaintenanceWidget::Open(EKnightMaintenanceDestination InDestination)
 		if (Button) Button->SetVisibility(bCrafting ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	if (CurrencyText) CurrencyText->SetVisibility(bCrafting ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 	RefreshCurrency();
-	SetCategory(bCrafting ? 0 : Destination == EKnightMaintenanceDestination::Enhancement ? 1 : 3, false);
+	SetCategory(bCrafting ? (bStartInMaterials ? 4 : 0) : Destination == EKnightMaintenanceDestination::Enhancement ? 1 : 3, false);
+}
+
+bool UKnightMaintenanceWidget::IsMaterialQuantityInputFocused() const
+{
+	return IsMaterialsViewOpen() && MaterialQuantityInput
+		&& (MaterialQuantityInput->HasAnyUserFocus() || MaterialQuantityInput->HasFocusedDescendants());
 }
 
 void UKnightMaintenanceWidget::Close()

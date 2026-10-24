@@ -45,7 +45,9 @@ class KNIGHT_API UKnightMaintenanceWidget : public UUserWidget
 	GENERATED_BODY()
 public:
 	static TSubclassOf<UKnightMaintenanceWidget> GetSharedWidgetClass();
-	void Open(EKnightMaintenanceDestination InDestination);
+	void Open(EKnightMaintenanceDestination InDestination, bool bStartInMaterials = false);
+	bool IsMaterialsViewOpen() const { return Destination == EKnightMaintenanceDestination::Crafting && Category == 4; }
+	bool IsMaterialQuantityInputFocused() const;
 	void Close();
 	EKnightMaintenanceDestination GetDestination() const { return Destination; }
 	/** Q/E, LB/RB. 제작이 아니면 재료 탭 건너뜀. */

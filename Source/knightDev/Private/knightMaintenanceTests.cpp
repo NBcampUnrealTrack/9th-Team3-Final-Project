@@ -16,6 +16,7 @@
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "Menu/UI/KnightInventoryWidget.h"
+#include "Menu/UI/KnightMainMenuWidget.h"
 #include "Menu/UI/KnightMaintenanceWidget.h"
 #include "Progression/knightProgressionSubsystem.h"
 #include "Progression/knightSaveGame.h"
@@ -37,6 +38,264 @@ namespace
 		UknightProgressionSubsystem* Progression = World && World->GetGameInstance()
 			? World->GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>() : nullptr;
 		if (!Progression || Args.IsEmpty()) return;
+		if (Args[0] == TEXT("IntegrationCases"))
+		{
+			const FString Mode = Args.Num() > 1 ? Args[1] : TEXT("Navigation");
+			int32 Failures = 0;
+			auto Check = [&Failures, &Mode](bool bPassed, const TCHAR* Case)
+			{
+				if (!bPassed) ++Failures;
+				UE_LOG(LogknightDev, Log, TEXT("Phase9 IntegrationCases %s %s: %s"), *Mode,
+					bPassed ? TEXT("PASS") : TEXT("FAIL"), Case);
+			};
+			UknightSaveSubsystem* const Saves = World->GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+			const FString Slot = Mode == TEXT("EquipmentUnequip") ? TEXT("Phase9EquipmentEquip")
+				: Mode == TEXT("RestoreCraft") ? TEXT("Phase9Craft")
+				: Mode == TEXT("RestoreState") ? TEXT("Phase9SaveState")
+				: Mode == TEXT("Legacy") ? TEXT("Legacy") : TEXT("Phase9") + Mode;
+			if (!Saves || !Saves->SelectSlot(Slot) || !Saves->GetSaveGame())
+			{
+				UE_LOG(LogknightDev, Error, TEXT("Phase9 IntegrationCases setup failed mode=%s"), *Mode);
+				return;
+			}
+			UknightSaveGame* const Save = Saves->GetSaveGame();
+			const UknightMaterialItemDefinition* const Hide = LoadObject<UknightMaterialItemDefinition>(nullptr,
+				TEXT("/Game/Knight/Items/Materials/Janyeol/DA_Material_Janyeol_Hide.DA_Material_Janyeol_Hide"));
+			const UknightWeaponItemDefinition* const Weapon = LoadObject<UknightWeaponItemDefinition>(nullptr,
+				TEXT("/Game/Knight/Data/Equipment/Janyeol/DA_Equipment_Janyeol_Weapon.DA_Equipment_Janyeol_Weapon"));
+			const UknightSocketItemDefinition* const Socket = LoadObject<UknightSocketItemDefinition>(nullptr,
+				TEXT("/Game/Knight/Items/Sockets/DA_Socket_RepairExpansion.DA_Socket_RepairExpansion"));
+			const UknightCraftRecipeDefinition* const Recipe = LoadObject<UknightCraftRecipeDefinition>(nullptr,
+				TEXT("/Game/Knight/Data/Equipment/Janyeol/Recipes/DA_Recipe_Equipment_Janyeol_HeadB.DA_Recipe_Equipment_Janyeol_HeadB"));
+			if (!Hide || !Weapon || !Socket || !Recipe || !Recipe->Result || Recipe->Costs.Num() != 2)
+			{
+				UE_LOG(LogknightDev, Error, TEXT("Phase9 IntegrationCases definitions missing mode=%s"), *Mode);
+				return;
+			}
+			if (Mode == TEXT("Navigation"))
+			{
+				APlayerController* const Player = UGameplayStatics::GetPlayerController(World, 0);
+				const TSubclassOf<UKnightMainMenuWidget> MenuClass = LoadClass<UKnightMainMenuWidget>(nullptr,
+					TEXT("/Game/Knight/UI/Menu/WBP_KnightMainMenu.WBP_KnightMainMenu_C"));
+				UKnightMainMenuWidget* const Menu = Player && MenuClass ? CreateWidget<UKnightMainMenuWidget>(Player, MenuClass) : nullptr;
+				Check(Menu && Menu->WidgetTree, TEXT("real main-menu WBP constructed"));
+				if (Menu && Menu->WidgetTree)
+				{
+					Check(Menu->ShowPage(EKnightMainMenuPage::Inventory), TEXT("serialized legacy page redirects to Materials"));
+					UWidgetSwitcher* const Switcher = Cast<UWidgetSwitcher>(Menu->WidgetTree->FindWidget(TEXT("Switcher_MaintenanceRuntime")));
+					UKnightMaintenanceWidget* const Maintenance = Switcher ? Cast<UKnightMaintenanceWidget>(Switcher->GetActiveWidget()) : nullptr;
+					Check(Menu->GetCurrentPage() == EKnightMainMenuPage::Maintenance && Maintenance
+						&& Maintenance->IsMaterialsViewOpen(), TEXT("shortcut uses real maintenance Materials view"));
+					Check(!Menu->WidgetTree->FindWidget(TEXT("Panel_InventoryRuntime")), TEXT("legacy inventory panel is not constructed"));
+					Check(Menu->ToggleMaterialsShortcut() && Menu->GetCurrentPage() == EKnightMainMenuPage::Home,
+						TEXT("Materials shortcut returns directly Home"));
+					Check(Menu->ToggleMaterialsShortcut() && Switcher && Switcher->GetActiveWidget() == Maintenance
+						&& Maintenance->IsMaterialsViewOpen(), TEXT("repeat entry reuses one widget with fresh Materials state"));
+					Check(Menu->ShowPage(EKnightMainMenuPage::Home), TEXT("normal page exit works"));
+					Check(Menu->ShowPage(EKnightMainMenuPage::Maintenance) && Switcher
+						&& Switcher->GetActiveWidget() != Maintenance, TEXT("normal maintenance entry shows three choices"));
+					if (Maintenance)
+					{
+						Maintenance->Open(EKnightMaintenanceDestination::Crafting);
+						Check(!Maintenance->IsMaterialsViewOpen(), TEXT("normal Crafting starts on Crafting tab"));
+					}
+				}
+			}
+			else if (Mode == TEXT("EquipmentEquip") || Mode == TEXT("EquipmentUnequip"))
+			{
+				const UknightPartItemDefinition* const HeadA = LoadObject<UknightPartItemDefinition>(nullptr,
+					TEXT("/Game/Knight/Data/Equipment/Janyeol/DA_Equipment_Janyeol_HeadA.DA_Equipment_Janyeol_HeadA"));
+				const UknightPartItemDefinition* const HeadB = LoadObject<UknightPartItemDefinition>(nullptr,
+					TEXT("/Game/Knight/Data/Equipment/Janyeol/DA_Equipment_Janyeol_HeadB.DA_Equipment_Janyeol_HeadB"));
+				APlayerController* const Player = UGameplayStatics::GetPlayerController(World, 0);
+				UKnightMaintenanceWidget* const Widget = Player ? CreateWidget<UKnightMaintenanceWidget>(
+					Player, UKnightMaintenanceWidget::GetSharedWidgetClass()) : nullptr;
+				if (!HeadA || !HeadB || !Widget || !Widget->WidgetTree)
+				{
+					UE_LOG(LogknightDev, Error, TEXT("Phase9 equipment fixture or WBP missing"));
+					return;
+				}
+				const FGameplayTag HeadTag = knightGameplayTags::Equipment_Slot_Head;
+				const FPrimaryAssetId HeadAId = HeadA->GetPrimaryAssetId();
+				const FPrimaryAssetId HeadBId = HeadB->GetPrimaryAssetId();
+				if (Mode == TEXT("EquipmentEquip"))
+				{
+					Save->ItemCounts.Reset();
+					Save->EquippedItems.Reset();
+					Save->ExplicitlyEmptySlots.Reset();
+					Save->ItemCounts.Add(HeadAId, 1);
+					Save->ItemCounts.Add(HeadBId, 1);
+					Save->EquippedItems.Add(HeadTag, HeadAId);
+					Save->Money = 4321;
+				}
+				Widget->Open(EKnightMaintenanceDestination::Crafting);
+				UCommonButtonBase* const EquipmentTab = Cast<UCommonButtonBase>(Widget->WidgetTree->FindWidget(TEXT("Btn_Weapon")));
+				UCommonButtonBase* const Execute = Cast<UCommonButtonBase>(Widget->WidgetTree->FindWidget(TEXT("Btn_Execute")));
+				UCommonButtonBase* const Unequip = Cast<UCommonButtonBase>(Widget->WidgetTree->FindWidget(TEXT("Btn_Unequip")));
+				UCommonButtonBase* const Confirm = Cast<UCommonButtonBase>(Widget->WidgetTree->FindWidget(TEXT("Btn_ConfirmOk")));
+				UCommonButtonBase* const Cancel = Cast<UCommonButtonBase>(Widget->WidgetTree->FindWidget(TEXT("Btn_ConfirmCancel")));
+				UScrollBox* const List = Cast<UScrollBox>(Widget->WidgetTree->FindWidget(TEXT("List_Items")));
+				UScrollBox* const Picker = Cast<UScrollBox>(Widget->WidgetTree->FindWidget(TEXT("RuntimeEquipmentPickerList")));
+				UTextBlock* const Name = Cast<UTextBlock>(Widget->WidgetTree->FindWidget(TEXT("Txt_PartName")));
+				if (!EquipmentTab || !Execute || !Unequip || !Confirm || !Cancel || !List || !Picker || !Name)
+				{
+					UE_LOG(LogknightDev, Error, TEXT("Phase9 equipment UI controls missing"));
+					return;
+				}
+				EquipmentTab->OnClicked().Broadcast();
+				Check(List->GetChildrenCount() == 5, TEXT("equipment tab shows exactly five fixed slots"));
+				auto HeadRow = [List]() -> UCommonButtonBase*
+				{
+					return List->GetChildrenCount() > 1 ? Cast<UCommonButtonBase>(List->GetChildAt(1)) : nullptr;
+				};
+				if (Mode == TEXT("EquipmentUnequip"))
+				{
+					Check(Progression->GetEquippedPart(HeadTag) == HeadB, TEXT("new process restores confirmed replacement"));
+					if (HeadRow()) HeadRow()->OnClicked().Broadcast();
+					Unequip->OnClicked().Broadcast();
+					Check(!Progression->GetEquippedPart(HeadTag) && Save->ExplicitlyEmptySlots.Contains(HeadTag)
+						&& Progression->GetItemCount(HeadB) == 1,
+						TEXT("unequip records explicit empty slot without deleting owned equipment"));
+				}
+				else
+				{
+					Check(Name->GetText().ToString().Contains(TEXT("현재 장비")), TEXT("unselected slot displays overall stats"));
+					if (HeadRow()) HeadRow()->OnClicked().Broadcast();
+					Check(Name->GetText().EqualTo(HeadA->DisplayName), TEXT("selected slot displays individual equipment"));
+					if (HeadRow()) HeadRow()->OnClicked().Broadcast();
+					Check(Name->GetText().ToString().Contains(TEXT("현재 장비")), TEXT("same-slot click restores overall view"));
+					if (HeadRow()) HeadRow()->OnClicked().Broadcast();
+					Execute->OnClicked().Broadcast();
+					Check(Picker->GetChildrenCount() == 2, TEXT("replacement picker contains only owned compatible heads"));
+					Cancel->OnClicked().Broadcast();
+					Check(Progression->GetEquippedPart(HeadTag) == HeadA && Save->Money == 4321,
+						TEXT("picker cancellation does not mutate equipment or currency"));
+					Execute->OnClicked().Broadcast();
+					if (Picker->GetChildrenCount() > 1)
+						if (UCommonButtonBase* const Candidate = Cast<UCommonButtonBase>(Picker->GetChildAt(1))) Candidate->OnClicked().Broadcast();
+					Check(Saves->SelectSlot(TEXT("Phase9EquipmentOther")) && Progression->GetItemCount(HeadB) == 0,
+						TEXT("profile switch closes stale equipment picker and isolates ownership"));
+					Confirm->OnClicked().Broadcast();
+					Check(Progression->GetEquippedPart(HeadTag) != HeadB, TEXT("stale confirmation cannot equip previous profile item"));
+					Check(Saves->SelectSlot(TEXT("Phase9EquipmentEquip")), TEXT("return to isolated equipment profile"));
+					UknightSaveGame* const Active = Saves->GetSaveGame();
+					if (Active)
+					{
+						Active->ItemCounts.Add(HeadAId, 1);
+						Active->ItemCounts.Add(HeadBId, 1);
+						Active->EquippedItems.Add(HeadTag, HeadAId);
+						Active->Money = 4321;
+						Progression->OnProgressionChanged.Broadcast();
+						if (HeadRow()) HeadRow()->OnClicked().Broadcast();
+						Execute->OnClicked().Broadcast();
+						if (Picker->GetChildrenCount() > 1)
+							if (UCommonButtonBase* const Candidate = Cast<UCommonButtonBase>(Picker->GetChildAt(1))) Candidate->OnClicked().Broadcast();
+						Active->ItemCounts.Remove(HeadBId);
+						Confirm->OnClicked().Broadcast();
+						Check(Progression->GetEquippedPart(HeadTag) == HeadA,
+							TEXT("confirmation revalidates ownership before replacement"));
+						Active->ItemCounts.Add(HeadBId, 1);
+						Progression->OnProgressionChanged.Broadcast();
+						if (Picker->GetChildrenCount() > 1)
+							if (UCommonButtonBase* const Candidate = Cast<UCommonButtonBase>(Picker->GetChildAt(1))) Candidate->OnClicked().Broadcast();
+						Confirm->OnClicked().Broadcast();
+						Check(Progression->GetEquippedPart(HeadTag) == HeadB && Active->Money == 4321,
+							TEXT("confirmed replacement updates equipped ID without consuming ownership or currency"));
+						Progression->OnProgressionChanged.Broadcast();
+						Check(Name->GetText().EqualTo(HeadB->DisplayName), TEXT("refresh preserves valid selected slot"));
+					}
+				}
+				Widget->Close();
+			}
+			else if (Mode == TEXT("Craft") || Mode == TEXT("RestoreCraft"))
+			{
+				const FPrimaryAssetId ResultId = Recipe->Result->GetPrimaryAssetId();
+				if (Mode == TEXT("Craft"))
+				{
+					Save->ItemCounts.Reset();
+					Save->EquippedItems.Reset();
+					Save->ExplicitlyEmptySlots.Reset();
+					Save->Money = 913;
+					for (const FknightItemCost& Cost : Recipe->Costs)
+						Save->ItemCounts.Add(Cost.Item->GetPrimaryAssetId(), Cost.Count + 2);
+					const UknightPartItemDefinition* const EquippedBefore = Progression->GetEquippedPart(Recipe->Result->SlotTag);
+					Check(Progression->CanCraftPart(Recipe), TEXT("two-material recipe is craftable in isolated fixture"));
+					Saves->DebugFailNextSaves(1);
+					Check(Progression->CraftPart(Recipe), TEXT("craft transaction accepted"));
+					Check(Progression->GetItemCount(Recipe->Result) == 1 && !Progression->CanCraftPart(Recipe)
+						&& Progression->GetEquippedPart(Recipe->Result->SlotTag) == EquippedBefore
+						&& !Save->EquippedItems.Contains(Recipe->Result->SlotTag) && Save->Money == 913,
+						TEXT("craft grants one owned part, blocks duplicate, does not autoequip or spend currency"));
+				}
+				else Check(Progression->GetItemCount(Recipe->Result) == 1 && Save->Money == 913
+					&& !Save->EquippedItems.Contains(Recipe->Result->SlotTag),
+					TEXT("new process restores crafted ownership without autoequip or extra currency change"));
+				for (const FknightItemCost& Cost : Recipe->Costs)
+					Check(Progression->GetItemCount(Cost.Item) == 2, TEXT("recipe material quantity restored after one deduction"));
+				Check(ResultId.IsValid(), TEXT("crafted asset has stable item ID"));
+			}
+			else if (Mode == TEXT("SaveState") || Mode == TEXT("RestoreState"))
+			{
+				const FPrimaryAssetId HideId = Hide->GetPrimaryAssetId();
+				const FPrimaryAssetId WeaponId = Weapon->GetPrimaryAssetId();
+				const FPrimaryAssetId SocketId = Socket->GetPrimaryAssetId();
+				if (Mode == TEXT("SaveState"))
+				{
+					Save->ItemCounts.Reset();
+					Save->EquippedItems.Reset();
+					Save->ItemUpgradeLevels.Reset();
+					Save->WeaponUpgradeFailures.Reset();
+					Save->ItemCounts.Add(HideId, 7);
+					Save->ItemCounts.Add(WeaponId, 1);
+					Save->ItemCounts.Add(SocketId, 1);
+					Save->Money = 2468;
+					Save->EquippedItems.Add(knightGameplayTags::Equipment_Slot_Weapon, WeaponId);
+					Save->ItemUpgradeLevels.Add(WeaponId, 4);
+					Save->WeaponUpgradeFailures.Add(WeaponId, 3);
+					Save->UnlockedSharedSocketSlots = 1;
+					Save->EquippedSocketItems = { SocketId };
+					Save->FirstDefeatedBossIds.Add(TEXT("Janyeol"));
+					Saves->RequestSave();
+				}
+				Check(Progression->GetMoney() == 2468 && Progression->GetItemCount(Hide) == 7
+					&& Progression->GetItemCount(Weapon) == 1 && Progression->GetItemCount(Socket) == 1,
+					TEXT("materials, owned weapon/socket and currency agree"));
+				Check(Progression->GetEquippedPart(knightGameplayTags::Equipment_Slot_Weapon) == Weapon
+					&& Progression->GetUpgradeLevel(Weapon) == 4 && Progression->GetWeaponUpgradeFailures(Weapon) == 3,
+					TEXT("equipped ID, upgrade level and failure compensation agree"));
+				Check(Progression->GetUnlockedSharedSocketSlots() == 1 && Progression->GetEquippedSocketItem(0) == Socket,
+					TEXT("socket unlock and assignment agree"));
+				if (Mode == TEXT("RestoreState"))
+				{
+					TArray<FKnightMainEquipmentSlot> Slots;
+					Check(Progression->GetMainEquipmentSlots(Slots) && Slots.Num() == 5,
+						TEXT("five main equipment slots resolve after reload"));
+					Check(Saves->SelectSlot(TEXT("Phase9Other")) && Progression->GetMoney() == 0
+						&& Progression->GetItemCount(Hide) == 0 && Progression->GetUnlockedSharedSocketSlots() == 0,
+						TEXT("other isolated profile does not inherit ownership, money or unlocks"));
+					Check(Saves->SelectSlot(TEXT("Phase9SaveState")) && Progression->GetMoney() == 2468
+						&& Progression->GetEquippedSocketItem(0) == Socket,
+						TEXT("original profile restores after active-profile change"));
+				}
+			}
+			else if (Mode == TEXT("Legacy"))
+			{
+				Check(Saves->HasSelectedSlot() && Save->SaveVersion <= UknightSaveGame::CurrentVersion,
+					TEXT("copied older-format fixture loads into current save class"));
+				TArray<FKnightMainEquipmentSlot> Slots;
+				Check(Progression->GetMainEquipmentSlots(Slots) && Slots.Num() == 5,
+					TEXT("legacy fixture resolves current five-slot query"));
+			}
+			if (Failures > 0)
+			{
+				UE_LOG(LogknightDev, Error, TEXT("Phase9 IntegrationCases SUMMARY mode=%s failures=%d"), *Mode, Failures);
+			}
+			else
+			{
+				UE_LOG(LogknightDev, Log, TEXT("Phase9 IntegrationCases SUMMARY mode=%s failures=%d"), *Mode, Failures);
+			}
+			return;
+		}
 		if (Args[0] == TEXT("SocketCases"))
 		{
 			const FString Mode = Args.Num() > 1 ? Args[1] : TEXT("Widget");
