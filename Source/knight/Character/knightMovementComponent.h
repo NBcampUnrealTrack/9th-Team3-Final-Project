@@ -190,6 +190,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Speed", meta=(ClampMin=0, Units="CentimetersPerSecond"))
 	float BaseRunSpeed = 810.f;
 
+	/**
+	 * (2026-10-23 사용자 결정) 락온 중에는 이동 방향이 앞(캐릭터가 보는 쪽)과 이 값 이상으로 겹칠 때만 달린다(내적, 1 = 정면).
+	 * 0.5면 W+A·W+D(약 0.71)는 달리고, A·D만(0)이나 뒤로는 걷는다. 전에는 뒤로 갈 때만 막아서 옆으로도 달렸다. 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Speed", meta=(ClampMin=-1, ClampMax=1))
+	float LockOnRunMinForwardDot = 0.5f;
+
 	/** 배율 1.0일 때의 점프 힘(위쪽 초기 속도). */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Speed", meta=(ClampMin=0, Units="CentimetersPerSecond"))
 	float BaseJumpZVelocity = 600.f;

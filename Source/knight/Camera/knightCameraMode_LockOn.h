@@ -40,6 +40,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Lock On", meta=(ClampMin=0))
 	float FramingInterpSpeed = 4.f;
 
+	/**
+	 * (2026-10-23 사용자 요청 '몬스터 줌인을 좀 낮추기') 올려다볼 때(피치 40도 이상) 몬스터 크기·거리로 늘린 거리를 이 비율까지만 줄인다.
+	 * 작을수록 큰 몬스터를 올려다볼 때 카메라가 플레이어 쪽으로 붙어 몬스터가 크게(줌인된 듯) 보인다. 전에는 0.45로 고정. 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Lock On", meta=(ClampMin=0, ClampMax=1))
+	float LookUpArmScale = 0.8f;
+
 private:
 	float CurrentExtraArm = 0.f;
 	float CurrentExtraHeight = 0.f;

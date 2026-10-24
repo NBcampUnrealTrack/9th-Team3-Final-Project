@@ -53,6 +53,14 @@ public:
 	/** Mode currently on top of the stack, for debugging. */
 	UknightCameraMode* GetActiveCameraMode() const;
 
+	/**
+	 * (2026-10-23) 공격 휘두르기 카메라 연출. 기계식 타이밍(FknightMechAttackTiming)이 부른다.
+	 * Windup = 준비 동작의 락(칼을 젖힌 순간): 시야각을 살짝 조인다. Swing = 휘두르는 순간: 조임을 풀며 시야각이 튀고
+	 * 카메라가 보는 방향으로 밀렸다가 돌아온다. Strength 1 = 한손 기준(양손은 더 크게 넘긴다).
+	 */
+	void StartAttackWindup(float Strength);
+	void StartAttackSwing(float Strength);
+
 protected:
 	virtual void OnRegister() override;
 	virtual void OnUnregister() override;
@@ -70,7 +78,44 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Instanced, Category="Knight|Camera")
 	TObjectPtr<UknightCameraFadeHandler> FadeHandler;
 
+	/**
+	 * (2026-10-23 사용자 요청 '휘두르는 건 묵직한데 화면이 너무 정적') 공격 휘두르기 카메라 연출을 쓸지.
+	 * PIE 콘솔 knight.Camera.AttackKick 0/1로 바로 비교할 수 있다. 아래 값은 모두 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Camera|Attack Kick")
+	bool bAttackCameraKick = true;
+
+	/** 준비 동작(락) 동안 시야각 변화(음수 = 조임). 휘두르면 풀린다. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Camera|Attack Kick", meta=(Units="deg", EditCondition="bAttackCameraKick"))
+	float WindupFOV = -2.f;
+
+	/** 휘두르는 순간 시야각이 튀는 크기. SwingKickDuration 동안 0으로 돌아온다. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Camera|Attack Kick", meta=(Units="deg", EditCondition="bAttackCameraKick"))
+	float SwingFOV = 4.f;
+
+	/** 휘두르는 순간 카메라를 보는 방향(캐릭터 쪽)으로 미는 거리. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Camera|Attack Kick", meta=(ClampMin=0, Units="cm", EditCondition="bAttackCameraKick"))
+	float SwingPush = 25.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Camera|Attack Kick", meta=(ClampMin=0.05, Units="s", EditCondition="bAttackCameraKick"))
+	float SwingKickDuration = 0.35f;
+
+	/** 준비 동작 조임이 들어가는 시간. 휘두르기가 안 오면(공격이 끊김) WindupTimeout 뒤 저절로 풀린다. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Camera|Attack Kick", meta=(ClampMin=0.01, Units="s", EditCondition="bAttackCameraKick"))
+	float WindupBlendTime = 0.08f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Camera|Attack Kick", meta=(ClampMin=0.1, Units="s", EditCondition="bAttackCameraKick"))
+	float WindupTimeout = 0.6f;
+
 private:
+	/** 지금 프레임의 공격 연출 시야각 변화와 앞으로 미는 거리. */
+	void EvaluateAttackKick(float& OutFOV, float& OutPush) const;
+
+	double WindupStartTime = -1.0;
+	float WindupStrength = 0.f;
+	double SwingStartTime = -1.0;
+	float SwingStrength = 0.f;
+
 	TSubclassOf<UknightCameraMode> DetermineCameraMode() const;
 
 	UPROPERTY(Transient)

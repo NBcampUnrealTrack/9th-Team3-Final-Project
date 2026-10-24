@@ -5,6 +5,7 @@
 #include "Animation/knightAnimNotifyState_MeleeTrace.h"
 #include "Animation/knightAnimNotify_MeleeArea.h"
 #include "Camera/CameraShakeBase.h"
+#include "Camera/knightCameraComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
@@ -25,6 +26,13 @@ namespace
 		TEXT("knight.Player.MechTiming"), 1,
 		TEXT("1: mechanical attack timing (lock -> burst -> stop) on player attacks. 0: original animation timing."),
 		ECVF_Cheat);
+
+	/** (2026-10-23) 이 공격을 하는 폰이 로컬 플레이어면 그 카메라(공격 휘두르기 카메라 연출용). */
+	UknightCameraComponent* FindLocalPlayerCamera(const USkeletalMeshComponent* MeshComp)
+	{
+		const APawn* const Pawn = MeshComp ? Cast<APawn>(MeshComp->GetOwner()) : nullptr;
+		return Pawn && Pawn->IsLocallyControlled() ? Pawn->FindComponentByClass<UknightCameraComponent>() : nullptr;
+	}
 }
 
 TSharedPtr<FknightMechAttackTiming> FknightMechAttackTiming::Start(UAnimInstance* AnimInstance, UAnimMontage* InMontage, float InBaseRate,
@@ -193,6 +201,11 @@ void FknightMechAttackTiming::EnterPhase(EPhase NewPhase)
 	case EPhase::Lock:
 		SetRate(Settings.LockRate);
 		PlaySound(Settings.LockSound);
+		// (2026-10-23) 카메라 연출: 칼을 젖힌 순간 시야각을 살짝 조인다(양손은 락처럼 TwoHandedLockScale만큼 더 크게).
+		if (UknightCameraComponent* const Camera = FindLocalPlayerCamera(Mesh.Get()))
+		{
+			Camera->StartAttackWindup(bTwoHandedStance ? Settings.TwoHandedLockScale : 1.f);
+		}
 		break;
 	case EPhase::Burst:
 	{
@@ -214,6 +227,11 @@ void FknightMechAttackTiming::EnterPhase(EPhase NewPhase)
 		if (PC && Settings.BurstShake && Settings.BurstShakeScale > 0.f)
 		{
 			PC->ClientStartCameraShake(Settings.BurstShake, Settings.BurstShakeScale);
+		}
+		// (2026-10-23) 카메라 연출: 휘두르는 순간 조임을 풀며 시야각이 튀고 앞으로 밀렸다가 돌아온다.
+		if (UknightCameraComponent* const Camera = FindLocalPlayerCamera(MeshComp))
+		{
+			Camera->StartAttackSwing(bTwoHandedStance ? Settings.TwoHandedLockScale : 1.f);
 		}
 		break;
 	}

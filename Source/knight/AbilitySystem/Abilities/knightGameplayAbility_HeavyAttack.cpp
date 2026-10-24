@@ -141,8 +141,9 @@ bool UknightGameplayAbility_HeavyAttack::CanStartCharge() const
 		return false;
 	}
 	// (2026-10-14) 공격 후딜은 퀵스텝만 끊는다 → 그때는 캔슬 창이어도 차지를 시작하지 않는다(아래에서 실행 중인 공격에 걸림).
+	// (2026-10-23) 후딜에 다음 공격을 허용하면(ASC bAttacksCancelAttackRecovery) 차지도 시작할 수 있다.
 	const UknightAbilitySystemComponent* const KnightASC = GetKnightAbilitySystemComponentFromActorInfo();
-	if (ASC->HasMatchingGameplayTag(knightGameplayTags::Window_Cancel) && !(KnightASC && KnightASC->IsAttackRecoveryDashOnly()))
+	if (ASC->HasMatchingGameplayTag(knightGameplayTags::Window_Cancel) && !(KnightASC && KnightASC->IsAttackRecoveryBlockingAttacks()))
 	{
 		return true;
 	}
