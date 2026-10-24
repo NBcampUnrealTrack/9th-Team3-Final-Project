@@ -19,12 +19,14 @@ public class knightDev : ModuleRules
 		PrivateDependencyModuleNames.AddRange(new string[] {
 			"AIModule",
 			"AssetRegistry",
+			"CommonUI",
 			"GameplayAbilities",
 			"GameplayTags",
 			"GameplayTasks",
 			"knight",
 			"knightInventory",
-			"knightPerfTracker"
+			"knightPerfTracker",
+			"UMG"
 		});
 	}
 }

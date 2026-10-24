@@ -31,6 +31,47 @@ namespace
 		Save.CompletedQuestIds.Add(QuestId);
 		return true;
 	}
+
+	bool ResolveOwnedDefinitions(const UknightSaveGame* Save, TArray<FknightItemStack>& OutItems)
+	{
+		OutItems.Reset();
+		if (!Save) return false;
+		bool bComplete = true;
+		for (const TPair<FPrimaryAssetId, int32>& Entry : Save->ItemCounts)
+		{
+			if (Entry.Value <= 0) continue;
+			const UknightItemDefinition* Item = UknightInventoryLibrary::LoadItemDefinition(Entry.Key);
+			if (!Item || Item->GetPrimaryAssetId() != Entry.Key)
+			{
+				bComplete = false;
+				UE_LOG(Logknight, Warning, TEXT("Owned item definition cannot be resolved: %s"), *Entry.Key.ToString());
+				continue;
+			}
+			OutItems.Emplace(Item, Entry.Value);
+		}
+		return bComplete;
+	}
+
+	template <typename TItem>
+	bool ResolveOwnedCategory(const UknightSaveGame* Save, FGameplayTag ExpectedType, TArray<FknightItemStack>& OutItems)
+	{
+		TArray<FknightItemStack> All;
+		bool bComplete = ResolveOwnedDefinitions(Save, All);
+		OutItems.Reset();
+		for (const FknightItemStack& Stack : All)
+		{
+			const bool bClassMatch = Stack.Item->IsA<TItem>();
+			const bool bTypeMatch = Stack.Item->ItemType == ExpectedType;
+			if (bClassMatch && bTypeMatch) OutItems.Add(Stack);
+			else if (bClassMatch != bTypeMatch)
+			{
+				bComplete = false;
+				UE_LOG(Logknight, Warning, TEXT("Owned item class/type mismatch: %s"),
+					*Stack.Item->GetPrimaryAssetId().ToString());
+			}
+		}
+		return bComplete;
+	}
 }
 
 void UknightProgressionSubsystem::Initialize(FSubsystemCollectionBase& Collection)
@@ -196,6 +237,12 @@ int32 UknightProgressionSubsystem::GetSocketEffectCount(EKnightSocketEffect Effe
 		Total += Item && Item->Effect == Effect ? 1 : 0;
 	}
 	return Total;
+}
+
+int32 UknightProgressionSubsystem::GetSocketGaugeGuardsPerKit(int32 BaseGuardsPerKit) const
+{
+	return FMath::Max(1, FMath::Max(1, BaseGuardsPerKit)
+		- GetSocketEffectCount(EKnightSocketEffect::SocketGaugeCharge));
 }
 
 int32 UknightProgressionSubsystem::GetRepairKitCapacityBonus() const
@@ -479,19 +526,123 @@ bool UknightProgressionSubsystem::SellMaterial(FPrimaryAssetId ItemId, int32 Cou
 
 void UknightProgressionSubsystem::GetOwnedItems(TArray<FknightItemStack>& OutItems) const
 {
-	OutItems.Reset();
-	const UknightSaveGame* const Save = GetSave();
-	if (!Save)
+	ResolveOwnedDefinitions(GetSave(), OutItems);
+}
+
+bool UknightProgressionSubsystem::GetOwnedMaterials(TArray<FknightItemStack>& OutMaterials) const
+{
+	const UknightSaveSubsystem* Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	const bool bComplete = ResolveOwnedCategory<UknightMaterialItemDefinition>(
+		Saves && Saves->HasSelectedSlot() ? GetSave() : nullptr, knightGameplayTags::Item_Type_Material, OutMaterials);
+	OutMaterials.Sort([](const FknightItemStack& A, const FknightItemStack& B)
 	{
-		return;
-	}
-	for (const TPair<FPrimaryAssetId, int32>& Entry : Save->ItemCounts)
+		if (A.Item->Rarity != B.Item->Rarity) return A.Item->Rarity > B.Item->Rarity;
+		return A.Item->GetPrimaryAssetId().ToString() < B.Item->GetPrimaryAssetId().ToString();
+	});
+	return bComplete;
+}
+
+bool UknightProgressionSubsystem::GetOwnedWeapons(TArray<FknightItemStack>& OutWeapons) const
+{
+	const UknightSaveSubsystem* Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	const bool bComplete = ResolveOwnedCategory<UknightWeaponItemDefinition>(
+		Saves && Saves->HasSelectedSlot() ? GetSave() : nullptr, knightGameplayTags::Item_Type_Weapon, OutWeapons);
+	OutWeapons.Sort([](const FknightItemStack& A, const FknightItemStack& B)
 	{
-		if (const UknightItemDefinition* const Item = UknightInventoryLibrary::LoadItemDefinition(Entry.Key))
+		return A.Item->GetPrimaryAssetId().ToString() < B.Item->GetPrimaryAssetId().ToString();
+	});
+	return bComplete;
+}
+
+bool UknightProgressionSubsystem::GetOwnedArmorForSlot(FGameplayTag SlotTag, TArray<FknightItemStack>& OutArmor) const
+{
+	OutArmor.Reset();
+	if (SlotTag != knightGameplayTags::Equipment_Slot_Head && SlotTag != knightGameplayTags::Equipment_Slot_Torso
+		&& SlotTag != knightGameplayTags::Equipment_Slot_Arms && SlotTag != knightGameplayTags::Equipment_Slot_Legs)
+		return false;
+	const UknightSaveSubsystem* Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	TArray<FknightItemStack> All;
+	bool bComplete = ResolveOwnedDefinitions(Saves && Saves->HasSelectedSlot() ? GetSave() : nullptr, All);
+	for (const FknightItemStack& Stack : All)
+	{
+		const UknightPartItemDefinition* Part = Cast<UknightPartItemDefinition>(Stack.Item);
+		if (!Part || Part->SlotTag != SlotTag) continue;
+		if (Part->ItemType == knightGameplayTags::Item_Type_Part && !Part->IsA<UknightWeaponItemDefinition>()) OutArmor.Add(Stack);
+		else
 		{
-			OutItems.Emplace(Item, Entry.Value);
+			bComplete = false;
+			UE_LOG(Logknight, Warning, TEXT("Owned armor slot/type mismatch: %s"), *Part->GetPrimaryAssetId().ToString());
 		}
 	}
+	OutArmor.Sort([](const FknightItemStack& A, const FknightItemStack& B)
+	{
+		return A.Item->GetPrimaryAssetId().ToString() < B.Item->GetPrimaryAssetId().ToString();
+	});
+	return bComplete;
+}
+
+bool UknightProgressionSubsystem::GetOwnedSockets(TArray<FknightItemStack>& OutSockets) const
+{
+	const UknightSaveSubsystem* Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	const bool bComplete = ResolveOwnedCategory<UknightSocketItemDefinition>(
+		Saves && Saves->HasSelectedSlot() ? GetSave() : nullptr, knightGameplayTags::Item_Type_Socket, OutSockets);
+	OutSockets.Sort([](const FknightItemStack& A, const FknightItemStack& B)
+	{
+		return A.Item->GetPrimaryAssetId().ToString() < B.Item->GetPrimaryAssetId().ToString();
+	});
+	return bComplete;
+}
+
+bool UknightProgressionSubsystem::GetSocketAssignments(TArray<FKnightSocketAssignment>& OutAssignments) const
+{
+	OutAssignments.Reset();
+	const UknightSaveSubsystem* Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	const UknightSaveGame* Save = Saves && Saves->HasSelectedSlot() ? GetSave() : nullptr;
+	if (!Save) return false;
+	bool bComplete = true;
+	for (int32 Index = 0; Index < Save->UnlockedSharedSocketSlots; ++Index)
+	{
+		FKnightSocketAssignment& Entry = OutAssignments.AddDefaulted_GetRef();
+		Entry.SlotIndex = Index;
+		if (!Save->EquippedSocketItems.IsValidIndex(Index)) continue;
+		Entry.ItemId = Save->EquippedSocketItems[Index];
+		if (!Entry.ItemId.IsValid()) continue;
+		Entry.Item = GetEquippedSocketItem(Index);
+		if (!Entry.Item) bComplete = false;
+	}
+	return bComplete;
+}
+
+bool UknightProgressionSubsystem::GetMainEquipmentSlots(TArray<FKnightMainEquipmentSlot>& OutSlots) const
+{
+	OutSlots.Reset();
+	const UknightSaveSubsystem* Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	const UknightSaveGame* Save = Saves && Saves->HasSelectedSlot() ? GetSave() : nullptr;
+	if (!Save) return false;
+	const UknightMaintenanceCatalog* Catalog = UknightEquipmentSettings::LoadCatalog();
+	const knightEquipmentStats::FLoadout Loadout = knightEquipmentStats::ReadLoadout(this, Catalog);
+	bool bComplete = Catalog != nullptr;
+	const FGameplayTag Slots[] = { knightGameplayTags::Equipment_Slot_Weapon, knightGameplayTags::Equipment_Slot_Head,
+		knightGameplayTags::Equipment_Slot_Torso, knightGameplayTags::Equipment_Slot_Arms,
+		knightGameplayTags::Equipment_Slot_Legs };
+	for (const FGameplayTag Slot : Slots)
+	{
+		FKnightMainEquipmentSlot& Entry = OutSlots.AddDefaulted_GetRef();
+		Entry.SlotTag = Slot;
+		Entry.Part = Loadout.FindRef(Slot);
+		const FPrimaryAssetId* SavedId = Save->EquippedItems.Find(Slot);
+		if (SavedId && (!Entry.Part || Entry.Part->GetPrimaryAssetId() != *SavedId))
+		{
+			Entry.Part = nullptr;
+			bComplete = false;
+		}
+		if (Entry.Part && Entry.Part->SlotTag != Slot)
+		{
+			Entry.Part = nullptr;
+			bComplete = false;
+		}
+	}
+	return bComplete;
 }
 
 int32 UknightProgressionSubsystem::GetUpgradeLevel(const UknightItemDefinition* Item) const
@@ -537,7 +688,11 @@ void UknightProgressionSubsystem::GetWeaponUpgradeQuote(const UknightWeaponItemD
 	OutQuote.TargetLevel = Level + 1;
 	OutQuote.MoneyCost = Step.MoneyCost;
 	OutQuote.BaseSuccessChance = Step.BaseSuccessChance;
+	const int32 Failures = FMath::Max(0, Save->WeaponUpgradeFailures.FindRef(OutQuote.WeaponId));
+	OutQuote.EffectiveSuccessChance = FMath::Clamp(
+		static_cast<double>(Step.BaseSuccessChance) + static_cast<double>(Failures) * Step.FailureBonusPerAttempt, 0.0, 1.0);
 	OutQuote.NextWeaponAttack = Weapon->GetWeaponAttackAtLevel(Level + 1);
+	OutQuote.NextWeaponAttackIncrease = OutQuote.NextWeaponAttack - OutQuote.CurrentWeaponAttack;
 	if (!Step.Costs.IsEmpty())
 	{
 		const FknightItemCost& Cost = Step.Costs[0];
@@ -564,10 +719,7 @@ EKnightWeaponUpgradeOutcome UknightProgressionSubsystem::TryUpgradeWeapon(
 	if (Quote.Availability != EKnightWeaponUpgradeAvailability::Ready) return OutReceipt.Outcome;
 	UknightSaveGame* const Save = GetSave();
 	const int32 Failures = Save->WeaponUpgradeFailures.FindRef(Quote.WeaponId);
-	const FknightUpgradeStep& Step = Weapon->UpgradeSteps[Quote.CurrentLevel];
-	const double Chance = FMath::Clamp(static_cast<double>(Step.BaseSuccessChance)
-		+ static_cast<double>(Failures) * Step.FailureBonusPerAttempt, 0.0, 1.0);
-	bool bSuccess = FMath::FRand() < Chance;
+	bool bSuccess = FMath::FRand() < Quote.EffectiveSuccessChance;
 #if WITH_EDITOR
 	if (DebugNextWeaponUpgradeOutcome >= 0)
 	{

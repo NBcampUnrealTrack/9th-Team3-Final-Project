@@ -12,11 +12,11 @@ class UKnightStageMapWidget;
 class UKnightSettingsWidget;
 class UKnightCodexWidget;
 class UKnightMaintenanceWidget;
-class UKnightInventoryWidget;
 class UKnightQuestMenuWidget;
 class UKnightQuestCatalog;
 class UCanvasPanel;
 class AKnightMaintenanceCameraRig;
+enum class EKnightMaintenanceDestination : uint8;
 struct FStreamableHandle;
 
 UENUM(BlueprintType)
@@ -27,7 +27,7 @@ enum class EKnightMainMenuPage : uint8
 	Maintenance,
 	Settings,
 	Codex,
-	Inventory
+	Inventory = 5 UMETA(Hidden) // Serialized legacy value; ShowPage redirects it to Crafting > Materials.
 };
 
 /**
@@ -45,6 +45,8 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category="Knight|Menu")
 	bool ShowPage(EKnightMainMenuPage NewPage);
+	/** Main-menu I shortcut; also callable by headless integration checks. */
+	bool ToggleMaterialsShortcut();
 
 	/** Shared entry point for map clicks, keyboard cycling and tests. NAME_None clears the selection. */
 	UFUNCTION(BlueprintCallable, Category="Knight|Stage")
@@ -174,6 +176,7 @@ private:
 	void HandleQuestLaunchRequested(FName QuestId);
 
 	bool ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDuringTravel);
+	bool OpenMaterialsShortcut();
 	bool RebuildMapMarkers();
 	void ShowSelectedRegionQuests();
 	void PlaceQuestPanel();
@@ -184,7 +187,9 @@ private:
 	void EnsureSettingsWidget();
 	void EnsureCodexWidget();
 	void EnsureMaintenanceWidget();
-	void EnsureInventoryWidget();
+	void ShowMaintenanceSelection();
+	void OpenMaintenanceDestination(EKnightMaintenanceDestination Destination, bool bStartInMaterials = false);
+	bool IsMaintenanceDestinationOpen() const;
 	void EnsureQuestWidget();
 
 	UPROPERTY(Transient)
@@ -194,15 +199,21 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UKnightMaintenanceWidget> MaintenanceWidget;
 	UPROPERTY(Transient)
-	TObjectPtr<UKnightInventoryWidget> InventoryWidget;
+	TObjectPtr<UWidgetSwitcher> MaintenanceSwitcher;
+	UPROPERTY(Transient)
+	TObjectPtr<UCanvasPanel> MaintenanceSelectionPanel;
+	UPROPERTY(Transient)
+	TObjectPtr<UCommonButtonBase> MaintenanceCraftingButton;
+	UPROPERTY(Transient)
+	TObjectPtr<UCommonButtonBase> MaintenanceEnhancementButton;
+	UPROPERTY(Transient)
+	TObjectPtr<UCommonButtonBase> MaintenanceSocketsButton;
 	UPROPERTY(Transient)
 	TObjectPtr<UKnightQuestMenuWidget> QuestWidget;
 	UPROPERTY(Transient)
 	TObjectPtr<const UKnightQuestCatalog> MapQuestCatalog;
-	UPROPERTY(Transient)
-	TObjectPtr<UCanvasPanel> InventoryPanel;
-	TWeakObjectPtr<UWidget> FocusBeforeInventory;
-	bool bRestoreInventoryFocus = false;
+	TWeakObjectPtr<UWidget> FocusBeforeMaterialsShortcut;
+	bool bRestoreMaterialsShortcutFocus = false;
 	TWeakObjectPtr<AKnightMaintenanceCameraRig> MaintenanceCameraRig;
 	bool bRestoreMaintenanceFocus = false;
 	bool bRestoreCodexFocus = false;
