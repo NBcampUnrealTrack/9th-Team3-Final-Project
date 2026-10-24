@@ -10,6 +10,7 @@
 #include "Engine/World.h"
 #include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
+#include "knightCharacter.h"
 #include "Item/knightEquipmentData.h"
 #include "Item/knightEquipmentStats.h"
 #include "Misc/CommandLine.h"
@@ -36,6 +37,181 @@ namespace
 		UknightProgressionSubsystem* Progression = World && World->GetGameInstance()
 			? World->GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>() : nullptr;
 		if (!Progression || Args.IsEmpty()) return;
+		if (Args[0] == TEXT("SocketCases"))
+		{
+			const FString Mode = Args.Num() > 1 ? Args[1] : TEXT("Widget");
+			int32 Failures = 0;
+			auto Check = [&Failures, &Mode](bool bPassed, const TCHAR* Case)
+			{
+				if (!bPassed) ++Failures;
+				UE_LOG(LogknightDev, Log, TEXT("Phase8 SocketCases %s %s: %s"), *Mode,
+					bPassed ? TEXT("PASS") : TEXT("FAIL"), Case);
+			};
+			UknightSaveSubsystem* const Saves = World->GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+			const UknightSocketItemDefinition* const Repair = LoadObject<UknightSocketItemDefinition>(nullptr,
+				TEXT("/Game/Knight/Items/Sockets/DA_Socket_RepairExpansion.DA_Socket_RepairExpansion"));
+			const UknightSocketItemDefinition* const Attack = LoadObject<UknightSocketItemDefinition>(nullptr,
+				TEXT("/Game/Knight/Items/Sockets/DA_Socket_AttackEfficiency.DA_Socket_AttackEfficiency"));
+			const UknightSocketItemDefinition* const Charge = LoadObject<UknightSocketItemDefinition>(nullptr,
+				TEXT("/Game/Knight/Items/Sockets/DA_Socket_ChargeAssist.DA_Socket_ChargeAssist"));
+			const FString TestSlot = Mode == TEXT("RestoreEquip") ? TEXT("Phase8Equip") : TEXT("Phase8") + Mode;
+			if (!Saves || !Repair || !Attack || !Charge || !Saves->SelectSlot(TestSlot))
+			{
+				UE_LOG(LogknightDev, Error, TEXT("Phase8 SocketCases setup failed mode=%s"), *Mode);
+				return;
+			}
+			UknightSaveGame* const Save = Saves->GetSaveGame();
+			if (!Save) { UE_LOG(LogknightDev, Error, TEXT("Phase8 SocketCases save unavailable")); return; }
+			const FPrimaryAssetId RepairId = Repair->GetPrimaryAssetId();
+			const FPrimaryAssetId AttackId = Attack->GetPrimaryAssetId();
+			const FPrimaryAssetId ChargeId = Charge->GetPrimaryAssetId();
+			if (Mode == TEXT("RestoreEquip"))
+			{
+				Check(Save->UnlockedSharedSocketSlots == 1 && Save->EquippedSocketItems.IsValidIndex(0)
+					&& Save->EquippedSocketItems[0] == RepairId && Save->ItemCounts.FindRef(RepairId) == 1,
+					TEXT("new process restores saved unlock, assignment and ownership"));
+				UE_LOG(LogknightDev, Log, TEXT("Phase8 SocketCases SUMMARY mode=%s failures=%d"), *Mode, Failures);
+				return;
+			}
+			Save->ItemCounts.Reset();
+			Save->EquippedSocketItems.Reset();
+			Save->UnlockedSharedSocketSlots = Mode == TEXT("Zero") ? 0 : Mode == TEXT("Effect") ? 3
+				: Mode == TEXT("Overflow") ? 4 : Mode == TEXT("Reject") ? 2 : 1;
+			Save->ItemCounts.Add(RepairId, Mode == TEXT("Reject") ? 2 : 1);
+			if (Mode == TEXT("Replace") || Mode == TEXT("Unequip") || Mode == TEXT("Reject"))
+			{
+				Save->EquippedSocketItems.SetNum(Save->UnlockedSharedSocketSlots);
+				Save->EquippedSocketItems[0] = RepairId;
+			}
+			if (Mode == TEXT("Replace") || Mode == TEXT("Overflow") || Mode == TEXT("Effect"))
+				Save->ItemCounts.Add(AttackId, 1);
+			if (Mode == TEXT("Overflow"))
+			{
+				Save->EquippedSocketItems.SetNum(4);
+				Save->EquippedSocketItems[3] = RepairId;
+			}
+			if (Mode == TEXT("Effect"))
+			{
+				Save->ItemCounts.Add(ChargeId, 1);
+				Save->EquippedSocketItems = { RepairId, AttackId, ChargeId };
+			}
+			APlayerController* const Player = UGameplayStatics::GetPlayerController(World, 0);
+			UKnightMaintenanceWidget* const Widget = Player ? CreateWidget<UKnightMaintenanceWidget>(
+				Player, UKnightMaintenanceWidget::GetSharedWidgetClass()) : nullptr;
+			if (!Widget || !Widget->WidgetTree)
+			{
+				UE_LOG(LogknightDev, Error, TEXT("Phase8 SocketCases WBP construction failed mode=%s"), *Mode);
+				return;
+			}
+			Widget->Open(EKnightMaintenanceDestination::Sockets);
+			auto SlotButton = [Widget](int32 Index) -> UCommonButtonBase*
+			{
+				return Cast<UCommonButtonBase>(Widget->WidgetTree->FindWidget(
+					FName(*FString::Printf(TEXT("Phase8_SocketSlot%d"), Index))));
+			};
+			auto CandidateButton = [Widget](int32 Index) -> UCommonButtonBase*
+			{
+				return Cast<UCommonButtonBase>(Widget->WidgetTree->FindWidget(
+					FName(*FString::Printf(TEXT("Phase8_SocketCandidate%d"), Index))));
+			};
+			UTextBlock* const Name = Cast<UTextBlock>(Widget->WidgetTree->FindWidget(TEXT("Txt_PartName")));
+			UTextBlock* const State = Cast<UTextBlock>(Widget->WidgetTree->FindWidget(TEXT("Txt_PartState")));
+			UTextBlock* const Bonus = Cast<UTextBlock>(Widget->WidgetTree->FindWidget(TEXT("Txt_Bonus")));
+			UCommonButtonBase* const Equip = Cast<UCommonButtonBase>(Widget->WidgetTree->FindWidget(TEXT("Btn_Execute")));
+			UCommonButtonBase* const Unequip = Cast<UCommonButtonBase>(Widget->WidgetTree->FindWidget(TEXT("Btn_Unequip")));
+			Check(SlotButton(0) && SlotButton(1) && SlotButton(2) && Name && State && Bonus && Equip && Unequip,
+				TEXT("exactly three visible slot controls and required detail controls exist"));
+			if (!SlotButton(0) || !SlotButton(1) || !SlotButton(2) || !Name || !State || !Bonus || !Equip || !Unequip)
+				return;
+			Check(Name->GetText().ToString().Contains(TEXT("활성")), TEXT("fresh entry selects no slot and shows combined effects"));
+			if (Mode == TEXT("Zero"))
+			{
+				SlotButton(0)->OnClicked().Broadcast();
+				Check(Name->GetText().ToString().Contains(TEXT("활성")) && Save->EquippedSocketItems.IsEmpty(),
+					TEXT("zero unlocks shows locked controls and rejects slot selection"));
+			}
+			else if (Mode == TEXT("Widget"))
+			{
+				SlotButton(2)->OnClicked().Broadcast();
+				Check(Name->GetText().ToString().Contains(TEXT("활성")), TEXT("locked slot click cannot select"));
+				SlotButton(0)->OnClicked().Broadcast();
+				Check(Name->GetText().ToString().Contains(TEXT("빈 소켓")) && CandidateButton(0),
+					TEXT("unlocked empty slot reveals owned candidate without equipping"));
+				if (CandidateButton(0)) CandidateButton(0)->OnClicked().Broadcast();
+				Check(Name->GetText().ToString().Contains(TEXT("빈 소켓")) && Save->EquippedSocketItems.IsEmpty(),
+					TEXT("candidate selection does not appear equipped or mutate save"));
+				SlotButton(0)->OnClicked().Broadcast();
+				Check(Name->GetText().ToString().Contains(TEXT("활성")) && Save->EquippedSocketItems.IsEmpty(),
+					TEXT("same slot click deselects without unequipping"));
+				SlotButton(0)->OnClicked().Broadcast();
+				Check(Saves->SelectSlot(TEXT("Phase8WidgetOther")), TEXT("profile change accepted"));
+				Check(Name->GetText().ToString().Contains(TEXT("활성")) && State->GetText().ToString().Contains(TEXT("해금 0"))
+					&& Save->EquippedSocketItems.IsEmpty(), TEXT("profile change clears slot and candidate without old-profile mutation"));
+			}
+			else if (Mode == TEXT("Effect"))
+			{
+				const AknightCharacter* const Defaults = GetDefault<AknightCharacter>();
+				const int32 Base = Defaults ? Defaults->GetBaseRepairKitGuardsPerKit() : 0;
+				Check(Base > 0 && Progression->GetSocketGaugeGuardsPerKit(Base) == FMath::Max(1, Base - 1)
+					&& Progression->GetSocketEffectCount(EKnightSocketEffect::SocketGaugeCharge) == 1,
+					TEXT("gauge uses character baseline and guards-per-kit query, not effect-value multiplier"));
+				Check(Progression->GetRepairKitCapacityBonus() == FMath::RoundToInt(Repair->EffectValue)
+					&& FMath::IsNearlyEqual(Progression->GetAttackStaminaCostMultiplier(), 1.f - Attack->EffectValue),
+					TEXT("combined effects match gameplay query semantics"));
+				SlotButton(1)->OnClicked().Broadcast();
+				Check(Name->GetText().EqualTo(Attack->DisplayName) && Bonus->GetText().ToString().Contains(TEXT("공격")),
+					TEXT("selected equipped slot shows its actual individual effect"));
+				SlotButton(1)->OnClicked().Broadcast();
+				Check(Name->GetText().ToString().Contains(TEXT("활성")), TEXT("reselection restores combined effects"));
+			}
+			else if (Mode == TEXT("Overflow"))
+			{
+				Check(State->GetText().ToString().Contains(TEXT("읽기 전용"))
+					&& Bonus->GetText().ToString().Contains(TEXT("추가 저장 슬롯"))
+					&& Progression->GetRepairKitCapacityBonus() == FMath::RoundToInt(Repair->EffectValue),
+					TEXT("overflow assignment remains in combined effect and is explicitly read-only"));
+				SlotButton(0)->OnClicked().Broadcast();
+				if (CandidateButton(0)) CandidateButton(0)->OnClicked().Broadcast();
+				Equip->OnClicked().Broadcast();
+				Check(Save->EquippedSocketItems.Num() == 4 && Save->EquippedSocketItems[3] == RepairId
+					&& !Save->EquippedSocketItems[0].IsValid(), TEXT("overflow UI cannot truncate or mutate saved assignments"));
+			}
+			else if (Mode == TEXT("Reject"))
+			{
+				Check(!Repair->bAllowDuplicateEquip, TEXT("fixture socket prohibits duplicate equipment"));
+				SlotButton(1)->OnClicked().Broadcast();
+				if (CandidateButton(0)) CandidateButton(0)->OnClicked().Broadcast();
+				Equip->OnClicked().Broadcast();
+				Check(Save->EquippedSocketItems[0] == RepairId && !Save->EquippedSocketItems[1].IsValid(),
+					TEXT("prohibited duplicate rejected without mutation"));
+				Check(!Progression->EquipSocketItem(2, Repair) && !Progression->EquipSocketItem(1, Charge),
+					TEXT("backend rejects locked slot and unowned socket"));
+			}
+			else if (Mode == TEXT("Equip") || Mode == TEXT("Replace") || Mode == TEXT("Unequip"))
+			{
+				SlotButton(0)->OnClicked().Broadcast();
+				if (Mode == TEXT("Unequip")) Unequip->OnClicked().Broadcast();
+				else
+				{
+					const int32 CandidateIndex = Mode == TEXT("Equip") || Attack->DisplayName.ToString() < Repair->DisplayName.ToString() ? 0 : 1;
+					if (CandidateButton(CandidateIndex)) CandidateButton(CandidateIndex)->OnClicked().Broadcast();
+					Equip->OnClicked().Broadcast();
+				}
+				const FPrimaryAssetId Expected = Mode == TEXT("Equip") ? RepairId : Mode == TEXT("Replace") ? AttackId : FPrimaryAssetId();
+				Check(Save->EquippedSocketItems.IsValidIndex(0) && Save->EquippedSocketItems[0] == Expected
+					&& Save->ItemCounts.FindRef(RepairId) == 1 && (Mode != TEXT("Replace") || Save->ItemCounts.FindRef(AttackId) == 1),
+					TEXT("explicit action atomically changes assignment without consuming ownership"));
+				Check(Mode == TEXT("Unequip") ? Name->GetText().ToString().Contains(TEXT("빈 소켓"))
+					: Name->GetText().EqualTo(Mode == TEXT("Replace") ? Attack->DisplayName : Repair->DisplayName),
+					TEXT("valid selected slot remains selected and shows actual post-action state"));
+				Saves->OnSaveFinished.Broadcast(true);
+				Check(Save->EquippedSocketItems[0] == Expected && Save->ItemCounts.FindRef(RepairId) == 1,
+					TEXT("save completion callback never replays socket mutation"));
+			}
+			Widget->Close();
+			UE_LOG(LogknightDev, Log, TEXT("Phase8 SocketCases SUMMARY mode=%s failures=%d"), *Mode, Failures);
+			return;
+		}
 		if (Args[0] == TEXT("UpgradeCases"))
 		{
 			const FString Mode = Args.Num() > 1 ? Args[1] : TEXT("Reject");
@@ -638,7 +814,7 @@ namespace
 	}
 
 	FAutoConsoleCommandWithWorldAndArgs MaintenanceTestCommand(
-		TEXT("knight.MaintenanceTest"), TEXT("Grant <asset> <count> | Snapshot | PureCases | AssetCases | MaterialSaleCases Partial|Final | MaterialWidgetCases | UpgradeCases Widget|Reject|Failure|SuccessEquipped|SuccessUnequipped|SuccessFinal; requires editor test save namespace."),
+		TEXT("knight.MaintenanceTest"), TEXT("Grant <asset> <count> | Snapshot | PureCases | AssetCases | MaterialSaleCases Partial|Final | MaterialWidgetCases | UpgradeCases Widget|Reject|Failure|SuccessEquipped|SuccessUnequipped|SuccessFinal | SocketCases Zero|Widget|Effect|Overflow|Reject|Equip|Replace|Unequip|RestoreEquip; requires editor test save namespace."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&MaintenanceTest), ECVF_Cheat);
 }
 #endif

@@ -271,6 +271,9 @@ protected:
 
 public:
 
+	/** Baseline used by HandlePerfectGuard before equipped socket reductions. Zero when charging is disabled. */
+	int32 GetBaseRepairKitGuardsPerKit() const;
+
 	/** 조작이나 UI에서 오는 이동 입력을 처리한다 */
 	UFUNCTION(BlueprintCallable, Category="Input")
 	virtual void DoMove(float Right, float Forward);

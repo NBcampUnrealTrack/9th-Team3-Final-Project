@@ -120,6 +120,12 @@ private:
 	const UknightWeaponItemDefinition* GetEnhancementTarget(bool& bComplete) const;
 	void RebuildSocketList();
 	void RefreshSocketDetails();
+	void SelectSocketSlot(int32 SlotIndex);
+	void SelectSocketCandidate(const UknightSocketItemDefinition* Item);
+	bool CanEditSocketProfile() const;
+	bool CanEquipSocketCandidate(int32 SlotIndex, const UknightSocketItemDefinition* Item) const;
+	void RequestSocketEquip();
+	void RequestSocketUnequip();
 	void RequestWeaponUpgrade();
 	void RefreshTabButtons();
 	void RebuildEquipmentSlots(bool bRestoreFocus);
@@ -209,8 +215,15 @@ private:
 	FGameplayTag SelectedEquipmentSlot;
 	bool bEquipmentPickerOpen = false;
 	UPROPERTY(Transient) TArray<TObjectPtr<UCommonButtonBase>> SocketListButtons;
+	UPROPERTY(Transient) TArray<TObjectPtr<UCommonButtonBase>> SocketSlotButtons;
+	UPROPERTY(Transient) TArray<TObjectPtr<UCommonButtonBase>> SocketCandidateButtons;
+	TArray<FPrimaryAssetId> SocketCandidateIds;
 	UPROPERTY(Transient) TObjectPtr<const UknightSocketItemDefinition> SelectedSocketItem;
+	FPrimaryAssetId SelectedSocketCandidateId;
 	int32 SelectedSocketSlot = INDEX_NONE;
+	bool bAwaitingSocketSave = false;
+	bool bSocketSaveFailed = false;
+	FString PendingSocketProfileId;
 	UPROPERTY(Transient) TObjectPtr<const UknightPartItemDefinition> SelectedPart;
 	UPROPERTY(Transient) TObjectPtr<const UknightCraftRecipeDefinition> SelectedRecipe;
 	UPROPERTY(Transient) TArray<TObjectPtr<UKnightMaintenanceEntryWidget>> Entries;

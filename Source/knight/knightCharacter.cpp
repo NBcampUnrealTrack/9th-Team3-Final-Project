@@ -312,6 +312,12 @@ void AknightCharacter::UpdateFullHealthAttackBonus()
 		bWant ? TEXT("on") : TEXT("off"), CoreAttributeSet->GetHealth(), MaxHealth, CoreAttributeSet->GetAttackPower());
 }
 
+int32 AknightCharacter::GetBaseRepairKitGuardsPerKit() const
+{
+	return RepairKitGaugePerPerfectGuard > 0.f
+		? FMath::Max(1, FMath::CeilToInt(UknightAttributeSet::RepairKitGaugeFull / RepairKitGaugePerPerfectGuard)) : 0;
+}
+
 void AknightCharacter::HandlePerfectGuard(const FGameplayEventData* Payload)
 {
 	const float KitCount = MechAttributeSet->GetRepairKitCount();
@@ -325,7 +331,7 @@ void AknightCharacter::HandlePerfectGuard(const FGameplayEventData* Payload)
 	// 소켓의 EffectValue(배율)는 쓰지 않고 끼운 개수만 센다. 최소 1번.
 	const UknightProgressionSubsystem* const Progression = GetGameInstance()
 		? GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>() : nullptr;
-	const int32 BaseGuardsPerKit = FMath::CeilToInt(UknightAttributeSet::RepairKitGaugeFull / RepairKitGaugePerPerfectGuard);
+	const int32 BaseGuardsPerKit = GetBaseRepairKitGuardsPerKit();
 	const int32 GuardsPerKit = Progression ? Progression->GetSocketGaugeGuardsPerKit(BaseGuardsPerKit)
 		: FMath::Max(1, BaseGuardsPerKit);
 	float Gauge = MechAttributeSet->GetRepairKitGauge() + UknightAttributeSet::RepairKitGaugeFull / GuardsPerKit;
