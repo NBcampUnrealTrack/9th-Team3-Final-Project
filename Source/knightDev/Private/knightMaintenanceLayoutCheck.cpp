@@ -2,6 +2,7 @@
 #if WITH_EDITOR
 #include "Menu/UI/KnightMainMenuWidget.h"
 #include "Menu/UI/KnightMaintenanceWidget.h"
+#include "Menu/UI/KnightMaintenanceEntryWidget.h"
 #include "Menu/UI/KnightInventoryWidget.h"
 #include "Components/Button.h"
 #include "Components/Border.h"
@@ -36,6 +37,7 @@ struct FMaintenanceLayoutCheck
 	FString Directory;
 	double Next = 0, Deadline = 0;
 	int32 Step = 0, Failures = 0;
+	bool bEnhancementOnly = false;
 	FVector HomeCamera;
 	void Check(bool Passed, const TCHAR* Label)
 	{
@@ -95,6 +97,23 @@ struct FMaintenanceLayoutCheck
 				Check(Footer && Footer->IsVisible() && OldLabel && OldLabel->GetVisibility() == ESlateVisibility::Collapsed,
 					TEXT("Maintenance Back uses compact footer content on existing bound button"));
 			}
+			else if (Screen->GetDestination() == EKnightMaintenanceDestination::Enhancement)
+			{
+				const UBorder* Backdrop = Cast<UBorder>(Screen->GetWidgetFromName(TEXT("MaintenanceBackdrop")));
+				Check(Backdrop && Backdrop->GetBrushColor().A == 1.f
+					&& Backdrop->GetCachedGeometry().GetLocalSize().Equals(Screen->GetCachedGeometry().GetLocalSize(), 1.f),
+					TEXT("Enhancement background opaque across complete viewport"));
+				Check(Screen->GetWidgetFromName(TEXT("Frame_Panel_Left"))->GetVisibility() == ESlateVisibility::Collapsed
+					&& Screen->GetWidgetFromName(TEXT("Frame_Panel_Right"))->GetVisibility() == ESlateVisibility::Collapsed
+					&& Screen->GetWidgetFromName(TEXT("CraftingEdgeShade"))->GetVisibility() == ESlateVisibility::Collapsed,
+					TEXT("Enhancement replaces old two panels and Crafting gradient"));
+				const FGeometry Center = Screen->GetWidgetFromName(TEXT("EnhancementTargetColumn"))->GetCachedGeometry();
+				const FGeometry Owned = Screen->GetWidgetFromName(TEXT("EnhancementOwnedColumn"))->GetCachedGeometry();
+				const FGeometry Preview = Screen->GetWidgetFromName(TEXT("EnhancementPreviewColumn"))->GetCachedGeometry();
+				Check(Owned.LocalToAbsolute(Owned.GetLocalSize()).X < Center.LocalToAbsolute(FVector2D::ZeroVector).X
+					&& Center.LocalToAbsolute(Center.GetLocalSize()).X < Preview.LocalToAbsolute(FVector2D::ZeroVector).X,
+					TEXT("three columns have nonoverlapping responsive bounds"));
+			}
 			else Check(R.X >= L.X && R.X - L.X < 30, TEXT("other destinations retain their layout"));
 		}
 		FScreenshotRequest::RequestScreenshot(FPaths::Combine(Directory, FString(Name) + TEXT(".png")), true, false);
@@ -112,7 +131,7 @@ struct FMaintenanceLayoutCheck
 		if (!PC) return true;
 		// Changing test profiles is correctly rejected during a periodic async save.
 		// Wait across frames instead of misreporting a fixture setup failure.
-		if (Step >= 24)
+		if (Step >= 24 || (bEnhancementOnly && Step >= 10))
 			if (UknightSaveSubsystem* Saves = World->GetGameInstance()->GetSubsystem<UknightSaveSubsystem>())
 				if (Saves->IsSaveInFlight()) return true;
 		if (Step == 0)
@@ -127,6 +146,8 @@ struct FMaintenanceLayoutCheck
 			Save->Money = 10000; Save->UnlockedSharedSocketSlots = 2;
 			for (const TCHAR* Path : {
 				TEXT("/Game/Knight/Data/Equipment/Janyeol/DA_Equipment_Janyeol_Weapon"),
+				TEXT("/Game/Knight/Data/Equipment/Janhyang/DA_Equipment_Janhyang_Weapon"),
+				TEXT("/Game/Knight/Data/Equipment/Heukgwan/DA_Equipment_Heukgwan_Weapon"),
 				TEXT("/Game/Knight/Items/Materials/Janyeol/DA_Material_Janyeol_Hide"),
 				TEXT("/Game/Knight/Items/Materials/Janyeol/DA_Material_Janyeol_ReinforcedBone"),
 				TEXT("/Game/Knight/Items/Materials/Janyeol/DA_Material_Janyeol_Essence"),
@@ -134,10 +155,47 @@ struct FMaintenanceLayoutCheck
 				TEXT("/Game/Knight/Items/Sockets/DA_Socket_AttackEfficiency") })
 				if (const UknightItemDefinition* Item = LoadObject<UknightItemDefinition>(nullptr, Path))
 					Save->ItemCounts.Add(Item->GetPrimaryAssetId(), Item->IsA<UknightMaterialItemDefinition>() ? 12 : 1);
+			if (bEnhancementOnly)
+				if (const auto* Weapon = LoadObject<UknightWeaponItemDefinition>(nullptr, TEXT("/Game/Knight/Data/Equipment/Janyeol/DA_Equipment_Janyeol_Weapon")))
+					Save->ItemUpgradeLevels.Add(Weapon->GetPrimaryAssetId(), 9);
 			// Transient fixture only; production saves and content defaults are never modified.
 			FRotator Rotation; PC->GetPlayerViewPoint(HomeCamera, Rotation);
 			Menu->ShowPage(EKnightMainMenuPage::Maintenance);
 			PC->ConsoleCommand(TEXT("r.SetRes 1920x1080w"), false);
+		}
+		else if (bEnhancementOnly)
+		{
+			switch (Step)
+			{
+			case 1: Open(TEXT("MaintenanceChoiceEnhancement")); break;
+			case 2: Capture(TEXT("enhancement_empty_1920")); break;
+			case 3:
+			case 7:
+			{
+				UScrollBox* List = Cast<UScrollBox>(Screen->GetWidgetFromName(TEXT("EnhancementOwnedWeapons")));
+				if (List)
+					for (UWidget* Child : List->GetAllChildren())
+						if (auto* Row = Cast<UKnightMaintenanceEntryWidget>(Child))
+							if (Row->GetPart() && Row->GetPart()->GetPathName().Contains(TEXT("/Janyeol/")))
+								{ Row->OnClicked().Broadcast(); break; }
+				break;
+			}
+			case 4: Capture(TEXT("enhancement_selected_1920")); break;
+			case 5: PC->ConsoleCommand(TEXT("r.SetRes 1280x720w"), false); Menu->RequestBack(); Open(TEXT("MaintenanceChoiceEnhancement")); break;
+			case 6: Capture(TEXT("enhancement_empty_720")); break;
+			case 8: Capture(TEXT("enhancement_selected_720")); break;
+			case 9: Menu->RequestBack(); break;
+			case 10: PC->ConsoleCommand(TEXT("knight.MaintenanceTest UpgradeCases Widget"), false); break;
+			case 11: PC->ConsoleCommand(TEXT("knight.MaintenanceTest UpgradeCases Reject"), false); break;
+			case 12: PC->ConsoleCommand(TEXT("knight.MaintenanceTest UpgradeCases Failure"), false); break;
+			case 13: PC->ConsoleCommand(TEXT("knight.MaintenanceTest UpgradeCases SuccessEquipped"), false); break;
+			case 14: PC->ConsoleCommand(TEXT("knight.MaintenanceTest UpgradeCases SuccessUnequipped"), false); break;
+			case 15: PC->ConsoleCommand(TEXT("knight.MaintenanceTest UpgradeCases SuccessFinal"), false); break;
+			case 16: PC->ConsoleCommand(TEXT("knight.MaintenanceTest IntegrationCases Navigation"), false); break;
+			case 17: PC->ConsoleCommand(TEXT("knight.MaintenanceTest UpgradeCases WidgetAttempt"), false); break;
+			default: UE_LOG(LogTemp, Display, TEXT("MaintenanceLayout COMPLETE failures=%d; noninteractive Enhancement render/delegate checks"), Failures);
+				FPlatformMisc::RequestExit(false); return false;
+			}
 		}
 		else switch (Step)
 		{
@@ -158,12 +216,12 @@ struct FMaintenanceLayoutCheck
 		case 4:
 			Menu->RequestBack();
 			Open(TEXT("MaintenanceChoiceEnhancement"));
-			Click(Screen.Get(), TEXT("Phase7_EnhancementTarget")); break;
+			break;
 		case 5:
 		{
-			UScrollBox* List = Cast<UScrollBox>(Screen->GetWidgetFromName(TEXT("RuntimeEquipmentPickerList")));
+			UScrollBox* List = Cast<UScrollBox>(Screen->GetWidgetFromName(TEXT("EnhancementOwnedWeapons")));
 			if (UCommonButtonBase* Row = List ? Cast<UCommonButtonBase>(List->GetChildAt(0)) : nullptr) Row->OnClicked().Broadcast();
-			Click(Screen.Get(), TEXT("Btn_ConfirmOk")); break;
+			break;
 		}
 		case 6: Capture(TEXT("03_enhancement")); break;
 		case 7:
@@ -226,6 +284,7 @@ void StartMaintenanceLayoutCheck(const TArray<FString>& Args, UWorld* World)
 		UE_LOG(LogTemp, Error, TEXT("MaintenanceLayout requires output directory and isolated MaintenanceLayout save namespace.")); return;
 	}
 	TSharedRef<FMaintenanceLayoutCheck> Run = MakeShared<FMaintenanceLayoutCheck>();
+	Run->bEnhancementOnly = FParse::Param(FCommandLine::Get(), TEXT("KnightEnhancementLayoutOnly"));
 	Run->World = World; Run->Directory = FPaths::ConvertRelativePathToFull(Args[0]);
 	Run->Deadline = FPlatformTime::Seconds() + 180.;
 	IFileManager::Get().MakeDirectory(*Run->Directory, true);
