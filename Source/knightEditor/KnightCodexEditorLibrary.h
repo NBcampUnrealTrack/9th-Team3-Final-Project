@@ -30,6 +30,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|Codex Editor") static bool RedesignCodex(UWidgetBlueprint* Blueprint);
 	UFUNCTION(BlueprintCallable, Category="Knight|Codex Editor") static bool RedesignBossEntry(UWidgetBlueprint* Blueprint);
 	UFUNCTION(BlueprintCallable, Category="Knight|Codex Editor") static bool RedesignDropEntry(UWidgetBlueprint* Blueprint);
+	/** Rebuild only the codex Designer presentation; class defaults and source data are retained. */
+	UFUNCTION(BlueprintCallable, Category="Knight|Codex Editor") static bool BuildArchivePresentation(UWidgetBlueprint* Blueprint, int32 Kind);
 	/** PIE inspection of a named scroll box in the compiled Designer tree. */
 	UFUNCTION(BlueprintPure, Category="Knight|Codex Editor") static UScrollBox* FindScrollBox(UUserWidget* Widget, FName WidgetName);
 };

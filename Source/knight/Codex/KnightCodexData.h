@@ -23,6 +23,20 @@ struct KNIGHT_API FKnightCodexTextSection
 	/** 2 = section heading, 3 = subsection heading. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Text", meta=(ClampMin="2", ClampMax="3"))
 	int32 HeadingLevel = 2;
+
+	/** Presentation only: keep source/planning records in the asset without exposing them to players. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Reader")
+	bool bShowInReader = true;
+
+	/** Optional edited excerpts. Heading and Body above always retain the original source. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Reader")
+	bool bUseReaderText = false;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Reader", meta=(EditCondition="bUseReaderText"))
+	FText ReaderHeading;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Reader", meta=(EditCondition="bUseReaderText", MultiLine=true))
+	FText ReaderBody;
+	const FText& GetReaderHeading() const { return bUseReaderText ? ReaderHeading : Heading; }
+	const FText& GetReaderBody() const { return bUseReaderText ? ReaderBody : Body; }
 };
 
 /** Only presentation fields live here. Combat and rewards remain in their own definitions. */
@@ -59,6 +73,14 @@ struct KNIGHT_API FKnightCodexBossEntry
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Boss", meta=(MultiLine=true))
 	FText AdditionalDescription;
+
+	/** Optional player-facing excerpts; the source descriptions remain unchanged. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Boss|Reader")
+	bool bUseReaderText = false;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Boss|Reader", meta=(EditCondition="bUseReaderText", MultiLine=true))
+	FText ReaderDescription;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Boss|Reader", meta=(EditCondition="bUseReaderText", MultiLine=true))
+	FText ReaderAdditionalDescription;
 };
 
 /** Array order is the displayed order. Add a row here without editing C++ or WBP graphs. */

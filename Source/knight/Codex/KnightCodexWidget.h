@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Codex/KnightCodexData.h"
+#include "Codex/KnightCodexPresentation.h"
 #include "Blueprint/UserWidget.h"
 #include "Components/Button.h"
 #include "KnightCodexWidget.generated.h"
@@ -24,7 +25,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FKnightCodexSectionSelected, int32,
 
 /** A small native list button keeps each prose section selectable without Blueprint graph bindings. */
 UCLASS()
-class KNIGHT_API UKnightCodexSectionButton : public UButton
+class KNIGHT_API UKnightCodexSectionButton : public UKnightCodexArchiveButton
 {
 	GENERATED_BODY()
 public:
@@ -88,6 +89,7 @@ public:
 
 protected:
 	virtual void NativeOnInitialized() override;
+	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Knight|Codex") TSoftObjectPtr<UKnightCodexData> CodexData;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Knight|Codex") TSubclassOf<UKnightCodexBossEntryWidget> BossEntryClass;
@@ -106,7 +108,7 @@ protected:
 	UPROPERTY(meta=(BindWidget)) TObjectPtr<UTextBlock> Text_BossName;
 	UPROPERTY(meta=(BindWidget)) TObjectPtr<UTextBlock> Text_BossDescription;
 	UPROPERTY(meta=(BindWidget)) TObjectPtr<UTextBlock> Text_BossExtra;
-	UPROPERTY(meta=(BindWidget)) TObjectPtr<UTextBlock> Text_NoPortrait;
+	UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> Text_NoPortrait;
 	UPROPERTY(meta=(BindWidget)) TObjectPtr<UImage> Image_Portrait;
 	UPROPERTY(meta=(BindWidget)) TObjectPtr<UVerticalBox> Box_Drops;
 	UPROPERTY(meta=(BindWidget)) TObjectPtr<UTextBlock> Text_NoDrops;
@@ -122,9 +124,9 @@ private:
 	bool IsBossUnlocked(const FKnightCodexBossEntry& Boss) const;
 	void SetBossDetailLocked(bool bLocked);
 	UFUNCTION() void HandleSectionSelected(int32 Category, int32 SectionIndex);
-	void RebuildTextPage(FName ColumnName, FName ListName, UTextBlock* LegacyBody, const FText& Title,
+	void RebuildTextPage(FName ListName, UTextBlock* LegacyBody, const FText& Title,
 		const TArray<FKnightCodexTextSection>& Sections, int32 Category);
-	void SelectReadingSection(int32 Category, int32 SectionIndex, bool bScroll);
+	void SelectReadingSection(int32 Category, int32 SectionIndex);
 	void ResetReadingScroll(FName ScrollName);
 	void RefreshBoss();
 	void ClearBossDetail();
@@ -132,7 +134,8 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UKnightCodexData> LoadedData;
 	UPROPERTY(Transient) TArray<TObjectPtr<UKnightCodexBossEntryWidget>> GeneratedEntries;
 	TArray<TWeakObjectPtr<UKnightCodexSectionButton>> ReadingButtons[2];
-	TArray<TWeakObjectPtr<UWidget>> ReadingAnchors[2];
+	TArray<int32> ReadingSectionIndices[2];
+	FText ReadingPageTitles[2];
 	FName SelectedBossId;
 	int32 ActiveCategory = 0;
 };
