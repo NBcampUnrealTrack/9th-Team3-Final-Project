@@ -5,6 +5,7 @@
 #include "CommonTextBlock.h"
 #include "Components/Border.h"
 #include "Components/Button.h"
+#include "Components/ButtonSlot.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/HorizontalBox.h"
@@ -100,8 +101,8 @@ namespace
 		Widget->Modify();
 		Widget->SetBackgroundColor(Color);
 		FButtonStyle ButtonStyle = Widget->GetStyle();
-		ButtonStyle.Hovered.TintColor = FSlateColor(FLinearColor(1.15f, 1.15f, 1.15f, 1.f));
-		ButtonStyle.Pressed.TintColor = FSlateColor(FLinearColor(0.9f, 0.77f, 0.56f, 1.f));
+		ButtonStyle.Hovered.TintColor = FSlateColor(FLinearColor(0.83f, 1.05f, 1.20f, 1.f));
+		ButtonStyle.Pressed.TintColor = FSlateColor(FLinearColor(0.58f, 0.85f, 1.18f, 1.f));
 		Widget->SetStyle(ButtonStyle);
 	}
 }
@@ -346,4 +347,218 @@ bool UKnightCodexEditorLibrary::StyleDropEntry(UWidgetBlueprint* BP)
 UScrollBox* UKnightCodexEditorLibrary::FindScrollBox(UUserWidget* Widget, FName WidgetName)
 {
 	return Widget ? Cast<UScrollBox>(Widget->GetWidgetFromName(WidgetName)) : nullptr;
+}
+
+bool UKnightCodexEditorLibrary::RedesignCodex(UWidgetBlueprint* BP)
+{
+	if (!BP || !BP->WidgetTree) return false;
+	// These presentation-only widgets were replaced. Remove their editor variable GUIDs as well,
+	// otherwise WidgetBlueprintCompiler reports missing-variable ensures on later compiles.
+	auto RemoveOldGuids = [BP]()
+	{
+		for (const TCHAR* Name : {TEXT("Spacer_Sidebar"), TEXT("Row_ContentHeader"),
+			TEXT("Spacer_ContentHeader"), TEXT("Row_Monster"), TEXT("Width_BossList")})
+			BP->OnVariableRemoved(Name);
+	};
+	if (BP->WidgetTree->FindWidget(TEXT("Switcher_Entries")))
+	{
+		for (const TCHAR* Name : {TEXT("Button_World"), TEXT("Button_Mech"), TEXT("Button_Monster"), TEXT("Button_Close")})
+			StyleCodexButton(Cast<UButton>(BP->WidgetTree->FindWidget(Name)), FLinearColor(0.10f, 0.17f, 0.25f, 1.f));
+		RemoveOldGuids();
+		End(BP);
+		return true;
+	}
+	auto Find = [BP](const TCHAR* Name) { return BP->WidgetTree->FindWidget(Name); };
+	UBorder* Frame = Cast<UBorder>(Find(TEXT("Border_Frame")));
+	UHorizontalBox* Main = Cast<UHorizontalBox>(Find(TEXT("Row_Main")));
+	USizeBox* CategoriesWidth = Cast<USizeBox>(Find(TEXT("Width_Categories")));
+	UBorder* CategoriesPanel = Cast<UBorder>(Find(TEXT("Border_Categories")));
+	UVerticalBox* Categories = Cast<UVerticalBox>(Find(TEXT("Column_Categories")));
+	UBorder* DetailPanel = Cast<UBorder>(Find(TEXT("Border_ReadingPanel")));
+	UVerticalBox* Detail = Cast<UVerticalBox>(Find(TEXT("Column_Content")));
+	UWidgetSwitcher* Content = Cast<UWidgetSwitcher>(Find(TEXT("Switcher_Content")));
+	UHorizontalBox* OldMonster = Cast<UHorizontalBox>(Find(TEXT("Row_Monster")));
+	UScrollBox* BossList = Cast<UScrollBox>(Find(TEXT("Scroll_BossList")));
+	UScrollBox* BossDetail = Cast<UScrollBox>(Find(TEXT("Scroll_BossDetail")));
+	UCommonTextBlock* Title = Cast<UCommonTextBlock>(Find(TEXT("Label_Codex")));
+	UButton* Close = Cast<UButton>(Find(TEXT("Button_Close")));
+	UButton* World = Cast<UButton>(Find(TEXT("Button_World")));
+	UButton* Mech = Cast<UButton>(Find(TEXT("Button_Mech")));
+	UButton* Monster = Cast<UButton>(Find(TEXT("Button_Monster")));
+	if (!Frame || !Main || !CategoriesWidth || !CategoriesPanel || !Categories || !DetailPanel || !Detail ||
+		!Content || !OldMonster || !BossList || !BossDetail || !Title || !Close || !World || !Mech || !Monster) return false;
+	BP->Modify(); BP->WidgetTree->Modify();
+	TArray<UWidget*> WidgetsToDetach = {Title, Close, World, Mech, Monster, CategoriesWidth,
+		DetailPanel, Content, BossList, BossDetail, Main};
+	for (UWidget* Widget : WidgetsToDetach) Widget->RemoveFromParent();
+	Content->RemoveChild(OldMonster);
+	Content->AddChild(BossDetail); // World, Mech, Monster remain indices 0, 1, 2.
+	Categories->ClearChildren();
+	Detail->ClearChildren();
+	Main->ClearChildren();
+	Frame->ClearChildren();
+
+	// The same full-viewport anchor and the project's DPI curve drive the shell at every resolution.
+	if (UCanvasPanelSlot* FrameSlot = Cast<UCanvasPanelSlot>(Frame->Slot))
+	{
+		FrameSlot->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f));
+		FrameSlot->SetOffsets(FMargin(28.f, 28.f, -28.f, -28.f));
+	}
+	Frame->SetBrushColor(FLinearColor(0.15f, 0.49f, 0.68f, 0.85f));
+	Frame->SetPadding(FMargin(1.f));
+	UBorder* Surface = New<UBorder>(BP, TEXT("Border_CodexSurface"));
+	Surface->SetBrushColor(FLinearColor(0.025f, 0.055f, 0.095f, 0.89f));
+	Surface->SetPadding(FMargin(16.f, 12.f));
+	Frame->AddChild(Surface);
+	UVerticalBox* Shell = New<UVerticalBox>(BP, TEXT("Column_CodexShell"));
+	Surface->AddChild(Shell);
+	UHorizontalBox* Header = New<UHorizontalBox>(BP, TEXT("Row_CodexHeader"));
+	Col(Shell, Header, false, FMargin(6.f, 0.f, 6.f, 10.f));
+	Title->SetText(INVTEXT("도감"));
+	if (TSubclassOf<UCommonTextStyle> S = Style(TEXT("TS_Knight_Title"))) Title->SetStyle(S);
+	Row(Header, Title, true);
+	StyleCodexButton(Close, FLinearColor(0.10f, 0.18f, 0.28f, 1.f));
+	Row(Header, Sized(BP, TEXT("Width_CodexClose"), 96.f, 0.f, Close), false);
+	UBorder* HeaderRule = New<UBorder>(BP, TEXT("Rule_CodexHeader"));
+	HeaderRule->SetBrushColor(FLinearColor(0.20f, 0.54f, 0.73f, 0.65f));
+	HeaderRule->SetVisibility(ESlateVisibility::HitTestInvisible);
+	Col(Shell, Sized(BP, TEXT("Height_CodexHeaderRule"), 0.f, 1.f, HeaderRule), false, FMargin(0.f, 0.f, 0.f, 12.f));
+	Col(Shell, Main, true);
+
+	CategoriesWidth->SetWidthOverride(174.f);
+	CategoriesPanel->SetBrushColor(FLinearColor(0.14f, 0.39f, 0.55f, 0.80f));
+	CategoriesPanel->SetPadding(FMargin(1.f));
+	Categories->RemoveFromParent();
+	UBorder* CategoriesSurface = New<UBorder>(BP, TEXT("Border_CategorySurface"));
+	CategoriesSurface->SetBrushColor(FLinearColor(0.035f, 0.08f, 0.13f, 0.73f));
+	CategoriesSurface->SetPadding(FMargin(10.f, 14.f));
+	CategoriesPanel->AddChild(CategoriesSurface);
+	CategoriesSurface->AddChild(Categories);
+	Col(Categories, Text(BP, TEXT("Label_CodexCategories"), INVTEXT("분류"), TEXT("TS_Knight_Caption")), false, FMargin(4.f, 0.f, 0.f, 14.f));
+	for (UButton* ButtonWidget : {World, Mech, Monster})
+	{
+		StyleCodexButton(ButtonWidget, FLinearColor(0.10f, 0.17f, 0.25f, 1.f));
+		if (UWidget* Label = ButtonWidget->GetContent())
+			if (UButtonSlot* Slot = Cast<UButtonSlot>(Label->Slot)) Slot->SetPadding(FMargin(10.f, 11.f));
+		Col(Categories, ButtonWidget, false, FMargin(0.f, 0.f, 0.f, 8.f));
+	}
+	Row(Main, CategoriesWidth, false, FMargin(0.f, 0.f, 12.f, 0.f));
+
+	USizeBox* EntriesWidth = New<USizeBox>(BP, TEXT("Width_CodexEntries"));
+	EntriesWidth->SetWidthOverride(318.f);
+	Row(Main, EntriesWidth, false, FMargin(0.f, 0.f, 12.f, 0.f));
+	UBorder* EntriesBorder = New<UBorder>(BP, TEXT("Border_CodexEntries"));
+	EntriesBorder->SetBrushColor(FLinearColor(0.14f, 0.39f, 0.55f, 0.80f));
+	EntriesBorder->SetPadding(FMargin(1.f));
+	EntriesWidth->AddChild(EntriesBorder);
+	UBorder* EntriesSurface = New<UBorder>(BP, TEXT("Border_EntriesSurface"));
+	EntriesSurface->SetBrushColor(FLinearColor(0.025f, 0.065f, 0.11f, 0.77f));
+	EntriesSurface->SetPadding(FMargin(12.f, 12.f, 8.f, 12.f));
+	EntriesBorder->AddChild(EntriesSurface);
+	UVerticalBox* EntriesColumn = New<UVerticalBox>(BP, TEXT("Column_CodexEntries"));
+	EntriesSurface->AddChild(EntriesColumn);
+	Col(EntriesColumn, Text(BP, TEXT("Label_CodexEntries"), INVTEXT("항목"), TEXT("TS_Knight_Subhead")), false, FMargin(3.f, 0.f, 0.f, 10.f));
+	UWidgetSwitcher* EntrySwitcher = New<UWidgetSwitcher>(BP, TEXT("Switcher_Entries"), true);
+	Col(EntriesColumn, EntrySwitcher, true);
+	for (const TCHAR* Name : {TEXT("World"), TEXT("Mech")})
+	{
+		UVerticalBox* List = New<UVerticalBox>(BP, *FString::Printf(TEXT("Box_%sEntries"), Name));
+		EntrySwitcher->AddChild(Scroll(BP, *FString::Printf(TEXT("Scroll_%sEntries"), Name), List));
+	}
+	EntrySwitcher->AddChild(BossList);
+	if (UWidget* BossListLabel = Find(TEXT("Label_BossList"))) BossListLabel->SetVisibility(ESlateVisibility::Collapsed);
+
+	DetailPanel->SetBrushColor(FLinearColor(0.14f, 0.39f, 0.55f, 0.80f));
+	DetailPanel->SetPadding(FMargin(1.f));
+	Detail->RemoveFromParent();
+	UBorder* DetailSurface = New<UBorder>(BP, TEXT("Border_DetailSurface"));
+	DetailSurface->SetBrushColor(FLinearColor(0.025f, 0.06f, 0.10f, 0.70f));
+	DetailSurface->SetPadding(FMargin(20.f, 16.f));
+	DetailPanel->AddChild(DetailSurface);
+	DetailSurface->AddChild(Detail);
+	Col(Detail, Content, true);
+	Row(Main, DetailPanel, true);
+
+	UBorder* FooterRule = New<UBorder>(BP, TEXT("Rule_CodexFooter"));
+	FooterRule->SetBrushColor(FLinearColor(0.20f, 0.54f, 0.73f, 0.55f));
+	FooterRule->SetVisibility(ESlateVisibility::HitTestInvisible);
+	Col(Shell, Sized(BP, TEXT("Height_CodexFooterRule"), 0.f, 1.f, FooterRule), false, FMargin(0.f, 12.f, 0.f, 7.f));
+	Col(Shell, Text(BP, TEXT("Label_CodexHints"), INVTEXT("항목 선택  ·  마우스 휠로 읽기  ·  Esc 뒤로"), TEXT("TS_Knight_Caption")), false, FMargin(6.f, 0.f, 0.f, 0.f));
+	for (const TCHAR* Name : {TEXT("Scroll_World"), TEXT("Scroll_Mech"), TEXT("Scroll_BossList"), TEXT("Scroll_BossDetail"), TEXT("Scroll_WorldEntries"), TEXT("Scroll_MechEntries")})
+		if (UScrollBox* Box = Cast<UScrollBox>(Find(Name)))
+		{
+			Box->SetScrollbarThickness(FVector2D(6.f, 6.f));
+			Box->SetScrollbarPadding(FMargin(4.f, 0.f, 0.f, 0.f));
+		}
+	RemoveOldGuids();
+	End(BP);
+	return true;
+}
+
+bool UKnightCodexEditorLibrary::RedesignBossEntry(UWidgetBlueprint* BP)
+{
+	if (!BP || !BP->WidgetTree) return false;
+	auto EnsureRowHeight = [BP]()
+	{
+		if (BP->WidgetTree->FindWidget(TEXT("Size_BossRecord"))) return;
+		UButton* ButtonRoot = Cast<UButton>(BP->WidgetTree->RootWidget);
+		if (!ButtonRoot) return;
+		USizeBox* Root = New<USizeBox>(BP, TEXT("Size_BossRecord"));
+		Root->SetHeightOverride(72.f);
+		Root->AddChild(ButtonRoot);
+		BP->WidgetTree->RootWidget = Root;
+	};
+	if (BP->WidgetTree->FindWidget(TEXT("Row_BossRecord")))
+	{
+		BP->Modify(); BP->WidgetTree->Modify();
+		StyleCodexButton(Cast<UButton>(BP->WidgetTree->FindWidget(TEXT("Button_Select"))), FLinearColor(0.10f, 0.17f, 0.25f, 1.f));
+		EnsureRowHeight();
+		End(BP);
+		return true;
+	}
+	UButton* ButtonWidget = Cast<UButton>(BP->WidgetTree->FindWidget(TEXT("Button_Select")));
+	UVerticalBox* OldColumn = Cast<UVerticalBox>(BP->WidgetTree->FindWidget(TEXT("Column_Entry")));
+	USizeBox* Icon = Cast<USizeBox>(BP->WidgetTree->FindWidget(TEXT("Size_Icon")));
+	UCommonTextBlock* Name = Cast<UCommonTextBlock>(BP->WidgetTree->FindWidget(TEXT("Text_Name")));
+	UWidget* Lock = BP->WidgetTree->FindWidget(TEXT("Row_LockState"));
+	if (!ButtonWidget || !OldColumn || !Icon || !Name || !Lock) return false;
+	BP->Modify(); BP->WidgetTree->Modify();
+	Icon->RemoveFromParent(); Name->RemoveFromParent(); Lock->RemoveFromParent();
+	Icon->SetWidthOverride(44.f); Icon->SetHeightOverride(44.f);
+	UHorizontalBox* RowWidget = New<UHorizontalBox>(BP, TEXT("Row_BossRecord"));
+	Col(OldColumn, RowWidget, false);
+	Row(RowWidget, Icon, false, FMargin(0.f, 0.f, 10.f, 0.f));
+	UVerticalBox* Labels = New<UVerticalBox>(BP, TEXT("Column_BossRecordLabels"));
+	Row(RowWidget, Labels, true);
+	Col(Labels, Name, false);
+	Col(Labels, Lock, false, FMargin(0.f, 3.f, 0.f, 0.f));
+	if (UWidget* Label = ButtonWidget->GetContent())
+		if (UButtonSlot* Slot = Cast<UButtonSlot>(Label->Slot)) Slot->SetPadding(FMargin(10.f, 9.f));
+	StyleCodexButton(ButtonWidget, FLinearColor(0.10f, 0.17f, 0.25f, 1.f));
+	EnsureRowHeight();
+	End(BP);
+	return true;
+}
+
+bool UKnightCodexEditorLibrary::RedesignDropEntry(UWidgetBlueprint* BP)
+{
+	if (!BP || !BP->WidgetTree) return false;
+	if (BP->WidgetTree->FindWidget(TEXT("Border_DropRow"))) return true;
+	UHorizontalBox* Root = Cast<UHorizontalBox>(BP->WidgetTree->FindWidget(TEXT("Row_Drop")));
+	USizeBox* Icon = Cast<USizeBox>(BP->WidgetTree->FindWidget(TEXT("Size_ItemIcon")));
+	UVerticalBox* Labels = Cast<UVerticalBox>(BP->WidgetTree->FindWidget(TEXT("Column_DropLabels")));
+	if (!Root || !Icon || !Labels) return false;
+	BP->Modify(); BP->WidgetTree->Modify();
+	Icon->RemoveFromParent(); Labels->RemoveFromParent();
+	UBorder* Border = New<UBorder>(BP, TEXT("Border_DropRow"));
+	Border->SetBrushColor(FLinearColor(0.08f, 0.16f, 0.24f, 0.62f));
+	Border->SetPadding(FMargin(10.f, 7.f));
+	Row(Root, Border, true, FMargin(0.f, 0.f, 0.f, 5.f));
+	UHorizontalBox* Content = New<UHorizontalBox>(BP, TEXT("Row_DropContent"));
+	Border->AddChild(Content);
+	Icon->SetWidthOverride(40.f); Icon->SetHeightOverride(40.f);
+	Row(Content, Icon, false, FMargin(0.f, 0.f, 10.f, 0.f));
+	Row(Content, Labels, true);
+	End(BP);
+	return true;
 }
