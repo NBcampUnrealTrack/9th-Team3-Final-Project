@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Codex/KnightCodexData.h"
 #include "Blueprint/UserWidget.h"
+#include "Components/Button.h"
 #include "KnightCodexWidget.generated.h"
 
 class UButton;
@@ -12,12 +13,30 @@ class UWidget;
 class UVerticalBox;
 class UWidgetSwitcher;
 class UTexture2D;
+class UScrollBox;
 class UKnightCodexData;
 struct FKnightCodexBossEntry;
 struct FknightRaidReward;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FKnightCodexClosed);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FKnightCodexBossSelected, FName, BossId);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FKnightCodexSectionSelected, int32, Category, int32, SectionIndex);
+
+/** A small native list button keeps each prose section selectable without Blueprint graph bindings. */
+UCLASS()
+class KNIGHT_API UKnightCodexSectionButton : public UButton
+{
+	GENERATED_BODY()
+public:
+	UPROPERTY() FKnightCodexSectionSelected OnSectionSelected;
+	void SetSection(int32 InCategory, int32 InIndex) { Category = InCategory; SectionIndex = InIndex; }
+protected:
+	virtual void SynchronizeProperties() override;
+private:
+	UFUNCTION() void HandleClicked();
+	int32 Category = 0;
+	int32 SectionIndex = 0;
+};
 
 UCLASS()
 class KNIGHT_API UKnightCodexBossEntryWidget : public UUserWidget
@@ -38,6 +57,8 @@ protected:
 private:
 	UFUNCTION() void HandleClicked();
 	FName BossId;
+	bool bEntrySelected = false;
+	bool bEntryUnlocked = false;
 };
 
 UCLASS()
@@ -100,13 +121,18 @@ private:
 	void RefreshUnlockStates();
 	bool IsBossUnlocked(const FKnightCodexBossEntry& Boss) const;
 	void SetBossDetailLocked(bool bLocked);
-	void RebuildTextPage(FName ColumnName, UTextBlock* LegacyBody, const TArray<FKnightCodexTextSection>& Sections);
+	UFUNCTION() void HandleSectionSelected(int32 Category, int32 SectionIndex);
+	void RebuildTextPage(FName ColumnName, FName ListName, UTextBlock* LegacyBody, const FText& Title,
+		const TArray<FKnightCodexTextSection>& Sections, int32 Category);
+	void SelectReadingSection(int32 Category, int32 SectionIndex, bool bScroll);
 	void ResetReadingScroll(FName ScrollName);
 	void RefreshBoss();
 	void ClearBossDetail();
 	const FKnightCodexBossEntry* FindBoss(FName BossId) const;
 	UPROPERTY(Transient) TObjectPtr<UKnightCodexData> LoadedData;
 	UPROPERTY(Transient) TArray<TObjectPtr<UKnightCodexBossEntryWidget>> GeneratedEntries;
+	TArray<TWeakObjectPtr<UKnightCodexSectionButton>> ReadingButtons[2];
+	TArray<TWeakObjectPtr<UWidget>> ReadingAnchors[2];
 	FName SelectedBossId;
 	int32 ActiveCategory = 0;
 };

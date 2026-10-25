@@ -9,8 +9,10 @@
 #include "Blueprint/WidgetTree.h"
 #include "CommonTextBlock.h"
 #include "Components/Button.h"
+#include "Components/ButtonSlot.h"
 #include "Components/Image.h"
 #include "Components/ScrollBox.h"
+#include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
@@ -22,8 +24,9 @@
 
 namespace
 {
-	const FLinearColor SelectedColor(FColor(0xB0, 0x7B, 0x37));
-	const FLinearColor NormalColor(FColor(0x32, 0x48, 0x5C));
+	const FLinearColor SelectedColor(FColor(0x18, 0x66, 0xAC));
+	const FLinearColor NormalColor(FColor(0x1B, 0x2B, 0x3A));
+	const FLinearColor LockedColor(FColor(0x15, 0x22, 0x2C));
 	TSubclassOf<UCommonTextStyle> CodexStyle(const TCHAR* Name)
 	{
 		return LoadClass<UCommonTextStyle>(nullptr,
@@ -38,6 +41,17 @@ namespace
 	}
 }
 
+void UKnightCodexSectionButton::SynchronizeProperties()
+{
+	Super::SynchronizeProperties();
+	OnClicked.AddUniqueDynamic(this, &ThisClass::HandleClicked);
+}
+
+void UKnightCodexSectionButton::HandleClicked()
+{
+	OnSectionSelected.Broadcast(Category, SectionIndex);
+}
+
 void UKnightCodexBossEntryWidget::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
@@ -47,15 +61,20 @@ void UKnightCodexBossEntryWidget::NativeOnInitialized()
 void UKnightCodexBossEntryWidget::Configure(FName InId, const FText& Name, UTexture2D* Icon, bool bUnlocked)
 {
 	BossId = InId;
+	bEntryUnlocked = bUnlocked;
 	if (Text_Name) Text_Name->SetText(Name);
+	if (Text_Name) Text_Name->SetColorAndOpacity(FSlateColor(bUnlocked
+		? FLinearColor(0.94f, 0.97f, 1.f, 1.f) : FLinearColor(0.54f, 0.65f, 0.74f, 1.f)));
 	SetImage(Image_Icon, bUnlocked ? Icon : nullptr);
 	if (Row_LockState) Row_LockState->SetVisibility(bUnlocked ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
 	else if (Text_LockState) Text_LockState->SetVisibility(bUnlocked ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+	SetSelected(bEntrySelected);
 }
 
 void UKnightCodexBossEntryWidget::SetSelected(bool bSelected)
 {
-	if (Button_Select) Button_Select->SetBackgroundColor(bSelected ? SelectedColor : NormalColor);
+	bEntrySelected = bSelected;
+	if (Button_Select) Button_Select->SetBackgroundColor(bSelected ? SelectedColor : bEntryUnlocked ? NormalColor : LockedColor);
 }
 
 void UKnightCodexBossEntryWidget::HandleClicked()
@@ -123,6 +142,13 @@ void UKnightCodexWidget::NativeDestruct()
 		if (Entry) Entry->OnSelected.RemoveDynamic(this, &ThisClass::HandleBossSelected);
 	}
 	GeneratedEntries.Reset();
+	for (int32 Category = 0; Category < 2; ++Category)
+	{
+		for (const TWeakObjectPtr<UKnightCodexSectionButton>& Button : ReadingButtons[Category])
+			if (Button.IsValid()) Button->OnSectionSelected.RemoveDynamic(this, &ThisClass::HandleSectionSelected);
+		ReadingButtons[Category].Reset();
+		ReadingAnchors[Category].Reset();
+	}
 	Super::NativeDestruct();
 }
 
@@ -138,8 +164,12 @@ void UKnightCodexWidget::Open()
 	if (Text_WorldBody) Text_WorldBody->SetText(OrPending(LoadedData ? LoadedData->WorldBody : FText::GetEmpty()));
 	if (Text_MechTitle) Text_MechTitle->SetText(LoadedData && !LoadedData->MechTitle.IsEmpty() ? LoadedData->MechTitle : LOCTEXT("Mech", "기체 설명"));
 	if (Text_MechBody) Text_MechBody->SetText(OrPending(LoadedData ? LoadedData->MechBody : FText::GetEmpty()));
-	RebuildTextPage(TEXT("Column_World"), Text_WorldBody, LoadedData ? LoadedData->WorldSections : TArray<FKnightCodexTextSection>());
-	RebuildTextPage(TEXT("Column_Mech"), Text_MechBody, LoadedData ? LoadedData->MechSections : TArray<FKnightCodexTextSection>());
+	RebuildTextPage(TEXT("Column_World"), TEXT("Box_WorldEntries"), Text_WorldBody,
+		Text_WorldTitle ? Text_WorldTitle->GetText() : LOCTEXT("World", "세계관"),
+		LoadedData ? LoadedData->WorldSections : TArray<FKnightCodexTextSection>(), 0);
+	RebuildTextPage(TEXT("Column_Mech"), TEXT("Box_MechEntries"), Text_MechBody,
+		Text_MechTitle ? Text_MechTitle->GetText() : LOCTEXT("Mech", "기체 설명"),
+		LoadedData ? LoadedData->MechSections : TArray<FKnightCodexTextSection>(), 1);
 	SelectedBossId = NAME_None;
 	RebuildBosses();
 	SelectCategory(0);
@@ -182,10 +212,17 @@ void UKnightCodexWidget::RefreshUnlockStates()
 	RefreshBoss();
 }
 
-void UKnightCodexWidget::RebuildTextPage(FName ColumnName, UTextBlock* LegacyBody, const TArray<FKnightCodexTextSection>& Sections)
+void UKnightCodexWidget::RebuildTextPage(FName ColumnName, FName ListName, UTextBlock* LegacyBody,
+	const FText& Title, const TArray<FKnightCodexTextSection>& Sections, int32 Category)
 {
 	UVerticalBox* Column = Cast<UVerticalBox>(GetWidgetFromName(ColumnName));
-	if (!Column || !WidgetTree) return;
+	UVerticalBox* List = Cast<UVerticalBox>(GetWidgetFromName(ListName));
+	if (!Column || !List || !WidgetTree || Category < 0 || Category > 1) return;
+	for (const TWeakObjectPtr<UKnightCodexSectionButton>& Button : ReadingButtons[Category])
+		if (Button.IsValid()) Button->OnSectionSelected.RemoveDynamic(this, &ThisClass::HandleSectionSelected);
+	ReadingButtons[Category].Reset();
+	ReadingAnchors[Category].Reset();
+	List->ClearChildren();
 	const FName DynamicName(*FString::Printf(TEXT("Dynamic_%s"), *ColumnName.ToString()));
 	UVerticalBox* SectionBox = Cast<UVerticalBox>(GetWidgetFromName(DynamicName));
 	if (!SectionBox)
@@ -196,8 +233,34 @@ void UKnightCodexWidget::RebuildTextPage(FName ColumnName, UTextBlock* LegacyBod
 	SectionBox->ClearChildren();
 	SectionBox->SetVisibility(Sections.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 	if (LegacyBody) LegacyBody->SetVisibility(Sections.IsEmpty() ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-	for (const FKnightCodexTextSection& Section : Sections)
+	const int32 EntryCount = FMath::Max(1, Sections.Num());
+	for (int32 Index = 0; Index < EntryCount; ++Index)
 	{
+		const FKnightCodexTextSection* SectionPtr = Sections.IsValidIndex(Index) ? &Sections[Index] : nullptr;
+		const FText EntryName = SectionPtr && !SectionPtr->Heading.IsEmpty() ? SectionPtr->Heading : Title;
+		UKnightCodexSectionButton* Entry = WidgetTree->ConstructWidget<UKnightCodexSectionButton>();
+		Entry->SetSection(Category, Index);
+		Entry->SetBackgroundColor(NormalColor);
+		Entry->OnSectionSelected.AddUniqueDynamic(this, &ThisClass::HandleSectionSelected);
+		UCommonTextBlock* Label = WidgetTree->ConstructWidget<UCommonTextBlock>();
+		Label->SetText(EntryName);
+		Label->SetAutoWrapText(true);
+		if (const TSubclassOf<UCommonTextStyle> ButtonStyle = CodexStyle(TEXT("TS_Knight_Button"))) Label->SetStyle(ButtonStyle);
+		Entry->AddChild(Label);
+		if (UButtonSlot* ButtonSlot = Cast<UButtonSlot>(Label->Slot)) ButtonSlot->SetPadding(FMargin(12.f, 10.f));
+		USizeBox* EntryHeight = WidgetTree->ConstructWidget<USizeBox>();
+		EntryHeight->SetHeightOverride(72.f);
+		EntryHeight->AddChild(Entry);
+		UVerticalBoxSlot* EntrySlot = List->AddChildToVerticalBox(EntryHeight);
+		EntrySlot->SetPadding(FMargin(0.f, 0.f, 0.f, 5.f));
+		ReadingButtons[Category].Add(Entry);
+		if (!SectionPtr)
+		{
+			ReadingAnchors[Category].Add(Cast<UWidget>(LegacyBody));
+			continue;
+		}
+		const FKnightCodexTextSection& Section = *SectionPtr;
+		UWidget* Anchor = nullptr;
 		if (!Section.Heading.IsEmpty())
 		{
 			UCommonTextBlock* Heading = WidgetTree->ConstructWidget<UCommonTextBlock>();
@@ -207,6 +270,7 @@ void UKnightCodexWidget::RebuildTextPage(FName ColumnName, UTextBlock* LegacyBod
 				Heading->SetStyle(Style);
 			UVerticalBoxSlot* HeadingSlot = SectionBox->AddChildToVerticalBox(Heading);
 			HeadingSlot->SetPadding(FMargin(0.f, Section.HeadingLevel >= 3 ? 8.f : 18.f, 0.f, 8.f));
+			Anchor = Heading;
 		}
 		if (!Section.Body.IsEmpty())
 		{
@@ -216,7 +280,30 @@ void UKnightCodexWidget::RebuildTextPage(FName ColumnName, UTextBlock* LegacyBod
 			if (const TSubclassOf<UCommonTextStyle> Style = CodexStyle(TEXT("TS_Knight_Body"))) Body->SetStyle(Style);
 			UVerticalBoxSlot* BodySlot = SectionBox->AddChildToVerticalBox(Body);
 			BodySlot->SetPadding(FMargin(0.f, 0.f, 0.f, 12.f));
+			if (!Anchor) Anchor = Body;
 		}
+		ReadingAnchors[Category].Add(Anchor);
+	}
+	SelectReadingSection(Category, 0, false);
+}
+
+void UKnightCodexWidget::HandleSectionSelected(int32 Category, int32 SectionIndex)
+{
+	if (Category == ActiveCategory) SelectReadingSection(Category, SectionIndex, true);
+}
+
+void UKnightCodexWidget::SelectReadingSection(int32 Category, int32 SectionIndex, bool bScroll)
+{
+	if (Category < 0 || Category > 1 || !ReadingButtons[Category].IsValidIndex(SectionIndex)) return;
+	for (int32 Index = 0; Index < ReadingButtons[Category].Num(); ++Index)
+		if (UKnightCodexSectionButton* Button = ReadingButtons[Category][Index].Get())
+			Button->SetBackgroundColor(Index == SectionIndex ? SelectedColor : NormalColor);
+	if (!bScroll) return;
+	UScrollBox* Scroll = Cast<UScrollBox>(GetWidgetFromName(Category == 0 ? TEXT("Scroll_World") : TEXT("Scroll_Mech")));
+	if (Scroll && ReadingAnchors[Category].IsValidIndex(SectionIndex))
+	{
+		if (UWidget* Anchor = ReadingAnchors[Category][SectionIndex].Get()) Scroll->ScrollWidgetIntoView(Anchor);
+		else Scroll->ScrollToStart();
 	}
 }
 
@@ -230,6 +317,9 @@ void UKnightCodexWidget::SelectCategory(int32 Category)
 	if (Category < 0 || Category > 2) return;
 	ActiveCategory = Category;
 	if (Switcher_Content) Switcher_Content->SetActiveWidgetIndex(Category);
+	if (UWidgetSwitcher* EntrySwitcher = Cast<UWidgetSwitcher>(GetWidgetFromName(TEXT("Switcher_Entries"))))
+		EntrySwitcher->SetActiveWidgetIndex(Category);
+	if (Category < 2) SelectReadingSection(Category, 0, false);
 	if (Category == 0) ResetReadingScroll(TEXT("Scroll_World"));
 	else if (Category == 1) ResetReadingScroll(TEXT("Scroll_Mech"));
 	else ResetReadingScroll(TEXT("Scroll_BossDetail"));
