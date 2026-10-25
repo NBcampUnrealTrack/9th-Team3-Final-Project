@@ -92,13 +92,40 @@ namespace
 					Check(Menu->ToggleMaterialsShortcut() && Switcher && Switcher->GetActiveWidget() == Maintenance
 						&& Maintenance->IsMaterialsViewOpen(), TEXT("repeat entry reuses one widget with fresh Materials state"));
 					Check(Menu->ShowPage(EKnightMainMenuPage::Home), TEXT("normal page exit works"));
-					Check(Menu->ShowPage(EKnightMainMenuPage::Maintenance) && Switcher
-						&& Switcher->GetActiveWidget() != Maintenance, TEXT("normal maintenance entry shows three choices"));
-					if (Maintenance)
+					Check(Menu->ShowPage(EKnightMainMenuPage::Maintenance) && Menu->GetCurrentPage() == EKnightMainMenuPage::Home,
+						TEXT("maintenance submenu retains Home page"));
+					UWidget* const Submenu = Menu->GetWidgetFromName(TEXT("Panel_MaintenanceSubmenu"));
+					Check(Submenu && (Submenu->GetVisibility() == ESlateVisibility::Visible) && Submenu->GetParent() == Menu->GetWidgetFromName(TEXT("Panel_Home"))
+						&& !Menu->GetWidgetFromName(TEXT("Panel_MaintenanceSelectionRuntime")), TEXT("adjacent submenu belongs to Home; centered chooser absent"));
+					Check(Menu->RequestBack() && Menu->GetCurrentPage() == EKnightMainMenuPage::Home && Submenu && !(Submenu->GetVisibility() == ESlateVisibility::Visible),
+						TEXT("Back collapses submenu without opening Settings"));
+					UCommonButtonBase* const MaintenanceItem = Cast<UCommonButtonBase>(Menu->GetWidgetFromName(TEXT("Button_Maintenance")));
+					if (MaintenanceItem) MaintenanceItem->OnClicked().Broadcast();
+					Check(Submenu && (Submenu->GetVisibility() == ESlateVisibility::Visible), TEXT("maintenance item opens submenu"));
+					if (MaintenanceItem) MaintenanceItem->OnClicked().Broadcast();
+					Check(Submenu && !(Submenu->GetVisibility() == ESlateVisibility::Visible), TEXT("same maintenance item toggles submenu closed"));
+					for (const TCHAR* ChoiceName : { TEXT("MaintenanceChoiceCrafting"), TEXT("MaintenanceChoiceEnhancement"), TEXT("MaintenanceChoiceSockets") })
 					{
-						Maintenance->Open(EKnightMaintenanceDestination::Crafting);
-						Check(!Maintenance->IsMaterialsViewOpen(), TEXT("normal Crafting starts on Crafting tab"));
+						Menu->ShowPage(EKnightMainMenuPage::Maintenance);
+						UCommonButtonBase* const Choice = Cast<UCommonButtonBase>(Menu->GetWidgetFromName(ChoiceName));
+						Check(Choice != nullptr, ChoiceName);
+						if (Choice) Choice->OnClicked().Broadcast();
+						Check(Menu->GetCurrentPage() == EKnightMainMenuPage::Maintenance && Maintenance
+							&& !Maintenance->IsMaterialsViewOpen() && Submenu && !(Submenu->GetVisibility() == ESlateVisibility::Visible), TEXT("choice opens destination and hides submenu"));
+						if (Maintenance && Maintenance->GetDestination() == EKnightMaintenanceDestination::Enhancement)
+						{
+							UCommonButtonBase* Target = Cast<UCommonButtonBase>(Maintenance->GetWidgetFromName(TEXT("Phase7_EnhancementTarget")));
+							if (Target) Target->OnClicked().Broadcast();
+							Check(Menu->RequestBack() && Menu->GetCurrentPage() == EKnightMainMenuPage::Maintenance,
+								TEXT("Back closes enhancement picker before leaving destination"));
+						}
+						Check(Menu->RequestBack() && Menu->GetCurrentPage() == EKnightMainMenuPage::Home && Submenu && (Submenu->GetVisibility() == ESlateVisibility::Visible),
+							TEXT("destination Back restores Home with submenu expanded"));
 					}
+					Check(Menu->ShowPage(EKnightMainMenuPage::Codex) && Submenu && !(Submenu->GetVisibility() == ESlateVisibility::Visible), TEXT("other Home destination dismisses submenu"));
+					Menu->ShowPage(EKnightMainMenuPage::Home);
+					Check(Menu->ToggleMaterialsShortcut() && Menu->RequestBack() && Menu->GetCurrentPage() == EKnightMainMenuPage::Home
+						&& Submenu && !(Submenu->GetVisibility() == ESlateVisibility::Visible), TEXT("Materials shortcut Back returns directly Home without submenu"));
 				}
 			}
 			else if (Mode == TEXT("EquipmentEquip") || Mode == TEXT("EquipmentUnequip"))

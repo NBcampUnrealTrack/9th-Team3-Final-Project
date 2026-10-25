@@ -25,6 +25,9 @@ class KNIGHTUI_API UknightButtonBase : public UCommonButtonBase
 	GENERATED_BODY()
 
 public:
+	/** Owner-controlled tab/list selection; actions never latch. Opt-in so other screens retain their presentation. */
+	UFUNCTION(BlueprintCallable, Category="Knight|Button")
+	void ConfigureMaintenanceButton(bool bInSelectable, bool bMainTab = false);
 	UFUNCTION(BlueprintCallable, Category="Knight|Button")
 	void SetButtonText(const FText& InText);
 
@@ -43,6 +46,7 @@ protected:
 	virtual void NativeOnUnhovered() override;
 	virtual void NativeOnPressed() override;
 	virtual void NativeOnReleased() override;
+	virtual void NativeOnClicked() override;
 	virtual void NativeOnEnabled() override;
 	virtual void NativeOnDisabled() override;
 	virtual void NativeOnCurrentTextStyleChanged() override;
@@ -123,6 +127,7 @@ private:
 	float ShakeTimeLeft = 0.f;
 	bool bPressedVisual = false;
 	bool bFocusedVisual = false;
+	bool bMaintenancePresentation = false;
 
 	FTSTicker::FDelegateHandle MotionTicker;
 };

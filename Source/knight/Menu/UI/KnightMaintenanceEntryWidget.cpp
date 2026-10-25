@@ -17,6 +17,11 @@ void UKnightMaintenanceEntryWidget::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
 	SetIsSelectable(true);
+	SetIsInteractableWhenSelected(true);
+	bTriggerClickedAfterSelection = true;
+	SetShouldSelectUponReceivingFocus(false);
+	if (const TSubclassOf<UCommonButtonStyle> StyleClass = LoadClass<UCommonButtonStyle>(nullptr,
+		TEXT("/Game/Knight/UI/Style/BS_Knight_CraftingRow.BS_Knight_CraftingRow_C"))) SetStyle(StyleClass);
 }
 
 void UKnightMaintenanceEntryWidget::NativeOnAddedToFocusPath(const FFocusEvent& InFocusEvent)

@@ -1751,11 +1751,13 @@ bool UknightUIEditorLibrary::BuildMaintenanceScreen(UWidgetBlueprint* WidgetBlue
 	auto MakePanel = [&](const TCHAR* Name, bool bRight) -> UVerticalBox*
 	{
 		UBorder* const Frame = NewWidget<UBorder>(WidgetBlueprint, *FString::Printf(TEXT("Frame_%s"), Name));
-		Frame->SetBrush(FrameBrush(0.88f));
+		FSlateBrush PanelBrush = FrameBrush(0.72f);
+		PanelBrush.DrawAs = ESlateBrushDrawType::NoDrawType; // Crafting is the designer default; runtime restores framed non-Crafting pages.
+		Frame->SetBrush(PanelBrush);
 		Frame->SetPadding(FMargin(22.f, 22.f, 22.f, 20.f));
-		// 머리~바닥 전체 높이. 가운데는 메카용으로 비움.
-		if (bRight) AddToCanvas(Root, Frame, FAnchors(1.f, 0.f, 1.f, 1.f), FVector2D(1.f, 0.f), FMargin(-HUDMargin.X, 196.f, 520.f, 156.f));
-		else AddToCanvas(Root, Frame, FAnchors(0.f, 0.f, 0.f, 1.f), FVector2D(0.f, 0.f), FMargin(HUDMargin.X, 196.f, 500.f, 156.f));
+		// Crafting default: live robot in the center. Runtime adjusts only other destinations.
+		if (bRight) AddToCanvas(Root, Frame, FAnchors(0.69f, 0.f, 1.f, 1.f), FVector2D::ZeroVector, FMargin(12.f, 152.f, 48.f, 100.f));
+		else AddToCanvas(Root, Frame, FAnchors(0.f, 0.f, 0.31f, 1.f), FVector2D::ZeroVector, FMargin(48.f, 152.f, 12.f, 100.f));
 		UVerticalBox* const Panel = NewWidget<UVerticalBox>(WidgetBlueprint, Name);
 		Frame->SetContent(Panel);
 		return Panel;
@@ -1791,7 +1793,7 @@ bool UknightUIEditorLibrary::BuildMaintenanceScreen(UWidgetBlueprint* WidgetBlue
 	AddToColumn(Header, NewText(WidgetBlueprint, TEXT("Txt_HeaderCaption"), CaptionStyle, INVTEXT("MAINTENANCE"), false), HAlign_Left);
 	AddToColumn(Header, NewHUDImage(WidgetBlueprint, TEXT("Img_HeaderAccent"), Frost, FVector2D(32.f, 2.f)), HAlign_Left, FMargin(0.f, 10.f, 0.f, 12.f));
 	AddToColumn(Header, NewText(WidgetBlueprint, TEXT("Txt_Header"), TitleStyle, NSLOCTEXT("knightUI", "MaintenanceTitle", "정비"), true), HAlign_Left);
-	AddToCanvas(Root, Header, FAnchors(0.f, 0.f), FVector2D::ZeroVector, FMargin(HUDMargin.X, HUDMargin.Y, 0.f, 0.f), true);
+	AddToCanvas(Root, Header, FAnchors(0.f, 0.f), FVector2D::ZeroVector, FMargin(48.f, 40.f, 0.f, 0.f), true);
 
 	// 왼쪽: 분류 탭, 부위 탭, 목록.
 	UVerticalBox* const Left = MakePanel(TEXT("Panel_Left"), false);
@@ -1830,7 +1832,7 @@ bool UknightUIEditorLibrary::BuildMaintenanceScreen(UWidgetBlueprint* WidgetBlue
 	IconFrame->SetContent(NewWidget<UImage>(WidgetBlueprint, TEXT("Img_Selected"), true));
 	AddCentered(Detail, IconBox, false, VAlign_Top);
 	UVerticalBox* const DetailText = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("VerticalBox_DetailText"));
-	AddToColumn(DetailText, NewText(WidgetBlueprint, TEXT("Txt_PartName"), SubheadStyle, NSLOCTEXT("knightUI", "MaintenancePartName", "장비 이름"), true), HAlign_Left);
+	AddToColumn(DetailText, MakeWrapText(TEXT("Txt_PartName"), SubheadStyle, NSLOCTEXT("knightUI", "MaintenancePartName", "장비 이름")), HAlign_Fill);
 	AddToColumn(DetailText, NewText(WidgetBlueprint, TEXT("Txt_PartState"), CaptionStyle, NSLOCTEXT("knightUI", "MaintenancePartState", "장착 중"), true), HAlign_Left, FMargin(0.f, 2.f, 0.f, 0.f));
 	AddToColumn(DetailText, MakeWrapText(TEXT("Txt_PartDesc"), BodyDimStyle, NSLOCTEXT("knightUI", "MaintenancePartDesc", "장비 설명")), HAlign_Fill, FMargin(0.f, 6.f, 0.f, 0.f));
 	AddCentered(Detail, DetailText, true, VAlign_Top, FMargin(16.f, 0.f, 0.f, 0.f));
@@ -1877,7 +1879,7 @@ bool UknightUIEditorLibrary::BuildMaintenanceScreen(UWidgetBlueprint* WidgetBlue
 		{ { INVTEXT("↑"), INVTEXT("↓") }, NSLOCTEXT("knightUI", "HintMaintenanceList", "목록") },
 		{ { INVTEXT("Q"), INVTEXT("E") }, NSLOCTEXT("knightUI", "HintMaintenanceInfo", "정보") },
 		{ { INVTEXT("Enter") }, NSLOCTEXT("knightUI", "HintMaintenanceRun", "실행") } }),
-		FAnchors(0.f, 1.f), FVector2D(0.f, 1.f), FMargin(HUDMargin.X, -112.f, 0.f, 0.f), true);
+		FAnchors(0.f, 1.f), FVector2D(0.f, 1.f), FMargin(48.f, -60.f, 0.f, 0.f), true);
 
 	// 제작 확인 창. 시작 시 C++가 숨김.
 	UOverlay* const Confirm = NewWidget<UOverlay>(WidgetBlueprint, TEXT("Panel_Confirm"), true);

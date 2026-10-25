@@ -1,4 +1,5 @@
 #include "KnightMainMenuWidget.h"
+#include "Menu/UI/KnightMaintenancePresentation.h"
 
 #include "GameFlow/KnightGameFlowSubsystem.h"
 #include "CommonButtonBase.h"
@@ -15,7 +16,10 @@
 #include "Progression/knightSaveSubsystem.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/HorizontalBoxSlot.h"
+#include "Components/HorizontalBox.h"
 #include "Components/Image.h"
+#include "Components/Overlay.h"
+#include "Components/OverlaySlot.h"
 #include "Components/PanelWidget.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBoxSlot.h"
@@ -70,6 +74,7 @@ void UKnightMainMenuWidget::NativeOnInitialized()
 	ValidateRequiredWidget(Button_Maintenance, TEXT("Button_Maintenance"));
 	ValidateRequiredWidget(Button_Settings, TEXT("Button_Settings"));
 	ValidateRequiredWidget(Button_Codex, TEXT("Button_Codex"));
+	BuildMaintenanceFooterBack();
 	if (Button_Stage) Button_Stage->OnClicked().AddUObject(this, &ThisClass::HandleStageClicked);
 	if (Button_ReturnToTitle) Button_ReturnToTitle->OnClicked().AddUObject(this, &ThisClass::HandleReturnToTitleClicked);
 	if (Button_Maintenance) Button_Maintenance->OnClicked().AddUObject(this, &ThisClass::HandleMaintenanceClicked);
@@ -140,6 +145,12 @@ void UKnightMainMenuWidget::NativeDestruct()
 bool UKnightMainMenuWidget::ShowPage(EKnightMainMenuPage NewPage)
 {
 	if (NewPage == EKnightMainMenuPage::Inventory) return OpenMaterialsShortcut();
+	if (NewPage == EKnightMainMenuPage::Maintenance)
+	{
+		if (IsTravelPending()) return false;
+		ShowMaintenanceSelection();
+		return CurrentPage == EKnightMainMenuPage::Home && MaintenanceSubmenu && (MaintenanceSubmenu->GetVisibility() == ESlateVisibility::Visible);
+	}
 	return ApplyPage(NewPage, false);
 }
 
@@ -157,7 +168,7 @@ bool UKnightMainMenuWidget::OpenMaterialsShortcut()
 		}
 	}
 	EnsureMaintenanceWidget();
-	if (!MaintenanceWidget || !MaintenanceSwitcher || !ApplyPage(EKnightMainMenuPage::Maintenance, false)) return false;
+	if (!MaintenanceWidget || !MaintenanceSwitcher) return false;
 	OpenMaintenanceDestination(EKnightMaintenanceDestination::Crafting, true);
 	return IsMaintenanceDestinationOpen() && MaintenanceWidget->IsMaterialsViewOpen();
 }
@@ -197,6 +208,7 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 	{
 		return false;
 	}
+	SetMaintenanceSubmenuOpen(false);
 	const bool bEnteringStage = NewPage == EKnightMainMenuPage::Stage && CurrentPage != EKnightMainMenuPage::Stage;
 	const bool bLeavingMaintenance = CurrentPage == EKnightMainMenuPage::Maintenance && NewPage != CurrentPage;
 	if (bLeavingMaintenance)
@@ -257,10 +269,10 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 			}
 		}
 		if (MaintenanceCameraRig.IsValid()) MaintenanceCameraRig->SetMaintenanceView(true);
-		ShowMaintenanceSelection();
 	}
 	// Settings and the codex bring their own close buttons.
 	UpdateBackVisibility(NewPage == EKnightMainMenuPage::Home || NewPage == EKnightMainMenuPage::Settings || NewPage == EKnightMainMenuPage::Codex);
+	ApplyMaintenanceBackPresentation(NewPage == EKnightMainMenuPage::Maintenance);
 	RefreshTravelControls();
 	if (!IsTravelPending() && GetFlow() && GetFlow()->GetCurrentFlowState() == EKnightFlowState::MainMenu)
 	{
@@ -288,8 +300,19 @@ bool UKnightMainMenuWidget::HandleBackRequested()
 	if (CurrentPage == EKnightMainMenuPage::Maintenance)
 	{
 		if (IsMaintenanceDestinationOpen() && MaintenanceWidget && MaintenanceWidget->HandleBack()) return true;
-		if (IsMaintenanceDestinationOpen()) { ShowMaintenanceSelection(); return true; }
-		return ShowPage(EKnightMainMenuPage::Home);
+		if (bMaterialsShortcutEntry)
+		{
+			bRestoreMaterialsShortcutFocus = true;
+			return ShowPage(EKnightMainMenuPage::Home);
+		}
+		ShowMaintenanceSelection();
+		return true;
+	}
+	if (CurrentPage == EKnightMainMenuPage::Home && MaintenanceSubmenu && (MaintenanceSubmenu->GetVisibility() == ESlateVisibility::Visible))
+	{
+		SetMaintenanceSubmenuOpen(false);
+		if (Button_Maintenance) Button_Maintenance->SetFocus();
+		return true;
 	}
 	if (CurrentPage == EKnightMainMenuPage::Stage && QuestWidget
 		&& !QuestWidget->GetSelectedQuestId().IsNone()) return QuestWidget->SelectQuest(NAME_None);
@@ -380,46 +403,104 @@ void UKnightMainMenuWidget::EnsureCodexWidget()
 	CodexWidget->OnClosed.AddUniqueDynamic(this, &ThisClass::HandleCodexClosed);
 }
 
+void UKnightMainMenuWidget::BuildMaintenanceFooterBack()
+{
+	// Reuse the already bound Back button: its mouse click and Escape both call RequestBack(),
+	// including the Maintenance dialog/picker-first route. Only its Maintenance content changes.
+	UUserWidget* const ButtonWidget = Cast<UUserWidget>(Button_Back);
+	UOverlay* const Layers = ButtonWidget ? Cast<UOverlay>(ButtonWidget->GetWidgetFromName(TEXT("Overlay_Root"))) : nullptr;
+	NormalBackContent = ButtonWidget ? ButtonWidget->GetWidgetFromName(TEXT("Txt_Label")) : nullptr;
+	if (!Layers || !NormalBackContent || !ButtonWidget->WidgetTree) return;
+	if (const UCommonButtonStyle* const Style = Button_Back->GetStyle()) NormalBackStyle = Style->GetClass();
+	if (const UCanvasPanelSlot* const BackSlot = Cast<UCanvasPanelSlot>(Button_Back->Slot))
+		NormalBackPosition = BackSlot->GetPosition();
+
+	const TSubclassOf<UCommonTextStyle> CaptionStyle = LoadClass<UCommonTextStyle>(nullptr,
+		TEXT("/Game/Knight/UI/Style/TS_Knight_Caption.TS_Knight_Caption_C"));
+	MaintenanceBackContent = ButtonWidget->WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("MaintenanceBackFooter"));
+	MaintenanceBackContent->SetVisibility(ESlateVisibility::Collapsed);
+	UOverlaySlot* const ContentSlot = Layers->AddChildToOverlay(MaintenanceBackContent);
+	ContentSlot->SetHorizontalAlignment(HAlign_Center);
+	ContentSlot->SetVerticalAlignment(VAlign_Center);
+	ContentSlot->SetPadding(FMargin(15.f, 8.f)); // Invisible click area beyond the visible keycap and label.
+
+	UBorder* const Keycap = ButtonWidget->WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("MaintenanceBackKeycap"));
+	FSlateBrush KeycapBrush;
+	KeycapBrush.DrawAs = ESlateBrushDrawType::RoundedBox;
+	KeycapBrush.TintColor = FSlateColor(FLinearColor(0.004f, 0.012f, 0.025f, 0.10f));
+	KeycapBrush.OutlineSettings = FSlateBrushOutlineSettings(FVector4(2.f),
+		FSlateColor(FLinearColor(0.38f, 0.58f, 0.72f, 0.88f)), 1.f);
+	KeycapBrush.OutlineSettings.RoundingType = ESlateBrushRoundingType::FixedRadius;
+	Keycap->SetBrush(KeycapBrush);
+	Keycap->SetPadding(FMargin(7.f, 2.f));
+	UCommonTextBlock* const Escape = ButtonWidget->WidgetTree->ConstructWidget<UCommonTextBlock>(UCommonTextBlock::StaticClass(), TEXT("MaintenanceBackEscape"));
+	Escape->SetText(INVTEXT("ESC"));
+	if (CaptionStyle) Escape->SetStyle(CaptionStyle);
+	Keycap->SetContent(Escape);
+	MaintenanceBackContent->AddChildToHorizontalBox(Keycap)->SetVerticalAlignment(VAlign_Center);
+	UCommonTextBlock* const Return = ButtonWidget->WidgetTree->ConstructWidget<UCommonTextBlock>(UCommonTextBlock::StaticClass(), TEXT("MaintenanceBackReturn"));
+	Return->SetText(LOCTEXT("MaintenanceBackFooter", "돌아가기"));
+	if (CaptionStyle) Return->SetStyle(CaptionStyle);
+	UHorizontalBoxSlot* const ReturnSlot = MaintenanceBackContent->AddChildToHorizontalBox(Return);
+	ReturnSlot->SetVerticalAlignment(VAlign_Center);
+	ReturnSlot->SetPadding(FMargin(9.f, 0.f, 0.f, 0.f));
+}
+
+void UKnightMainMenuWidget::ApplyMaintenanceBackPresentation(bool bMaintenance)
+{
+	if (!Button_Back || !MaintenanceBackContent || !NormalBackContent) return;
+	NormalBackContent->SetVisibility(bMaintenance ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+	MaintenanceBackContent->SetVisibility(bMaintenance ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	if (bMaintenance)
+	{
+		const TSubclassOf<UCommonButtonStyle> FooterStyle = LoadClass<UCommonButtonStyle>(nullptr,
+			TEXT("/Game/Knight/UI/Style/BS_Knight_MaintenanceFooterBack.BS_Knight_MaintenanceFooterBack_C"));
+		if (FooterStyle) Button_Back->SetStyle(FooterStyle);
+	}
+	else if (NormalBackStyle) Button_Back->SetStyle(NormalBackStyle);
+	if (UCanvasPanelSlot* const BackSlot = Cast<UCanvasPanelSlot>(Button_Back->Slot))
+		BackSlot->SetPosition(bMaintenance ? FVector2D(-48.f, -48.f) : NormalBackPosition);
+}
+
 void UKnightMainMenuWidget::EnsureMaintenanceWidget()
 {
 	if (MaintenanceWidget || !Panel_Maintenance || !GetOwningPlayer() || !WidgetTree) return;
 	MaintenanceSwitcher = WidgetTree->ConstructWidget<UWidgetSwitcher>(UWidgetSwitcher::StaticClass(), TEXT("Switcher_MaintenanceRuntime"));
-	MaintenanceSelectionPanel = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("Panel_MaintenanceSelectionRuntime"));
-	UBorder* const Card = WidgetTree->ConstructWidget<UBorder>();
-	Card->SetBrushColor(FLinearColor(0.035f, 0.065f, 0.1f, 0.92f));
-	Card->SetPadding(FMargin(26.f, 24.f));
-	UCanvasPanelSlot* const CardSlot = MaintenanceSelectionPanel->AddChildToCanvas(Card);
-	CardSlot->SetAnchors(FAnchors(0.5f, 0.5f));
-	CardSlot->SetAlignment(FVector2D(0.5f, 0.5f));
-	CardSlot->SetSize(FVector2D(520.f, 360.f));
+	// A child of Home, not another page or a popup window. Its position follows
+	// the actual menu item's geometry (including DPI), never a screen pixel offset.
+	UCanvasPanel* const Home = Cast<UCanvasPanel>(Panel_Home);
+	if (!Home) return;
+	MaintenanceSubmenu = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("Panel_MaintenanceSubmenu"));
+	MaintenanceSubmenu->SetBrushColor(FLinearColor(0.006f, 0.014f, 0.026f, 0.94f));
+	MaintenanceSubmenu->SetPadding(FMargin(10.f));
+	UCanvasPanelSlot* const CardSlot = Home->AddChildToCanvas(MaintenanceSubmenu);
+	CardSlot->SetSize(FVector2D(260.f, 212.f));
+	CardSlot->SetZOrder(10);
+	MaintenanceSubmenu->SetVisibility(ESlateVisibility::Collapsed);
 	UVerticalBox* const Options = WidgetTree->ConstructWidget<UVerticalBox>();
-	Card->SetContent(Options);
-	UCommonTextBlock* const Heading = WidgetTree->ConstructWidget<UCommonTextBlock>();
-	Heading->SetText(LOCTEXT("MaintenanceSelectionHeading", "정비"));
-	if (const TSubclassOf<UCommonTextStyle> Style = LoadClass<UCommonTextStyle>(nullptr,
-		TEXT("/Game/Knight/UI/Style/TS_Knight_Subhead.TS_Knight_Subhead_C"))) Heading->SetStyle(Style);
-	Options->AddChildToVerticalBox(Heading)->SetPadding(FMargin(0.f, 0.f, 0.f, 18.f));
+	MaintenanceSubmenu->SetContent(Options);
 	const TSubclassOf<UCommonButtonBase> ButtonClass = LoadClass<UCommonButtonBase>(nullptr,
 		TEXT("/Game/Knight/UI/Common/WBP_KnightButton.WBP_KnightButton_C"));
-	auto AddChoice = [this, Options, ButtonClass](const FText& Label, EKnightMaintenanceDestination Destination) -> UCommonButtonBase*
+	auto AddChoice = [this, Options, ButtonClass](FName Name, const FText& Label, EKnightMaintenanceDestination Destination) -> UCommonButtonBase*
 	{
 		if (!ButtonClass) return nullptr;
-		UCommonButtonBase* const Button = CreateWidget<UCommonButtonBase>(GetOwningPlayer(), ButtonClass);
+		UCommonButtonBase* const Button = CreateWidget<UCommonButtonBase>(GetOwningPlayer(), ButtonClass, Name);
 		if (!Button) return nullptr;
 		SetMaintenanceButtonLabel(Button, Label);
-		Button->SetIsSelectable(true);
-		Button->SetIsInteractableWhenSelected(true);
+		// Navigation actions are not a persistent selection group.
+		Button->SetIsSelectable(false);
+		KnightMaintenancePresentation::ConfigureButton(Button, false);
 		USizeBox* const Height = WidgetTree->ConstructWidget<USizeBox>();
-		Height->SetHeightOverride(70.f);
+		Height->SetHeightOverride(60.f);
 		Height->AddChild(Button);
-		Options->AddChildToVerticalBox(Height)->SetPadding(FMargin(0.f, 0.f, 0.f, 12.f));
+		Options->AddChildToVerticalBox(Height)->SetPadding(FMargin(0.f, 2.f));
+		Button->SetNavigationRuleExplicit(EUINavigation::Left, Button_Maintenance);
 		Button->OnClicked().AddWeakLambda(this, [this, Destination]() { OpenMaintenanceDestination(Destination); });
 		return Button;
 	};
-	MaintenanceCraftingButton = AddChoice(LOCTEXT("MaintenanceChoiceCrafting", "제작"), EKnightMaintenanceDestination::Crafting);
-	MaintenanceEnhancementButton = AddChoice(LOCTEXT("MaintenanceChoiceEnhancement", "강화"), EKnightMaintenanceDestination::Enhancement);
-	MaintenanceSocketsButton = AddChoice(LOCTEXT("MaintenanceChoiceSockets", "소켓"), EKnightMaintenanceDestination::Sockets);
-	MaintenanceSwitcher->AddChild(MaintenanceSelectionPanel);
+	MaintenanceCraftingButton = AddChoice(TEXT("MaintenanceChoiceCrafting"), LOCTEXT("MaintenanceChoiceCrafting", "제작"), EKnightMaintenanceDestination::Crafting);
+	MaintenanceEnhancementButton = AddChoice(TEXT("MaintenanceChoiceEnhancement"), LOCTEXT("MaintenanceChoiceEnhancement", "강화"), EKnightMaintenanceDestination::Enhancement);
+	MaintenanceSocketsButton = AddChoice(TEXT("MaintenanceChoiceSockets"), LOCTEXT("MaintenanceChoiceSockets", "소켓"), EKnightMaintenanceDestination::Sockets);
 	MaintenanceWidget = CreateWidget<UKnightMaintenanceWidget>(GetOwningPlayer(), UKnightMaintenanceWidget::GetSharedWidgetClass());
 	if (!MaintenanceWidget) return;
 	MaintenanceSwitcher->AddChild(MaintenanceWidget);
@@ -440,22 +521,58 @@ void UKnightMainMenuWidget::EnsureMaintenanceWidget()
 
 bool UKnightMainMenuWidget::IsMaintenanceDestinationOpen() const
 {
-	return MaintenanceSwitcher && MaintenanceWidget && MaintenanceSwitcher->GetActiveWidget() == MaintenanceWidget;
+	return CurrentPage == EKnightMainMenuPage::Maintenance && MaintenanceSwitcher && MaintenanceWidget
+		&& MaintenanceSwitcher->GetActiveWidget() == MaintenanceWidget;
 }
 
 void UKnightMainMenuWidget::ShowMaintenanceSelection()
 {
-	if (!MaintenanceSwitcher || !MaintenanceSelectionPanel) return;
-	if (MaintenanceWidget) MaintenanceWidget->Close();
-	MaintenanceSwitcher->SetActiveWidget(MaintenanceSelectionPanel);
-	if (MaintenanceCameraRig.IsValid()) MaintenanceCameraRig->FocusSlot(FGameplayTag());
-	if (CurrentPage == EKnightMainMenuPage::Maintenance && GetOwningPlayer() && MaintenanceCraftingButton)
-		MaintenanceCraftingButton->SetUserFocus(GetOwningPlayer());
+	EnsureMaintenanceWidget();
+	if (!ApplyPage(EKnightMainMenuPage::Home, false)) return;
+	SetMaintenanceSubmenuOpen(true);
+	FocusCurrentPage();
+}
+
+void UKnightMainMenuWidget::SetMaintenanceSubmenuOpen(bool bOpen)
+{
+	if (!MaintenanceSubmenu) return;
+	MaintenanceSubmenu->SetVisibility(bOpen ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	if (Button_Maintenance)
+	{
+		if (bOpen) Button_Maintenance->SetNavigationRuleExplicit(EUINavigation::Right, MaintenanceCraftingButton);
+		else Button_Maintenance->SetNavigationRuleBase(EUINavigation::Right, EUINavigationRule::Escape);
+	}
+	if (bOpen) { ForceLayoutPrepass(); PlaceMaintenanceSubmenu(); }
+}
+
+void UKnightMainMenuWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+	if (CurrentPage == EKnightMainMenuPage::Home && MaintenanceSubmenu && (MaintenanceSubmenu->GetVisibility() == ESlateVisibility::Visible))
+		PlaceMaintenanceSubmenu();
+}
+
+void UKnightMainMenuWidget::PlaceMaintenanceSubmenu()
+{
+	if (!Panel_Home || !Button_Maintenance || !MaintenanceSubmenu) return;
+	UCanvasPanelSlot* const SubmenuSlot = Cast<UCanvasPanelSlot>(MaintenanceSubmenu->Slot);
+	if (!SubmenuSlot) return;
+	const FGeometry& Home = Panel_Home->GetCachedGeometry();
+	const FGeometry& Item = Button_Maintenance->GetCachedGeometry();
+	if (Home.GetLocalSize().IsNearlyZero() || Item.GetLocalSize().IsNearlyZero()) return;
+	const FVector2D Right = Home.AbsoluteToLocal(Item.LocalToAbsolute(FVector2D(Item.GetLocalSize().X, 0.f)));
+	const FVector2D Size = SubmenuSlot->GetSize();
+	SubmenuSlot->SetPosition(FVector2D(
+		FMath::Clamp(Right.X + 12.f, 0.f, FMath::Max(0.f, Home.GetLocalSize().X - Size.X - 16.f)),
+		FMath::Clamp(Right.Y, 16.f, FMath::Max(16.f, Home.GetLocalSize().Y - Size.Y - 16.f))));
 }
 
 void UKnightMainMenuWidget::OpenMaintenanceDestination(EKnightMaintenanceDestination Destination, bool bStartInMaterials)
 {
-	if (CurrentPage != EKnightMainMenuPage::Maintenance || IsTravelPending() || !MaintenanceSwitcher || !MaintenanceWidget) return;
+	if (IsTravelPending() || !MaintenanceSwitcher || !MaintenanceWidget) return;
+	if (CurrentPage != EKnightMainMenuPage::Home && CurrentPage != EKnightMainMenuPage::Maintenance) return;
+	if (!ApplyPage(EKnightMainMenuPage::Maintenance, false)) return;
+	bMaterialsShortcutEntry = bStartInMaterials;
 	MaintenanceWidget->Open(Destination, bStartInMaterials);
 	MaintenanceSwitcher->SetActiveWidget(MaintenanceWidget);
 	if (MaintenanceCameraRig.IsValid()) MaintenanceCameraRig->FocusSlot(
@@ -495,6 +612,8 @@ void UKnightMainMenuWidget::HandleCodexClosed()
 
 UWidget* UKnightMainMenuWidget::GetPreferredFocusTarget() const
 {
+	if (CurrentPage == EKnightMainMenuPage::Home && MaintenanceSubmenu && (MaintenanceSubmenu->GetVisibility() == ESlateVisibility::Visible))
+		return MaintenanceCraftingButton;
 	if (CurrentPage == EKnightMainMenuPage::Home && bRestoreMaterialsShortcutFocus && FocusBeforeMaterialsShortcut.IsValid())
 		return FocusBeforeMaterialsShortcut.Get();
 	if (CurrentPage == EKnightMainMenuPage::Home && bRestoreMaintenanceFocus && Button_Maintenance) return Button_Maintenance;
@@ -540,6 +659,7 @@ void UKnightMainMenuWidget::SetTravelControlsEnabled(bool bEnabled)
 	if (Button_LaunchStage) Button_LaunchStage->SetIsEnabled(bEnabled && bStageLaunchAvailable && !SelectedStageId.IsNone());
 	if (Map_Stages) Map_Stages->SetIsEnabled(bEnabled);
 	if (QuestWidget) QuestWidget->SetIsEnabled(bEnabled);
+	if (MaintenanceSubmenu) MaintenanceSubmenu->SetIsEnabled(bEnabled);
 }
 
 void UKnightMainMenuWidget::HandleStageClicked()
@@ -549,12 +669,19 @@ void UKnightMainMenuWidget::HandleStageClicked()
 
 void UKnightMainMenuWidget::HandleReturnToTitleClicked()
 {
+	SetMaintenanceSubmenuOpen(false);
 	if (UKnightGameFlowSubsystem* const Flow = GetFlow()) Flow->RequestOpenTitle();
 }
 
 void UKnightMainMenuWidget::HandleMaintenanceClicked()
 {
-	ShowPage(EKnightMainMenuPage::Maintenance);
+	if (IsTravelPending()) return;
+	if (CurrentPage == EKnightMainMenuPage::Home && MaintenanceSubmenu && (MaintenanceSubmenu->GetVisibility() == ESlateVisibility::Visible))
+	{
+		SetMaintenanceSubmenuOpen(false);
+		if (Button_Maintenance) Button_Maintenance->SetFocus();
+	}
+	else ShowMaintenanceSelection();
 }
 
 void UKnightMainMenuWidget::HandleSettingsClicked()
