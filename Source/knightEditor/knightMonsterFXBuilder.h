@@ -102,6 +102,15 @@ public:
 		UMaterialInterface* WispMaterial, float Radius = 600.f, FLinearColor Tint = FLinearColor::White);
 
 	/**
+	 * 초음파 브레스 예고 동안 가슴 아래 바닥에서 위(로컬 +Z)로 Height(cm)까지 빨려 오르는 먼지와 바람결, 바닥에서 잘게 튀는 알갱이.
+	 * bWater면 먼지 대신 물안개, 알갱이 대신 물방울이다. 바닥(또는 수면)에 스케일 1로 붙이고, 실제 가슴 높이에 맞춰 Z로 늘인다.
+	 * Radius(cm)는 빨려 드는 바닥 범위의 반지름, Tint는 먼지·물안개 색.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|FX")
+	static UNiagaraSystem* BuildSonicInflowSystem(const FString& PackagePath, UMaterialInterface* StreakMaterial, UMaterialInterface* WispMaterial,
+		float Radius = 500.f, float Height = 1000.f, bool bWater = false, FLinearColor Tint = FLinearColor::White);
+
+	/**
 	 * 초음파 브레스 기둥을 따라 아래(로컬 -Z)로 쏟아지는 바람결과 연기 결. 위 끝(가슴)에 붙이고, 로컬 Length(cm) 아래가 바닥이 되도록
 	 * 실제 기둥 높이에 맞춰 컴포넌트를 Z로 늘인다(가로 크기는 그대로). Radius(cm)는 기둥 아래 끝 반지름.
 	 */

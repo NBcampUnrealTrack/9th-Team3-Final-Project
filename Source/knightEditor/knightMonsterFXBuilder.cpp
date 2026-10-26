@@ -1139,6 +1139,96 @@ UNiagaraSystem* UknightMonsterFXBuilder::BuildSonicChargeSystem(const FString& P
 	return Finish(System, false);
 }
 
+UNiagaraSystem* UknightMonsterFXBuilder::BuildSonicInflowSystem(const FString& PackagePath, UMaterialInterface* StreakMaterial,
+	UMaterialInterface* WispMaterial, float Radius, float Height, bool bWater, FLinearColor Tint)
+{
+	using namespace knightMonsterFX;
+	if (!WispMaterial || !StreakMaterial)
+	{
+		return nullptr;
+	}
+	// 먼지(물안개): 바닥 링에서 피어 가슴 쪽으로 모이며 오른다. 수명 동안 높이의 절반쯤 올라가고 위로 갈수록 옅어진다.
+	FSpriteLayer Lift;
+	Lift.Name = TEXT("Lift");
+	Lift.Material = WispMaterial;
+	Lift.Rate = 60.f;
+	Lift.Life = FVector2f(0.9f, 1.3f);
+	Lift.SizeMin = FVector2f(Radius * 0.5f);
+	Lift.SizeMax = FVector2f(Radius * 0.9f);
+	Lift.CurlStrength = 250.f;
+	Lift.CurlFrequency = 0.003f;
+	Lift.ColorKeys = { {0.f, 1.f}, {1.f, 1.f} };
+	Lift.AlphaKeys = { {0.f, 0.f}, {0.25f, bWater ? 0.3f : 0.35f}, {0.7f, 0.15f}, {1.f, 0.f} };
+	Lift.SizeKeys = { {0.f, 0.7f}, {1.f, 1.4f} };
+	Lift.SortOrder = 0;
+
+	// 바람결: 바닥 둘레에서 가슴으로 곧게 빨려 오르는 가는 줄기(속도 정렬).
+	FSpriteLayer Streaks;
+	Streaks.Name = TEXT("Streaks");
+	Streaks.Material = StreakMaterial;
+	Streaks.Rate = 90.f;
+	Streaks.Life = FVector2f(0.35f, 0.5f);
+	Streaks.SizeMin = FVector2f(7.f, 200.f);
+	Streaks.SizeMax = FVector2f(12.f, 400.f);
+	Streaks.ColorKeys = { {0.f, 1.f}, {1.f, 1.f} };
+	Streaks.AlphaKeys = { {0.f, 0.f}, {0.3f, 0.3f}, {0.8f, 0.15f}, {1.f, 0.f} };
+	Streaks.SizeKeys = { {0.f, 0.5f}, {0.4f, 1.f}, {1.f, 0.7f} };
+	Streaks.Alignment = ENiagaraSpriteAlignment::VelocityAligned;
+	Streaks.SortOrder = 1;
+
+	// 알갱이(물방울): 바닥이 떨리듯 낮게 튀었다 떨어지는 작은 점들.
+	FSpriteLayer Grains;
+	Grains.Name = TEXT("Grains");
+	Grains.Material = bWater ? StreakMaterial : WispMaterial;
+	Grains.Rate = bWater ? 220.f : 90.f;
+	Grains.Life = FVector2f(0.25f, 0.4f);
+	Grains.SizeMin = bWater ? FVector2f(6.f, 14.f) : FVector2f(35.f);
+	Grains.SizeMax = bWater ? FVector2f(12.f, 30.f) : FVector2f(70.f);
+	Grains.Rise = -1200.f;
+	Grains.ColorKeys = { {0.f, 1.f}, {1.f, 1.f} };
+	Grains.AlphaKeys = { {0.f, 0.f}, {0.15f, bWater ? 0.55f : 0.3f}, {1.f, 0.f} };
+	Grains.SizeKeys = { {0.f, 1.f}, {1.f, bWater ? 0.7f : 1.5f} };
+	Grains.Alignment = bWater ? ENiagaraSpriteAlignment::VelocityAligned : ENiagaraSpriteAlignment::Unaligned;
+	Grains.SortOrder = 2;
+
+	const FSpriteLayer Layers[] = { Lift, Streaks, Grains };
+	const float Margin = Radius * 1.6f;
+	UNiagaraSystem* const System = BuildLayeredSystem(PackagePath, Layers, 0.f, 1.f, FVector(-Margin, -Margin, -100.f), FVector(Margin, Margin, Height * 1.2f));
+	if (!System)
+	{
+		return nullptr;
+	}
+	for (int32 Index = 0; Index < System->GetEmitterHandles().Num(); ++Index)
+	{
+		UNiagaraStatelessEmitter* const Emitter = System->GetEmitterHandle(Index).GetStatelessEmitter();
+		if (!Emitter || !Layers[FMath::Min(Index, 2)].Material)
+		{
+			continue;
+		}
+		if (Index == 2)
+		{
+			// 바닥 원판 안에서 거의 곧장 위로 낮게(최고 50~150cm) 튄다.
+			SetRingFromPoint(*Emitter, FVector2f(Radius * 0.1f, Radius), FRotator3f(0.f, 0.f, 0.f), FVector3f(0.f, 0.f, -Radius * 2.f),
+				FVector2f(350.f, 600.f), FVector3f(0.f, 0.f, 5.f));
+			if (UNiagaraStatelessModule_ShapeLocation* const Shape = Get<UNiagaraStatelessModule_ShapeLocation>(*Emitter))
+			{
+				Shape->DiscCoverage.InitConstant(1.f);
+			}
+		}
+		else
+		{
+			// 바닥 링에서 가슴(위 Height) 쪽 한 점으로 빨려 든다. 먼지는 넓게, 바람결은 그 안쪽에서.
+			const bool bStreaks = Index == 1;
+			SetRingFromPoint(*Emitter, bStreaks ? FVector2f(Radius * 0.5f, Radius * 0.9f) : FVector2f(Radius * 0.6f, Radius * 1.1f), FRotator3f(0.f, 0.f, 0.f),
+				FVector3f(0.f, 0.f, Height), bStreaks ? FVector2f(-Height * 1.4f, -Height * 1.9f) : FVector2f(-Height * 0.4f, -Height * 0.55f),
+				FVector3f(0.f, 0.f, bStreaks ? 40.f : 60.f));
+		}
+		SetTint(*Emitter, Tint);
+		Emitter->PostEditChange();
+	}
+	return Finish(System, false);
+}
+
 UNiagaraSystem* UknightMonsterFXBuilder::BuildSonicPillarSystem(const FString& PackagePath, UMaterialInterface* StreakMaterial,
 	UMaterialInterface* WispMaterial, float Radius, float Length, FLinearColor Tint)
 {
