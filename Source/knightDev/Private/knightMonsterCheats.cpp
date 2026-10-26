@@ -15,6 +15,8 @@
 //   knight.Monster.Parried                            플레이어가 퍼펙트 가드에 성공한 것처럼 Event.Parried를 보낸다
 //   knight.Monster.FreezeAI [0|1]                     모든 몬스터의 StateTree를 멈추거나 재개한다. 인자가 없으면 토글한다
 //   knight.Monster.Status [all]                       속성, 상태 태그, 타깃, 부위를 로그로 출력한다
+//   knight.Monster.Attack <Name>                      공격을 바로 쓴다(쿨다운 무시). 공중 공격이면 이륙, 지상 공격이면 착지한 뒤 쓴다.
+//                                                     이름은 어빌리티 이름이나 끝 구간(Tornado, SonicBreath). 틀리면 공격 목록을 출력한다
 //   knight.Player.Invulnerable [0|1]                  플레이어에 State.Invulnerable을 건다. 인자가 없으면 토글한다
 //   knight.Monster.Spawn <Name|/Game/Path> [Distance] 플레이어 앞 지면에 몬스터를 스폰한다 (Janyeol 또는 BP_Janyeol)
 //   knight.Monster.Revive [all]                       죽은 몬스터를 지우고 그 자리에 같은 몬스터를 새로 스폰한다
@@ -30,6 +32,7 @@
 #include "Engine/Blueprint.h"
 #include "Misc/PackageName.h"
 #include "AbilitySystemGlobals.h"
+#include "AbilitySystem/Abilities/knightGameplayAbility_MonsterAttack.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
 #include "AbilitySystem/Attributes/knightMonsterAttributeSet.h"
 #include "AbilitySystem/Effects/knightGameplayEffect_Damage.h"
@@ -44,8 +47,10 @@
 #include "HAL/IConsoleManager.h"
 #include "Interfaces/CombatInterface.h"
 #include "Interfaces/TargetableInterface.h"
+#include "Monster/knightMonsterAirTurnComponent.h"
 #include "Monster/knightMonsterCharacterBase.h"
 #include "Monster/knightMonsterDefinition.h"
+#include "TimerManager.h"
 #include "Monster/knightMonsterPartComponent.h"
 #include "Monster/knightMonsterTargetingComponent.h"
 #include "System/knightGameplayTags.h"
@@ -672,6 +677,143 @@ namespace knightMonsterCheats
 		}
 	}
 
+	// knight.Monster.Attack <Name>
+
+	/** 어빌리티 클래스 이름(GA_Janhyang_Tornado). 블루프린트 클래스의 _C는 뗀다. */
+	static FString GetAbilityName(const FGameplayAbilitySpec& Spec)
+	{
+		FString Name = Spec.Ability ? Spec.Ability->GetClass()->GetName() : FString();
+		Name.RemoveFromEnd(TEXT("_C"));
+		return Name;
+	}
+
+	/** 이름이 같거나 "_<Name>"으로 끝나는 공격, 없으면 이름에 Name이 들어간 첫 공격. 못 찾으면 공격 목록을 로그로 남긴다. */
+	static FGameplayAbilitySpecHandle FindAttack(UAbilitySystemComponent* ASC, const FString& Name)
+	{
+		const FGameplayAbilitySpec* Partial = nullptr;
+		TArray<FString> Known;
+		for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+		{
+			if (!Spec.Ability || !Spec.Ability->IsA<UknightGameplayAbility_MonsterAttack>())
+			{
+				continue;
+			}
+			const FString AbilityName = GetAbilityName(Spec);
+			if (AbilityName.Equals(Name, ESearchCase::IgnoreCase) || AbilityName.EndsWith(TEXT("_") + Name, ESearchCase::IgnoreCase))
+			{
+				return Spec.Handle;
+			}
+			if (!Partial && AbilityName.Contains(Name, ESearchCase::IgnoreCase))
+			{
+				Partial = &Spec;
+			}
+			Known.Add(AbilityName);
+		}
+		if (Partial)
+		{
+			return Partial->Handle;
+		}
+		UE_LOG(LogknightDev, Warning, TEXT("knight.Monster.Attack: no attack named '%s'. Attacks: %s"), *Name,
+			Known.IsEmpty() ? TEXT("(none)") : *FString::Join(Known, TEXT(" ")));
+		return FGameplayAbilitySpecHandle();
+	}
+
+	/** 공격을 지금 쓴다. 쿨다운은 AI 선택에만 걸리므로 바로 다시 쓸 수 있다. bLogBlocked가 아니면 성공만 로그로 남긴다. */
+	static bool TryAttack(AknightMonsterCharacterBase* Monster, FGameplayAbilitySpecHandle Handle, const TCHAR* When, bool bLogBlocked = true)
+	{
+		UAbilitySystemComponent* const ASC = Monster->GetAbilitySystemComponent();
+		const bool bActivated = ASC->TryActivateAbility(Handle);
+		if (!bActivated && !bLogBlocked)
+		{
+			return false;
+		}
+		const FGameplayAbilitySpec* const Spec = ASC->FindAbilitySpecFromHandle(Handle);
+		UE_LOG(LogknightDev, Display, TEXT("knight.Monster.Attack: %s %s %s%s."), *Monster->GetName(), Spec ? *GetAbilityName(*Spec) : TEXT("?"),
+			bActivated ? TEXT("activated") : TEXT("blocked"), When);
+		return bActivated;
+	}
+
+	static void AttackCommand(const TArray<FString>& Args, UWorld* World)
+	{
+		if (!Args.IsValidIndex(0))
+		{
+			UE_LOG(LogknightDev, Warning, TEXT("Usage: knight.Monster.Attack <Name> (e.g. Tornado, SonicBreath)"));
+			return;
+		}
+		AknightMonsterCharacterBase* const Monster = FindTargetMonster(World);
+		UAbilitySystemComponent* const ASC = Monster ? Monster->GetAbilitySystemComponent() : nullptr;
+		const FGameplayAbilitySpecHandle Handle = ASC ? FindAttack(ASC, Args[0]) : FGameplayAbilitySpecHandle();
+		const FGameplayAbilitySpec* const Spec = Handle.IsValid() ? ASC->FindAbilitySpecFromHandle(Handle) : nullptr;
+		const UknightGameplayAbility_MonsterAttack* const Attack = Spec ? Cast<UknightGameplayAbility_MonsterAttack>(Spec->Ability) : nullptr;
+		if (!Attack)
+		{
+			return;
+		}
+
+		// 공중·지상 공격은 AI 선택 조건(State.Monster.Airborne 필요·차단)으로만 나뉘고 발동 자체는 막히지 않는다.
+		// 맞는 자리에서 쓰도록 먼저 이륙하거나 착지한다. 다른 선택 조건(공명해방 전용 등)은 알리기만 하고 그대로 쓴다.
+		const FknightMonsterAttackSelection& Selection = Attack->GetSelection();
+		const FGameplayTag Airborne = knightGameplayTags::State_Monster_Airborne;
+		FGameplayTagContainer Missing = Selection.RequiredOwnerTags;
+		Missing.RemoveTag(Airborne);
+		FGameplayTagContainer Owned;
+		ASC->GetOwnedGameplayTags(Owned);
+		if (!Owned.HasAll(Missing))
+		{
+			UE_LOG(LogknightDev, Display, TEXT("knight.Monster.Attack: the AI only picks it with %s; using it anyway."), *Missing.ToStringSimple());
+		}
+		UknightMonsterAirTurnComponent* const AirTurn = Monster->FindComponentByClass<UknightMonsterAirTurnComponent>();
+		const bool bAirAttack = Selection.RequiredOwnerTags.HasTagExact(Airborne);
+		const bool bGroundAttack = Selection.BlockedOwnerTags.HasTagExact(Airborne);
+		if (!AirTurn || (!bAirAttack && !bGroundAttack) || AirTurn->IsAirborne() == bAirAttack)
+		{
+			if (!TryAttack(Monster, Handle, TEXT("")))
+			{
+				UE_LOG(LogknightDev, Warning, TEXT("knight.Monster.Attack: blocked by the monster's state (another attack or reaction running?). Tags %s"),
+					*Owned.ToStringSimple());
+			}
+			return;
+		}
+		if (bAirAttack)
+		{
+			AirTurn->TakeOff();
+		}
+		else
+		{
+			AirTurn->Land();
+		}
+		UE_LOG(LogknightDev, Display, TEXT("knight.Monster.Attack: %s first."), bAirAttack ? TEXT("taking off") : TEXT("landing"));
+
+		// 이륙·착지 반응이 끝나 공격을 쓸 수 있게 될 때까지 짧게 다시 시도한다.
+		static FTimerHandle RetryTimer;
+		World->GetTimerManager().ClearTimer(RetryTimer);
+		const TWeakObjectPtr<AknightMonsterCharacterBase> WeakMonster(Monster);
+		const double GiveUpTime = World->GetTimeSeconds() + 10.0;
+		World->GetTimerManager().SetTimer(RetryTimer, FTimerDelegate::CreateLambda([WeakMonster, Handle, bAirAttack, GiveUpTime]()
+		{
+			AknightMonsterCharacterBase* const Target = WeakMonster.Get();
+			UWorld* const TimerWorld = Target ? Target->GetWorld() : nullptr;
+			const UknightMonsterAirTurnComponent* const Turn = Target ? Target->FindComponentByClass<UknightMonsterAirTurnComponent>() : nullptr;
+			if (!TimerWorld || !Turn || Target->IsDead())
+			{
+				if (TimerWorld)
+				{
+					TimerWorld->GetTimerManager().ClearTimer(RetryTimer);
+				}
+				return;
+			}
+			const bool bDone = Turn->IsAirborne() == bAirAttack && TryAttack(Target, Handle, bAirAttack ? TEXT(" after taking off") : TEXT(" after landing"), false);
+			if (bDone || TimerWorld->GetTimeSeconds() > GiveUpTime)
+			{
+				if (!bDone)
+				{
+					UE_LOG(LogknightDev, Warning, TEXT("knight.Monster.Attack: gave up after 10 s (still blocked)."));
+				}
+				TimerWorld->GetTimerManager().ClearTimer(RetryTimer);
+			}
+		}), 0.25f, true);
+	}
+
 	static FAutoConsoleCommandWithWorldAndArgs SpawnCmd(TEXT("knight.Monster.Spawn"),
 		TEXT("knight.Monster.Spawn <Name|/Game/Path> [Distance]. Spawns a monster Blueprint (e.g. Janyeol) on the ground in front of the player."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&SpawnCommand), ECVF_Cheat);
@@ -705,6 +847,9 @@ namespace knightMonsterCheats
 	static FAutoConsoleCommandWithWorldAndArgs FreezeAICmd(TEXT("knight.Monster.FreezeAI"),
 		TEXT("knight.Monster.FreezeAI [0|1]. Pauses or resumes every monster's StateTree; no argument toggles."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&FreezeAICommand), ECVF_Cheat);
+	static FAutoConsoleCommandWithWorldAndArgs AttackCmd(TEXT("knight.Monster.Attack"),
+		TEXT("knight.Monster.Attack <Name>. The target monster uses this attack now (ignores cooldown; takes off or lands first if needed). Name: GA name or its last part, e.g. Tornado."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&AttackCommand), ECVF_Cheat);
 	static FAutoConsoleCommandWithWorldAndArgs StatusCmd(TEXT("knight.Monster.Status"),
 		TEXT("knight.Monster.Status [all]. Logs attributes, tags, target and parts."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&StatusCommand), ECVF_Cheat);

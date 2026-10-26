@@ -11,11 +11,14 @@ class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class UNiagaraComponent;
 class UNiagaraSystem;
+class UAudioComponent;
+class USoundBase;
 class UStaticMesh;
 class UStaticMeshComponent;
 
 /**
- * 지나가며 바닥을 때리는 공격의 보이는 부분. 경고 동안 가슴(BeamBone)에 모이는 빛, 지나가는 동안 가슴에서 바닥까지 이어진 기둥,
+ * 지나가며 바닥을 때리는 공격의 보이는 부분. 경고 동안 가슴(BeamBone)에 모이는 빛과 소리, 아래 바닥에서 빨려 오르는 먼지(수면이면
+ * 물안개와 떨리는 잔물결), 지나가는 동안 가슴에서 바닥까지 이어진 기둥,
  * 기둥이 바닥(또는 수면)에 닿는 자리의 바람과 물결. 공명해방(State.Monster.Enraged) 중에는 Enraged 쪽을 쓰고, 비어 있으면 기본을 쓴다.
  * 모두 비우면 아무것도 보이지 않는다(판정은 그대로).
  */
@@ -30,6 +33,42 @@ struct FknightFlybyBeamEffects
 
 	UPROPERTY(EditDefaultsOnly, Category="Effects")
 	TObjectPtr<UNiagaraSystem> EnragedWarning;
+
+	/**
+	 * 경고 동안 가슴 바로 아래 바닥에 붙어, 바닥의 먼지가 가슴으로 빨려 올라간다. 바닥에서 위(+Z)로 WarningInflowHeight까지 오르도록
+	 * 만들고, 실제 가슴 높이에 맞춰 Z로 늘인다. 지나가기가 시작되면 새 입자만 멈춘다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Effects|Warning")
+	TObjectPtr<UNiagaraSystem> WarningInflow;
+
+	/** 가슴 아래가 수면이면 WarningInflow 대신 쓴다(물안개와 물방울). 비우면 WarningInflow. */
+	UPROPERTY(EditDefaultsOnly, Category="Effects|Warning")
+	TObjectPtr<UNiagaraSystem> WarningWaterInflow;
+
+	UPROPERTY(EditDefaultsOnly, Category="Effects|Warning", meta=(ClampMin=1, Units="cm"))
+	float WarningInflowHeight = 1000.f;
+
+	/** 경고 동안 가슴에서 울리는 소리(공명음). 지나가기가 시작되는 순간 WarningSoundFadeOut만에 끊는다. 비우면 소리 없음. */
+	UPROPERTY(EditDefaultsOnly, Category="Effects|Warning")
+	TObjectPtr<USoundBase> WarningSound;
+
+	/** 경고 시작과 끝의 음높이 배율. 사이는 선형으로 올린다. 소리 자체에 음높이 변화가 있으면 둘 다 1로 둔다. */
+	UPROPERTY(EditDefaultsOnly, Category="Effects|Warning")
+	FVector2D WarningSoundPitch = FVector2D(1.0, 1.4);
+
+	UPROPERTY(EditDefaultsOnly, Category="Effects|Warning", meta=(ClampMin=0, Units="s"))
+	float WarningSoundFadeOut = 0.05f;
+
+	/** 경고 동안 가슴 아래 수면을 이 간격마다 같은 자리에서 눌러 잔물결 고리가 이어 퍼지게 한다. 0이면 끈다. */
+	UPROPERTY(EditDefaultsOnly, Category="Effects|Warning", meta=(ClampMin=0, Units="s"))
+	float WarningRippleInterval = 0.12f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Effects|Warning", meta=(ClampMin=0, Units="cm"))
+	float WarningRippleRadius = 250.f;
+
+	/** 경고 시작과 끝의 누르는 깊이(cm). 사이는 선형으로 깊어진다. */
+	UPROPERTY(EditDefaultsOnly, Category="Effects|Warning")
+	FVector2D WarningRippleDepth = FVector2D(2.0, 8.0);
 
 	/** 기둥 메시. 피벗이 위 가운데이고 -Z로 100cm, 아래 끝 반지름 100cm로 만든다(높이·반지름에 맞춰 늘린다). */
 	UPROPERTY(EditDefaultsOnly, Category="Effects|Pillar")
@@ -76,7 +115,6 @@ struct FknightFlybyBeamEffects
 	UPROPERTY(EditDefaultsOnly, Category="Effects|Ground", meta=(ClampMin=1, Units="cm"))
 	float GroundTrailSpacing = 500.f;
 
-	/** 수면을 지날 때 이만큼 갈 때마다 물결을 하나 낸다. */
 	/** 기둥이 닿은 수면을 이 간격마다 눌러 지나간 자리에 골을 판다. 촘촘히 이어 누르면 양옆으로 V자 물결이 퍼진다. */
 	UPROPERTY(EditDefaultsOnly, Category="Effects|Water", meta=(ClampMin=1, Units="cm"))
 	float WaterRippleSpacing = 50.f;
@@ -114,7 +152,7 @@ struct FknightFlybyBeamEffects
 /**
  * 공중 턴의 날짐승이 타깃 머리 위를 일자로 빠르게 지나가며 아래 바닥을 띠 모양으로 때리는 공격(잔향 초음파 브레스).
  *
- *   경고: WarningMontage를 재생하며 WarningTime 동안 타깃 쪽으로 돈다. 그동안 몬스터에 State.Monster.Warning이 붙는다(HUD WARNING 띠용).
+ *   경고: WarningMontage를 재생하며 WarningTime 동안 타깃 쪽으로 돈다. 그동안 몬스터에 State.Monster.Warning이 붙는다.
  *   지나가기: 경고가 끝나는 순간의 타깃 쪽으로 방향을 고정하고, 타깃 너머 PassOvershoot까지 PassSpeed로 날아간다.
  *             지나가는 동안 BeamBone(가슴) 아래 바닥에서 반지름 HalfWidth 구체로 때린다(폭 HalfWidth*2 띠). 대상마다 한 번.
  *
@@ -178,6 +216,11 @@ private:
 
 	/** 가슴 아래 판정 중심(바닥 높이)과 가슴 위치. */
 	void GetBeam(FVector& OutChest, FVector& OutGround) const;
+	/** 가슴 아래 수면 높이. 수면이 바닥 근처나 그보다 위(물에 잠긴 바닥)이고 가슴보다 아래일 때만 true. */
+	bool FindBeamWater(const FVector& Chest, const FVector& Ground, float& OutSurfaceZ) const;
+	void UpdateWarningEffects();
+	/** 경고 소리를 끊고 빨려 오르는 입자의 생성을 멈춘다(남은 입자는 수명대로). */
+	void StopWarningEffects();
 	void StartBeamEffects();
 	void UpdateBeamEffects();
 	void UpdateWater(const FVector& Chest, const FVector& Ground, float& InOutBottomZ);
@@ -189,6 +232,12 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UNiagaraComponent> WarningComponent;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UNiagaraComponent> InflowComponent;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAudioComponent> WarningAudio;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMeshComponent> PillarComponent;
@@ -206,6 +255,8 @@ private:
 	TObjectPtr<UNiagaraComponent> SprayComponent;
 
 	bool bEnraged = false;
+	/** 경고 중 마지막으로 수면을 누른 뒤 지난 시간. */
+	float WarningRippleTime = 0.f;
 	/** 수면 위를 지난 거리(물결·물보라 간격용). 수면을 벗어나면 다시 센다. */
 	float WaterTravel = 0.f;
 	float WaterSplashTravel = 0.f;

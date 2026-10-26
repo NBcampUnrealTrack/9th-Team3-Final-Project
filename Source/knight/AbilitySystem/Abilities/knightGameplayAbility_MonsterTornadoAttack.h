@@ -15,7 +15,9 @@ class UAnimMontage;
  *   날갯짓: SummonMontage를 재생하며 타깃 쪽으로 돈다. SpawnTime에 몸 아래 바닥에 회오리를 만들고,
  *           분노 중이면 EnragedTornadoCount개를 SpawnInterval 간격으로 만든다. 여러 개면 좌우로 SpawnSpread씩 벌려 놓고
  *           첫 진행 방향도 SpreadAngle씩 벌려 양옆에서 조여 오게 한다. 0이면 각자 자리에서 타깃 쪽으로 나가 타깃 근처에서 엇갈린다.
- *   탈진 착지: ExhaustTime에 공중 턴을 끝내고 LandMontage를 LandHoldTime 동안, 이어서 GetUpMontage를 재생한다(공격 없는 딜 타임).
+ *   지침: ExhaustTime부터 TiredTime 동안 날갯짓(메시 애니메이션 전체)이 TiredAnimRate까지 점점 느려진다. 떨어질 것을 미리 보여
+ *         플레이어가 다가갈 틈을 준다.
+ *   탈진 착지: 지침이 끝나면 공중 턴을 끝내고 LandMontage를 LandHoldTime 동안, 이어서 GetUpMontage를 재생한다(공격 없는 딜 타임).
  *             공중이 아니면 착지 없이 끝난다. 일어난 뒤부터 지상 턴이 처음부터 시작된다.
  *             착지부터 끝날 때까지 State.Monster.Collapsed를 붙인다(엎드린 몸·날개로 플레이어를 밀어내지 않음).
  *
@@ -71,9 +73,17 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Tornado", meta=(ClampMin=0, Units="deg"))
 	float TurnRate = 180.f;
 
-	/** 발동부터 탈진 착지를 시작하기까지. 마지막 회오리가 생긴 뒤여야 한다. */
+	/** 발동부터 지치기 시작하기까지. 마지막 회오리가 생긴 뒤여야 한다. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Land", meta=(ClampMin=0, Units="s"))
 	float ExhaustTime = 2.5f;
+
+	/** 공중에서 날갯짓이 느려지는 시간. 끝나면 탈진 착지한다. 0이면 바로 떨어진다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Land", meta=(ClampMin=0, Units="s"))
+	float TiredTime = 3.f;
+
+	/** 지침이 끝날 때의 애니메이션 속도 배율. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Land", meta=(ClampMin=0.05, ClampMax=1))
+	float TiredAnimRate = 0.35f;
 
 	/** 탈진 착지(바닥에 떨어져 엎드림). 비어 있으면 착지 없이 끝난다. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Land")
@@ -94,8 +104,10 @@ private:
 
 	void SpawnTornado(int32 Index, int32 Count);
 	void StartLand();
+	/** 메시 애니메이션 속도 배율(지침). */
+	void SetAnimRate(float Rate);
 
-	enum class EPhase : uint8 { Summon, Land, GetUp };
+	enum class EPhase : uint8 { Summon, Tired, Land, GetUp };
 
 	TWeakObjectPtr<UAbilityTask_Repeat> TickTask;
 	EPhase Phase = EPhase::Summon;

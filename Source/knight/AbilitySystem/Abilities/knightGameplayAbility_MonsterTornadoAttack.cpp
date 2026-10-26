@@ -4,6 +4,7 @@
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_Repeat.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
 #include "Monster/knightMonsterAirTurnComponent.h"
 #include "Monster/knightMonsterCharacterBase.h"
@@ -81,17 +82,31 @@ void UknightGameplayAbility_MonsterTornadoAttack::HandleTick(int32 ActionNumber)
 		if (Spawned >= SpawnCount && PhaseTime >= ExhaustTime)
 		{
 			const UknightMonsterAirTurnComponent* const AirTurn = Monster->FindComponentByClass<UknightMonsterAirTurnComponent>();
-			if (AirTurn && AirTurn->IsAirborne())
+			if (!AirTurn || !AirTurn->IsAirborne())
 			{
-				StartLand();
+				HandleGetUpFinished();
+			}
+			else if (TiredTime > 0.f)
+			{
+				Phase = EPhase::Tired;
+				PhaseTime = 0.f;
+				UE_LOG(LogknightAI, Log, TEXT("%s: tornado summoned, tiring for %.1f s."), *GetNameSafe(Monster), TiredTime);
 			}
 			else
 			{
-				HandleGetUpFinished();
+				StartLand();
 			}
 		}
 		break;
 	}
+	case EPhase::Tired:
+		// 처음엔 천천히, 떨어지기 직전에 크게 느려진다.
+		SetAnimRate(FMath::Lerp(1.f, TiredAnimRate, FMath::Square(FMath::Clamp(PhaseTime / TiredTime, 0.f, 1.f))));
+		if (PhaseTime >= TiredTime)
+		{
+			StartLand();
+		}
+		break;
 	case EPhase::Land:
 		if (PhaseTime >= LandHoldTime)
 		{
@@ -145,8 +160,18 @@ void UknightGameplayAbility_MonsterTornadoAttack::SpawnTornado(int32 Index, int3
 	UE_LOG(LogknightAI, Log, TEXT("%s: tornado %d/%d spawned."), *GetNameSafe(Monster), Index + 1, Count);
 }
 
+void UknightGameplayAbility_MonsterTornadoAttack::SetAnimRate(float Rate)
+{
+	const AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetAvatarActorFromActorInfo());
+	if (USkeletalMeshComponent* const Mesh = Monster ? Monster->GetMesh() : nullptr)
+	{
+		Mesh->GlobalAnimRateScale = Rate;
+	}
+}
+
 void UknightGameplayAbility_MonsterTornadoAttack::StartLand()
 {
+	SetAnimRate(1.f);
 	AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetAvatarActorFromActorInfo());
 	if (UknightMonsterAirTurnComponent* const AirTurn = Monster ? Monster->FindComponentByClass<UknightMonsterAirTurnComponent>() : nullptr)
 	{
@@ -185,6 +210,7 @@ void UknightGameplayAbility_MonsterTornadoAttack::EndAbility(const FGameplayAbil
 		TickTask->EndTask();
 	}
 	TickTask.Reset();
+	SetAnimRate(1.f);
 
 	const AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetAvatarActorFromActorInfo());
 	if (UknightMonsterAirTurnComponent* const AirTurn = Monster && bLanded ? Monster->FindComponentByClass<UknightMonsterAirTurnComponent>() : nullptr)

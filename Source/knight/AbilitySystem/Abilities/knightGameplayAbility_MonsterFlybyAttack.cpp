@@ -6,6 +6,7 @@
 #include "Abilities/Tasks/AbilityTask_Repeat.h"
 #include "Animation/AnimMontage.h"
 #include "Camera/knightPlayerCameraManager.h"
+#include "Components/AudioComponent.h"
 #include "Combat/knightCombatLibrary.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -18,6 +19,7 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/RootMotionSource.h"
+#include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
@@ -109,7 +111,13 @@ void UknightGameplayAbility_MonsterFlybyAttack::ActivateAbility(const FGameplayA
 	{
 		WarningComponent = knightMonsterFlyby::SpawnEffect(knightMonsterFlyby::Pick(bEnraged, Effects.Warning, Effects.EnragedWarning),
 			Monster->GetMesh(), BeamBone, Monster->GetActorRotation());
+		if (Effects.WarningSound)
+		{
+			WarningAudio = UGameplayStatics::SpawnSoundAttached(Effects.WarningSound, Monster->GetMesh(), BeamBone, FVector::ZeroVector,
+				EAttachLocation::SnapToTarget, false, 1.f, Effects.WarningSoundPitch.X);
+		}
 	}
+	WarningRippleTime = Effects.WarningRippleInterval;
 	if (WarningMontage)
 	{
 		UAbilityTask_PlayMontageAndWait* const MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, WarningMontage);
@@ -148,6 +156,7 @@ void UknightGameplayAbility_MonsterFlybyAttack::HandleTick(int32 ActionNumber)
 			DrawDebugLine(GetWorld(), From, To, FColor::Orange, false, knightMonsterFlyby::TickInterval, 0, HalfWidth * 0.2f);
 		}
 #endif
+		UpdateWarningEffects();
 		if (PhaseTime >= WarningTime)
 		{
 			StartPass();
@@ -168,7 +177,7 @@ void UknightGameplayAbility_MonsterFlybyAttack::StartPass()
 	const UknightMonsterTargetingComponent* const Targeting = Monster ? Monster->GetTargetingComponent() : nullptr;
 	const AActor* const Target = Targeting ? Targeting->GetCurrentTarget() : nullptr;
 	SetWarning(false);
-	knightMonsterFlyby::Release(WarningComponent, true);
+	StopWarningEffects();
 	bPassing = true;
 	PhaseTime = 0.f;
 	if (PlayingWarning.IsValid())
@@ -208,6 +217,72 @@ void UknightGameplayAbility_MonsterFlybyAttack::GetBeam(FVector& OutChest, FVect
 	OutChest = Mesh && Mesh->DoesSocketExist(BeamBone) ? Mesh->GetSocketLocation(BeamBone) : Monster->GetActorLocation();
 	const UCapsuleComponent* const Capsule = Monster->GetCapsuleComponent();
 	OutGround = FVector(OutChest.X, OutChest.Y, Monster->GetActorLocation().Z - (Capsule ? Capsule->GetScaledCapsuleHalfHeight() : 0.f));
+}
+
+bool UknightGameplayAbility_MonsterFlybyAttack::FindBeamWater(const FVector& Chest, const FVector& Ground, float& OutSurfaceZ) const
+{
+	const UWorld* const World = GetWorld();
+	return World && UknightWaterRippleSubsystem::FindWaterSurface(World, Ground, OutSurfaceZ) && OutSurfaceZ > Ground.Z - 50.f && OutSurfaceZ < Chest.Z;
+}
+
+void UknightGameplayAbility_MonsterFlybyAttack::UpdateWarningEffects()
+{
+	AActor* const Monster = GetAvatarActorFromActorInfo();
+	USceneComponent* const Root = Monster ? Monster->GetRootComponent() : nullptr;
+	if (!Root)
+	{
+		return;
+	}
+	const float Alpha = WarningTime > 0.f ? FMath::Clamp(PhaseTime / WarningTime, 0.f, 1.f) : 1.f;
+	if (WarningAudio)
+	{
+		WarningAudio->SetPitchMultiplier(FMath::Lerp(Effects.WarningSoundPitch.X, Effects.WarningSoundPitch.Y, Alpha));
+	}
+
+	FVector Chest, Ground;
+	GetBeam(Chest, Ground);
+	float SurfaceZ = 0.f;
+	const bool bWater = FindBeamWater(Chest, Ground, SurfaceZ);
+	const FVector Bottom(Ground.X, Ground.Y, bWater ? SurfaceZ : Ground.Z);
+
+	// 바닥과 수면을 오가면 이펙트를 바꾼다. 앞의 것은 남은 입자가 수명대로 사라진다.
+	UNiagaraSystem* const Inflow = bWater && Effects.WarningWaterInflow ? Effects.WarningWaterInflow.Get() : Effects.WarningInflow.Get();
+	if (InflowComponent && InflowComponent->GetAsset() != Inflow)
+	{
+		knightMonsterFlyby::Release(InflowComponent, false);
+	}
+	if (!InflowComponent && Inflow)
+	{
+		InflowComponent = knightMonsterFlyby::SpawnEffect(Inflow, Root, NAME_None, FRotator(0.f, Monster->GetActorRotation().Yaw, 0.f));
+	}
+	if (InflowComponent)
+	{
+		InflowComponent->SetRelativeLocation(Root->GetComponentTransform().InverseTransformPosition(Bottom));
+		const float Height = FMath::Max(Chest.Z - Bottom.Z, knightMonsterFlyby::PillarMeshSize);
+		InflowComponent->SetRelativeScale3D(FVector(1.f, 1.f, Height / FMath::Max(Effects.WarningInflowHeight, 1.f)));
+	}
+
+	// 같은 자리를 이어 눌러 잔물결 고리가 연달아 퍼지고, 발사가 가까워질수록 깊어진다.
+	WarningRippleTime += knightMonsterFlyby::TickInterval;
+	if (bWater && Effects.WarningRippleInterval > 0.f && Effects.WarningRippleRadius > 0.f && WarningRippleTime >= Effects.WarningRippleInterval)
+	{
+		WarningRippleTime = 0.f;
+		if (UknightWaterRippleSubsystem* const Ripples = GetWorld()->GetSubsystem<UknightWaterRippleSubsystem>())
+		{
+			Ripples->AddImpulse(Bottom, Effects.WarningRippleRadius, FMath::Lerp(Effects.WarningRippleDepth.X, Effects.WarningRippleDepth.Y, Alpha));
+		}
+	}
+}
+
+void UknightGameplayAbility_MonsterFlybyAttack::StopWarningEffects()
+{
+	knightMonsterFlyby::Release(WarningComponent, true);
+	knightMonsterFlyby::Release(InflowComponent, false);
+	if (WarningAudio)
+	{
+		WarningAudio->FadeOut(Effects.WarningSoundFadeOut, 0.f);
+	}
+	WarningAudio = nullptr;
 }
 
 void UknightGameplayAbility_MonsterFlybyAttack::StartBeamEffects()
@@ -317,9 +392,7 @@ void UknightGameplayAbility_MonsterFlybyAttack::UpdateWater(const FVector& Chest
 {
 	UWorld* const World = GetWorld();
 	float SurfaceZ = 0.f;
-	// 수면이 바닥 근처나 그보다 위(물에 잠긴 바닥)이고 가슴보다 아래일 때만 기둥이 수면에서 끝난다.
-	const bool bWater = World && UknightWaterRippleSubsystem::FindWaterSurface(World, Ground, SurfaceZ) && SurfaceZ > Ground.Z - 50.f && SurfaceZ < Chest.Z;
-	if (!bWater)
+	if (!FindBeamWater(Chest, Ground, SurfaceZ))
 	{
 		bOverWater = false;
 		if (SprayComponent && SprayComponent->IsActive())
@@ -386,7 +459,7 @@ void UknightGameplayAbility_MonsterFlybyAttack::UpdateWater(const FVector& Chest
 
 void UknightGameplayAbility_MonsterFlybyAttack::StopEffects()
 {
-	knightMonsterFlyby::Release(WarningComponent, true);
+	StopWarningEffects();
 	knightMonsterFlyby::Release(StreakComponent, false);
 	knightMonsterFlyby::Release(GroundComponent, false);
 	knightMonsterFlyby::Release(SprayComponent, false);
