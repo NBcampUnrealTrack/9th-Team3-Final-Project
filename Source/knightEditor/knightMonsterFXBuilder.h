@@ -134,6 +134,28 @@ public:
 	static UNiagaraSystem* BuildSonicWaterSpraySystem(const FString& PackagePath, UMaterialInterface* SprayMaterial, UMaterialInterface* MistMaterial,
 		float Width = 400.f, FLinearColor Tint = FLinearColor::White);
 
+	/**
+	 * 물 위 회오리(용오름)의 입자: 밑동에서 바깥으로 튀었다 떨어지는 물보라 막과 물방울, 낮게 퍼지는 물안개, 기둥 안을 감아 오르는 물안개,
+	 * 꼭대기에서 흩어지는 물안개, 밑동에서 세차게 치솟는 물줄기, 기둥 겉에서 내던져지는 물방울(계속 생성). 밑동(수면)에 스케일 1로 붙이고, 컴포넌트를 Z축으로 돌리면 입자가 함께 돈다.
+	 * Radius(cm)는 판정 반지름, Height(cm)는 기둥 높이.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|FX")
+	static UNiagaraSystem* BuildTornadoSystem(const FString& PackagePath, UMaterialInterface* SprayMaterial, UMaterialInterface* MistMaterial,
+		float Radius = 300.f, float Height = 1200.f, FLinearColor Tint = FLinearColor::White);
+
+	/** 회오리가 만들어지는 동안 밑동 수면: 도는 물보라 고리와 물방울, 바깥에서 빨려 드는 물안개(계속 생성). 수면에 스케일 1로 붙인다. */
+	UFUNCTION(BlueprintCallable, Category="Knight|FX")
+	static UNiagaraSystem* BuildTornadoFormSystem(const FString& PackagePath, UMaterialInterface* SprayMaterial, UMaterialInterface* MistMaterial,
+		float Radius = 300.f, FLinearColor Tint = FLinearColor::White);
+
+	/**
+	 * 회오리 물 한 번(월드에 스폰, 스스로 끝남). bCollapse가 아니면 다 만들어지는 순간 밑동에서 크게 솟구치는 물,
+	 * bCollapse면 사라질 때 기둥 높이에서 쏟아져 내리는 물. 밑동(수면)에 스폰한다.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|FX")
+	static UNiagaraSystem* BuildTornadoBurstSystem(const FString& PackagePath, UMaterialInterface* SprayMaterial, UMaterialInterface* MistMaterial,
+		float Radius = 300.f, float Height = 1200.f, bool bCollapse = false, FLinearColor Tint = FLinearColor::White);
+
 	/** 위로 솟구치는 불꽃 한 번(가시 발사). 월드에 스폰하는 용도라 cm 그대로다. */
 	UFUNCTION(BlueprintCallable, Category="Knight|FX")
 	static UNiagaraSystem* BuildFireBurstSystem(const FString& PackagePath, UMaterialInterface* Material, float Height = 800.f);
