@@ -54,6 +54,9 @@ public:
 	/** 초음파가 맞지 않고 가까이 스쳤다. 화면 가장자리 색만 짧게 갈라진다. See UknightCameraModifier_Deafen. */
 	void StartSonicNearMiss();
 
+	/** 초음파 브레스 기둥 아래에 있다. 부르는 동안 화면이 빠르게 자글거린다. See UknightCameraModifier_Deafen. */
+	void HoldSonicJitter();
+
 	/** World의 로컬 플레이어 카메라마다 Function을 부른다. */
 	static void ForEachLocalCamera(const UObject* WorldContext, TFunctionRef<void(AknightPlayerCameraManager&)> Function);
 

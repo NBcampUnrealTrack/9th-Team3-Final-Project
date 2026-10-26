@@ -44,6 +44,12 @@ public:
 	/** Location 주변 Radius 안을 Depth(cm)만큼 한 번 누른다. 계산 범위 밖이거나 꺼져 있으면 무시한다. */
 	void AddImpulse(const FVector& Location, float Radius, float Depth);
 
+	/**
+	 * Seconds 동안 계산 높이 상한(MaxHeight)을 Height까지 올린다(초음파 브레스처럼 센 물결). 상한은 계산 범위 전체에 걸리므로
+	 * 그동안은 다른 물결도 더 높아질 수 있다. 끝나면 BoostFadeTime 동안 원래 상한으로 돌아간다. 다시 부르면 더 높은 쪽, 더 긴 쪽을 따른다.
+	 */
+	void BoostMaxHeight(float Height, float Seconds);
+
 	/** Bone에 붙은 피직스 바디의 가로 반폭(cm). 바디가 없으면 0. */
 	static float GetBodyHalfWidth(const USkeletalMeshComponent* Mesh, FName Bone);
 
@@ -148,6 +154,9 @@ private:
 	/** 렌더 타깃 한 칸 단위로 맞춘 계산 범위 중심. */
 	FVector2D Center = FVector2D::ZeroVector;
 	double LastSourceTime = 0.0;
+	/** BoostMaxHeight로 올린 상한과 그 끝 시각. */
+	float BoostHeight = 0.f;
+	double BoostEndTime = 0.0;
 	int32 CurrentState = 0;
 	int32 Resolution = 0;
 	float StepAccumulator = 0.f;

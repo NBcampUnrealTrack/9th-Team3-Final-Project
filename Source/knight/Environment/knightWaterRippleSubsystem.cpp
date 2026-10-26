@@ -27,6 +27,8 @@ namespace knightWaterRipple
 {
 	/** M_WaterRipple_Step의 Impulse0..15와 맞춘다. */
 	constexpr int32 MaxImpulses = 16;
+	/** BoostMaxHeight가 끝난 뒤 원래 상한으로 돌아가는 시간. */
+	constexpr float BoostFadeTime = 1.5f;
 	constexpr int32 MaxStepsPerFrame = 2;
 	constexpr double CharacterRefreshInterval = 1.0;
 
@@ -118,6 +120,22 @@ void UknightWaterRippleSubsystem::AddImpulse(const FVector& Location, float Radi
 		return;
 	}
 	PendingImpulses.Add({ Location2D, Radius, Depth, static_cast<float>(Location.Z) });
+}
+
+void UknightWaterRippleSubsystem::BoostMaxHeight(float Height, float Seconds)
+{
+	const UWorld* const World = GetWorld();
+	if (!World || Height <= 0.f || Seconds <= 0.f)
+	{
+		return;
+	}
+	const double Now = World->GetTimeSeconds();
+	if (Now >= BoostEndTime + knightWaterRipple::BoostFadeTime)
+	{
+		BoostHeight = 0.f;
+	}
+	BoostHeight = FMath::Max(BoostHeight, Height);
+	BoostEndTime = FMath::Max(BoostEndTime, Now + Seconds);
 }
 
 bool UknightWaterRippleSubsystem::ShouldCreateSubsystem(UObject* Outer) const
@@ -608,7 +626,15 @@ void UknightWaterRippleSubsystem::RunStep(const FVector2D& Shift, bool bWithImpu
 	StepMID->SetScalarParameterValue(TEXT("Res"), Resolution);
 	StepMID->SetScalarParameterValue(TEXT("WaveSpeed"), Settings->WaveSpeed);
 	StepMID->SetScalarParameterValue(TEXT("Damping"), Settings->Damping);
-	StepMID->SetScalarParameterValue(TEXT("MaxHeight"), Settings->MaxHeight);
+	// 올린 상한은 끝난 뒤 천천히 내린다. 한 번에 자르면 높은 물결이 갑자기 납작해진다.
+	float MaxHeight = Settings->MaxHeight;
+	if (BoostHeight > MaxHeight)
+	{
+		const double Now = GetWorld()->GetTimeSeconds();
+		const float Fade = 1.f - FMath::Clamp(static_cast<float>(Now - BoostEndTime) / knightWaterRipple::BoostFadeTime, 0.f, 1.f);
+		MaxHeight = FMath::Lerp(MaxHeight, BoostHeight, Fade);
+	}
+	StepMID->SetScalarParameterValue(TEXT("MaxHeight"), MaxHeight);
 	StepMID->SetVectorParameterValue(TEXT("Offset"), FLinearColor(Shift.X, Shift.Y, 0.f, 0.f));
 
 	// 한 단계에 넣을 수 있는 수가 정해져 있어서, 넘치면 크고 센 것부터 남긴다.
