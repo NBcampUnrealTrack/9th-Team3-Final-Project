@@ -33,6 +33,13 @@ void UknightCameraComponent::StartAttackSwing(float Strength)
 	{
 		return;
 	}
+	// 남아 있던 조임·앞 공격 연출은 휘두르는 동안 부드럽게 푼다(한 번에 풀면 화면이 툭 끊겼다).
+	// (출력을 멤버에 바로 받으면 계산 중에 이전 값을 0으로 덮으므로 임시 변수로 받는다.)
+	float CurrentFOV = 0.f;
+	float CurrentPush = 0.f;
+	EvaluateAttackKick(CurrentFOV, CurrentPush);
+	CarriedFOVAtSwing = CurrentFOV;
+	CarriedPushAtSwing = CurrentPush;
 	WindupStartTime = -1.0;
 	SwingStartTime = World->GetRealTimeSeconds();
 	SwingStrength = FMath::Max(0.f, Strength);
@@ -48,19 +55,22 @@ void UknightCameraComponent::EvaluateAttackKick(float& OutFOV, float& OutPush) c
 		return;
 	}
 	// 실제 시간 기준: 히트스탑·그로기 슬로 중에도 연출 길이가 바뀌지 않게.
+	// (2026-10-26) 모든 변화는 SmoothStep(천천히 시작해 천천히 멈춤)으로 — 한 프레임에 튀면 인위적으로 보였다.
 	const double Now = World->GetRealTimeSeconds();
 	if (WindupStartTime >= 0.0 && Now - WindupStartTime < WindupTimeout)
 	{
-		const float Blend = FMath::Clamp(static_cast<float>((Now - WindupStartTime) / WindupBlendTime), 0.f, 1.f);
+		const float Blend = FMath::SmoothStep(0.f, 1.f, static_cast<float>((Now - WindupStartTime) / WindupBlendTime));
 		OutFOV += WindupFOV * WindupStrength * Blend;
 	}
 	if (SwingStartTime >= 0.0 && Now - SwingStartTime < SwingKickDuration)
 	{
-		// 휘두르는 순간 가장 크고, 남은 시간의 제곱으로 빠르게 돌아온다.
-		const float Remaining = 1.f - static_cast<float>((Now - SwingStartTime) / SwingKickDuration);
-		const float Kick = SwingStrength * Remaining * Remaining;
-		OutFOV += SwingFOV * Kick;
-		OutPush += SwingPush * Kick;
+		// SwingRiseTime 동안 0 → 최대로 올라가고, 남은 시간 동안 최대 → 0으로 내려온다. 준비 동작 조임은 올라가는 동안 풀린다.
+		const float Elapsed = static_cast<float>(Now - SwingStartTime);
+		const float Rise = FMath::SmoothStep(0.f, 1.f, Elapsed / SwingRiseTime);
+		const float Fall = 1.f - FMath::SmoothStep(0.f, 1.f, (Elapsed - SwingRiseTime) / FMath::Max(SwingKickDuration - SwingRiseTime, KINDA_SMALL_NUMBER));
+		const float Kick = SwingStrength * (Elapsed < SwingRiseTime ? Rise : Fall);
+		OutFOV += SwingFOV * Kick + CarriedFOVAtSwing * (1.f - Rise);
+		OutPush += SwingPush * Kick + CarriedPushAtSwing * (1.f - Rise);
 	}
 }
 

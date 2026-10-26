@@ -140,7 +140,10 @@ void UknightAbilitySystemComponent::TickBoostRecovery()
 	// 대기 시간이 이미 지났으면 행동이 끝나는 순간 바로 차기 시작한다. (2026-10-16)
 	const bool bPaused = (bPauseBoostRecoveryWhileRunning && IsAvatarRunning())
 		|| (bHoldBoostRecoveryDuringAction && IsActionHoldingBoostRecovery());
-	const float NewGauge = knightBoostRecovery::Step(CurrentGauge, MechSet->GetMaxBoostGauge(), MechSet->GetBoostRecoveryRate(),
+	// (2026-10-26) 가드를 올리고 있으면 회복 속도를 줄인다(GuardBoostRecoveryScale).
+	const float RecoveryRate = MechSet->GetBoostRecoveryRate()
+		* (HasMatchingGameplayTag(knightGameplayTags::State_Guarding) ? GuardBoostRecoveryScale : 1.f);
+	const float NewGauge = knightBoostRecovery::Step(CurrentGauge, MechSet->GetMaxBoostGauge(), RecoveryRate,
 		BoostRecoveryInterval, World->GetTimeSeconds() - MechSet->GetLastBoostSpendTime(), MechSet->GetBoostRecoveryDelay(), bPaused);
 	if (NewGauge != CurrentGauge)
 	{

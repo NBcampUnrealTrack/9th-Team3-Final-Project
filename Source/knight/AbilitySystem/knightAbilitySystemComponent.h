@@ -94,6 +94,8 @@ struct KNIGHT_API FknightStanceModifiers
  *   마지막으로 쓴 뒤 BoostRecoveryDelay초(메카 속성, 기본 1.2)가 지나면 초당 BoostRecoveryRate(메카 속성, 기본 25)만큼 찬다.
  *   (2026-10-13) 달리는 동안에는 회복이 멈춘다(bPauseBoostRecoveryWhileRunning). 달리기는 쓰는 게 아니라서 대기 시간을 다시 세지 않는다.
  *   (2026-10-16) 대기 시간이 지나도 공격이 끝나기 전(휘두르는 중·후딜·콤보 창)에는 회복을 미룬다(bHoldBoostRecoveryDuringAction).
+ *   (2026-10-26) 가드를 올리고 있는 동안(State.Guarding)은 회복 속도에 GuardBoostRecoveryScale을 곱한다.
+ *   가불(비용이 남은 양보다 많아 음수가 된 것)도 같은 속도로 0을 거쳐 그대로 찬다.
  *   메카 속성 세트가 있는 나이트만 해당된다.
  */
 UCLASS()
@@ -239,6 +241,13 @@ protected:
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Boost")
 	bool bPauseBoostRecoveryWhileRunning = true;
+
+	/**
+	 * (2026-10-26 사용자 결정 '가드 중엔 스테미너 회복량 감소') 가드를 올리고 있는 동안(State.Guarding) 회복 속도에 곱하는 배율.
+	 * 0.5 = 절반(초당 25 → 12.5), 0 = 가드 중엔 회복 없음, 1 = 줄이지 않음. 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Boost", meta=(ClampMin=0, ClampMax=1))
+	float GuardBoostRecoveryScale = 0.5f;
 
 	/** 아바타의 나이트 무브먼트가 지금 달리는 중인지. */
 	bool IsAvatarRunning() const;

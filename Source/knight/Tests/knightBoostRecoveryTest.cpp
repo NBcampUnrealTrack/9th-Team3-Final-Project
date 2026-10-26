@@ -31,6 +31,9 @@ bool FknightBoostRecoveryTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("대기 시간과 경과 시간이 같으면 회복 시작"), Step(50.f, Max, Rate, Dt, 1.5f, Delay), 52.5f, Tolerance);
 	TestEqual(TEXT("0에서도 회복(그로기와 다름)"), Step(0.f, Max, Rate, Dt, 2.f, Delay), 2.5f, Tolerance);
 	TestEqual(TEXT("최대치를 넘지 않음"), Step(99.f, Max, Rate, Dt, 2.f, Delay), 100.f, Tolerance);
+	TestEqual(TEXT("(2026-10-26) 가불로 음수여도 같은 속도로 회복"), Step(-20.f, Max, Rate, Dt, 2.f, Delay), -17.5f, Tolerance);
+	TestEqual(TEXT("(2026-10-26) 음수에서 0을 지나 그대로 참"), Step(-1.f, Max, Rate, Dt, 2.f, Delay), 1.5f, Tolerance);
+	TestEqual(TEXT("(2026-10-26) 가불 중에도 쓴 직후(대기 중)면 그대로"), Step(-20.f, Max, Rate, Dt, 1.f, Delay), -20.f, Tolerance);
 	TestEqual(TEXT("대기 시간 0이면 바로 회복"), Step(50.f, Max, Rate, Dt, 0.f, 0.f), 52.5f, Tolerance);
 	TestEqual(TEXT("아직 쓴 적 없음(아주 먼 과거)이면 회복"), Step(50.f, Max, Rate, Dt, UE_BIG_NUMBER, Delay), 52.5f, Tolerance);
 

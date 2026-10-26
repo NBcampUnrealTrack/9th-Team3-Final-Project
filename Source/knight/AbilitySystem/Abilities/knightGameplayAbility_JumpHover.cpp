@@ -1,6 +1,7 @@
 #include "AbilitySystem/Abilities/knightGameplayAbility_JumpHover.h"
 
 #include "AbilitySystemComponent.h"
+#include "AbilitySystem/knightAbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_WaitInputRelease.h"
 #include "AbilitySystem/Attributes/knightAttributeSet.h"
 #include "Animation/AnimInstance.h"
@@ -41,6 +42,27 @@ UknightGameplayAbility_JumpHover::UknightGameplayAbility_JumpHover(const FObject
 	ThrusterSockets = { TEXT("foot_l"), TEXT("foot_r") };
 }
 
+bool UknightGameplayAbility_JumpHover::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
+{
+	if (!Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags))
+	{
+		return false;
+	}
+	// (2026-10-26) 땅 위에서 몽타주(공격·검 뽑기·대시 등) 중이면 가드·이동과 같은 때에만 뛴다:
+	// 캔슬 창이 열려 있고, 공격 후딜(퀵스텝만 되는 AttackRecoveryDashOnlyTime)이 지났을 때.
+	// 발동한 뒤에 바로 끝내면 입력 버퍼가 누름을 처리된 것으로 보고 지워서, 미리 눌러 둔 점프가 사라졌다.
+	const ACharacter* const Character = ActorInfo ? Cast<ACharacter>(ActorInfo->AvatarActor.Get()) : nullptr;
+	const UCharacterMovementComponent* const Movement = Character ? Character->GetCharacterMovement() : nullptr;
+	const UAnimInstance* const Anim = Character && Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr;
+	if (!Movement || !Movement->IsMovingOnGround() || !Anim || !Anim->IsAnyMontagePlaying())
+	{
+		return true;
+	}
+	const UknightAbilitySystemComponent* const KnightASC = Cast<UknightAbilitySystemComponent>(ActorInfo->AbilitySystemComponent.Get());
+	return KnightASC && KnightASC->HasMatchingGameplayTag(knightGameplayTags::Window_Cancel) && !KnightASC->IsAttackRecoveryDashOnly();
+}
+
 void UknightGameplayAbility_JumpHover::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
 {
@@ -58,16 +80,21 @@ void UknightGameplayAbility_JumpHover::ActivateAbility(const FGameplayAbilitySpe
 
 	if (Movement->IsMovingOnGround())
 	{
-		// 공격·검 뽑기·대시 몽타주 중에는 점프하지 않는다.
+		// 몽타주 중인지는 CanActivateAbility가 봤다(캔슬 창에서만 여기까지 온다).
 		const UAnimInstance* const Anim = Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr;
 		// (2026-10-20) 점프 행동 에너지: 조금이라도 남아 있어야 뛰고, 뛴 뒤에 JumpStaminaCost만큼 쓴다.
-		const UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();
+		UknightAbilitySystemComponent* const ASC = GetKnightAbilitySystemComponentFromActorInfo();
 		const FGameplayAttribute Gauge = UknightAttributeSet::GetBoostGaugeAttribute();
 		const bool bOutOfStamina = JumpStaminaCost > 0.f && ASC && ASC->HasAttributeSetForAttribute(Gauge) && ASC->GetNumericAttribute(Gauge) <= 0.f;
-		if ((Anim && Anim->IsAnyMontagePlaying()) || !Character->CanJump() || bOutOfStamina)
+		if (!Character->CanJump() || bOutOfStamina)
 		{
 			EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 			return;
+		}
+		// (2026-10-26) 캔슬 창에서 뛰면 하던 동작(공격 후딜·퀵스텝·가드 경직)을 끊는다. 가드가 공격을 대신하는 것과 같다.
+		if (ASC && Anim && Anim->IsAnyMontagePlaying())
+		{
+			ASC->CancelActivationGroupAbilities(EknightAbilityActivationGroup::Exclusive_Replaceable, this);
 		}
 		Character->Jump();
 		bJumped = true;
@@ -240,7 +267,8 @@ void UknightGameplayAbility_JumpHover::TickHover()
 				{
 					Drain += FMath::Max(0.f, ASC->GetNumericAttribute(UknightAttributeSet::GetBoostRecoveryRateAttribute()));
 				}
-				ASC->ApplyModToAttribute(Gauge, EGameplayModOp::Additive, -Drain * DeltaTime);
+				// (2026-10-26) 체공은 행동 비용이 아니라서 가불하지 않는다: 0에서 멈추고 아래에서 체공이 끝난다.
+				ASC->ApplyModToAttribute(Gauge, EGameplayModOp::Additive, -FMath::Min(Drain * DeltaTime, FMath::Max(0.f, ASC->GetNumericAttribute(Gauge))));
 				GaugeValue = ASC->GetNumericAttribute(Gauge);
 				if (GaugeValue <= 0.f)
 				{

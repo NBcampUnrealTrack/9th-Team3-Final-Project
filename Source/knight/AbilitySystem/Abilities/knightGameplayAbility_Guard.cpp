@@ -326,6 +326,11 @@ void UknightGameplayAbility_Guard::CheckMoveCancel()
 			}
 		}
 	}
+	// (2026-10-26) 이동 입력으로 가드를 내리는 건 bMoveInputCancelsGuard를 켰을 때만.
+	if (!bMoveInputCancelsGuard)
+	{
+		return;
+	}
 	MovePress.Update(*Character);
 	if (MovePress.HasFreshPress() && !Character->GetLastMovementInputVector().IsNearlyZero())
 	{

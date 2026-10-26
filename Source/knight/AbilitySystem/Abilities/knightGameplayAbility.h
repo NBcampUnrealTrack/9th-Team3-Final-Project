@@ -86,8 +86,9 @@ protected:
 	float StaminaCost = 0.f;
 
 	/**
-	 * 켜면 StaminaCost만큼 남아 있어야 발동한다(퀵스텝). 끄면(기본) 조금이라도 남아 있으면 발동하고 0까지만 깎는다.
+	 * 켜면 StaminaCost만큼 남아 있어야 발동한다. 끄면(기본) 조금이라도 남아 있으면 발동하고 모자란 만큼 음수가 된다(가불).
 	 * (2026-10-09 사용자 결정: 공격·가드는 조금이라도 있으면 발동, 퀵스텝은 전부 있어야 발동)
+	 * (2026-10-26 사용자 결정: 퀵스텝도 가불 — 지금 켜 둔 어빌리티는 없다. 0 이하면 어떤 행동도 못 쓴다.)
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Knight|Cost")
 	bool bRequireFullStaminaCost = false;
