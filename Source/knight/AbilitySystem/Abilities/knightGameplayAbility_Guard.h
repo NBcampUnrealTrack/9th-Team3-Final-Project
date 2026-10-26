@@ -45,6 +45,13 @@ class UGameplayEffect;
  * (2026-10-15 사용자 결정) 누른 순간 막혀 있던 가드(공격 후딜 등)는 키를 누르고 있는 동안 가드할 수 있게 되는 순간 올린다
  *   (bRetryPressWhileHeld, 한 번 올라가면 그 누름은 끝이라 위 규칙은 그대로). 퍼펙트 가드 판정 시간은 가드가 올라간 순간부터
  *   전부 준다(미리 눌러 둔 가드도 같음. 올린 순간 맞았는데 퍼펙트가 안 되면 불쾌하다는 사용자 판단).
+ *
+ * (2026-10-26 사용자 결정) 가드 연타 막기 — 누르고·떼고·누르기를 반복해 퍼펙트 가드 판정을 계속 새로 받던 것:
+ *   - 퍼펙트 가드 없이 가드를 내린 뒤 ReguardLockoutTime(0.15초) 동안은 다시 올릴 수 없다(CanActivateAbility).
+ *     그동안 누르고 있으면 위 bRetryPressWhileHeld로 잠금이 풀리는 순간 올라간다.
+ *   - 내린 뒤 PerfectGuardRearmTime(0.3초) 안에 다시 올리면 퍼펙트 가드 판정이 RearmPerfectGuardScale(0.5)배,
+ *     그렇게 연속 두 번째부터는 0(일반 가드만). 그 시간이 지나 올리면 원래대로, 연속 횟수도 처음부터.
+ *   - 퍼펙트 가드에 성공해 내려간 직후는 둘 다 적용하지 않는다(연속 공격을 이어서 패링하는 플레이는 그대로).
  */
 UCLASS()
 class KNIGHT_API UknightGameplayAbility_Guard : public UknightGameplayAbility
@@ -54,6 +61,9 @@ class KNIGHT_API UknightGameplayAbility_Guard : public UknightGameplayAbility
 public:
 	UknightGameplayAbility_Guard(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
+	virtual bool CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+		const FGameplayTagContainer* SourceTags = nullptr, const FGameplayTagContainer* TargetTags = nullptr,
+		FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
 	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 		const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData) override;
 	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
@@ -136,6 +146,18 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Guard|Perfect Guard")
 	TSubclassOf<UGameplayEffect> PerfectGuardDamageEffect;
 
+	/** (2026-10-26) 퍼펙트 가드 없이 가드를 내린 뒤 다시 올릴 수 없는 시간. 0이면 끈다. 바뀔 수 있는 값. */
+	UPROPERTY(EditDefaultsOnly, Category="Guard|Reguard", meta=(ClampMin=0, Units="s"))
+	float ReguardLockoutTime = 0.15f;
+
+	/** (2026-10-26) 가드를 내린 뒤 이 시간 안에 다시 올리면 퍼펙트 가드 판정을 줄인다(아래 배율, 연속 두 번째부터 0). 0이면 끈다. 바뀔 수 있는 값. */
+	UPROPERTY(EditDefaultsOnly, Category="Guard|Reguard", meta=(ClampMin=0, Units="s"))
+	float PerfectGuardRearmTime = 0.3f;
+
+	/** (2026-10-26) 위 시간 안에 처음 다시 올린 가드의 퍼펙트 가드 판정 배율. 바뀔 수 있는 값. */
+	UPROPERTY(EditDefaultsOnly, Category="Guard|Reguard", meta=(ClampMin=0, ClampMax=1))
+	float RearmPerfectGuardScale = 0.5f;
+
 private:
 	/** 이번 가드의 퍼펙트 가드 판정 시간(초). 메카 속성 PerfectGuardWindow, 없으면 ParryWindow. */
 	float GetPerfectGuardWindow() const;
@@ -177,4 +199,10 @@ private:
 	/** 가드를 올릴 때 누르고 있던 방향은 새 이동 입력이 아니다(방향 전환에만 씀). */
 	FknightMovePressTracker MovePress;
 	FTimerHandle MoveCancelTimer;
+
+	/** (2026-10-26) 가드 연타 막기: 퍼펙트 가드 없이 가드를 내린 시각(없으면 -1), 빨리 다시 올린 연속 횟수, 이번 가드가 올라갔는지·패링했는지. */
+	double LastGuardEndTime = -1.0;
+	int32 QuickReguardCount = 0;
+	bool bGuardRaised = false;
+	bool bParriedThisGuard = false;
 };
