@@ -12,6 +12,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Settings/knightSettingsSubsystem.h"
 #include "Settings/knightSharedSettings.h"
+#include "Combat/knightGroggyFeedbackComponent.h"
 
 AknightPlayerCameraManager::AknightPlayerCameraManager()
 {
@@ -20,6 +21,11 @@ AknightPlayerCameraManager::AknightPlayerCameraManager()
 	RoarShockwaveClass = UknightCameraModifier_RoarShockwave::StaticClass();
 	DarknessClass = UknightCameraModifier_Darkness::StaticClass();
 	DeafenClass = UknightCameraModifier_Deafen::StaticClass();
+}
+
+void AknightPlayerCameraManager::SetRadialPullSource(UknightGroggyFeedbackComponent* Source)
+{
+	RadialPullSource = Source;
 }
 
 void AknightPlayerCameraManager::UpdateViewTarget(FTViewTarget& OutVT, float DeltaTime)
@@ -54,6 +60,12 @@ void AknightPlayerCameraManager::UpdateViewTarget(FTViewTarget& OutVT, float Del
 		// OutVT contains this frame's camera mode and user FOV; never subtract from last frame's zoomed FOV.
 		const float BaseFOV = OutVT.POV.FOV;
 		OutVT.POV.FOV = FMath::Clamp(BaseFOV - GetKnockdownZoomDegrees(Now) * GetKnockdownZoomWeight(Now), FMath::Min(BaseFOV, 45.f), 115.f);
+	}
+	if (UknightGroggyFeedbackComponent* const Pull = RadialPullSource.Get())
+	{
+		// Compose on this frame's underlying view (user FOV, lock-on and existing zoom).
+		const float BaseFOV = OutVT.POV.FOV;
+		OutVT.POV.FOV = FMath::Max(FMath::Min(BaseFOV, 45.f), BaseFOV - Pull->GetRadialPullFOVOffset());
 	}
 }
 

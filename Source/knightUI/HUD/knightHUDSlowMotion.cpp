@@ -9,6 +9,9 @@
 void UknightHUDSlowMotion::NativeConstruct()
 {
 	Super::NativeConstruct();
+	// The groggy cue's cyan edge is now a scene-only radial pull. Keep the separate
+	// player-knockdown white edge, impact flash and existing letterbox behavior.
+	if (Img_Edge) Img_Edge->SetVisibility(ESlateVisibility::Collapsed);
 	SetVisibility(ESlateVisibility::Collapsed);
 
 	const ULocalPlayer* const LocalPlayer = GetOwningLocalPlayer();
@@ -108,7 +111,7 @@ bool UknightHUDSlowMotion::Tick(float DeltaTime)
 	}
 	if (Img_Edge)
 	{
-		Img_Edge->SetRenderOpacity(GroggyEdgeOpacity * Cinema);
+		Img_Edge->SetVisibility(ESlateVisibility::Collapsed);
 	}
 	if (Img_Flash)
 	{

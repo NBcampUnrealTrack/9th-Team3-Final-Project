@@ -33,6 +33,8 @@
 #include "knightCharacter.h"
 #include "System/knightGameplayTags.h"
 #include "TimerManager.h"
+#include "Materials/MaterialInterface.h"
+#include "UObject/ConstructorHelpers.h"
 #include "knight.h"
 
 namespace
@@ -123,11 +125,15 @@ UknightGroggyFeedbackComponent::UknightGroggyFeedbackComponent()
 	PrimaryComponentTick.bCanEverTick = false;
 	GroggyCueTag = knightGameplayTags::GameplayCue_Hit_Groggy;
 	ReleaseCueTag = knightGameplayTags::GameplayCue_Hit_Groggy_Release;
+	// Hard default reference keeps the presentation material in the cooked dependency graph.
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> PullMaterial(TEXT("/Game/Knight/Camera/PostProcess/M_PP_GroggyPull.M_PP_GroggyPull"));
+	RadialPullMaterial = PullMaterial.Object;
 }
 
 void UknightGroggyFeedbackComponent::BeginPlay()
 {
 	Super::BeginPlay();
+	InitializeRadialPull();
 	PoiseBrokenHandle = UknightHitReactionComponent::OnAnyPoiseBroken.AddUObject(this, &ThisClass::HandleAnyPoiseBroken);
 }
 
@@ -136,6 +142,7 @@ void UknightGroggyFeedbackComponent::EndPlay(const EEndPlayReason::Type EndPlayR
 	UknightHitReactionComponent::OnAnyPoiseBroken.Remove(PoiseBrokenHandle);
 	PoiseBrokenHandle.Reset();
 	CancelKnockdownPresentation();
+	ShutdownRadialPull();
 	SetPredictionAudio(false);
 	if (UWorld* const World = GetWorld())
 	{
@@ -448,6 +455,7 @@ bool UknightGroggyFeedbackComponent::TryStartPredictedKnockdown(UGameplayAbility
 	UE_LOG(LogknightCombat, Log, TEXT("Predicted knockdown %s -> %s: poise %.1f, expected %.1f (surfaceDist %.0f, pointDist %.0f, %s, %.2fs to hit)"),
 		*GetNameSafe(Player), *GetNameSafe(Boss), TargetCore->GetPoise(), ExpectedPoiseDamage, SurfaceDistance2D, PointDistance2D,
 		bLeadMode ? TEXT("lunge dash") : (bUsingWarpTarget ? TEXT("from warp target") : TEXT("from player")), RemainingToHit);
+	PlayRadialPull(Boss, TargetPoint);
 	OnPresentationEvent.Broadcast(false);
 	UE_LOG(LogknightCombat, Verbose, TEXT("Predicted knockdown %s -> %s: poise %.1f, expected %.1f"),
 		*GetNameSafe(Player), *GetNameSafe(Boss), TargetCore->GetPoise(), ExpectedPoiseDamage);
@@ -534,6 +542,7 @@ void UknightGroggyFeedbackComponent::BeginPredictionReturn()
 	{
 		return;
 	}
+	CancelRadialPull();
 	bPredictionLead = false;
 	FinishPredictionSlow();
 	SetPredictionAudio(false);
@@ -621,6 +630,7 @@ void UknightGroggyFeedbackComponent::FinishPredictionVisual()
 
 void UknightGroggyFeedbackComponent::CancelKnockdownPresentation()
 {
+	CancelRadialPull();
 	bLungeWatch = false;
 	bPredictionLead = false;
 	LungeAttack.Reset();
@@ -708,6 +718,7 @@ void UknightGroggyFeedbackComponent::HandleAnyPoiseBroken(AActor* InVictim, AAct
 		VictimASC->ExecuteGameplayCue(GroggyCueTag, CueParams);
 	}
 
+	PlayRadialPull(InVictim, CueParams.Location);
 	OnPresentationEvent.Broadcast(true);
 
 	// 2·3. FreezeTime 뒤 '쾅'과 슬로모션. 기존 히트스톱 지연 뒤 슬로우 길이는 실시간 티커로 잰다.
