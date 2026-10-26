@@ -10,8 +10,12 @@ void UknightHUDSlowMotion::NativeConstruct()
 {
 	Super::NativeConstruct();
 	// The groggy cue's cyan edge is now a scene-only radial pull. Keep the separate
-	// player-knockdown white edge, impact flash and existing letterbox behavior.
+	// player-knockdown white edge, impact flash and HUD dimming. Combat never crops the view.
 	if (Img_Edge) Img_Edge->SetVisibility(ESlateVisibility::Collapsed);
+	// Old/custom copies of this WBP may still contain the retired bars. The current
+	// asset and builder omit them; never animate legacy copies back into the viewport.
+	if (Img_LetterboxTop) Img_LetterboxTop->SetVisibility(ESlateVisibility::Collapsed);
+	if (Img_LetterboxBottom) Img_LetterboxBottom->SetVisibility(ESlateVisibility::Collapsed);
 	SetVisibility(ESlateVisibility::Collapsed);
 
 	const ULocalPlayer* const LocalPlayer = GetOwningLocalPlayer();
@@ -77,7 +81,7 @@ bool UknightHUDSlowMotion::Tick(float DeltaTime)
 	// The component knows when every path ends (missed prediction, freeze without a slow, cancel), so follow it instead of timing it here.
 	const bool bGroggy = VM && VM->IsGroggyPresentationActive();
 	const float Step = bGroggy ? (GroggyEnterTime > 0.f ? DeltaTime / GroggyEnterTime : 1.f) : -(GroggyExitTime > 0.f ? DeltaTime / GroggyExitTime : 1.f);
-	Cinema = FMath::Clamp(Cinema + Step, 0.f, 1.f);
+	GroggyWeight = FMath::Clamp(GroggyWeight + Step, 0.f, 1.f);
 	Flash = HitFlashTime > 0.f ? FMath::Max(0.f, Flash - DeltaTime / HitFlashTime) : 0.f;
 
 	float Knockdown = 0.f;
@@ -99,16 +103,8 @@ bool UknightHUDSlowMotion::Tick(float DeltaTime)
 		}
 	}
 
-	// Ease out so the bars slow down as they settle.
-	const float Bars = 1.f - FMath::Square(1.f - Cinema);
-	if (Img_LetterboxTop)
-	{
-		Img_LetterboxTop->SetRenderScale(FVector2D(1.f, Bars));
-	}
-	if (Img_LetterboxBottom)
-	{
-		Img_LetterboxBottom->SetRenderScale(FVector2D(1.f, Bars));
-	}
+	// Retain the existing HUD fade timing, independently of the removed letterbox.
+	const float HUDDimWeight = 1.f - FMath::Square(1.f - GroggyWeight);
 	if (Img_Edge)
 	{
 		Img_Edge->SetVisibility(ESlateVisibility::Collapsed);
@@ -121,9 +117,9 @@ bool UknightHUDSlowMotion::Tick(float DeltaTime)
 	{
 		Img_KnockdownEdge->SetRenderOpacity(KnockdownEdgeOpacity * Knockdown);
 	}
-	SetHUDOpacity(1.f - GroggyHUDDim * Bars);
+	SetHUDOpacity(1.f - GroggyHUDDim * HUDDimWeight);
 
-	if (!bGroggy && Cinema <= 0.f && Flash <= 0.f && KnockdownTime < 0.f)
+	if (!bGroggy && GroggyWeight <= 0.f && Flash <= 0.f && KnockdownTime < 0.f)
 	{
 		SetHUDOpacity(1.f);
 		SetVisibility(ESlateVisibility::Collapsed);

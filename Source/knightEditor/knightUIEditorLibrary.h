@@ -76,7 +76,7 @@ public:
 
 	/**
 	 * WBP_HUDSlowMotion: 화면 전체로 늘린 시안 가장자리(Img_Edge), 흰 가장자리(Img_KnockdownEdge), 흰 번쩍임(Img_Flash),
-	 * 위아래 끝에 붙은 검은 띠(Img_LetterboxTop/Bottom, 화면 높이의 10%). 처음에는 모두 투명하고 띠는 높이 0이다.
+	 * 처음에는 모두 투명하다. 전투 시야를 가리는 레터박스는 생성하지 않는다.
 	 */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
 	static bool BuildHUDSlowMotion(UWidgetBlueprint* WidgetBlueprint, UTexture2D* VignetteTexture);

@@ -647,20 +647,8 @@ bool UknightUIEditorLibrary::BuildHUDSlowMotion(UWidgetBlueprint* WidgetBlueprin
 	Flash->SetRenderOpacity(0.f);
 	FillCanvas(Root, Flash);
 
-	// 띠는 화면 끝에 붙은 쪽을 기준점으로 세로 크기를 0~1로 키운다(C++).
-	auto AddBar = [&](const TCHAR* Name, float Top, float Pivot)
-	{
-		UImage* const Bar = NewWidget<UImage>(WidgetBlueprint, Name, true);
-		Bar->SetColorAndOpacity(FLinearColor::Black);
-		Bar->SetVisibility(ESlateVisibility::HitTestInvisible);
-		Bar->SetRenderTransformPivot(FVector2D(0.5f, Pivot));
-		Bar->SetRenderScale(FVector2D(1.f, 0.f));
-		UCanvasPanelSlot* const Slot = Root->AddChildToCanvas(Bar);
-		Slot->SetAnchors(FAnchors(0.f, Top, 1.f, Top + 0.1f));
-		Slot->SetOffsets(FMargin(0.f));
-	};
-	AddBar(TEXT("Img_LetterboxTop"), 0.f, 0.f);
-	AddBar(TEXT("Img_LetterboxBottom"), 0.9f, 1.f);
+	// Combat feedback must not obscure the top/bottom of the gameplay view.
+	// Do not regenerate the retired Img_LetterboxTop/Bottom widgets.
 	EndBuild(WidgetBlueprint);
 	return true;
 }
@@ -681,7 +669,7 @@ bool UknightUIEditorLibrary::BuildHUDLayout(UWidgetBlueprint* WidgetBlueprint, T
 
 	// 저체력 붉은 가장자리는 맨 아래에 깔아서 체력 숫자 등 HUD 글자를 가리지 않는다.
 	FillCanvas(Root, NewWidget<UUserWidget>(WidgetBlueprint, LowHealthClass, TEXT("LowHealth"), true));
-	// 슬로우 모션 띠·가장자리도 HUD 아래. 이 위젯이 자기보다 뒤에 그려지는 HUD 위젯을 흐리게 하므로 HUD보다 먼저 넣는다.
+	// 슬로우 모션 가장자리도 HUD 아래. 이 위젯이 자기보다 뒤에 그려지는 HUD 위젯을 흐리게 하므로 HUD보다 먼저 넣는다.
 	FillCanvas(Root, NewWidget<UUserWidget>(WidgetBlueprint, SlowMotionClass, TEXT("SlowMotion"), true));
 	// 화면 전체를 덮고 HUD 중 아래쪽에 그려진다. 마커가 다른 HUD를 가리지 않는다.
 	FillCanvas(Root, NewWidget<UUserWidget>(WidgetBlueprint, LockOnMarkerClass, TEXT("LockOnMarker"), true));
