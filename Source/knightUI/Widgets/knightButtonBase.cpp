@@ -2,7 +2,40 @@
 
 #include "CommonButtonBase.h"
 #include "CommonTextBlock.h"
+#include "Blueprint/WidgetTree.h"
+#include "Components/Image.h"
 #include "Framework/Application/SlateApplication.h"
+
+void UknightButtonBase::ConfigureMaintenanceButton(bool bInSelectable, bool bMainTab)
+{
+	bMaintenancePresentation = true;
+	// CommonUI otherwise auto-selects AFTER the owner has cleared/toggled its selection.
+	// Dispatch selection first, then let the screen be the final authority.
+	bTriggerClickedAfterSelection = true;
+	SetShouldSelectUponReceivingFocus(false);
+	SetIsSelectable(bInSelectable);
+	SetIsInteractableWhenSelected(true);
+	FocusedTextStyle = nullptr;
+	HoverScale = 1.f;
+	PressedScale = 0.99f;
+	const TCHAR* Path = bMainTab
+		? TEXT("/Game/Knight/UI/Style/BS_Knight_CraftingMainTab.BS_Knight_CraftingMainTab_C")
+		: TEXT("/Game/Knight/UI/Style/BS_Knight_CraftingControl.BS_Knight_CraftingControl_C");
+	if (const TSubclassOf<UCommonButtonStyle> StyleClass = LoadClass<UCommonButtonStyle>(nullptr, Path)) SetStyle(StyleClass);
+	const auto TintFocusImage = [](UWidget* Widget)
+	{
+		if (UImage* Image = Cast<UImage>(Widget)) Image->SetColorAndOpacity(FLinearColor(0.32f, 0.57f, 0.76f, 0.65f));
+	};
+	for (UWidget* Bracket : { Bracket_L.Get(), Bracket_R.Get() })
+	{
+		TintFocusImage(Bracket);
+		// The shipped bracket is a nested WBP with three Images, not an Image itself.
+		if (UUserWidget* Nested = Cast<UUserWidget>(Bracket))
+			if (Nested->WidgetTree) Nested->WidgetTree->ForEachWidget(TintFocusImage);
+	}
+	RefreshTargets();
+	ApplyLabelStyle();
+}
 
 void UknightButtonBase::SetButtonText(const FText& InText)
 {
@@ -78,6 +111,13 @@ void UknightButtonBase::NativeOnReleased()
 	RefreshTargets();
 }
 
+void UknightButtonBase::NativeOnClicked()
+{
+	// CommonUI selects before routing the locked-click notification too. A locked slot is not a selected slot.
+	if (bMaintenancePresentation && GetLocked()) ClearSelection();
+	Super::NativeOnClicked();
+}
+
 void UknightButtonBase::NativeOnEnabled()
 {
 	Super::NativeOnEnabled();
@@ -126,6 +166,7 @@ void UknightButtonBase::HandleFocusLost()
 {
 	Super::HandleFocusLost();
 	bFocusedVisual = false;
+	bPressedVisual = false;
 	RefreshTargets();
 	ApplyLabelStyle();
 }
@@ -143,7 +184,7 @@ void UknightButtonBase::RefreshTargets()
 	const bool bHot = bInteractive && (IsHovered() || bFocusedVisual);
 
 	TargetScale = !bInteractive ? 1.f : (bPressedVisual ? PressedScale : (bHot ? HoverScale : 1.f));
-	TargetBracketAlpha = bHot ? 1.f : 0.f;
+	TargetBracketAlpha = (bMaintenancePresentation ? bInteractive && bFocusedVisual : bHot) ? 1.f : 0.f;
 
 	if (IsDesignTime())
 	{

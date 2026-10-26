@@ -1,4 +1,7 @@
 #include "Menu/UI/KnightMaintenanceWidget.h"
+#include "Menu/UI/KnightMaintenancePresentation.h"
+#include "Materials/MaterialInterface.h"
+#include "Materials/MaterialInstanceDynamic.h"
 
 #include "AbilitySystem/Attributes/knightAttributeSet.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
@@ -9,11 +12,13 @@
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
+#include "Components/Border.h"
 #include "Components/EditableTextBox.h"
 #include "Components/Image.h"
 #include "Components/ScrollBox.h"
 #include "Components/ScrollBoxSlot.h"
 #include "Components/SizeBox.h"
+#include "Components/ScaleBox.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
@@ -358,13 +363,17 @@ TSubclassOf<UKnightMaintenanceWidget> UKnightMaintenanceWidget::GetSharedWidgetC
 void UKnightMaintenanceWidget::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
+	// Actions do not select. Tabs below explicitly opt into owner-managed selection.
+	if (WidgetTree) WidgetTree->ForEachWidget([](UWidget* Widget)
+	{
+		KnightMaintenancePresentation::ConfigureButton(Cast<UCommonButtonBase>(Widget), false);
+	});
 	// 선택된 탭도 포커스 가능하게 (키보드 이동).
 	for (UCommonButtonBase* Button : { Btn_Craft.Get(), Btn_Weapon.Get(), Btn_Armor.Get(), Btn_Head.Get(), Btn_Torso.Get(), Btn_Legs.Get(),
 		Btn_Arms.Get(), Btn_SlotWeapon.Get(), Btn_InfoSpec.Get(), Btn_InfoSet.Get(), Btn_InfoMaterial.Get() })
 	{
 		if (!Button) continue;
-		Button->SetIsSelectable(true);
-		Button->SetIsInteractableWhenSelected(true);
+		KnightMaintenancePresentation::ConfigureButton(Button, true, Button == Btn_Craft || Button == Btn_Weapon || Button == Btn_Armor);
 	}
 	if (Btn_Craft) Btn_Craft->OnClicked().AddWeakLambda(this, [this]() { SetCategory(0, true); });
 	if (Btn_Weapon) Btn_Weapon->OnClicked().AddWeakLambda(this, [this]() { SetCategory(2, true); });
@@ -374,11 +383,39 @@ void UKnightMaintenanceWidget::NativeOnInitialized()
 	SetButtonLabel(Btn_Armor, LOCTEXT("MaterialsTab", "소재"));
 	if (UCanvasPanel* const Root = WidgetTree ? Cast<UCanvasPanel>(WidgetTree->RootWidget) : nullptr)
 	{
+		UBorder* const Background = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("MaintenanceBackdrop"));
+		Background->SetBrushColor(FLinearColor(0.003f, 0.008f, 0.016f, 0.55f));
+		Background->SetVisibility(ESlateVisibility::HitTestInvisible);
+		UCanvasPanelSlot* const BackgroundSlot = Root->AddChildToCanvas(Background);
+		BackgroundSlot->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f));
+		BackgroundSlot->SetOffsets(FMargin(24.f));
+		BackgroundSlot->SetZOrder(-10);
+		MaintenanceBackdrop = Background;
+		CraftingEdgeShade = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("CraftingEdgeShade"));
+		CraftingEdgeShade->SetVisibility(ESlateVisibility::HitTestInvisible);
+		if (UMaterialInterface* Material = LoadObject<UMaterialInterface>(nullptr,
+			TEXT("/Game/Knight/UI/Menu/Maintenance/M_UI_CraftingEdges.M_UI_CraftingEdges")))
+		{
+			CraftingEdgeShade->SetBrushFromMaterial(Material);
+			if (UMaterialInstanceDynamic* DynamicMaterial = CraftingEdgeShade->GetDynamicMaterial())
+			{
+				const float ClearWidth = FMath::Clamp(CraftingClearBandWidth, 0.05f, 0.80f);
+				DynamicMaterial->SetScalarParameterValue(TEXT("ClearBandWidth"), ClearWidth);
+				DynamicMaterial->SetScalarParameterValue(TEXT("TransitionWidth"),
+					FMath::Clamp(CraftingTransitionWidth, 0.01f, (1.f - ClearWidth) * 0.5f));
+				DynamicMaterial->SetScalarParameterValue(TEXT("SideOpacity"), FMath::Clamp(CraftingSideOpacity, 0.f, 1.f));
+			}
+		}
+		else CraftingEdgeShade->SetColorAndOpacity(FLinearColor::Transparent);
+		UCanvasPanelSlot* const ShadeSlot = Root->AddChildToCanvas(CraftingEdgeShade);
+		ShadeSlot->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f));
+		ShadeSlot->SetOffsets(FMargin(0.f));
+		ShadeSlot->SetZOrder(-9);
 		CurrencyText = NewRowText(WidgetTree, BodyStyle(), ETextJustify::Right);
 		UCanvasPanelSlot* const CurrencySlot = Root->AddChildToCanvas(CurrencyText);
 		CurrencySlot->SetAnchors(FAnchors(1.f, 0.f));
 		CurrencySlot->SetAlignment(FVector2D(1.f, 0.f));
-		CurrencySlot->SetPosition(FVector2D(-96.f, 64.f));
+		CurrencySlot->SetPosition(FVector2D(-48.f, 48.f));
 		CurrencySlot->SetAutoSize(true);
 		RefreshCurrency();
 		if (UWidget* const Confirm = WidgetTree->FindWidget(TEXT("Panel_Confirm")))
@@ -407,6 +444,8 @@ void UKnightMaintenanceWidget::NativeOnInitialized()
 				InfoRow->ClearChildren();
 				SetButtonLabel(InfoPreviousButton, LOCTEXT("InfoPrevious", "←"));
 				SetButtonLabel(InfoNextButton, LOCTEXT("InfoNext", "→"));
+				for (UCommonButtonBase* Action : { InfoPreviousButton.Get(), InfoNextButton.Get() })
+					KnightMaintenancePresentation::ConfigureButton(Action, false);
 				InfoPreviousButton->OnClicked().AddWeakLambda(this, [this]() { CycleInfoTab(-1); });
 				InfoNextButton->OnClicked().AddWeakLambda(this, [this]() { CycleInfoTab(1); });
 				auto AddArrow = [this, InfoRow](UCommonButtonBase* Button)
@@ -456,6 +495,7 @@ void UKnightMaintenanceWidget::NativeOnInitialized()
 			UCommonButtonBase* const Button = CreateWidget<UCommonButtonBase>(GetOwningPlayer(), ButtonClass);
 			if (!Button) return;
 			SetButtonLabel(Button, Label);
+			KnightMaintenancePresentation::ConfigureButton(Button, false);
 			Button->OnClicked().AddWeakLambda(this, [Action = MoveTemp(Action)]() { Action(); });
 			USizeBox* const Frame = WidgetTree->ConstructWidget<USizeBox>();
 			Frame->SetWidthOverride(64.f);
@@ -465,6 +505,18 @@ void UKnightMaintenanceWidget::NativeOnInitialized()
 		AddQuantityButton(LOCTEXT("MaterialSaleMinus", "−"), [this]() { ChangeMaterialSaleQuantity(-1); });
 		MaterialQuantityInput = WidgetTree->ConstructWidget<UEditableTextBox>(UEditableTextBox::StaticClass(), TEXT("Phase6_MaterialQuantityInput"));
 		MaterialQuantityInput->SetHintText(LOCTEXT("MaterialQuantityHint", "수량"));
+		FEditableTextBoxStyle QuantityStyle = MaterialQuantityInput->GetWidgetStyle();
+		FSlateBrush QuantityBackground;
+		QuantityBackground.DrawAs = ESlateBrushDrawType::RoundedBox;
+		QuantityBackground.TintColor = FSlateColor(FLinearColor(0.005f, 0.012f, 0.024f, 0.9f));
+		QuantityBackground.OutlineSettings = FSlateBrushOutlineSettings(FVector4(0.f), FSlateColor(FLinearColor(0.12f, 0.25f, 0.4f, 1.f)), 1.f);
+		QuantityStyle.BackgroundImageNormal = QuantityStyle.BackgroundImageReadOnly = QuantityBackground;
+		QuantityBackground.OutlineSettings.Color = FSlateColor(FLinearColor(0.32f, 0.57f, 0.76f, 1.f));
+		QuantityStyle.BackgroundImageHovered = QuantityStyle.BackgroundImageFocused = QuantityBackground;
+		QuantityStyle.ForegroundColor = FSlateColor(White);
+		QuantityStyle.FocusedForegroundColor = FSlateColor(White);
+		QuantityStyle.ReadOnlyForegroundColor = FSlateColor(Frost);
+		MaterialQuantityInput->SetWidgetStyle(QuantityStyle);
 		MaterialQuantityInput->OnTextCommitted.AddUniqueDynamic(this, &ThisClass::HandleMaterialQuantityCommitted);
 		AddFixed(QuantityRow, WidgetTree, MaterialQuantityInput, 84.f);
 		AddQuantityButton(LOCTEXT("MaterialSalePlus", "+"), [this]() { ChangeMaterialSaleQuantity(1); });
@@ -478,31 +530,10 @@ void UKnightMaintenanceWidget::NativeOnInitialized()
 		MaterialFeedbackText = NewRowText(WidgetTree, TextStyle, ETextJustify::Left);
 		MaterialFeedbackText->SetAutoWrapText(true);
 		Body->AddChildToVerticalBox(MaterialFeedbackText)->SetPadding(FMargin(0.f, 0.f, 12.f, 8.f));
-		EnhancementDetailPage = WidgetTree->ConstructWidget<UScrollBox>(UScrollBox::StaticClass(), TEXT("Phase7_EnhancementDetailPage"));
-		UpgradePanel = WidgetTree->ConstructWidget<UVerticalBox>();
-		EnhancementDetailPage->AddChild(UpgradePanel);
-		Switcher_Info->AddChild(EnhancementDetailPage);
-		auto AddUpgradeText = [this, TextStyle](TObjectPtr<UCommonTextBlock>& Target)
-		{
-			Target = NewRowText(WidgetTree, TextStyle, ETextJustify::Left);
-			Target->SetAutoWrapText(true);
-			UpgradePanel->AddChildToVerticalBox(Target)->SetPadding(FMargin(0.f, 0.f, 12.f, 12.f));
-		};
-		AddUpgradeText(UpgradeHeading);
-		AddUpgradeText(UpgradeAttack);
-		AddUpgradeText(UpgradeMoney);
-		AddUpgradeText(UpgradeGate);
-		AddUpgradeText(UpgradeChance);
-		AddUpgradeText(UpgradeResult);
-		UpgradeButton = ButtonClass ? CreateWidget<UCommonButtonBase>(GetOwningPlayer(), ButtonClass,
-			TEXT("Phase7_UpgradeButton")) : nullptr;
-		if (UpgradeButton)
-		{
-			SetButtonLabel(UpgradeButton, LOCTEXT("UpgradeAction", "강화"));
-			UpgradeButton->OnClicked().AddWeakLambda(this, [this]() { RequestWeaponUpgrade(); });
-			UpgradePanel->AddChildToVerticalBox(UpgradeButton)->SetPadding(FMargin(0.f, 8.f, 12.f, 0.f));
-		}
+
 	}
+	BuildEnhancementPresentation();
+	BuildSocketPresentation();
 	if (Btn_Execute) Btn_Execute->OnClicked().AddWeakLambda(this, [this]() { RequestExecute(); });
 	if (Btn_Unequip) Btn_Unequip->OnClicked().AddWeakLambda(this, [this]() { UnequipSelection(); });
 	if (Btn_Execute) Btn_Execute->OnLockClicked().AddWeakLambda(this, [this]() { if (Txt_Status) Txt_Status->SetText(ExecuteLockReason); });
@@ -527,14 +558,12 @@ void UKnightMaintenanceWidget::NativeOnInitialized()
 	if (Btn_ConfirmOk) Btn_ConfirmOk->OnClicked().AddWeakLambda(this, [this]()
 	{
 		if (bEquipmentPickerOpen) ConfirmEquipmentReplacement();
-		else if (bEnhancementPickerOpen) ConfirmEnhancementTarget();
 		else if (bMaterialSaleConfirmOpen) ConfirmMaterialSale();
 		else { ShowConfirm(false); ExecuteSelection(); }
 	});
 	if (Btn_ConfirmCancel) Btn_ConfirmCancel->OnClicked().AddWeakLambda(this, [this]()
 	{
 		if (bEquipmentPickerOpen) CloseEquipmentPicker(true);
-		else if (bEnhancementPickerOpen) CloseEnhancementPicker(true);
 		else if (bMaterialSaleConfirmOpen) CloseMaterialSaleConfirmation(true);
 		else ShowConfirm(false);
 	});
@@ -567,19 +596,80 @@ UknightProgressionSubsystem* UKnightMaintenanceWidget::GetProgression() const
 	return GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>() : nullptr;
 }
 
+void UKnightMaintenanceWidget::ApplyDestinationLayout()
+{
+	const bool bCrafting = Destination == EKnightMaintenanceDestination::Crafting;
+	const bool bEnhancement = Destination == EKnightMaintenanceDestination::Enhancement;
+	if (MaintenanceBackdrop)
+	{
+		MaintenanceBackdrop->SetVisibility(bCrafting ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+		MaintenanceBackdrop->SetBrushColor(FLinearColor(.003f, .008f, .016f, 1.f));
+		if (UCanvasPanelSlot* BackgroundSlot = Cast<UCanvasPanelSlot>(MaintenanceBackdrop->Slot))
+			BackgroundSlot->SetOffsets(FMargin(0.f));
+	}
+	const bool bSockets = Destination == EKnightMaintenanceDestination::Sockets;
+	if (SocketColumns) SocketColumns->SetVisibility(bSockets ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
+	if (SocketInputHints) SocketInputHints->SetVisibility(bSockets ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	if (EnhancementColumns) EnhancementColumns->SetVisibility(bEnhancement ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
+	if (EnhancementInputHints) EnhancementInputHints->SetVisibility(bEnhancement ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	if (UWidget* Hints = WidgetTree ? WidgetTree->FindWidget(TEXT("Panel_Hints")) : nullptr)
+		Hints->SetVisibility(!bCrafting ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
+	if (CraftingEdgeShade) CraftingEdgeShade->SetVisibility(bCrafting ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	if (!WidgetTree) return;
+	for (bool bRight : { false, true })
+	{
+		UBorder* Frame = Cast<UBorder>(WidgetTree->FindWidget(bRight ? TEXT("Frame_Panel_Right") : TEXT("Frame_Panel_Left")));
+		UCanvasPanelSlot* FrameSlot = Frame ? Cast<UCanvasPanelSlot>(Frame->Slot) : nullptr;
+		if (!FrameSlot) continue;
+		Frame->SetVisibility(!bCrafting ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
+		// Crafting preserves the live camera view between side panels. Other destinations keep their layout.
+		FrameSlot->SetAnchors(bRight ? FAnchors(bCrafting ? 0.69f : 0.5f, 0.f, 1.f, 1.f)
+			: FAnchors(0.f, 0.f, bCrafting ? 0.31f : 0.5f, 1.f));
+		FrameSlot->SetAlignment(FVector2D::ZeroVector);
+		FrameSlot->SetOffsets(bRight ? FMargin(12.f, 152.f, 48.f, 100.f) : FMargin(48.f, 152.f, 12.f, 100.f));
+		FSlateBrush Brush = Frame->Background;
+		// The full-viewport edge material is Crafting's only panel background. Drawing this
+		// border as well makes two hard-edged rectangles over the continuous fade.
+		Brush.DrawAs = bCrafting ? ESlateBrushDrawType::NoDrawType : ESlateBrushDrawType::RoundedBox;
+		FLinearColor Tint = Brush.TintColor.GetSpecifiedColor();
+		Tint.A = 0.72f;
+		Brush.TintColor = FSlateColor(Tint);
+		Frame->SetBrush(Brush);
+		// Crafting only: reclaim vertical whitespace without reducing text or button sizes.
+		Frame->SetPadding(bCrafting ? FMargin(22.f, 16.f, 22.f, 16.f) : FMargin(22.f, 22.f, 22.f, 20.f));
+	}
+	struct FVerticalSpacing { const TCHAR* Name; float CraftingTop; float OtherTop; };
+	for (const FVerticalSpacing& Spacing : {
+		FVerticalSpacing{ TEXT("Img_ListLine"), 10.f, 14.f },
+		FVerticalSpacing{ TEXT("List_Items"), 10.f, 12.f },
+		FVerticalSpacing{ TEXT("Row_InfoTabs"), 14.f, 20.f },
+		FVerticalSpacing{ TEXT("Img_InfoLine"), 8.f, 10.f },
+		FVerticalSpacing{ TEXT("Switcher_Info"), 10.f, 12.f },
+		FVerticalSpacing{ TEXT("Row_Actions"), 12.f, 16.f } })
+	{
+		if (UWidget* Widget = WidgetTree->FindWidget(Spacing.Name))
+			if (UVerticalBoxSlot* VerticalSlot = Cast<UVerticalBoxSlot>(Widget->Slot))
+				VerticalSlot->SetPadding(FMargin(0.f, bCrafting ? Spacing.CraftingTop : Spacing.OtherTop, 0.f, 0.f));
+	}
+}
+
 void UKnightMaintenanceWidget::Open(EKnightMaintenanceDestination InDestination, bool bStartInMaterials)
 {
 	SelectedSocketSlot = INDEX_NONE;
 	SelectedSocketItem = nullptr;
 	SelectedSocketCandidateId = FPrimaryAssetId();
+	SocketSelectionProfileId.Reset();
+	SelectedSocketAssignmentId = FPrimaryAssetId();
+	SocketFeedback = FText::GetEmpty();
 	SocketSlotButtons.Reset();
 	SocketCandidateButtons.Reset();
 	SocketCandidateIds.Reset();
 	bAwaitingSocketSave = false;
 	bSocketSaveFailed = false;
 	PendingSocketProfileId.Reset();
-	CloseEnhancementPicker(false);
 	EnhancementTargetId = FPrimaryAssetId();
+	EnhancementTargetProfileId.Reset();
+	EnhancementQuotedLevel = INDEX_NONE;
 	UpgradeResultMessage = FText::GetEmpty();
 	UpgradeSaveStatusMessage = FText::GetEmpty();
 	PendingUpgradeWeaponId = FPrimaryAssetId();
@@ -590,6 +680,7 @@ void UKnightMaintenanceWidget::Open(EKnightMaintenanceDestination InDestination,
 	CloseEquipmentPicker(false);
 	ShowConfirm(false);
 	Destination = InDestination;
+	ApplyDestinationLayout();
 	InfoTab = InDestination == EKnightMaintenanceDestination::Crafting ? InfoMaterial : InfoSpec;
 	if (Txt_Status) Txt_Status->SetText(FText::GetEmpty());
 	const bool bCrafting = Destination == EKnightMaintenanceDestination::Crafting;
@@ -599,7 +690,7 @@ void UKnightMaintenanceWidget::Open(EKnightMaintenanceDestination InDestination,
 			: LOCTEXT("SocketsDestination", "소켓"));
 	for (UCommonButtonBase* const Button : { Btn_Craft.Get(), Btn_Weapon.Get(), Btn_Armor.Get() })
 		if (Button) Button->SetVisibility(bCrafting ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-	if (CurrencyText) CurrencyText->SetVisibility(bCrafting ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	if (CurrencyText) CurrencyText->SetVisibility(ESlateVisibility::HitTestInvisible);
 	RefreshCurrency();
 	SetCategory(bCrafting ? (bStartInMaterials ? 4 : 0) : Destination == EKnightMaintenanceDestination::Enhancement ? 1 : 3, false);
 }
@@ -613,14 +704,18 @@ bool UKnightMaintenanceWidget::IsMaterialQuantityInputFocused() const
 void UKnightMaintenanceWidget::Close()
 {
 	SelectedSocketCandidateId = FPrimaryAssetId();
+	SocketSelectionProfileId.Reset();
+	SelectedSocketAssignmentId = FPrimaryAssetId();
+	SocketFeedback = FText::GetEmpty();
 	SocketSlotButtons.Reset();
 	SocketCandidateButtons.Reset();
 	SocketCandidateIds.Reset();
 	bAwaitingSocketSave = false;
 	bSocketSaveFailed = false;
 	PendingSocketProfileId.Reset();
-	CloseEnhancementPicker(false);
 	EnhancementTargetId = FPrimaryAssetId();
+	EnhancementTargetProfileId.Reset();
+	EnhancementQuotedLevel = INDEX_NONE;
 	bAwaitingUpgradeSave = false;
 	bUpgradeSaveFailed = false;
 	UpgradeSaveStatusMessage = FText::GetEmpty();
@@ -654,12 +749,11 @@ UWidget* UKnightMaintenanceWidget::GetFocusButton() const
 
 void UKnightMaintenanceWidget::SetCategory(int32 NewCategory, bool bFromPlayer)
 {
-	if ((bEquipmentPickerOpen || bEnhancementPickerOpen || bMaterialSaleConfirmOpen) && bFromPlayer) return;
+	if ((bEquipmentPickerOpen || bMaterialSaleConfirmOpen) && bFromPlayer) return;
 	if (Destination == EKnightMaintenanceDestination::Crafting && NewCategory != 0 && NewCategory != 2 && NewCategory != 4) return;
 	if (Destination == EKnightMaintenanceDestination::Enhancement && NewCategory != 1) return;
 	if (Destination == EKnightMaintenanceDestination::Sockets && NewCategory != 3) return;
 	CloseMaterialSaleConfirmation(false);
-	CloseEnhancementPicker(false);
 	CloseEquipmentPicker(false);
 	if (NewCategory != 4)
 	{
@@ -668,7 +762,12 @@ void UKnightMaintenanceWidget::SetCategory(int32 NewCategory, bool bFromPlayer)
 		MaterialSaleQuantity = 0;
 		MaterialSaleFeedback = FText::GetEmpty();
 	}
-	if (NewCategory != 1) EnhancementTargetId = FPrimaryAssetId();
+	if (NewCategory != 1)
+	{
+		EnhancementTargetId = FPrimaryAssetId();
+		EnhancementTargetProfileId.Reset();
+		EnhancementQuotedLevel = INDEX_NONE;
+	}
 	Category = NewCategory;
 	SelectedEquipmentSlot = FGameplayTag();
 	EquipmentSlotButtons.Reset();
@@ -705,7 +804,6 @@ void UKnightMaintenanceWidget::SetCategory(int32 NewCategory, bool bFromPlayer)
 	if (Switcher_Info)
 	{
 		if (Category == 4 && MaterialSalePage) Switcher_Info->SetActiveWidget(MaterialSalePage);
-		else if (Category == 1 && EnhancementDetailPage) Switcher_Info->SetActiveWidget(EnhancementDetailPage);
 		else Switcher_Info->SetActiveWidgetIndex(InfoTab);
 	}
 	RebuildList(false);
@@ -772,6 +870,7 @@ void UKnightMaintenanceWidget::RefreshMaterialContainer()
 		UKnightInventoryEntryWidget* const Row = CreateWidget<UKnightInventoryEntryWidget>(
 			GetOwningPlayer(), UKnightInventoryEntryWidget::StaticClass());
 		if (!Row) continue;
+		Row->UseMaintenancePresentation();
 		const FLinearColor NameColor = Material->bHardModeExclusive ? FLinearColor(FColor(225, 93, 93))
 			: Material->Rarity > 1 ? FLinearColor(FColor(97, 166, 239)) : White;
 		Row->Configure(Material, Stack.Count, false, NameColor);
@@ -890,6 +989,8 @@ void UKnightMaintenanceWidget::RefreshMaterialDetails()
 		UTexture2D* const Icon = Material ? Material->Icon.LoadSynchronous() : nullptr;
 		if (Icon) Img_Selected->SetBrushFromTexture(Icon);
 		Img_Selected->SetVisibility(Icon ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+		if (UWidget* Thumbnail = WidgetTree ? WidgetTree->FindWidget(TEXT("SelectedImageFrame")) : nullptr)
+			Thumbnail->SetVisibility(Icon ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 	}
 	if (Txt_Bonus) Txt_Bonus->SetVisibility(ESlateVisibility::Collapsed);
 	if (Btn_Unequip) Btn_Unequip->SetVisibility(ESlateVisibility::Collapsed);
@@ -1035,14 +1136,7 @@ void UKnightMaintenanceWidget::RebuildList(bool bRestoreFocus)
 {
 	if (!List_Items) return;
 	if (Category == 2) { RebuildEquipmentSlots(bRestoreFocus); return; }
-	if (Category == 1)
-	{
-		const bool bTargetFocused = bRestoreFocus && EnhancementTargetButton
-			&& (EnhancementTargetButton->HasAnyUserFocus() || EnhancementTargetButton->HasFocusedDescendants());
-		RebuildEnhancementTarget();
-		if (bTargetFocused && EnhancementTargetButton) EnhancementTargetButton->SetFocus();
-		return;
-	}
+	if (Category == 1) { RebuildEnhancementTarget(bRestoreFocus); return; }
 	if (Category == 3) { RebuildSocketList(); return; }
 	if (Category == 4) { RefreshMaterialContainer(); return; }
 	// 줄을 다시 만들면 포커스가 사라지므로 기억했다가 복원.
@@ -1125,165 +1219,110 @@ void UKnightMaintenanceWidget::RebuildList(bool bRestoreFocus)
 const UknightWeaponItemDefinition* UKnightMaintenanceWidget::GetEnhancementTarget(bool& bComplete) const
 {
 	bComplete = false;
-	if (!GetProgression()) return nullptr;
+	const UknightSaveSubsystem* Saves = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
+	if (!GetProgression() || !Saves || !Saves->HasSelectedSlot()) return nullptr;
 	TArray<FknightItemStack> Owned;
 	bComplete = GetProgression()->GetOwnedWeapons(Owned);
+	if (EnhancementTargetProfileId != Saves->GetActiveSlotId()) return nullptr;
 	for (const FknightItemStack& Stack : Owned)
 		if (Stack.Count > 0 && Stack.Item && Stack.Item->GetPrimaryAssetId() == EnhancementTargetId)
 			return Cast<UknightWeaponItemDefinition>(Stack.Item);
 	return nullptr;
 }
 
-void UKnightMaintenanceWidget::RebuildEnhancementTarget()
+void UKnightMaintenanceWidget::RebuildEnhancementTarget(bool bRestoreFocus)
 {
-	if (!List_Items || !WidgetTree) return;
-	List_Items->ClearChildren();
-	Entries.Reset();
-	EquipmentSlotButtons.Reset();
-	EnhancementTargetButton = nullptr;
+	if (!EnhancementOwnedList || !WidgetTree) return;
+	FPrimaryAssetId FocusedId;
+	for (const UKnightMaintenanceEntryWidget* Row : EnhancementWeaponRows)
+		if (bRestoreFocus && Row && Row->GetPart() && (Row->HasAnyUserFocus() || Row->HasFocusedDescendants()))
+			FocusedId = Row->GetPart()->GetPrimaryAssetId();
+	const float Scroll = EnhancementOwnedList->GetScrollOffset();
+	EnhancementOwnedList->ClearChildren(); EnhancementWeaponRows.Reset(); EnhancementTargetButton = nullptr;
 	bool bComplete = false;
-	const UknightWeaponItemDefinition* const Weapon = GetEnhancementTarget(bComplete);
+	const UknightWeaponItemDefinition* Weapon = GetEnhancementTarget(bComplete);
 	if (bComplete && EnhancementTargetId.IsValid() && !Weapon)
 	{
-		EnhancementTargetId = FPrimaryAssetId();
+		EnhancementTargetId = FPrimaryAssetId(); EnhancementTargetProfileId.Reset(); EnhancementQuotedLevel = INDEX_NONE;
 		UpgradeResultMessage = FText::GetEmpty();
 	}
-	const TSubclassOf<UCommonButtonBase> ButtonClass = LoadClass<UCommonButtonBase>(nullptr,
-		TEXT("/Game/Knight/UI/Common/WBP_KnightButton.WBP_KnightButton_C"));
-	if (ButtonClass && GetOwningPlayer())
+	UknightProgressionSubsystem* Progression = GetProgression();
+	const UknightSaveSubsystem* Saves = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
+	const FString Profile = Saves ? Saves->GetActiveSlotId() : FString();
+	TArray<FknightItemStack> Owned;
+	if (Progression) bComplete = Progression->GetOwnedWeapons(Owned);
+	const auto RowClass = UKnightMaintenanceEntryWidget::GetSharedWidgetClass();
+	for (const FknightItemStack& Stack : Owned)
 	{
-		EnhancementTargetButton = CreateWidget<UCommonButtonBase>(GetOwningPlayer(), ButtonClass,
-			TEXT("Phase7_EnhancementTarget"));
-		if (EnhancementTargetButton)
+		const UknightWeaponItemDefinition* Item = Cast<UknightWeaponItemDefinition>(Stack.Item);
+		if (!Item || Stack.Count <= 0 || !RowClass) continue;
+		UKnightMaintenanceEntryWidget* Row = CreateWidget<UKnightMaintenanceEntryWidget>(GetOwningPlayer(), RowClass);
+		if (!Row) continue;
+		Row->SetEntry(Item, nullptr, EKnightMaintenanceEntryState::Owned, Stack.Count);
+		const FPrimaryAssetId Id = Item->GetPrimaryAssetId();
+		Row->OnClicked().AddWeakLambda(this, [this, Id, Profile]()
 		{
-			SetButtonLabel(EnhancementTargetButton, Weapon
-				? FText::Format(LOCTEXT("EnhancementTargetFilled", "강화 대상 · {0}"), PartName(Weapon))
-				: EnhancementTargetId.IsValid() ? LOCTEXT("EnhancementTargetUnresolved", "강화 대상 확인 불가")
-				: LOCTEXT("EnhancementTargetEmpty", "강화 대상 선택 · 빈 슬롯"));
-			EnhancementTargetButton->SetIsSelectable(true);
-			EnhancementTargetButton->SetIsInteractableWhenSelected(true);
-			EnhancementTargetButton->OnClicked().AddWeakLambda(this, [this]() { OpenEnhancementPicker(); });
-			if (UScrollBoxSlot* const Row = Cast<UScrollBoxSlot>(List_Items->AddChild(EnhancementTargetButton)))
-				Row->SetPadding(FMargin(18.f, 48.f, 18.f, 8.f));
+			const auto* Current = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
+			if (Current && Current->GetActiveSlotId() == Profile) SelectEnhancementWeapon(Id);
+		});
+		if (UTextBlock* Level = Cast<UTextBlock>(Row->GetWidgetFromName(TEXT("Txt_State"))))
+		{
+			if (UCommonTextBlock* StyledLevel = Cast<UCommonTextBlock>(Level)) StyledLevel->SetStyle(nullptr);
+			FSlateFontInfo Font = Level->GetFont(); Font.Size = 16; Level->SetFont(Font);
+			Level->SetText(FText::Format(LOCTEXT("OwnedUpgradeLevel", "+{0}"), Progression->GetUpgradeLevel(Item)));
+			Level->SetColorAndOpacity(FSlateColor(FLinearColor(FColor(0xF1, 0xBD, 0x5E))));
 		}
-	}
-	TArray<FknightItemStack> Owned;
-	if (UknightProgressionSubsystem* const Progression = GetProgression()) Progression->GetOwnedWeapons(Owned);
-	if (Txt_Status) Txt_Status->SetText(!bComplete
-		? LOCTEXT("EnhancementOwnedIncomplete", "보유 무기 정의를 모두 확인할 수 없습니다. 저장 기록은 유지됩니다.")
-		: Owned.IsEmpty() ? LOCTEXT("EnhancementNoWeapons", "보유 무기가 없습니다.") : FText::GetEmpty());
-	RefreshEnhancementDetails();
-	if (bEnhancementPickerOpen) RebuildEnhancementPicker();
-}
-
-void UKnightMaintenanceWidget::OpenEnhancementPicker()
-{
-	if (Category != 1 || bEnhancementPickerOpen || bBusy || !Panel_Confirm || !EquipmentPickerList) return;
-	const UknightSaveSubsystem* const Saves = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
-	if (!Saves || !Saves->HasSelectedSlot()) return;
-	bEnhancementPickerOpen = true;
-	EnhancementCandidateId = FPrimaryAssetId();
-	EnhancementPickerProfileId = Saves->GetActiveSlotId();
-	if (UWidget* const Frame = EquipmentPickerList->GetParent()) Frame->SetVisibility(ESlateVisibility::Visible);
-	if (Txt_ConfirmTitle) Txt_ConfirmTitle->SetText(LOCTEXT("EnhancementPickerTitle", "강화 대상 무기"));
-	SetButtonLabel(Btn_ConfirmOk, LOCTEXT("EnhancementPickerChoose", "대상 선택"));
-	RebuildEnhancementPicker();
-	ShowConfirm(true);
-	if (!EnhancementPickerButtons.IsEmpty()) EnhancementPickerButtons[0]->SetFocus();
-	else if (Btn_ConfirmCancel) Btn_ConfirmCancel->SetFocus();
-}
-
-void UKnightMaintenanceWidget::RebuildEnhancementPicker()
-{
-	if (!bEnhancementPickerOpen || !EquipmentPickerList || !WidgetTree) return;
-	EquipmentPickerList->ClearChildren();
-	EnhancementPickerButtons.Reset();
-	EnhancementPickerIds.Reset();
-	TArray<FknightItemStack> Owned;
-	const bool bComplete = GetProgression() && GetProgression()->GetOwnedWeapons(Owned);
-	if (EnhancementCandidateId.IsValid() && !Owned.ContainsByPredicate([this](const FknightItemStack& Stack)
-	{
-		return Stack.Count > 0 && Stack.Item && Stack.Item->GetPrimaryAssetId() == EnhancementCandidateId;
-	})) EnhancementCandidateId = FPrimaryAssetId();
-	const TSubclassOf<UCommonButtonBase> ButtonClass = LoadClass<UCommonButtonBase>(nullptr,
-		TEXT("/Game/Knight/UI/Common/WBP_KnightButton.WBP_KnightButton_C"));
-	if (ButtonClass && GetOwningPlayer())
-		for (const FknightItemStack& Stack : Owned)
+		if (UBorder* Badge = Cast<UBorder>(Row->GetWidgetFromName(TEXT("Border_Badge"))))
 		{
-			const UknightWeaponItemDefinition* const Weapon = Cast<UknightWeaponItemDefinition>(Stack.Item);
-			if (!Weapon || Stack.Count <= 0) continue;
-			const FPrimaryAssetId Id = Weapon->GetPrimaryAssetId();
-			UCommonButtonBase* const Button = CreateWidget<UCommonButtonBase>(GetOwningPlayer(), ButtonClass);
-			if (!Button) continue;
-			SetButtonLabel(Button, FText::Format(LOCTEXT("EnhancementPickerRow", "{0} · +{1} · 보유 {2}"),
-				PartName(Weapon), GetProgression()->GetUpgradeLevel(Weapon), Stack.Count));
-			Button->SetIsSelectable(true);
-			Button->SetIsInteractableWhenSelected(true);
-			Button->OnClicked().AddWeakLambda(this, [this, Id]()
+			FSlateBrush Brush = Badge->Background; Brush.DrawAs = ESlateBrushDrawType::NoDrawType; Badge->SetBrush(Brush);
+		}
+		UImage* Icon = Cast<UImage>(Row->GetWidgetFromName(TEXT("Img_Icon")));
+		if (USizeBox* IconFrame = Cast<USizeBox>(Row->GetWidgetFromName(TEXT("IconFrame"))))
+		{
+			IconFrame->SetWidthOverride(76.f); IconFrame->SetHeightOverride(76.f);
+			IconFrame->SetVisibility(Item->Icon.IsNull() ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
+		}
+		if (Icon)
+			if (UBorder* IconBorder = Cast<UBorder>(Icon->GetParent()))
 			{
-				if (!bEnhancementPickerOpen) return;
-				EnhancementCandidateId = Id;
-				for (int32 Index = 0; Index < EnhancementPickerButtons.Num() && Index < EnhancementPickerIds.Num(); ++Index)
-					SetSelected(EnhancementPickerButtons[Index], EnhancementPickerIds[Index] == Id);
-				SetButtonLocked(Btn_ConfirmOk, false, FText::GetEmpty());
-			});
-			SetSelected(Button, EnhancementCandidateId == Id);
-			if (UScrollBoxSlot* const Row = Cast<UScrollBoxSlot>(EquipmentPickerList->AddChild(Button)))
-				Row->SetPadding(FMargin(0.f, 0.f, 10.f, 6.f));
-			EnhancementPickerButtons.Add(Button);
-			EnhancementPickerIds.Add(Id);
-		}
-	if (!bComplete || Owned.IsEmpty())
-	{
-		UCommonTextBlock* const Message = NewRowText(WidgetTree, BodyStyle(), ETextJustify::Left);
-		Message->SetText(!bComplete ? LOCTEXT("EnhancementPickerIncomplete", "일부 무기 정의를 확인할 수 없습니다. 먼저 에셋을 확인하세요.")
-			: LOCTEXT("EnhancementPickerEmpty", "보유 무기가 없습니다."));
-		EquipmentPickerList->AddChild(Message);
+				Icon->RemoveFromParent();
+				UScaleBox* Fit = Row->WidgetTree->ConstructWidget<UScaleBox>(); Fit->SetStretch(EStretch::ScaleToFit);
+				IconBorder->SetContent(Fit); Fit->AddChild(Icon);
+				if (UTexture2D* Texture = Item->Icon.LoadSynchronous()) Icon->SetBrushFromTexture(Texture, true);
+			}
+		if (UScrollBoxSlot* Cell = Cast<UScrollBoxSlot>(EnhancementOwnedList->AddChild(Row))) Cell->SetPadding(FMargin(0.f, 0.f, 8.f, 10.f));
+		EnhancementWeaponRows.Add(Row);
+		SetSelected(Row, Id == EnhancementTargetId);
+		if (!EnhancementTargetButton || Id == EnhancementTargetId) EnhancementTargetButton = Row;
+		if (Id == FocusedId) Row->SetFocus();
 	}
-	if (Txt_ConfirmBody) Txt_ConfirmBody->SetText(LOCTEXT("EnhancementPickerHelp", "보유 무기를 선택하세요. 대상 지정은 장착이나 저장을 변경하지 않습니다."));
-	SetButtonLocked(Btn_ConfirmOk, !bComplete || !EnhancementCandidateId.IsValid(),
-		LOCTEXT("EnhancementPickerSelectFirst", "보유 무기를 선택해 주세요."));
+	EnhancementOwnedList->SetScrollOffset(Scroll);
+	if (EnhancementListStatus) EnhancementListStatus->SetText(!bComplete
+		? LOCTEXT("EnhancementOwnedIncomplete", "보유 무기 정의를 모두 확인할 수 없습니다. 저장 기록은 유지됩니다.")
+		: Owned.IsEmpty() ? LOCTEXT("EnhancementNoWeapons", "보유 무기가 없습니다.")
+		: LOCTEXT("EnhancementSelectFromList", "강화할 무기를 선택하세요."));
+	RefreshEnhancementDetails();
 }
 
-void UKnightMaintenanceWidget::CloseEnhancementPicker(bool bRestoreFocus)
+void UKnightMaintenanceWidget::SelectEnhancementWeapon(FPrimaryAssetId WeaponId)
 {
-	if (!bEnhancementPickerOpen) return;
-	bEnhancementPickerOpen = false;
-	EnhancementCandidateId = FPrimaryAssetId();
-	EnhancementPickerProfileId.Reset();
-	EnhancementPickerButtons.Reset();
-	EnhancementPickerIds.Reset();
-	if (EquipmentPickerList)
-	{
-		EquipmentPickerList->ClearChildren();
-		if (UWidget* const Frame = EquipmentPickerList->GetParent()) Frame->SetVisibility(ESlateVisibility::Collapsed);
-	}
-	ShowConfirm(false);
-	SetButtonLabel(Btn_ConfirmOk, LOCTEXT("ConfirmCraftLabel", "제작"));
-	if (bRestoreFocus && EnhancementTargetButton) EnhancementTargetButton->SetFocus();
-}
-
-void UKnightMaintenanceWidget::ConfirmEnhancementTarget()
-{
-	if (!bEnhancementPickerOpen || bBusy || !EnhancementCandidateId.IsValid()) return;
-	const UknightSaveSubsystem* const Saves = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
+	if (Category != 1 || bBusy || (Panel_Confirm && Panel_Confirm->IsVisible())) return;
+	const auto* Saves = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
 	TArray<FknightItemStack> Owned;
-	const bool bComplete = GetProgression() && GetProgression()->GetOwnedWeapons(Owned);
-	const bool bStillOwned = Owned.ContainsByPredicate([this](const FknightItemStack& Stack)
-	{
-		return Stack.Count > 0 && Stack.Item && Stack.Item->GetPrimaryAssetId() == EnhancementCandidateId;
-	});
-	if (!Saves || Saves->GetActiveSlotId() != EnhancementPickerProfileId || !bComplete || !bStillOwned)
-	{
-		RebuildEnhancementPicker();
-		return;
-	}
-	EnhancementTargetId = EnhancementCandidateId;
-	UpgradeResultMessage = FText::GetEmpty();
-	UpgradeSaveStatusMessage = FText::GetEmpty();
-	CloseEnhancementPicker(false);
-	RebuildEnhancementTarget();
-	if (EnhancementTargetButton) EnhancementTargetButton->SetFocus();
+	if (!Saves || !Saves->HasSelectedSlot() || !GetProgression() || !GetProgression()->GetOwnedWeapons(Owned)) return;
+	const bool bOwned = Owned.ContainsByPredicate([WeaponId](const FknightItemStack& Stack)
+		{ return Stack.Count > 0 && Stack.Item && Stack.Item->IsA<UknightWeaponItemDefinition>() && Stack.Item->GetPrimaryAssetId() == WeaponId; });
+	if (!bOwned) return;
+	EnhancementTargetId = WeaponId; EnhancementTargetProfileId = Saves->GetActiveSlotId();
+	UpgradeResultMessage = FText::GetEmpty(); UpgradeSaveStatusMessage = FText::GetEmpty();
+	for (UKnightMaintenanceEntryWidget* Row : EnhancementWeaponRows)
+		if (Row && Row->GetPart())
+		{
+			const bool bSelected = Row->GetPart()->GetPrimaryAssetId() == WeaponId;
+			SetSelected(Row, bSelected); if (bSelected) EnhancementTargetButton = Row;
+		}
+	RefreshEnhancementDetails();
+	if (EnhancementDetailPage) EnhancementDetailPage->ScrollToStart();
 }
 
 void UKnightMaintenanceWidget::RebuildEquipmentSlots(bool bRestoreFocus)
@@ -1315,12 +1354,11 @@ void UKnightMaintenanceWidget::RebuildEquipmentSlots(bool bRestoreFocus)
 		UCommonButtonBase* const Button = CreateWidget<UCommonButtonBase>(GetOwningPlayer(), ButtonClass);
 		if (!Button) continue;
 		SetButtonLabel(Button, FText::Format(LOCTEXT("EquipmentSlotRow", "{0}  ·  {1}"), MainEquipmentSlotLabel(Tag), PartLabel));
-		Button->SetIsSelectable(true);
-		Button->SetIsInteractableWhenSelected(true);
+		KnightMaintenancePresentation::ConfigureButton(Button, true);
 		Button->OnClicked().AddWeakLambda(this, [this, Tag]() { SelectEquipmentSlot(Tag); });
 		SetSelected(Button, SelectedEquipmentSlot == Tag);
 		if (UScrollBoxSlot* const Row = Cast<UScrollBoxSlot>(List_Items->AddChild(Button)))
-			Row->SetPadding(FMargin(0.f, 0.f, 10.f, 6.f));
+			Row->SetPadding(FMargin(24.f, 6.f, 24.f, 6.f));
 		EquipmentSlotButtons.Add(Button);
 	}
 	if (Txt_Status && !bComplete) Txt_Status->SetText(LOCTEXT("EquipmentLoadIncomplete", "일부 장비 데이터를 확인할 수 없습니다. 저장 슬롯과 에셋을 확인하세요."));
@@ -1404,8 +1442,7 @@ void UKnightMaintenanceWidget::RebuildEquipmentPicker()
 			if (!Button) continue;
 			SetButtonLabel(Button, FText::Format(LOCTEXT("EquipmentPickerRow", "{0}  ·  보유 {1}"),
 				PartName(Part), GetProgression() ? GetProgression()->GetItemCount(Part) : 0));
-			Button->SetIsSelectable(true);
-			Button->SetIsInteractableWhenSelected(true);
+			KnightMaintenancePresentation::ConfigureButton(Button, true);
 			TWeakObjectPtr<const UknightPartItemDefinition> WeakPart(Part);
 			Button->OnClicked().AddWeakLambda(this, [this, WeakPart]()
 			{
@@ -1514,147 +1551,6 @@ void UKnightMaintenanceWidget::ConfirmEquipmentReplacement()
 	ExecuteSelection();
 }
 
-void UKnightMaintenanceWidget::RebuildSocketList()
-{
-	if (!List_Items || !WidgetTree) return;
-	int32 FocusedSlot = INDEX_NONE;
-	FPrimaryAssetId FocusedCandidate;
-	for (int32 Index = 0; Index < SocketSlotButtons.Num(); ++Index)
-		if (SocketSlotButtons[Index] && (SocketSlotButtons[Index]->HasAnyUserFocus() || SocketSlotButtons[Index]->HasFocusedDescendants()))
-			FocusedSlot = Index;
-	for (int32 Index = 0; Index < SocketCandidateButtons.Num() && Index < SocketCandidateIds.Num(); ++Index)
-		if (SocketCandidateButtons[Index] && (SocketCandidateButtons[Index]->HasAnyUserFocus() || SocketCandidateButtons[Index]->HasFocusedDescendants()))
-			FocusedCandidate = SocketCandidateIds[Index];
-	List_Items->ClearChildren();
-	Entries.Reset();
-	SocketListButtons.Reset();
-	SocketSlotButtons.Reset();
-	SocketCandidateButtons.Reset();
-	SocketCandidateIds.Reset();
-	UknightProgressionSubsystem* const Progression = GetProgression();
-	const int32 Slots = Progression ? Progression->GetUnlockedSharedSocketSlots() : 0;
-	TArray<FKnightSocketAssignment> Assignments;
-	const bool bAssignmentsComplete = Progression && Progression->GetSocketAssignments(Assignments);
-	if (SelectedSocketSlot >= FMath::Min(Slots, 3) || SelectedSocketSlot < INDEX_NONE)
-	{
-		SelectedSocketSlot = INDEX_NONE;
-		SelectedSocketItem = nullptr;
-		SelectedSocketCandidateId = FPrimaryAssetId();
-	}
-	const TSubclassOf<UCommonButtonBase> ButtonClass = LoadClass<UCommonButtonBase>(nullptr,
-		TEXT("/Game/Knight/UI/Common/WBP_KnightButton.WBP_KnightButton_C"));
-	if (!ButtonClass || !GetOwningPlayer()) return;
-	auto AddButton = [this, ButtonClass](FName Name, const FText& Label, TFunction<void()> OnClick,
-		bool bSelected, bool bLocked, UTexture2D* Icon) -> UCommonButtonBase*
-	{
-		UCommonButtonBase* const Button = CreateWidget<UCommonButtonBase>(GetOwningPlayer(), ButtonClass, Name);
-		if (!Button) return nullptr;
-		SetButtonLabel(Button, Label);
-		Button->SetIsSelectable(true);
-		Button->SetIsInteractableWhenSelected(true);
-		SetSelected(Button, bSelected);
-		Button->OnClicked().AddWeakLambda(this, [Click = MoveTemp(OnClick)]() { Click(); });
-		if (bLocked) SetButtonLocked(Button, true, LOCTEXT("SocketLockedReason", "이 소켓 칸은 아직 해금되지 않았습니다."));
-		UWidget* RowContent = Button;
-		if (Icon)
-		{
-			UHorizontalBox* const Row = WidgetTree->ConstructWidget<UHorizontalBox>();
-			USizeBox* const IconFrame = WidgetTree->ConstructWidget<USizeBox>();
-			IconFrame->SetWidthOverride(40.f);
-			IconFrame->SetHeightOverride(40.f);
-			UImage* const Image = WidgetTree->ConstructWidget<UImage>();
-			Image->SetBrushFromTexture(Icon);
-			IconFrame->AddChild(Image);
-			Row->AddChildToHorizontalBox(IconFrame)->SetPadding(FMargin(0.f, 0.f, 8.f, 0.f));
-			Row->AddChildToHorizontalBox(Button)->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-			RowContent = Row;
-		}
-		if (UScrollBoxSlot* const ScrollSlot = Cast<UScrollBoxSlot>(List_Items->AddChild(RowContent)))
-			ScrollSlot->SetPadding(FMargin(0.f, 0.f, 10.f, 6.f));
-		SocketListButtons.Add(Button);
-		return Button;
-	};
-	for (int32 Index = 0; Index < 3; ++Index)
-	{
-		const bool bUnlocked = Index < Slots;
-		const FKnightSocketAssignment* const Assignment = Assignments.IsValidIndex(Index) ? &Assignments[Index] : nullptr;
-		const bool bUnresolved = bUnlocked && Assignment && Assignment->ItemId.IsValid() && !Assignment->Item;
-		const UknightSocketItemDefinition* const Equipped = Assignment ? Assignment->Item.Get() : nullptr;
-		const FText State = !bUnlocked ? LOCTEXT("SocketLocked", "잠김")
-			: bUnresolved ? LOCTEXT("SocketUnresolved", "장착 정보 확인 불가")
-			: Equipped ? (Equipped->DisplayName.IsEmpty() ? FText::FromString(Equipped->GetName()) : Equipped->DisplayName)
-			: LOCTEXT("SocketEmpty", "빈 칸");
-		UCommonButtonBase* const Button = AddButton(FName(*FString::Printf(TEXT("Phase8_SocketSlot%d"), Index)),
-			FText::Format(LOCTEXT("SocketSlotRow", "소켓 {0} · {1}"), Index + 1, State),
-			[this, Index]() { SelectSocketSlot(Index); }, SelectedSocketSlot == Index, !bUnlocked,
-			Equipped ? Equipped->Icon.LoadSynchronous() : nullptr);
-		SocketSlotButtons.Add(Button);
-	}
-	if (SelectedSocketSlot == INDEX_NONE)
-	{
-		UCommonTextBlock* const Prompt = NewRowText(WidgetTree, BodyStyle(), ETextJustify::Left);
-		Prompt->SetText(LOCTEXT("SocketSelectPrompt", "해금된 소켓 칸을 선택하세요. 같은 칸을 다시 누르면 전체 효과로 돌아갑니다."));
-		Prompt->SetAutoWrapText(true);
-		List_Items->AddChild(Prompt);
-	}
-	TArray<FknightItemStack> Owned;
-	const bool bOwnedComplete = Progression && Progression->GetOwnedSockets(Owned);
-	Owned.Sort([](const FknightItemStack& A, const FknightItemStack& B)
-	{
-		return A.Item && B.Item ? A.Item->DisplayName.ToString() < B.Item->DisplayName.ToString() : A.Item != nullptr;
-	});
-	SelectedSocketItem = nullptr;
-	for (const FknightItemStack& Stack : Owned)
-		if (Stack.Count > 0 && Stack.Item && Stack.Item->GetPrimaryAssetId() == SelectedSocketCandidateId)
-			SelectedSocketItem = Cast<UknightSocketItemDefinition>(Stack.Item);
-	if (!SelectedSocketItem) SelectedSocketCandidateId = FPrimaryAssetId();
-	if (SelectedSocketSlot != INDEX_NONE)
-	{
-		if (!bOwnedComplete)
-		{
-			UCommonTextBlock* const Warning = NewRowText(WidgetTree, BodyStyle(), ETextJustify::Left);
-			Warning->SetText(LOCTEXT("SocketOwnedUnresolved", "보유 소켓 정의 일부를 확인할 수 없습니다. 장착은 보류됩니다."));
-			Warning->SetAutoWrapText(true);
-			List_Items->AddChild(Warning);
-		}
-		if (Owned.IsEmpty())
-		{
-			UCommonTextBlock* const Empty = NewRowText(WidgetTree, BodyStyle(), ETextJustify::Left);
-			Empty->SetText(LOCTEXT("SocketNoOwned", "보유 소켓 아이템이 없습니다."));
-			List_Items->AddChild(Empty);
-		}
-		for (const FknightItemStack& Stack : Owned)
-		{
-			const UknightSocketItemDefinition* const Item = Cast<UknightSocketItemDefinition>(Stack.Item);
-			if (!Item || Stack.Count <= 0) continue;
-			const int32 Available = Progression->GetAvailableSocketItemCount(Item);
-			const FText Name = Item->DisplayName.IsEmpty() ? FText::FromString(Item->GetName()) : Item->DisplayName;
-			UCommonButtonBase* const Button = AddButton(FName(*FString::Printf(TEXT("Phase8_SocketCandidate%d"), SocketCandidateButtons.Num())),
-				FText::Format(LOCTEXT("SocketOwnedRow", "{0} · 보유 {1} / 사용 가능 {2}\n{3}"),
-					Name, Stack.Count, Available, SocketItemEffectText(Item)),
-				[this, Item]() { SelectSocketCandidate(Item); }, SelectedSocketCandidateId == Item->GetPrimaryAssetId(),
-				false, Item->Icon.LoadSynchronous());
-			SocketCandidateButtons.Add(Button);
-			SocketCandidateIds.Add(Item->GetPrimaryAssetId());
-		}
-	}
-	if (!bAssignmentsComplete && Txt_Status)
-		Txt_Status->SetText(LOCTEXT("SocketAssignmentsUnresolved", "장착 소켓 정보를 모두 확인할 수 없습니다. 변경은 보류됩니다."));
-	else if (Slots > 3 && Txt_Status)
-		Txt_Status->SetText(LOCTEXT("SocketOverflowReadonly", "저장된 소켓 칸이 3개를 초과합니다. 모든 효과는 유지되며 이 화면에서는 변경할 수 없습니다."));
-	RefreshTabButtons();
-	RefreshSocketDetails();
-	if (FocusedSlot >= 0 && SocketSlotButtons.IsValidIndex(FocusedSlot) && SocketSlotButtons[FocusedSlot])
-		SocketSlotButtons[FocusedSlot]->SetFocus();
-	else if (FocusedCandidate.IsValid())
-		for (int32 Index = 0; Index < SocketCandidateIds.Num(); ++Index)
-			if (SocketCandidateIds[Index] == FocusedCandidate && SocketCandidateButtons[Index])
-			{
-				SocketCandidateButtons[Index]->SetFocus();
-				break;
-			}
-}
-
 bool UKnightMaintenanceWidget::CanEditSocketProfile() const
 {
 	const UknightProgressionSubsystem* const Progression = GetProgression();
@@ -1681,35 +1577,36 @@ bool UKnightMaintenanceWidget::CanEquipSocketCandidate(int32 SlotIndex, const Uk
 
 void UKnightMaintenanceWidget::SelectSocketSlot(int32 SlotIndex)
 {
-	const UknightProgressionSubsystem* const Progression = GetProgression();
-	if (!Progression || SlotIndex < 0 || SlotIndex >= 3
-		|| SlotIndex >= Progression->GetUnlockedSharedSocketSlots()) return;
+	const auto* Saves = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
+	const UknightProgressionSubsystem* Progression = GetProgression();
+	if (Category != 3 || bBusy || (Panel_Confirm && Panel_Confirm->IsVisible()) || !Saves || !Saves->HasSelectedSlot()
+		|| !Progression || SlotIndex < 0 || SlotIndex >= 3 || SlotIndex >= Progression->GetUnlockedSharedSocketSlots()) return;
+	SocketSelectionProfileId = Saves->GetActiveSlotId();
 	SelectedSocketSlot = SelectedSocketSlot == SlotIndex ? INDEX_NONE : SlotIndex;
-	SelectedSocketCandidateId = FPrimaryAssetId();
-	SelectedSocketItem = nullptr;
-	if (Txt_Status) Txt_Status->SetText(FText::GetEmpty());
+	SocketFeedback = FText::GetEmpty();
 	RebuildSocketList();
 }
 
 void UKnightMaintenanceWidget::SelectSocketCandidate(const UknightSocketItemDefinition* Item)
 {
-	const UknightProgressionSubsystem* const Progression = GetProgression();
-	if (!Item || !Progression || SelectedSocketSlot < 0 || SelectedSocketSlot >= 3
-		|| SelectedSocketSlot >= Progression->GetUnlockedSharedSocketSlots()) return;
+	const auto* Saves = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
+	const UknightProgressionSubsystem* Progression = GetProgression();
+	if (Category != 3 || bBusy || (Panel_Confirm && Panel_Confirm->IsVisible()) || !Saves || !Saves->HasSelectedSlot() || !Item || !Progression) return;
 	TArray<FknightItemStack> Owned;
 	if (!Progression->GetOwnedSockets(Owned) || !Owned.ContainsByPredicate([Item](const FknightItemStack& Stack)
 	{
 		return Stack.Count > 0 && Stack.Item == Item;
 	})) return;
+	SocketSelectionProfileId = Saves->GetActiveSlotId();
 	SelectedSocketCandidateId = Item->GetPrimaryAssetId();
 	SelectedSocketItem = Item;
-	if (Txt_Status) Txt_Status->SetText(FText::GetEmpty());
+	SocketFeedback = FText::GetEmpty();
 	RebuildSocketList();
 }
 
 void UKnightMaintenanceWidget::RequestSocketEquip()
 {
-	if (bBusy || Category != 3 || SelectedSocketSlot < 0 || SelectedSocketSlot >= 3) return;
+	if (bBusy || Category != 3 || (Panel_Confirm && Panel_Confirm->IsVisible()) || SelectedSocketSlot < 0 || SelectedSocketSlot >= 3) return;
 	UknightProgressionSubsystem* const Progression = GetProgression();
 	UknightSaveSubsystem* const Saves = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
 	const UknightSocketItemDefinition* const Candidate = SelectedSocketItem.Get();
@@ -1719,11 +1616,15 @@ void UKnightMaintenanceWidget::RequestSocketEquip()
 	{
 		return Stack.Count > 0 && Stack.Item == Candidate;
 	});
-	if (!Saves || !Saves->CanStartAtomicTransaction() || !CanEditSocketProfile() || !bOwnedComplete
+	TArray<FKnightSocketAssignment> CurrentAssignments;
+	const bool bSameAssignment = Progression && Progression->GetSocketAssignments(CurrentAssignments)
+		&& CurrentAssignments.IsValidIndex(SelectedSocketSlot)
+		&& CurrentAssignments[SelectedSocketSlot].ItemId == SelectedSocketAssignmentId;
+	if (!bSameAssignment || !Saves || Saves->GetActiveSlotId() != SocketSelectionProfileId || !Saves->CanStartAtomicTransaction() || !CanEditSocketProfile() || !bOwnedComplete
 		|| !bStillOwned || Candidate->GetPrimaryAssetId() != SelectedSocketCandidateId
 		|| !CanEquipSocketCandidate(SelectedSocketSlot, Candidate))
 	{
-		if (Txt_Status) Txt_Status->SetText(LOCTEXT("SocketEquipRejected", "소켓 장착 불가: 슬롯·보유·중복·저장 상태를 확인하세요."));
+		SocketFeedback = LOCTEXT("SocketEquipRejected", "소켓 장착 불가: 슬롯·보유·중복·저장 상태를 확인하세요.");
 		RebuildSocketList();
 		return;
 	}
@@ -1738,21 +1639,25 @@ void UKnightMaintenanceWidget::RequestSocketEquip()
 		bSocketSaveFailed = false;
 		PendingSocketProfileId = Saves->GetActiveSlotId();
 	}
-	if (Txt_Status) Txt_Status->SetText(bSuccess ? LOCTEXT("SocketEquipped", "소켓을 장착했습니다.")
-		: LOCTEXT("SocketEquipRejected", "소켓 장착 불가: 슬롯·보유·중복·저장 상태를 확인하세요."));
+	SocketFeedback = bSuccess ? LOCTEXT("SocketEquipped", "소켓을 장착했습니다.")
+		: LOCTEXT("SocketEquipRejected", "소켓 장착 불가: 슬롯·보유·중복·저장 상태를 확인하세요.");
 	RebuildSocketList();
 }
 
 void UKnightMaintenanceWidget::RequestSocketUnequip()
 {
-	if (bBusy || Category != 3 || SelectedSocketSlot < 0 || SelectedSocketSlot >= 3) return;
+	if (bBusy || Category != 3 || (Panel_Confirm && Panel_Confirm->IsVisible()) || SelectedSocketSlot < 0 || SelectedSocketSlot >= 3) return;
 	UknightProgressionSubsystem* const Progression = GetProgression();
 	UknightSaveSubsystem* const Saves = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
-	if (!Saves || !Saves->CanStartAtomicTransaction() || !CanEditSocketProfile() || !Progression
+	TArray<FKnightSocketAssignment> CurrentAssignments;
+	const bool bSameAssignment = Progression && Progression->GetSocketAssignments(CurrentAssignments)
+		&& CurrentAssignments.IsValidIndex(SelectedSocketSlot)
+		&& CurrentAssignments[SelectedSocketSlot].ItemId == SelectedSocketAssignmentId;
+	if (!bSameAssignment || !Saves || Saves->GetActiveSlotId() != SocketSelectionProfileId || !Saves->CanStartAtomicTransaction() || !CanEditSocketProfile() || !Progression
 		|| SelectedSocketSlot >= Progression->GetUnlockedSharedSocketSlots()
 		|| !Progression->GetEquippedSocketItem(SelectedSocketSlot))
 	{
-		if (Txt_Status) Txt_Status->SetText(LOCTEXT("SocketUnequipRejected", "소켓 해제 불가: 장착·슬롯·저장 상태를 확인하세요."));
+		SocketFeedback = LOCTEXT("SocketUnequipRejected", "소켓 해제 불가: 장착·슬롯·저장 상태를 확인하세요.");
 		RebuildSocketList();
 		return;
 	}
@@ -1767,13 +1672,14 @@ void UKnightMaintenanceWidget::RequestSocketUnequip()
 		bSocketSaveFailed = false;
 		PendingSocketProfileId = Saves->GetActiveSlotId();
 	}
-	if (Txt_Status) Txt_Status->SetText(bSuccess ? LOCTEXT("SocketUnequipped", "소켓을 해제했습니다.")
-		: LOCTEXT("SocketUnequipRejected", "소켓 해제 불가: 장착·슬롯·저장 상태를 확인하세요."));
+	SocketFeedback = bSuccess ? LOCTEXT("SocketUnequipped", "소켓을 해제했습니다.")
+		: LOCTEXT("SocketUnequipRejected", "소켓 해제 불가: 장착·슬롯·저장 상태를 확인하세요.");
 	RebuildSocketList();
 }
 
 void UKnightMaintenanceWidget::RefreshSocketDetails()
 {
+	if (Category != 3) return;
 	UknightProgressionSubsystem* const Progression = GetProgression();
 	const int32 Slots = Progression ? Progression->GetUnlockedSharedSocketSlots() : 0;
 	TArray<FKnightSocketAssignment> Assignments;
@@ -1782,35 +1688,25 @@ void UKnightMaintenanceWidget::RefreshSocketDetails()
 		? &Assignments[SelectedSocketSlot] : nullptr;
 	const UknightSocketItemDefinition* const Equipped = Assignment ? Assignment->Item.Get() : nullptr;
 	const bool bUnresolved = Assignment && Assignment->ItemId.IsValid() && !Equipped;
-	if (Txt_PartName) Txt_PartName->SetText(SelectedSocketSlot == INDEX_NONE
-		? LOCTEXT("SocketCombinedTitle", "현재 활성 소켓 효과")
+	SelectedSocketAssignmentId = Assignment ? Assignment->ItemId : FPrimaryAssetId();
+	if (SocketDetailTitle) SocketDetailTitle->SetText(SelectedSocketSlot == INDEX_NONE
+		? LOCTEXT("SocketCombinedTitle", "전체 활성 장착 효과")
 		: bUnresolved ? LOCTEXT("SocketUnknownTitle", "장착 소켓 확인 불가")
-		: Equipped ? (Equipped->DisplayName.IsEmpty() ? FText::FromString(Equipped->GetName()) : Equipped->DisplayName)
-		: LOCTEXT("SocketEmptyTitle", "빈 소켓 칸"));
-	if (Txt_PartState) Txt_PartState->SetText(Slots > 3
-		? FText::Format(LOCTEXT("SocketOverflowState", "해금 {0}칸 · 화면 표시 3칸 · 읽기 전용"), Slots)
-		: FText::Format(LOCTEXT("SocketState", "해금 {0} / 3칸 · {1}"), Slots,
-			SelectedSocketSlot == INDEX_NONE ? LOCTEXT("SocketNoSelection", "전체 효과")
-			: FText::Format(LOCTEXT("SocketSelectedIndex", "소켓 {0} 선택"), SelectedSocketSlot + 1)));
-	if (Txt_PartDesc)
+		: Equipped ? Equipped->DisplayName : LOCTEXT("SocketEmptyTitle", "빈 소켓 칸"));
+	int32 AssignedCount = 0;
+	for (const FKnightSocketAssignment& Entry : Assignments)
 	{
-		Txt_PartDesc->SetText(SelectedSocketSlot == INDEX_NONE
-			? LOCTEXT("SocketCombinedDescription", "실제로 장착된 소켓의 합산 효과입니다. 왼쪽에서 해금된 칸을 선택하세요.")
-			: bUnresolved ? FText::Format(LOCTEXT("SocketUnknownId", "저장된 아이템 ID: {0}"),
-				FText::FromString(Assignment->ItemId.ToString()))
-			: Equipped ? Equipped->Description
+		AssignedCount += Entry.ItemId.IsValid() ? 1 : 0;
+	}
+	if (SocketAssignmentSummary) SocketAssignmentSummary->SetText(Slots > 3
+		? FText::Format(LOCTEXT("SocketOverflowState", "장착 {0} / {1} · 해금 {1}칸\n화면 표시 3칸 · 읽기 전용"), AssignedCount, Slots)
+		: FText::Format(LOCTEXT("SocketActualState", "장착 현황  {0} / {1} · 해금 {1}칸"), AssignedCount, Slots));
+	if (SocketDetailDescription) SocketDetailDescription->SetText(SelectedSocketSlot == INDEX_NONE
+		? FText::GetEmpty() : bUnresolved
+			? FText::Format(LOCTEXT("SocketUnknownId", "저장된 아이템 ID: {0}"), FText::FromString(Assignment->ItemId.ToString()))
+			: Equipped ? (Equipped->Effect == EKnightSocketEffect::SocketGaugeCharge
+				? LOCTEXT("SocketGuardDescription", "키트 충전에 필요한 퍼펙트 가드 횟수를 줄입니다. 최소 횟수는 1회입니다.") : Equipped->Description)
 			: LOCTEXT("SocketEmptyDescription", "보유 소켓을 선택한 다음 장착을 누르세요."));
-		Txt_PartDesc->SetVisibility(ESlateVisibility::HitTestInvisible);
-	}
-	if (Img_Selected)
-	{
-		UTexture2D* const Icon = Equipped ? Equipped->Icon.LoadSynchronous() : nullptr;
-		if (Icon) Img_Selected->SetBrushFromTexture(Icon);
-		Img_Selected->SetVisibility(Icon ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
-	}
-	if (Stats_Rows) Stats_Rows->SetVisibility(ESlateVisibility::Collapsed);
-	if (Txt_ActiveSets) Txt_ActiveSets->SetVisibility(ESlateVisibility::Collapsed);
-	if (Txt_SetInfo) Txt_SetInfo->SetVisibility(ESlateVisibility::Collapsed);
 	TArray<FText> Lines;
 	if (SelectedSocketSlot == INDEX_NONE && Progression)
 	{
@@ -1866,10 +1762,10 @@ void UKnightMaintenanceWidget::RefreshSocketDetails()
 	}
 	else Lines.Add(LOCTEXT("SocketEmptyEffect", "이 칸에는 활성 효과가 없습니다. 보유 아이템을 선택한 뒤 장착하세요."));
 	if (!bAssignmentsComplete) Lines.Add(LOCTEXT("SocketIncompleteSummary", "일부 장착 정의가 확인되지 않아 효과 요약이 불완전할 수 있습니다."));
-	if (Txt_Bonus)
+	if (SocketEffectsText)
 	{
-		Txt_Bonus->SetText(FText::Join(FText::FromString(TEXT("\n")), Lines));
-		Txt_Bonus->SetVisibility(ESlateVisibility::HitTestInvisible);
+		SocketEffectsText->SetText(FText::Join(FText::FromString(TEXT("\n")), Lines));
+		SocketEffectsText->SetVisibility(ESlateVisibility::HitTestInvisible);
 	}
 	TArray<FknightItemStack> Owned;
 	const bool bOwnedComplete = Progression && Progression->GetOwnedSockets(Owned);
@@ -1879,21 +1775,39 @@ void UKnightMaintenanceWidget::RefreshSocketDetails()
 		return Stack.Count > 0 && Stack.Item == Candidate;
 	});
 	const UknightSaveSubsystem* const Saves = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
-	const bool bCanMutate = !bBusy && CanEditSocketProfile() && Saves && Saves->CanStartAtomicTransaction();
-	if (Btn_Execute)
+	const bool bCanMutate = !bBusy && CanEditSocketProfile() && Saves && Saves->GetActiveSlotId() == SocketSelectionProfileId && Saves->CanStartAtomicTransaction();
+	if (SocketEquipButton)
 	{
-		SetButtonLabel(Btn_Execute, Equipped ? LOCTEXT("SocketReplace", "소켓 교체") : LOCTEXT("SocketEquip", "소켓 장착"));
-		Btn_Execute->SetVisibility(ESlateVisibility::Visible);
-		SetButtonLocked(Btn_Execute, !bCanMutate || !bOwnedComplete || !bCandidateOwned
+		SetButtonLabel(SocketEquipButton, Equipped ? LOCTEXT("SocketReplaceAction", "교체") : LOCTEXT("SocketEquipAction", "장착"));
+		SocketEquipButton->SetVisibility(ESlateVisibility::Visible);
+		SetButtonLocked(SocketEquipButton, !bCanMutate || !bOwnedComplete || !bCandidateOwned
 			|| !CanEquipSocketCandidate(SelectedSocketSlot, Candidate),
 			LOCTEXT("SocketEquipUnavailable", "보유 수량과 소켓 칸을 확인하세요."));
 	}
-	if (Btn_Unequip)
+	if (SocketUnequipButton)
 	{
-		Btn_Unequip->SetVisibility(ESlateVisibility::Visible);
-		SetButtonLocked(Btn_Unequip, !bCanMutate || !Equipped,
+		SocketUnequipButton->SetVisibility(ESlateVisibility::Visible);
+		SetButtonLocked(SocketUnequipButton, !bCanMutate || !Equipped,
 			LOCTEXT("SocketSlotEmpty", "선택한 칸이 비어 있거나 변경할 수 없습니다."));
 	}
+	if (SocketCandidateText)
+	{
+		const FText Position = SelectedSocketSlot == INDEX_NONE ? LOCTEXT("SocketChoosePosition", "장착할 소켓 칸을 선택하세요.")
+			: FText::Format(LOCTEXT("SocketChosenPosition", "소켓 {0} · {1}"), SelectedSocketSlot + 1,
+				Equipped ? Equipped->DisplayName : bUnresolved ? LOCTEXT("SocketUnknownTitle", "장착 소켓 확인 불가") : LOCTEXT("SocketEmptyTitle", "빈 소켓 칸"));
+		SocketCandidateText->SetText(Candidate
+			? FText::Format(LOCTEXT("SocketPendingCandidate", "{0}\n\n장착 후보: {1}\n{2}"), Position, Candidate->DisplayName, SocketItemEffectText(Candidate))
+			: FText::Format(LOCTEXT("SocketChooseCandidate", "{0}\n\n왼쪽 목록에서 장착할 소켓을 선택하세요."), Position));
+	}
+	FText Notice = SocketFeedback;
+	if (!Saves || !Saves->HasSelectedSlot()) Notice = LOCTEXT("SocketNoProfile", "저장 슬롯을 선택하세요.");
+	else if (!bAssignmentsComplete) Notice = LOCTEXT("SocketAssignmentsUnresolved", "장착 소켓 정보를 모두 확인할 수 없습니다. 변경은 보류됩니다.");
+	else if (Slots > 3) Notice = LOCTEXT("SocketOverflowReadonly", "저장된 소켓 칸이 3개를 초과합니다. 모든 효과는 유지되며 이 화면에서는 변경할 수 없습니다.");
+	else if (!Saves->CanStartAtomicTransaction()) Notice = LOCTEXT("SocketSavePending", "저장 처리 중이거나 저장 복구가 필요합니다. 변경은 잠시 보류됩니다.");
+	else if (Notice.IsEmpty() && Candidate && SelectedSocketSlot != INDEX_NONE && !CanEquipSocketCandidate(SelectedSocketSlot, Candidate))
+		Notice = LOCTEXT("SocketConstraint", "이미 장착된 항목이거나 사용 가능 수량·중복 장착 조건을 충족하지 않습니다.");
+	if (SocketFeedbackText) { SocketFeedbackText->SetText(Notice); SocketFeedbackText->SetVisibility(Notice.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible); }
+
 }
 
 void UKnightMaintenanceWidget::SelectEntry(UKnightMaintenanceEntryWidget* Entry)
@@ -1922,12 +1836,19 @@ void UKnightMaintenanceWidget::HandleEntryFocused(UKnightMaintenanceEntryWidget*
 bool UKnightMaintenanceWidget::HandleConfirmKey()
 {
 	if (Panel_Confirm && Panel_Confirm->IsVisible()) return false;
-	if (Category == 2) return false; // Fixed slot selection is never an equip request.
-	if (Category == 3)
+	if (Category == 1)
 	{
-		for (UCommonButtonBase* Button : SocketListButtons)
-			if (Button && (Button->HasAnyUserFocus() || Button->HasFocusedDescendants())) return false;
+		for (UKnightMaintenanceEntryWidget* Row : EnhancementWeaponRows)
+			if (Row && Row->GetPart() && (Row->HasAnyUserFocus() || Row->HasFocusedDescendants()))
+			{
+				// First activation selects; a subsequent activation of the current target attempts once.
+				if (Row->GetPart()->GetPrimaryAssetId() != EnhancementTargetId) return false;
+				RequestWeaponUpgrade(); return true;
+			}
+		return false; // The actual Upgrade button owns its single click handler.
 	}
+	if (Category == 2) return false; // Fixed slot selection is never an equip request.
+	if (Category == 3) return false; // Slot/candidate clicks select only; explicit action buttons own mutations.
 	for (UKnightMaintenanceEntryWidget* Entry : Entries)
 	{
 		// 포커스는 버튼 내부 위젯(자손)에 있다.
@@ -1943,7 +1864,6 @@ bool UKnightMaintenanceWidget::HandleConfirmKey()
 
 bool UKnightMaintenanceWidget::HandleBack()
 {
-	if (bEnhancementPickerOpen) { CloseEnhancementPicker(true); return true; }
 	if (bMaterialSaleConfirmOpen) { CloseMaterialSaleConfirmation(true); return true; }
 	if (bEquipmentPickerOpen) { CloseEquipmentPicker(true); return true; }
 	if (!Panel_Confirm || !Panel_Confirm->IsVisible()) return false;
@@ -2065,61 +1985,24 @@ void UKnightMaintenanceWidget::EnsureStatRows()
 void UKnightMaintenanceWidget::RefreshEnhancementDetails()
 {
 	if (Category != 1) return;
-	if (Switcher_Info && EnhancementDetailPage) Switcher_Info->SetActiveWidget(EnhancementDetailPage);
-	if (Stats_Rows) Stats_Rows->SetVisibility(ESlateVisibility::Collapsed);
-	if (Txt_SetInfo) Txt_SetInfo->SetVisibility(ESlateVisibility::Collapsed);
-	if (Txt_ActiveSets) Txt_ActiveSets->SetVisibility(ESlateVisibility::Collapsed);
-	if (Btn_Execute) Btn_Execute->SetVisibility(ESlateVisibility::Collapsed);
-	if (Btn_Unequip) Btn_Unequip->SetVisibility(ESlateVisibility::Collapsed);
 	bool bComplete = false;
-	const UknightWeaponItemDefinition* const Weapon = GetEnhancementTarget(bComplete);
-	FKnightWeaponUpgradeQuote Quote;
-	if (Weapon && GetProgression()) GetProgression()->GetWeaponUpgradeQuote(Weapon, Quote);
-	const bool bKnown = Weapon && Quote.WeaponId.IsValid()
-		&& Quote.Availability != EKnightWeaponUpgradeAvailability::InvalidSettings
-		&& Quote.Availability != EKnightWeaponUpgradeAvailability::NoSlot
-		&& Quote.Availability != EKnightWeaponUpgradeAvailability::NotOwned;
-	if (Txt_PartName) Txt_PartName->SetText(Weapon ? PartName(Weapon)
-		: EnhancementTargetId.IsValid() ? LOCTEXT("EnhancementUnresolvedName", "무기 확인 불가")
-		: LOCTEXT("EnhancementEmptyName", "강화 대상 없음"));
-	if (Txt_PartState)
+	const UknightWeaponItemDefinition* Weapon = GetEnhancementTarget(bComplete);
+	if (EnhancementWeaponImage)
 	{
-		Txt_PartState->SetText(bKnown ? FText::Format(LOCTEXT("EnhancementLevel", "현재 +{0} / +15"), Quote.CurrentLevel)
-			: FText::GetEmpty());
-		Txt_PartState->SetVisibility(bKnown ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+		UTexture2D* Icon = Weapon ? Weapon->Icon.LoadSynchronous() : nullptr;
+		EnhancementWeaponImage->SetBrushFromTexture(Icon, true);
+		EnhancementWeaponImage->SetVisibility(Icon ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Hidden);
 	}
-	if (Txt_PartDesc)
+	TArray<FText> Lines;
+	if (Weapon)
 	{
-		Txt_PartDesc->SetText(Weapon ? LOCTEXT("EnhancementIndividualNotice", "선택 무기 자체의 능력치입니다. 현재 캐릭터 전체 능력치와 다릅니다.")
-			: LOCTEXT("EnhancementPickNotice", "왼쪽 강화 대상 슬롯에서 보유 무기를 선택하세요."));
-		Txt_PartDesc->SetVisibility(ESlateVisibility::HitTestInvisible);
+		for (const FknightPartStatModifier& Mod : Weapon->StatModifiers)
+			if (Mod.Attribute != UknightCoreAttributeSet::GetAttackPowerAttribute() || Mod.ModifierOp != EGameplayModOp::AddBase)
+				Lines.Add(ModifierText(Mod));
+		if (Weapon->AbilitySet) Lines.Add(LOCTEXT("EnhancementAbilityNotice", "AbilitySet의 조건부 효과는 이 개별 수치에 포함되지 않습니다."));
 	}
-	if (Img_Selected)
-	{
-		UTexture2D* const Icon = Weapon ? Weapon->Icon.LoadSynchronous() : nullptr;
-		if (Icon) Img_Selected->SetBrushFromTexture(Icon);
-		Img_Selected->SetVisibility(Icon ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
-	}
-	if (Txt_Bonus)
-	{
-		TArray<FText> Lines;
-		if (bKnown)
-		{
-			Lines.Add(Quote.Availability == EKnightWeaponUpgradeAvailability::MaxLevel
-				? FText::Format(LOCTEXT("EnhancementOwnAttackMax", "공격력 {0} · 최대 강화"), FText::AsNumber(Quote.CurrentWeaponAttack))
-				: FText::Format(LOCTEXT("EnhancementOwnAttack", "공격력 {0}  성공 시 +{1}"),
-					FText::AsNumber(Quote.CurrentWeaponAttack), FText::AsNumber(Quote.NextWeaponAttackIncrease)));
-			for (const FknightPartStatModifier& Mod : Weapon->StatModifiers)
-				if (Mod.Attribute != UknightCoreAttributeSet::GetAttackPowerAttribute() || Mod.ModifierOp != EGameplayModOp::AddBase)
-					Lines.Add(ModifierText(Mod));
-			if (Weapon->AbilitySet)
-				Lines.Add(LOCTEXT("EnhancementConditionalEffects", "AbilitySet의 조건부 효과는 이 개별 수치에 포함되지 않습니다."));
-		}
-		else if (Weapon) Lines.Add(LOCTEXT("EnhancementOwnUnknown", "개별 능력치를 확인할 수 없습니다."));
-		const FText Summary = FText::Join(FText::FromString(TEXT("\n")), Lines);
-		Txt_Bonus->SetText(Summary);
-		Txt_Bonus->SetVisibility(Summary.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
-	}
+	if (EnhancementStatsText) EnhancementStatsText->SetText(FText::Join(FText::FromString(TEXT("\n")), Lines));
+	RefreshCurrency();
 	RefreshWeaponUpgradePanel();
 }
 
@@ -2137,34 +2020,55 @@ void UKnightMaintenanceWidget::RefreshWeaponUpgradePanel()
 		&& Quote.Availability != EKnightWeaponUpgradeAvailability::InvalidSettings
 		&& Quote.Availability != EKnightWeaponUpgradeAvailability::NoSlot
 		&& Quote.Availability != EKnightWeaponUpgradeAvailability::NotOwned;
-	if (UpgradeHeading) UpgradeHeading->SetText(!Weapon ? LOCTEXT("UpgradeChooseTarget", "강화 대상을 선택하세요.")
-		: bQuoteKnown ? FText::Format(LOCTEXT("UpgradeHeading", "{0}  +{1} / +15"), PartName(Weapon), Quote.CurrentLevel)
-		: LOCTEXT("UpgradeUnknownTarget", "강화 정보를 확인할 수 없습니다."));
-	if (UpgradeAttack) UpgradeAttack->SetText(!bQuoteKnown ? FText::GetEmpty()
-		: Quote.Availability == EKnightWeaponUpgradeAvailability::MaxLevel
-			? FText::Format(LOCTEXT("UpgradeMaxAttack", "현재 무기 공격력 {0} · 최대 강화"), FText::AsNumber(Quote.CurrentWeaponAttack))
-			: FText::Format(LOCTEXT("UpgradeAttack", "무기 공격력 {0} → 성공 시 {1} (+{2})"),
-				FText::AsNumber(Quote.CurrentWeaponAttack), FText::AsNumber(Quote.NextWeaponAttack),
-				FText::AsNumber(Quote.NextWeaponAttackIncrease)));
-	if (UpgradeMoney) UpgradeMoney->SetText(!bQuoteKnown ? FText::GetEmpty()
-		: Quote.Availability == EKnightWeaponUpgradeAvailability::MaxLevel
-			? FText::Format(LOCTEXT("UpgradeOwnedMoney", "보유 돈 {0}"), FText::AsNumber(Progression->GetMoney()))
-			: FText::Format(LOCTEXT("UpgradeMoney", "보유 돈 {0} / 필요 돈 {1}"),
-				FText::AsNumber(Progression->GetMoney()), FText::AsNumber(Quote.MoneyCost)));
+	EnhancementQuotedLevel = bQuoteKnown ? Quote.CurrentLevel : INDEX_NONE;
+	const bool bMax = bQuoteKnown && Quote.Availability == EKnightWeaponUpgradeAvailability::MaxLevel;
+	const bool bNext = bQuoteKnown && Quote.TargetLevel > 0;
+	if (UpgradeHeading) UpgradeHeading->SetText(!Weapon ? LOCTEXT("UpgradeChooseTarget", "강화할 무기를 선택하세요.") : PartName(Weapon));
+	const FText Levels = !bQuoteKnown ? FText::GetEmpty() : bMax
+		? FText::Format(LOCTEXT("EnhancementMaxLevel", "+{0} · 최대 강화"), Quote.CurrentLevel)
+		: FText::Format(LOCTEXT("EnhancementLevelTransition", "+{0}  →  +{1}"), Quote.CurrentLevel, Quote.TargetLevel);
+	if (EnhancementLevels) EnhancementLevels->SetText(Levels);
+	if (EnhancementPreviewLevels) EnhancementPreviewLevels->SetText(bQuoteKnown
+		? FText::Format(LOCTEXT("EnhancementPreviewLevel", "강화 단계  {0}"), Levels) : FText::GetEmpty());
+	if (UpgradeAttack) UpgradeAttack->SetText(bQuoteKnown ? FText::AsNumber(Quote.CurrentWeaponAttack) : FText::GetEmpty());
+	const FText Gain = bNext && Quote.NextWeaponAttackIncrease > 0.f
+		? FText::Format(LOCTEXT("UpgradePositiveGain", "+{0}"), FText::AsNumber(Quote.NextWeaponAttackIncrease)) : FText::GetEmpty();
+	if (EnhancementIncrease) EnhancementIncrease->SetText(Gain);
+	if (EnhancementSuccessSummary) EnhancementSuccessSummary->SetText(bNext
+		? FText::Format(LOCTEXT("UpgradeSuccessGain", "성공 시 공격력 {0}"), Gain.IsEmpty() ? FText::AsNumber(Quote.NextWeaponAttackIncrease) : Gain)
+		: bMax ? LOCTEXT("UpgradeMax", "최대 강화") : FText::GetEmpty());
+	if (UWidget* Summary = WidgetTree->FindWidget(TEXT("EnhancementSuccessFrame")))
+		Summary->SetVisibility(bQuoteKnown ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	if (UpgradeMoney)
+	{
+		UpgradeMoney->SetText(bNext ? FText::Format(LOCTEXT("EnhancementCost", "강화 비용  {0}"), FText::AsNumber(Quote.MoneyCost)) : FText::GetEmpty());
+		UpgradeMoney->SetColorAndOpacity(FSlateColor(bNext && Progression->GetMoney() < Quote.MoneyCost ? Alert : White));
+	}
+	const bool bHasGate = bNext && Quote.GateMaterial != nullptr;
 	if (UpgradeGate)
 	{
-		const bool bHasGate = bQuoteKnown && Quote.GateMaterial != nullptr;
-		UpgradeGate->SetVisibility(bHasGate ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
-		if (bHasGate) UpgradeGate->SetText(FText::Format(LOCTEXT("UpgradeGate", "성공 시에만 소모: {0}  보유 {1} / 필요 {2}"),
-			Quote.GateMaterial->DisplayName, Quote.GateMaterialOwned, Quote.GateMaterialNeeded));
+		UpgradeGate->SetText(bHasGate ? FText::Format(LOCTEXT("EnhancementGateQuantity", "{0}  {1} / {2}"),
+			Quote.GateMaterial->DisplayName, Quote.GateMaterialOwned, Quote.GateMaterialNeeded)
+			: bNext ? LOCTEXT("EnhancementNoGate", "필요 소재 없음") : FText::GetEmpty());
+		UpgradeGate->SetColorAndOpacity(FSlateColor(bHasGate && Quote.GateMaterialOwned < Quote.GateMaterialNeeded ? Alert : White));
 	}
-	if (UpgradeChance) UpgradeChance->SetText(bQuoteKnown && Quote.TargetLevel > 0
-		? FText::Format(LOCTEXT("UpgradeEffectiveChance", "이번 시도 성공률 {0}"), FText::AsPercent(Quote.EffectiveSuccessChance))
-		: FText::GetEmpty());
+	if (EnhancementMaterialImage)
+	{
+		UTexture2D* Icon = bHasGate ? Quote.GateMaterial->Icon.LoadSynchronous() : nullptr;
+		EnhancementMaterialImage->SetBrushFromTexture(Icon, true);
+		if (UWidget* Size = EnhancementMaterialImage->GetParent() ? EnhancementMaterialImage->GetParent()->GetParent() : nullptr)
+			Size->SetVisibility(Icon ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	}
+	FNumberFormattingOptions Percent; Percent.MinimumFractionalDigits = 1; Percent.MaximumFractionalDigits = 1;
+	if (UpgradeChance) UpgradeChance->SetText(bNext ? FText::AsPercent(Quote.EffectiveSuccessChance, &Percent)
+		: bMax ? LOCTEXT("UpgradeMax", "최대 강화") : FText::GetEmpty());
+	if (EnhancementGuidance) EnhancementGuidance->SetText(FText::Format(LOCTEXT("EnhancementRules",
+		"실패해도 강화 단계는 유지됩니다.\n\n강화 시도마다 돈이 소모됩니다.\n\n관문 소재는 성공 시에만 소모됩니다.\n\n{0}"),
+		Weapon ? FText::Format(LOCTEXT("EnhancementDataMax", "최대 강화 +{0}"), Weapon->UpgradeSteps.Num()) : FText::GetEmpty()));
 	FText Reason;
 	switch (Quote.Availability)
 	{
-	case EKnightWeaponUpgradeAvailability::Ready: break;
+	case EKnightWeaponUpgradeAvailability::Ready: Reason = LOCTEXT("EnhancementReady", "강화 가능"); break;
 	case EKnightWeaponUpgradeAvailability::NoSlot: Reason = LOCTEXT("UpgradeNoSlot", "저장 슬롯을 선택하세요."); break;
 	case EKnightWeaponUpgradeAvailability::NotOwned: Reason = LOCTEXT("UpgradeNotOwned", "보유하지 않은 무기입니다."); break;
 	case EKnightWeaponUpgradeAvailability::MaxLevel: Reason = LOCTEXT("UpgradeMax", "최대 강화"); break;
@@ -2172,7 +2076,7 @@ void UKnightMaintenanceWidget::RefreshWeaponUpgradePanel()
 	case EKnightWeaponUpgradeAvailability::MissingMaterial: Reason = LOCTEXT("UpgradeNoGate", "관문 소재가 부족합니다."); break;
 	case EKnightWeaponUpgradeAvailability::SaveBlocked: Reason = LOCTEXT("UpgradeSaveBlocked", "저장 처리 중입니다. 잠시 후 다시 시도하세요."); break;
 	default: Reason = !Weapon && !EnhancementTargetId.IsValid()
-		? LOCTEXT("UpgradePickFirst", "강화 대상 슬롯에서 무기를 선택하세요.")
+		? LOCTEXT("UpgradePickFirst", "왼쪽 보유 무기 목록에서 선택하세요.")
 		: LOCTEXT("UpgradeInvalid", "무기 정의 또는 강화 설정을 확인할 수 없습니다."); break;
 	}
 	if (UpgradeResult)
@@ -2188,7 +2092,7 @@ void UKnightMaintenanceWidget::RefreshWeaponUpgradePanel()
 
 void UKnightMaintenanceWidget::RequestWeaponUpgrade()
 {
-	if (bBusy || bEnhancementPickerOpen || Category != 1) return;
+	if (bBusy || Category != 1 || (Panel_Confirm && Panel_Confirm->IsVisible())) return;
 	UknightProgressionSubsystem* Progression = GetProgression();
 	const UknightSaveSubsystem* const Saves = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
 	bool bComplete = false;
@@ -2197,6 +2101,7 @@ void UKnightMaintenanceWidget::RequestWeaponUpgrade()
 	if (Progression && Weapon) Progression->GetWeaponUpgradeQuote(Weapon, Quote);
 	if (!Progression || !Saves || !Saves->CanStartAtomicTransaction() || !bComplete || !Weapon
 		|| Weapon->GetPrimaryAssetId() != EnhancementTargetId
+		|| Saves->GetActiveSlotId() != EnhancementTargetProfileId || Quote.CurrentLevel != EnhancementQuotedLevel
 		|| Quote.Availability != EKnightWeaponUpgradeAvailability::Ready)
 	{
 		UpgradeResultMessage = LOCTEXT("UpgradeRejected", "강화 요청 불가: 대상, 보유량 또는 저장 상태를 확인하세요.");
@@ -2220,7 +2125,7 @@ void UKnightMaintenanceWidget::RequestWeaponUpgrade()
 		: Outcome == EKnightWeaponUpgradeOutcome::ChanceFailed
 			? LOCTEXT("UpgradeChanceFailed", "확률 실패: 돈만 소모되고 단계와 관문 소재는 유지됩니다.")
 			: LOCTEXT("UpgradeRejected", "강화 요청이 거절됐습니다. 조건을 확인하세요.");
-	RefreshEnhancementDetails();
+	RebuildEnhancementTarget();
 }
 
 void UKnightMaintenanceWidget::RefreshMaterials(const UknightCraftRecipeDefinition* Recipe, UknightProgressionSubsystem* Progression)
@@ -2244,11 +2149,7 @@ void UKnightMaintenanceWidget::RefreshMaterials(const UknightCraftRecipeDefiniti
 		// 추가 후에 색 지정 (위젯 생성 시 텍스트 스타일이 색을 덮어씀).
 		Count->SetColorAndOpacity(FSlateColor(RightColor));
 	};
-	if (!Recipe)
-	{
-		AddLine(LOCTEXT("PickRecipe", "제작할 장비를 선택하세요."), FText::GetEmpty(), White);
-	}
-	else if (Recipe->Costs.IsEmpty())
+	if (Recipe && Recipe->Costs.IsEmpty())
 	{
 		AddLine(LOCTEXT("NoMaterials", "필요 재료 없음"), FText::GetEmpty(), White);
 	}
@@ -2334,8 +2235,8 @@ void UKnightMaintenanceWidget::RefreshDetails()
 	}
 	if (Txt_PartDesc)
 	{
-		Txt_PartDesc->SetText(Shown ? FText::GetEmpty() : LOCTEXT("PickPart", "왼쪽 목록에서 장비를 선택하세요."));
-		Txt_PartDesc->SetVisibility(Shown ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+		Txt_PartDesc->SetText(FText::GetEmpty());
+		Txt_PartDesc->SetVisibility(ESlateVisibility::Collapsed);
 	}
 	if (Txt_Bonus)
 	{
@@ -2347,7 +2248,9 @@ void UKnightMaintenanceWidget::RefreshDetails()
 	{
 		UTexture2D* Icon = Shown ? Shown->Icon.LoadSynchronous() : nullptr;
 		if (Icon) Img_Selected->SetBrushFromTexture(Icon);
-		Img_Selected->SetVisibility(Icon ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Hidden);
+		Img_Selected->SetVisibility(Icon ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+		if (UWidget* Thumbnail = WidgetTree ? WidgetTree->FindWidget(TEXT("SelectedImageFrame")) : nullptr)
+			Thumbnail->SetVisibility(Icon ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 	}
 
 	// 스펙: 현재값, 다른 장비 선택 시 변경 후 값.
@@ -2482,6 +2385,8 @@ void UKnightMaintenanceWidget::RefreshEquipmentDetails()
 		UTexture2D* const Icon = Part ? Part->Icon.LoadSynchronous() : nullptr;
 		if (Icon) Img_Selected->SetBrushFromTexture(Icon);
 		Img_Selected->SetVisibility(Icon ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+		if (UWidget* Thumbnail = WidgetTree ? WidgetTree->FindWidget(TEXT("SelectedImageFrame")) : nullptr)
+			Thumbnail->SetVisibility(Icon ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 	}
 	if (Txt_Bonus)
 	{
@@ -2656,11 +2561,15 @@ void UKnightMaintenanceWidget::HandleProgressionChanged()
 void UKnightMaintenanceWidget::HandleActiveSlotChanged(const FString& SlotId)
 {
 	SelectedSocketCandidateId = FPrimaryAssetId();
+	SocketSelectionProfileId.Reset();
+	SelectedSocketAssignmentId = FPrimaryAssetId();
+	SocketFeedback = FText::GetEmpty();
 	bAwaitingSocketSave = false;
 	bSocketSaveFailed = false;
 	PendingSocketProfileId.Reset();
-	CloseEnhancementPicker(false);
 	EnhancementTargetId = FPrimaryAssetId();
+	EnhancementTargetProfileId.Reset();
+	EnhancementQuotedLevel = INDEX_NONE;
 	UpgradeResultMessage = FText::GetEmpty();
 	UpgradeSaveStatusMessage = FText::GetEmpty();
 	PendingUpgradeWeaponId = FPrimaryAssetId();
@@ -2694,14 +2603,14 @@ void UKnightMaintenanceWidget::HandleSaveFinished(bool bSuccess)
 	if (bAwaitingSocketSave)
 	{
 		const UknightSaveSubsystem* const Saves = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
-		if (Saves && Saves->GetActiveSlotId() == PendingSocketProfileId && Txt_Status)
+		if (Saves && Saves->GetActiveSlotId() == PendingSocketProfileId)
 		{
 			if (!bSuccess)
 			{
-				Txt_Status->SetText(LOCTEXT("SocketSaveFailed", "소켓 변경은 메모리에 반영됐지만 저장에 실패했습니다. 같은 상태의 저장을 재시도해야 합니다."));
+				SocketFeedback = LOCTEXT("SocketSaveFailed", "소켓 변경은 메모리에 반영됐지만 저장에 실패했습니다. 같은 상태의 저장을 재시도해야 합니다.");
 				bSocketSaveFailed = true;
 			}
-			else if (bSocketSaveFailed) Txt_Status->SetText(LOCTEXT("SocketSaveRecovered", "소켓 변경 저장 완료"));
+			else if (bSocketSaveFailed) SocketFeedback = LOCTEXT("SocketSaveRecovered", "소켓 변경 저장 완료");
 		}
 		if (bSuccess)
 		{

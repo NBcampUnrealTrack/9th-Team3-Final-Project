@@ -25,6 +25,7 @@ public:
 	FKnightInventoryItemSelected OnSelected;
 	void Configure(const UknightItemDefinition* InItem, int32 Count, bool bEquipped, const FLinearColor& NameColor);
 	void SetSelected(bool bInSelected);
+	void UseMaintenancePresentation();
 	const UknightItemDefinition* GetItem() const { return Item; }
 	UButton* GetButton() const { return Button; }
 protected:
@@ -41,6 +42,7 @@ private:
 	int32 DisplayCount = 0;
 	bool bDisplayEquipped = false;
 	bool bSelected = false;
+	bool bMaintenancePresentation = false;
 	FLinearColor DisplayNameColor = FLinearColor::White;
 };
 

@@ -10,6 +10,7 @@
 class UCommonButtonBase;
 class UCommonTextBlock;
 class UImage;
+class UBorder;
 class UScrollBox;
 class UTextBlock;
 class UVerticalBox;
@@ -21,6 +22,7 @@ class UknightSocketItemDefinition;
 class UKnightMaintenanceEntryWidget;
 class UknightProgressionSubsystem;
 class UCanvasPanel;
+class UHorizontalBox;
 class UEditableTextBox;
 class UKnightInventoryEntryWidget;
 class UknightItemDefinition;
@@ -65,6 +67,15 @@ protected:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeDestruct() override;
 
+	/** Width of the untouched robot view, as a fraction of the viewport. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Crafting Presentation", meta=(ClampMin="0.05", ClampMax="0.80", UIMin="0.15", UIMax="0.40"))
+	float CraftingClearBandWidth = 0.23f;
+	/** Width of each smooth edge transition, as a fraction of the viewport. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Crafting Presentation", meta=(ClampMin="0.01", ClampMax="0.45", UIMin="0.10", UIMax="0.30"))
+	float CraftingTransitionWidth = 0.20f;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Crafting Presentation", meta=(ClampMin="0.0", ClampMax="1.0"))
+	float CraftingSideOpacity = 0.90f;
+
 	UPROPERTY(meta=(BindWidget)) TObjectPtr<UCommonButtonBase> Btn_Craft;
 	UPROPERTY(meta=(BindWidget)) TObjectPtr<UCommonButtonBase> Btn_Weapon;
 	UPROPERTY(meta=(BindWidget)) TObjectPtr<UCommonButtonBase> Btn_Armor;
@@ -100,6 +111,9 @@ protected:
 	UPROPERTY(meta=(BindWidget)) TObjectPtr<UCommonButtonBase> Btn_ConfirmCancel;
 
 private:
+	void ApplyDestinationLayout();
+	UPROPERTY(Transient) TObjectPtr<UBorder> MaintenanceBackdrop;
+	UPROPERTY(Transient) TObjectPtr<UImage> CraftingEdgeShade;
 	void ShowConfirm(bool bShow);
 	UFUNCTION() void HandleProgressionChanged();
 	UFUNCTION() void HandleActiveSlotChanged(const FString& SlotId);
@@ -113,14 +127,13 @@ private:
 	void RefreshDetails();
 	void RefreshMaterials(const UknightCraftRecipeDefinition* Recipe, UknightProgressionSubsystem* Progression);
 	void RefreshWeaponUpgradePanel();
-	void RebuildEnhancementTarget();
+	void RebuildEnhancementTarget(bool bRestoreFocus = true);
+	void BuildEnhancementPresentation();
+	void SelectEnhancementWeapon(FPrimaryAssetId WeaponId);
 	void RefreshEnhancementDetails();
-	void OpenEnhancementPicker();
-	void RebuildEnhancementPicker();
-	void CloseEnhancementPicker(bool bRestoreFocus);
-	void ConfirmEnhancementTarget();
 	const UknightWeaponItemDefinition* GetEnhancementTarget(bool& bComplete) const;
 	void RebuildSocketList();
+	void BuildSocketPresentation();
 	void RefreshSocketDetails();
 	void SelectSocketSlot(int32 SlotIndex);
 	void SelectSocketCandidate(const UknightSocketItemDefinition* Item);
@@ -169,20 +182,30 @@ private:
 	FText UpgradeResultMessage;
 	FText UpgradeSaveStatusMessage;
 	FPrimaryAssetId EnhancementTargetId;
-	FPrimaryAssetId EnhancementCandidateId;
+	FString EnhancementTargetProfileId;
+	int32 EnhancementQuotedLevel = INDEX_NONE;
 	FPrimaryAssetId PendingUpgradeWeaponId;
-	FString EnhancementPickerProfileId;
 	FString PendingUpgradeProfileId;
-	bool bEnhancementPickerOpen = false;
 	bool bAwaitingUpgradeSave = false;
 	bool bUpgradeSaveFailed = false;
 	UPROPERTY(Transient) TObjectPtr<UCommonButtonBase> EnhancementTargetButton;
-	UPROPERTY(Transient) TArray<TObjectPtr<UCommonButtonBase>> EnhancementPickerButtons;
-	TArray<FPrimaryAssetId> EnhancementPickerIds;
+	UPROPERTY(Transient) TArray<TObjectPtr<UKnightMaintenanceEntryWidget>> EnhancementWeaponRows;
+	UPROPERTY(Transient) TObjectPtr<UWidget> EnhancementColumns;
+	UPROPERTY(Transient) TObjectPtr<UWidget> EnhancementInputHints;
+	UPROPERTY(Transient) TObjectPtr<UScrollBox> EnhancementOwnedList;
+	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> EnhancementListStatus;
+	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> EnhancementLevels;
+	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> EnhancementPreviewLevels;
+	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> EnhancementIncrease;
+	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> EnhancementSuccessSummary;
+	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> EnhancementGuidance;
+	UPROPERTY(Transient) TObjectPtr<UImage> EnhancementWeaponImage;
+	UPROPERTY(Transient) TObjectPtr<UImage> EnhancementMaterialImage;
 	UPROPERTY(Transient) TObjectPtr<UVerticalBox> UpgradePanel;
 	UPROPERTY(Transient) TObjectPtr<UScrollBox> EnhancementDetailPage;
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> UpgradeHeading;
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> UpgradeAttack;
+	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> EnhancementStatsText;
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> UpgradeMoney;
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> UpgradeGate;
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> UpgradeChance;
@@ -217,6 +240,22 @@ private:
 	FGameplayTag SelectedEquipmentSlot;
 	bool bEquipmentPickerOpen = false;
 	UPROPERTY(Transient) TArray<TObjectPtr<UCommonButtonBase>> SocketListButtons;
+	UPROPERTY(Transient) TObjectPtr<UWidget> SocketColumns;
+	UPROPERTY(Transient) TObjectPtr<UWidget> SocketInputHints;
+	UPROPERTY(Transient) TObjectPtr<UScrollBox> SocketOwnedList;
+	UPROPERTY(Transient) TObjectPtr<UHorizontalBox> SocketSlotHost;
+	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> SocketListStatus;
+	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> SocketAssignmentSummary;
+	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> SocketCandidateText;
+	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> SocketFeedbackText;
+	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> SocketDetailTitle;
+	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> SocketDetailDescription;
+	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> SocketEffectsText;
+	UPROPERTY(Transient) TObjectPtr<UCommonButtonBase> SocketEquipButton;
+	UPROPERTY(Transient) TObjectPtr<UCommonButtonBase> SocketUnequipButton;
+	FString SocketSelectionProfileId;
+	FPrimaryAssetId SelectedSocketAssignmentId;
+	FText SocketFeedback;
 	UPROPERTY(Transient) TArray<TObjectPtr<UCommonButtonBase>> SocketSlotButtons;
 	UPROPERTY(Transient) TArray<TObjectPtr<UCommonButtonBase>> SocketCandidateButtons;
 	TArray<FPrimaryAssetId> SocketCandidateIds;

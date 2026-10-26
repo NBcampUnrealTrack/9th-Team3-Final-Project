@@ -15,6 +15,9 @@ class UKnightMaintenanceWidget;
 class UKnightQuestMenuWidget;
 class UKnightQuestCatalog;
 class UCanvasPanel;
+class UBorder;
+class UHorizontalBox;
+class UCommonButtonStyle;
 class AKnightMaintenanceCameraRig;
 enum class EKnightMaintenanceDestination : uint8;
 struct FStreamableHandle;
@@ -61,6 +64,7 @@ public:
 protected:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeConstruct() override;
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 	virtual FReply NativeOnPreviewKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
 	virtual EKnightFlowState GetExpectedFlowState() const override { return EKnightFlowState::MainMenu; }
 	virtual bool HandleBackRequested() override;
@@ -187,7 +191,11 @@ private:
 	void EnsureSettingsWidget();
 	void EnsureCodexWidget();
 	void EnsureMaintenanceWidget();
+	void BuildMaintenanceFooterBack();
+	void ApplyMaintenanceBackPresentation(bool bMaintenance);
 	void ShowMaintenanceSelection();
+	void SetMaintenanceSubmenuOpen(bool bOpen);
+	void PlaceMaintenanceSubmenu();
 	void OpenMaintenanceDestination(EKnightMaintenanceDestination Destination, bool bStartInMaterials = false);
 	bool IsMaintenanceDestinationOpen() const;
 	void EnsureQuestWidget();
@@ -199,9 +207,16 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UKnightMaintenanceWidget> MaintenanceWidget;
 	UPROPERTY(Transient)
+	TObjectPtr<UHorizontalBox> MaintenanceBackContent;
+	UPROPERTY(Transient)
+	TObjectPtr<UWidget> NormalBackContent;
+	UPROPERTY(Transient)
+	TSubclassOf<UCommonButtonStyle> NormalBackStyle;
+	FVector2D NormalBackPosition = FVector2D::ZeroVector;
+	UPROPERTY(Transient)
 	TObjectPtr<UWidgetSwitcher> MaintenanceSwitcher;
 	UPROPERTY(Transient)
-	TObjectPtr<UCanvasPanel> MaintenanceSelectionPanel;
+	TObjectPtr<UBorder> MaintenanceSubmenu;
 	UPROPERTY(Transient)
 	TObjectPtr<UCommonButtonBase> MaintenanceCraftingButton;
 	UPROPERTY(Transient)
@@ -214,6 +229,7 @@ private:
 	TObjectPtr<const UKnightQuestCatalog> MapQuestCatalog;
 	TWeakObjectPtr<UWidget> FocusBeforeMaterialsShortcut;
 	bool bRestoreMaterialsShortcutFocus = false;
+	bool bMaterialsShortcutEntry = false;
 	TWeakObjectPtr<AKnightMaintenanceCameraRig> MaintenanceCameraRig;
 	bool bRestoreMaintenanceFocus = false;
 	bool bRestoreCodexFocus = false;

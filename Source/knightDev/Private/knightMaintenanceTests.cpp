@@ -3,6 +3,8 @@
 #include "AbilitySystem/Attributes/knightAttributeSet.h"
 #include "Blueprint/WidgetTree.h"
 #include "CommonButtonBase.h"
+#include "CommonTextBlock.h"
+#include "Menu/UI/KnightMaintenanceEntryWidget.h"
 #include "Components/ScrollBox.h"
 #include "Components/TextBlock.h"
 #include "Components/WidgetSwitcher.h"
@@ -92,13 +94,34 @@ namespace
 					Check(Menu->ToggleMaterialsShortcut() && Switcher && Switcher->GetActiveWidget() == Maintenance
 						&& Maintenance->IsMaterialsViewOpen(), TEXT("repeat entry reuses one widget with fresh Materials state"));
 					Check(Menu->ShowPage(EKnightMainMenuPage::Home), TEXT("normal page exit works"));
-					Check(Menu->ShowPage(EKnightMainMenuPage::Maintenance) && Switcher
-						&& Switcher->GetActiveWidget() != Maintenance, TEXT("normal maintenance entry shows three choices"));
-					if (Maintenance)
+					Check(Menu->ShowPage(EKnightMainMenuPage::Maintenance) && Menu->GetCurrentPage() == EKnightMainMenuPage::Home,
+						TEXT("maintenance submenu retains Home page"));
+					UWidget* const Submenu = Menu->GetWidgetFromName(TEXT("Panel_MaintenanceSubmenu"));
+					Check(Submenu && (Submenu->GetVisibility() == ESlateVisibility::Visible) && Submenu->GetParent() == Menu->GetWidgetFromName(TEXT("Panel_Home"))
+						&& !Menu->GetWidgetFromName(TEXT("Panel_MaintenanceSelectionRuntime")), TEXT("adjacent submenu belongs to Home; centered chooser absent"));
+					Check(Menu->RequestBack() && Menu->GetCurrentPage() == EKnightMainMenuPage::Home && Submenu && !(Submenu->GetVisibility() == ESlateVisibility::Visible),
+						TEXT("Back collapses submenu without opening Settings"));
+					UCommonButtonBase* const MaintenanceItem = Cast<UCommonButtonBase>(Menu->GetWidgetFromName(TEXT("Button_Maintenance")));
+					if (MaintenanceItem) MaintenanceItem->OnClicked().Broadcast();
+					Check(Submenu && (Submenu->GetVisibility() == ESlateVisibility::Visible), TEXT("maintenance item opens submenu"));
+					if (MaintenanceItem) MaintenanceItem->OnClicked().Broadcast();
+					Check(Submenu && !(Submenu->GetVisibility() == ESlateVisibility::Visible), TEXT("same maintenance item toggles submenu closed"));
+					for (const TCHAR* ChoiceName : { TEXT("MaintenanceChoiceCrafting"), TEXT("MaintenanceChoiceEnhancement"), TEXT("MaintenanceChoiceSockets") })
 					{
-						Maintenance->Open(EKnightMaintenanceDestination::Crafting);
-						Check(!Maintenance->IsMaterialsViewOpen(), TEXT("normal Crafting starts on Crafting tab"));
+						Menu->ShowPage(EKnightMainMenuPage::Maintenance);
+						UCommonButtonBase* const Choice = Cast<UCommonButtonBase>(Menu->GetWidgetFromName(ChoiceName));
+						Check(Choice != nullptr, ChoiceName);
+						if (Choice) Choice->OnClicked().Broadcast();
+						Check(Menu->GetCurrentPage() == EKnightMainMenuPage::Maintenance && Maintenance
+							&& !Maintenance->IsMaterialsViewOpen() && Submenu && !(Submenu->GetVisibility() == ESlateVisibility::Visible), TEXT("choice opens destination and hides submenu"));
+
+						Check(Menu->RequestBack() && Menu->GetCurrentPage() == EKnightMainMenuPage::Home && Submenu && (Submenu->GetVisibility() == ESlateVisibility::Visible),
+							TEXT("destination Back restores Home with submenu expanded"));
 					}
+					Check(Menu->ShowPage(EKnightMainMenuPage::Codex) && Submenu && !(Submenu->GetVisibility() == ESlateVisibility::Visible), TEXT("other Home destination dismisses submenu"));
+					Menu->ShowPage(EKnightMainMenuPage::Home);
+					Check(Menu->ToggleMaterialsShortcut() && Menu->RequestBack() && Menu->GetCurrentPage() == EKnightMainMenuPage::Home
+						&& Submenu && !(Submenu->GetVisibility() == ESlateVisibility::Visible), TEXT("Materials shortcut Back returns directly Home without submenu"));
 				}
 			}
 			else if (Mode == TEXT("EquipmentEquip") || Mode == TEXT("EquipmentUnequip"))
@@ -373,16 +396,18 @@ namespace
 				return Cast<UCommonButtonBase>(Widget->WidgetTree->FindWidget(
 					FName(*FString::Printf(TEXT("Phase8_SocketCandidate%d"), Index))));
 			};
-			UTextBlock* const Name = Cast<UTextBlock>(Widget->WidgetTree->FindWidget(TEXT("Txt_PartName")));
-			UTextBlock* const State = Cast<UTextBlock>(Widget->WidgetTree->FindWidget(TEXT("Txt_PartState")));
-			UTextBlock* const Bonus = Cast<UTextBlock>(Widget->WidgetTree->FindWidget(TEXT("Txt_Bonus")));
-			UCommonButtonBase* const Equip = Cast<UCommonButtonBase>(Widget->WidgetTree->FindWidget(TEXT("Btn_Execute")));
-			UCommonButtonBase* const Unequip = Cast<UCommonButtonBase>(Widget->WidgetTree->FindWidget(TEXT("Btn_Unequip")));
+			UTextBlock* const Name = Cast<UTextBlock>(Widget->WidgetTree->FindWidget(TEXT("SocketDetailTitle")));
+			UTextBlock* const State = Cast<UTextBlock>(Widget->WidgetTree->FindWidget(TEXT("SocketAssignmentSummary")));
+			UTextBlock* const Bonus = Cast<UTextBlock>(Widget->WidgetTree->FindWidget(TEXT("SocketEffectsText")));
+			UCommonButtonBase* const Equip = Cast<UCommonButtonBase>(Widget->WidgetTree->FindWidget(TEXT("SocketEquipAction")));
+			UCommonButtonBase* const Unequip = Cast<UCommonButtonBase>(Widget->WidgetTree->FindWidget(TEXT("SocketUnequipAction")));
 			Check(SlotButton(0) && SlotButton(1) && SlotButton(2) && Name && State && Bonus && Equip && Unequip,
 				TEXT("exactly three visible slot controls and required detail controls exist"));
 			if (!SlotButton(0) || !SlotButton(1) || !SlotButton(2) || !Name || !State || !Bonus || !Equip || !Unequip)
 				return;
 			Check(Name->GetText().ToString().Contains(TEXT("활성")), TEXT("fresh entry selects no slot and shows combined effects"));
+			Check(!SlotButton(0)->GetSelected() && !SlotButton(1)->GetSelected() && !SlotButton(2)->GetSelected()
+				&& CandidateButton(0) && !CandidateButton(0)->GetSelected() && !SlotButton(3), TEXT("three positions and owned list start with no selection"));
 			if (Mode == TEXT("Zero"))
 			{
 				SlotButton(0)->OnClicked().Broadcast();
@@ -391,6 +416,9 @@ namespace
 			}
 			else if (Mode == TEXT("Widget"))
 			{
+				CandidateButton(0)->OnClicked().Broadcast();
+				Check(Name->GetText().ToString().Contains(TEXT("활성")) && Save->EquippedSocketItems.IsEmpty(),
+					TEXT("candidate can be selected before slot without changing combined view"));
 				SlotButton(2)->OnClicked().Broadcast();
 				Check(Name->GetText().ToString().Contains(TEXT("활성")), TEXT("locked slot click cannot select"));
 				SlotButton(0)->OnClicked().Broadcast();
@@ -399,11 +427,17 @@ namespace
 				if (CandidateButton(0)) CandidateButton(0)->OnClicked().Broadcast();
 				Check(Name->GetText().ToString().Contains(TEXT("빈 소켓")) && Save->EquippedSocketItems.IsEmpty(),
 					TEXT("candidate selection does not appear equipped or mutate save"));
+				Check(!Widget->HandleConfirmKey() && Save->EquippedSocketItems.IsEmpty(),
+					TEXT("shared confirm route cannot equip a candidate; explicit action owns the transaction"));
 				SlotButton(0)->OnClicked().Broadcast();
 				Check(Name->GetText().ToString().Contains(TEXT("활성")) && Save->EquippedSocketItems.IsEmpty(),
 					TEXT("same slot click deselects without unequipping"));
 				SlotButton(0)->OnClicked().Broadcast();
+				UCommonButtonBase* OldSlot = SlotButton(0);
+				UCommonButtonBase* OldCandidate = CandidateButton(0);
 				Check(Saves->SelectSlot(TEXT("Phase8WidgetOther")), TEXT("profile change accepted"));
+				OldSlot->OnClicked().Broadcast(); OldCandidate->OnClicked().Broadcast();
+				Equip->OnClicked().Broadcast(); Saves->OnSaveFinished.Broadcast(true);
 				Check(Name->GetText().ToString().Contains(TEXT("활성")) && State->GetText().ToString().Contains(TEXT("해금 0"))
 					&& Save->EquippedSocketItems.IsEmpty(), TEXT("profile change clears slot and candidate without old-profile mutation"));
 			}
@@ -422,6 +456,10 @@ namespace
 					TEXT("selected equipped slot shows its actual individual effect"));
 				SlotButton(1)->OnClicked().Broadcast();
 				Check(Name->GetText().ToString().Contains(TEXT("활성")), TEXT("reselection restores combined effects"));
+				Check(Save->EquippedSocketItems[1] == AttackId, TEXT("same equipped slot click only deselects and never unequips"));
+				SlotButton(2)->OnClicked().Broadcast();
+				Check(Bonus->GetText().ToString().Contains(TEXT("기준")) && !Bonus->GetText().ToString().Contains(TEXT("%")),
+					TEXT("charge detail uses guards-per-kit context rather than percentage"));
 			}
 			else if (Mode == TEXT("Overflow"))
 			{
@@ -454,7 +492,7 @@ namespace
 				{
 					const int32 CandidateIndex = Mode == TEXT("Equip") || Attack->DisplayName.ToString() < Repair->DisplayName.ToString() ? 0 : 1;
 					if (CandidateButton(CandidateIndex)) CandidateButton(CandidateIndex)->OnClicked().Broadcast();
-					Equip->OnClicked().Broadcast();
+					if (UFunction* Click = Equip->FindFunction(TEXT("HandleButtonClicked"))) Equip->ProcessEvent(Click, nullptr);
 				}
 				const FPrimaryAssetId Expected = Mode == TEXT("Equip") ? RepairId : Mode == TEXT("Replace") ? AttackId : FPrimaryAssetId();
 				Check(Save->EquippedSocketItems.IsValidIndex(0) && Save->EquippedSocketItems[0] == Expected
@@ -463,6 +501,7 @@ namespace
 				Check(Mode == TEXT("Unequip") ? Name->GetText().ToString().Contains(TEXT("빈 소켓"))
 					: Name->GetText().EqualTo(Mode == TEXT("Replace") ? Attack->DisplayName : Repair->DisplayName),
 					TEXT("valid selected slot remains selected and shows actual post-action state"));
+				Saves->OnSaveFinished.Broadcast(false);
 				Saves->OnSaveFinished.Broadcast(true);
 				Check(Save->EquippedSocketItems[0] == Expected && Save->ItemCounts.FindRef(RepairId) == 1,
 					TEXT("save completion callback never replays socket mutation"));
@@ -521,7 +560,7 @@ namespace
 			Check(FMath::IsNearlyEqual(Quote.EffectiveSuccessChance, ExpectedChance)
 				&& FMath::IsNearlyEqual(Quote.NextWeaponAttackIncrease, Step.AttackIncrease),
 				TEXT("effective chance and next weapon attack come from transaction rules"));
-			if (Mode == TEXT("Widget"))
+			if (Mode == TEXT("Widget") || Mode == TEXT("WidgetAttempt"))
 			{
 				APlayerController* const Player = UGameplayStatics::GetPlayerController(World, 0);
 				UKnightMaintenanceWidget* const Widget = Player ? CreateWidget<UKnightMaintenanceWidget>(
@@ -532,40 +571,75 @@ namespace
 					return;
 				}
 				Widget->Open(EKnightMaintenanceDestination::Enhancement);
-				UCommonButtonBase* Target = Cast<UCommonButtonBase>(Widget->WidgetTree->FindWidget(TEXT("Phase7_EnhancementTarget")));
-				UCommonButtonBase* const Cancel = Cast<UCommonButtonBase>(Widget->WidgetTree->FindWidget(TEXT("Btn_ConfirmCancel")));
-				UCommonButtonBase* const Confirm = Cast<UCommonButtonBase>(Widget->WidgetTree->FindWidget(TEXT("Btn_ConfirmOk")));
-				UScrollBox* const Picker = Cast<UScrollBox>(Widget->WidgetTree->FindWidget(TEXT("RuntimeEquipmentPickerList")));
-				UWidgetSwitcher* const Switcher = Cast<UWidgetSwitcher>(Widget->WidgetTree->FindWidget(TEXT("Switcher_Info")));
-				UWidget* const DetailPage = Widget->WidgetTree->FindWidget(TEXT("Phase7_EnhancementDetailPage"));
-				UTextBlock* const DetailName = Cast<UTextBlock>(Widget->WidgetTree->FindWidget(TEXT("Txt_PartName")));
-				if (!Target || !Cancel || !Confirm || !Picker || !Switcher || !DetailPage || !DetailName)
+				UScrollBox* List = Cast<UScrollBox>(Widget->GetWidgetFromName(TEXT("EnhancementOwnedWeapons")));
+				UCommonTextBlock* Name = Cast<UCommonTextBlock>(Widget->GetWidgetFromName(TEXT("EnhancementWeaponName")));
+				UCommonTextBlock* Chance = Cast<UCommonTextBlock>(Widget->GetWidgetFromName(TEXT("EnhancementChance")));
+				UCommonTextBlock* Gain = Cast<UCommonTextBlock>(Widget->GetWidgetFromName(TEXT("EnhancementAttackIncrease")));
+				UCommonButtonBase* Execute = Cast<UCommonButtonBase>(Widget->GetWidgetFromName(TEXT("Phase7_UpgradeButton")));
+				if (!List || !Name || !Chance || !Gain || !Execute) { Check(false, TEXT("enhancement controls exist")); return; }
+				Check(List->GetChildrenCount() == 2 && Name->GetText().ToString().Contains(TEXT("선택")),
+					TEXT("fresh entry lists owned weapons with no selected target"));
+				auto FindRow = [List](FPrimaryAssetId Id) -> UKnightMaintenanceEntryWidget*
 				{
-					UE_LOG(LogknightDev, Error, TEXT("Phase7 UpgradeCases Widget controls missing"));
-					return;
-				}
-				Check(Switcher->GetActiveWidget() == DetailPage && DetailName->GetText().ToString().Contains(TEXT("없음")),
-					TEXT("fresh enhancement entry has empty target and separate quote page"));
-				Target->OnClicked().Broadcast();
-				Cancel->OnClicked().Broadcast();
-				Check(DetailName->GetText().ToString().Contains(TEXT("없음")) && Save->Money == 10000
-					&& Save->ItemUpgradeLevels.FindRef(WeaponId) == Level,
-					TEXT("picker cancellation leaves target and progression unchanged"));
-				Target->OnClicked().Broadcast();
-				UCommonButtonBase* const First = Picker->GetChildrenCount() > 0 ? Cast<UCommonButtonBase>(Picker->GetChildAt(0)) : nullptr;
+					for (UWidget* Child : List->GetAllChildren())
+						if (auto* Row = Cast<UKnightMaintenanceEntryWidget>(Child))
+							if (Row->GetPart() && Row->GetPart()->GetPrimaryAssetId() == Id) return Row;
+					return nullptr;
+				};
+				UKnightMaintenanceEntryWidget* First = FindRow(WeaponId);
+				UKnightMaintenanceEntryWidget* Second = FindRow(OtherId);
+				Check(First && Second && !First->GetSelected() && !Second->GetSelected(), TEXT("owned rows initially unselected"));
 				if (First) First->OnClicked().Broadcast();
-				Confirm->OnClicked().Broadcast();
-				const FString SelectedName = DetailName->GetText().ToString();
-				Check(First && !SelectedName.Contains(TEXT("없음")) && Save->Money == 10000
-					&& Save->ItemUpgradeLevels.FindRef(WeaponId) == Level && Save->EquippedItems.FindRef(knightGameplayTags::Equipment_Slot_Weapon) == WeaponId,
-					TEXT("target selection does not equip or write progression"));
+				FNumberFormattingOptions Percent; Percent.MinimumFractionalDigits = 1; Percent.MaximumFractionalDigits = 1;
+				Check(Name->GetText().EqualTo(Weapon->DisplayName)
+					&& Chance->GetText().EqualTo(FText::AsPercent(Quote.EffectiveSuccessChance, &Percent))
+					&& Gain->GetText().ToString().Contains(FText::AsNumber(Quote.NextWeaponAttackIncrease).ToString()),
+					TEXT("target details use actual effective probability and successful stat gain"));
+				if (Second) Second->OnClicked().Broadcast();
+				Check(First && Second && !First->GetSelected() && Second->GetSelected(), TEXT("selection clears previous row highlight"));
+				if (First) First->OnClicked().Broadcast();
+				Check(Save->Money == 10000 && Save->ItemUpgradeLevels.FindRef(WeaponId) == Level
+					&& Save->EquippedItems.FindRef(knightGameplayTags::Equipment_Slot_Weapon) == WeaponId,
+					TEXT("target selection does not equip or mutate progression"));
 				Progression->OnProgressionChanged.Broadcast();
-				Check(DetailName->GetText().ToString() == SelectedName, TEXT("refresh preserves target by item ID"));
-				Target = Cast<UCommonButtonBase>(Widget->WidgetTree->FindWidget(TEXT("Phase7_EnhancementTarget")));
-				if (Target) Target->OnClicked().Broadcast();
-				Check(Saves->SelectSlot(TEXT("Phase7WidgetOther")), TEXT("profile changes while picker is open"));
-				Check(DetailName->GetText().ToString().Contains(TEXT("없음"))
-					&& Save->ItemUpgradeLevels.FindRef(WeaponId) == Level, TEXT("profile change invalidates target without mutation"));
+				Check(Name->GetText().EqualTo(Weapon->DisplayName) && FindRow(WeaponId) && FindRow(WeaponId)->GetSelected(),
+					TEXT("refresh preserves target by ID and only its selection"));
+				Saves->OnSaveFinished.Broadcast(true);
+				Check(Save->Money == 10000 && Save->ItemUpgradeLevels.FindRef(WeaponId) == Level
+					&& Name->GetText().EqualTo(Weapon->DisplayName), TEXT("save completion preserves selection without replaying attempt"));
+				// A quote rendered for +9 must not silently buy a different level after an external change.
+				Save->ItemUpgradeLevels.Add(WeaponId, Level + 1);
+				Execute->OnClicked().Broadcast();
+				Check(Save->Money == 10000 && Save->ItemUpgradeLevels.FindRef(WeaponId) == Level + 1,
+					TEXT("execution rejects stale target level before transaction"));
+				Save->ItemUpgradeLevels.Add(WeaponId, Level);
+				if (Mode == TEXT("WidgetAttempt"))
+				{
+					Progression->OnProgressionChanged.Broadcast();
+					Progression->SetDebugNextWeaponUpgradeOutcome(1);
+					UFunction* Click = Execute->FindFunction(TEXT("HandleButtonClicked"));
+					if (Click) Execute->ProcessEvent(Click, nullptr);
+					Check(Click && Save->Money == 10000 - Quote.MoneyCost && Save->ItemUpgradeLevels.FindRef(WeaponId) == Level + 1,
+						TEXT("one real button-handler activation performs exactly one existing transaction"));
+					Check(!Gate || Save->ItemCounts.FindRef(Gate->GetPrimaryAssetId()) == 0,
+						TEXT("successful UI attempt consumes gate once"));
+					const FString LevelText = Cast<UCommonTextBlock>(Widget->GetWidgetFromName(TEXT("EnhancementLevels")))->GetText().ToString();
+					Check(LevelText.Contains(FString::Printf(TEXT("+%d"), Level + 1)) && Name->GetText().EqualTo(Weapon->DisplayName),
+						TEXT("attempt refreshes current level and preserves selected weapon"));
+					Saves->OnSaveFinished.Broadcast(false);
+					Saves->OnSaveFinished.Broadcast(true);
+					Check(Save->Money == 10000 - Quote.MoneyCost && Save->ItemUpgradeLevels.FindRef(WeaponId) == Level + 1,
+						TEXT("save failure and completion notifications never replay UI attempt"));
+				}
+				else
+				{
+					Check(Saves->SelectSlot(TEXT("Phase7WidgetOther")), TEXT("profile switch succeeds"));
+					if (First) First->OnClicked().Broadcast();
+					Saves->OnSaveFinished.Broadcast(true);
+					Check(Name->GetText().ToString().Contains(TEXT("선택")) && List->GetChildrenCount() == 0
+						&& Save->ItemUpgradeLevels.FindRef(WeaponId) == Level,
+						TEXT("profile change clears target and rejects stale row and save callbacks"));
+				}
 				Widget->Close();
 			}
 			else if (Mode == TEXT("Reject"))

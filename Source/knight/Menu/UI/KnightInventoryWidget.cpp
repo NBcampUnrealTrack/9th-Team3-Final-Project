@@ -2,8 +2,10 @@
 
 #include "Blueprint/WidgetTree.h"
 #include "CommonTextBlock.h"
+#include "CommonButtonBase.h"
 #include "Components/Border.h"
 #include "Components/Button.h"
+#include "Components/ButtonSlot.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/EditableTextBox.h"
@@ -28,7 +30,7 @@ namespace
 {
 	const FLinearColor PanelColor(FColor(15, 25, 35, 242));
 	const FLinearColor RowColor(FColor(35, 52, 67, 230));
-	const FLinearColor InventorySelectedColor(FColor(176, 123, 55, 240));
+	const FLinearColor InventorySelectedColor(FColor(28, 69, 107, 215));
 	const FLinearColor InventoryWhite(FColor(242, 244, 246));
 
 	UCommonTextBlock* MakeText(UWidgetTree* Tree, const FText& Value, const TCHAR* Style)
@@ -75,6 +77,15 @@ TSharedRef<SWidget> UKnightInventoryEntryWidget::RebuildWidget()
 		Row->AddChildToHorizontalBox(CountText)->SetPadding(FMargin(10, 0, 10, 0));
 		Row->AddChildToHorizontalBox(EquippedText);
 		Button->SetContent(Row);
+		if (bMaintenancePresentation)
+		{
+			NameText->SetAutoWrapText(true);
+			if (UButtonSlot* ContentSlot = Cast<UButtonSlot>(Row->Slot))
+			{
+				ContentSlot->SetHorizontalAlignment(HAlign_Fill);
+				ContentSlot->SetPadding(FMargin(16.f, 20.f));
+			}
+		}
 		WidgetTree->RootWidget = Button;
 	}
 	return Super::RebuildWidget();
@@ -106,13 +117,35 @@ void UKnightInventoryEntryWidget::ApplyConfiguration()
 	}
 	if (CountText) CountText->SetText(FText::Format(LOCTEXT("Count", "×{0}"), FText::AsNumber(DisplayCount)));
 	if (EquippedText) EquippedText->SetText(bDisplayEquipped ? LOCTEXT("Equipped", "장착 중") : FText::GetEmpty());
-	if (Button) Button->SetBackgroundColor(bSelected ? InventorySelectedColor : RowColor);
+	if (Button)
+	{
+		Button->SetBackgroundColor(bSelected ? InventorySelectedColor : RowColor);
+		if (bMaintenancePresentation)
+			if (const TSubclassOf<UCommonButtonStyle> StyleClass = LoadClass<UCommonButtonStyle>(nullptr,
+				TEXT("/Game/Knight/UI/Style/BS_Knight_CraftingRow.BS_Knight_CraftingRow_C")))
+			{
+				const UCommonButtonStyle* Style = StyleClass.GetDefaultObject();
+				FButtonStyle RowStyle = Button->GetStyle();
+				RowStyle.Normal = bSelected ? Style->SelectedBase : Style->NormalBase;
+				RowStyle.Hovered = bSelected ? Style->SelectedHovered : Style->NormalHovered;
+				RowStyle.Pressed = bSelected ? Style->SelectedPressed : Style->NormalPressed;
+				RowStyle.Disabled = Style->Disabled;
+				Button->SetStyle(RowStyle);
+				Button->SetBackgroundColor(FLinearColor::White);
+			}
+	}
+}
+
+void UKnightInventoryEntryWidget::UseMaintenancePresentation()
+{
+	bMaintenancePresentation = true;
+	ApplyConfiguration();
 }
 
 void UKnightInventoryEntryWidget::SetSelected(bool bInSelected)
 {
 	bSelected = bInSelected;
-	if (Button) Button->SetBackgroundColor(bInSelected ? InventorySelectedColor : RowColor);
+	ApplyConfiguration();
 }
 
 void UKnightInventoryEntryWidget::HandleClicked()
