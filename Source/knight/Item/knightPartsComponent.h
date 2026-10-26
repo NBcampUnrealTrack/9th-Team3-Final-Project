@@ -119,6 +119,13 @@ public:
 	 */
 	void GetPartMeshes(TArray<UMeshComponent*>& OutMeshes) const;
 
+	/**
+	 * (2026-10-26) 무기 메시를 몸 메시의 소켓으로 옮긴다(검 뽑기·넣기 노티파이, 자동으로 검 넣기).
+	 * 그 소켓이 장착한 무기 파츠의 붙일 소켓(Attachment.AttachSocket, 보통 손 weapon_r)이면 워크벤치에서 맞춘 위치·회전·크기로 붙이고,
+	 * 다른 소켓(등 weapon_back)이면 지금처럼 소켓에 딱 붙인다. 예전에는 뽑을 때도 딱 붙여서 워크벤치 값이 사라졌다.
+	 */
+	static void AttachWeaponToSocket(UMeshComponent* WeaponMesh, USkeletalMeshComponent* Body, FName Socket);
+
 	UPROPERTY(BlueprintAssignable, Category="Knight|Parts")
 	FknightEquipmentChanged OnEquipmentChanged;
 

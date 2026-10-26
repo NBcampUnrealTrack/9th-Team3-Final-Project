@@ -379,6 +379,28 @@ void UknightPartsComponent::GetPartMeshes(TArray<UMeshComponent*>& OutMeshes) co
 	}
 }
 
+void UknightPartsComponent::AttachWeaponToSocket(UMeshComponent* WeaponMesh, USkeletalMeshComponent* Body, FName Socket)
+{
+	if (!WeaponMesh || !Body)
+	{
+		return;
+	}
+	const AActor* const Owner = Body->GetOwner();
+	if (const UknightPartsComponent* const Parts = Owner ? Owner->FindComponentByClass<UknightPartsComponent>() : nullptr)
+	{
+		for (const TPair<FGameplayTag, FknightEquippedPart>& Entry : Parts->EquippedParts)
+		{
+			const UknightPartItemDefinition* const Part = Entry.Value.Definition.Get();
+			if (Part && Entry.Value.MeshComponent == WeaponMesh && Part->Attachment.AttachSocket == Socket)
+			{
+				Part->Attachment.Apply(WeaponMesh, Body);
+				return;
+			}
+		}
+	}
+	WeaponMesh->AttachToComponent(Body, FAttachmentTransformRules::SnapToTargetNotIncludingScale, Socket);
+}
+
 void UknightPartsComponent::CreateBodyRegionMeshes()
 {
 	ACharacter* const Character = Cast<ACharacter>(GetOwner());
