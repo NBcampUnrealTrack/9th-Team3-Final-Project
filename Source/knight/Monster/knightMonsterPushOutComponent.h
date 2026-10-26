@@ -14,6 +14,8 @@ class UPrimitiveComponent;
  * 캐릭터 이동은 캡슐만 쓸어서 검사하므로, 몬스터의 메시나 차단 상자가 움직이며 플레이어를 덮치면(앞발 내려찍기, 꼬리, 회전)
  * 플레이어가 몸 안에 끼고, 플레이어가 움직이기 전까지 빠져나오지 못한다. 이 컴포넌트가 매 프레임 겹침을 찾아
  * 몸 중심선(액터 앞뒤 축)에서 멀어지는 쪽으로 PushSpeed만큼 옮긴다. 벽에 막히면 벽을 따라 미끄러진다.
+ * 엎드린 동안(ShallowMeshPushOutTags)에는 메시 바디에서 가장 짧게 빠져나오는 쪽으로, 허용 깊이를 넘은 만큼만 옮긴다.
+ * 엎드린 몸은 중심선과 어긋나 놓이므로 중심선 기준으로 밀면 몸을 따라 옆으로 흘러가 붙어 서지 못한다.
  * 차단 상자·이동 캡슐 윗면에 서 있거나 모서리에 걸친 플레이어(몸 위로 떨어진 경우)도 같은 방향으로 밀어 내려보낸다.
  *
  * 대상: 플레이어가 조종하는 캐릭터만. 검사 대상 몸: 몸 아래 차단 상자(UknightMonsterBodyBlockerComponent), bPushOutOfMesh면 메시 바디도.
@@ -51,7 +53,9 @@ protected:
 
 	/**
 	 * 몬스터에 이 태그 중 하나가 있으면 메시 바디는 ShallowMeshPenetration만큼 파고들 때까지 밀지 않는다(차단 상자는 그대로).
-	 * 기본값은 다운(State.HitReact.Knockdown): 쓰러진 자세는 바디가 땅에 넓게 깔려, 다 밀어내면 머리·몸통에 닿기 전에 밀려난다.
+	 * 기본값은 엎드린 상태: 다운(State.HitReact.Knockdown), 그로기(State.HitReact.Groggy), 탈진 착지(State.Monster.Collapsed).
+	 * 탈진(State.Monster.Exhausted)은 서서 느리게 움직이는 몬스터(잔열)도 있어 넣지 않는다.
+	 * 엎드린 자세는 바디가 땅에 넓게 깔려, 다 밀어내면 머리·몸통에 닿기 전에 밀려나고 붙어 서려 할수록 몸을 따라 미끄러진다.
 	 * 아예 안 밀면 플레이어가 누운 몸 속에 서 있게 되니, 몸에 붙어 때릴 만큼만 들어오게 한다.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Push Out", meta=(EditCondition="bPushOutOfMesh"))
@@ -76,13 +80,20 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Push Out", meta=(EditCondition="bPushOutOfMesh"))
 	TArray<FName> PassThroughBones;
 
-	/** 기본값: 다운(State.HitReact.Knockdown), 탈진(State.Monster.Exhausted), 탈진 착지(State.Monster.Collapsed). */
+	/** 기본값: 다운(State.HitReact.Knockdown), 그로기(State.HitReact.Groggy), 탈진(State.Monster.Exhausted), 탈진 착지(State.Monster.Collapsed). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Push Out", meta=(EditCondition="bPushOutOfMesh"))
 	FGameplayTagContainer PassThroughBoneTags;
 
 private:
 	/** MeshPenetration: 메시 바디에 이만큼 파고든 것까지는 겹침으로 보지 않는다. */
 	bool IsOverlappingBody(const class ACharacter* Character, float MeshPenetration) const;
+	/** 메시가 아닌 몸(차단 상자)과 겹치는지. */
+	bool IsOverlappingBlockers(const class ACharacter* Character) const;
+	/**
+	 * 메시 바디에 Penetration보다 깊이 파고든 바디 중 가장 깊은 것에서 빠져나오는 수평 방향과 거리. 겹친 바디가 없으면 false.
+	 * 위에서 눌러 수평으로 빠져나올 길이 거의 없으면(몸 위에 올라선 경우) 중심선 기준 방향을 쓴다.
+	 */
+	bool FindMeshPushOut(const class ACharacter* Character, float Penetration, FVector& OutDirection, float& OutDistance) const;
 	/** 플레이어 캡슐을 Penetration만큼 줄였을 때도 Primitive와 겹치는지. */
 	bool IsOverlappingPrimitive(const class ACharacter* Character, const UPrimitiveComponent* Primitive, float Penetration) const;
 	/** 차단 상자나 이동 캡슐 윗면에 서 있거나 모서리에 걸쳐 있는지. 위에서 떨어지면 몸 위에 올라타거나 공중에 걸린다. */
