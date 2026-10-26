@@ -16,6 +16,8 @@ UknightCameraModifier_Deafen::UknightCameraModifier_Deafen()
 	{
 		MutedClasses.Add(TSoftObjectPtr<USoundClass>(FSoftObjectPath(Path)));
 	}
+	// 사운드 클래스가 SC_Knight_Master라 위에서 줄이는 클래스에 들지 않는다.
+	TinnitusSound = TSoftObjectPtr<USoundBase>(FSoftObjectPath(TEXT("/Game/Knight/Creatures/Janhyang/Sounds/S_Janhyang_Sonic_Tinnitus.S_Janhyang_Sonic_Tinnitus")));
 }
 
 void UknightCameraModifier_Deafen::StartDeafen(float Seconds)
