@@ -39,7 +39,8 @@ UknightGameplayAbility_BoostDash::UknightGameplayAbility_BoostDash(const FObject
 	bRetriggerInstancedAbility = true;
 
 	// 퀵스텝은 행동 에너지가 비용만큼 있어야 나간다(2026-10-09 사용자 결정). 비용 값은 BP의 StaminaCost(전에는 Cost GE).
-	bRequireFullStaminaCost = true;
+	// (2026-10-26 사용자 결정) 퀵스텝도 다른 행동처럼 조금이라도 남아 있으면 나가고, 모자란 만큼 가불한다.
+	bRequireFullStaminaCost = false;
 
 	// 등 부스터 두 개: 등 뒤쪽(X -), 양옆(Y ±). (2026-10-12)
 	BackThrusterOffsets = { FVector(-15.f, -12.f, 4.f), FVector(-15.f, 12.f, 4.f) };

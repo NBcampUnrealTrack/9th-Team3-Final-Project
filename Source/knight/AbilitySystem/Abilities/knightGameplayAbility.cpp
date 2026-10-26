@@ -62,7 +62,7 @@ void UknightGameplayAbility::ApplyCost(const FGameplayAbilitySpecHandle Handle, 
 		UknightGameplayEffect_StaminaCost::StaticClass());
 	if (SpecHandle.IsValid())
 	{
-		// 남은 양보다 많아도 그대로 뺀다. BoostGauge는 속성 세트에서 0 아래로 내려가지 않는다.
+		// 남은 양보다 많아도 그대로 뺀다. (2026-10-26) 모자란 만큼 음수가 된다(가불, 속성 세트 ClampAttribute).
 		SpecHandle.Data->SetSetByCallerMagnitude(knightGameplayTags::SetByCaller_BoostCost, -Cost);
 		ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, SpecHandle);
 	}
@@ -78,7 +78,7 @@ void UknightGameplayAbility::ApplyStaminaCost(float Amount) const
 	const FGameplayEffectSpecHandle SpecHandle = MakeOutgoingGameplayEffectSpec(UknightGameplayEffect_StaminaCost::StaticClass());
 	if (SpecHandle.IsValid())
 	{
-		// 남은 양보다 많아도 그대로 뺀다. BoostGauge는 속성 세트에서 0 아래로 내려가지 않는다.
+		// 남은 양보다 많아도 그대로 뺀다. (2026-10-26) 모자란 만큼 음수가 된다(가불, 속성 세트 ClampAttribute).
 		SpecHandle.Data->SetSetByCallerMagnitude(knightGameplayTags::SetByCaller_BoostCost, -Amount);
 		ApplyGameplayEffectSpecToOwner(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), SpecHandle);
 	}

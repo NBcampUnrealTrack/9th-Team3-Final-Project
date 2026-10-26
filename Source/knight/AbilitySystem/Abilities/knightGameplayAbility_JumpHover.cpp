@@ -267,7 +267,8 @@ void UknightGameplayAbility_JumpHover::TickHover()
 				{
 					Drain += FMath::Max(0.f, ASC->GetNumericAttribute(UknightAttributeSet::GetBoostRecoveryRateAttribute()));
 				}
-				ASC->ApplyModToAttribute(Gauge, EGameplayModOp::Additive, -Drain * DeltaTime);
+				// (2026-10-26) 체공은 행동 비용이 아니라서 가불하지 않는다: 0에서 멈추고 아래에서 체공이 끝난다.
+				ASC->ApplyModToAttribute(Gauge, EGameplayModOp::Additive, -FMath::Min(Drain * DeltaTime, FMath::Max(0.f, ASC->GetNumericAttribute(Gauge))));
 				GaugeValue = ASC->GetNumericAttribute(Gauge);
 				if (GaugeValue <= 0.f)
 				{

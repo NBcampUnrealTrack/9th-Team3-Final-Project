@@ -68,7 +68,9 @@ void UknightAttributeSet::ClampAttribute(const FGameplayAttribute& Attribute, fl
 {
 	if (Attribute == GetBoostGaugeAttribute())
 	{
-		NewValue = FMath::Clamp(NewValue, 0.f, GetMaxBoostGauge());
+		// (2026-10-26 사용자 결정 '스테미너 가불') 행동 비용이 남은 양보다 많으면 모자란 만큼 음수가 된다(최대 한 칸, -MaxBoostGauge까지).
+		// 0 이하면 비용이 있는 행동은 못 쓰고(UknightGameplayAbility::CheckCost), 화면에는 0으로 보인다(knightVM_PlayerStatus).
+		NewValue = FMath::Clamp(NewValue, -GetMaxBoostGauge(), GetMaxBoostGauge());
 	}
 	else if (Attribute == GetMaxBoostGaugeAttribute())
 	{
