@@ -9,8 +9,22 @@
 #include "UserSettings/EnhancedInputUserSettings.h"
 #include "knightAudioSubsystem.h"
 #include "Settings/knightSharedSettings.h"
+#include "Settings/knightDisplayCalibration.h"
+#include "Settings/knightDisplayCalibrationViewExtension.h"
 
 const FString UknightSettingsSubsystem::SlotName = TEXT("KnightSharedSettings");
+
+void UknightSettingsSubsystem::Initialize(FSubsystemCollectionBase& Collection)
+{
+	Super::Initialize(Collection);
+	DisplayCalibration = FSceneViewExtensions::NewExtension<FknightDisplayCalibrationViewExtension>(this);
+}
+
+void UknightSettingsSubsystem::Deinitialize()
+{
+	DisplayCalibration.Reset();
+	Super::Deinitialize();
+}
 
 UknightSharedSettings* UknightSettingsSubsystem::GetSharedSettings()
 {
@@ -87,8 +101,8 @@ void UknightSettingsSubsystem::PreviewDisplaySettings(float FieldOfViewOffset, f
 {
 	bDisplayPreviewActive = true;
 	PreviewFieldOfViewOffset = FMath::Clamp(FieldOfViewOffset, -20.f, 30.f);
-	PreviewBrightness = FMath::Clamp(Brightness, 0.8f, 1.2f);
-	PreviewGamma = FMath::Clamp(Gamma, 0.8f, 1.2f);
+	PreviewBrightness = KnightDisplayCalibration::Sanitize(Brightness);
+	PreviewGamma = KnightDisplayCalibration::Sanitize(Gamma);
 	RefreshActiveCamera();
 }
 
@@ -105,8 +119,8 @@ void UknightSettingsSubsystem::GetEffectiveDisplaySettings(float& FieldOfViewOff
 {
 	const UknightSharedSettings* const Settings = GetSharedSettings();
 	FieldOfViewOffset = bDisplayPreviewActive ? PreviewFieldOfViewOffset : Settings ? Settings->FieldOfViewOffset : 0.f;
-	Brightness = bDisplayPreviewActive ? PreviewBrightness : Settings ? Settings->Brightness : 1.f;
-	Gamma = bDisplayPreviewActive ? PreviewGamma : Settings ? Settings->Gamma : 1.f;
+	Brightness = KnightDisplayCalibration::Sanitize(bDisplayPreviewActive ? PreviewBrightness : Settings ? Settings->Brightness : 1.f);
+	Gamma = KnightDisplayCalibration::Sanitize(bDisplayPreviewActive ? PreviewGamma : Settings ? Settings->Gamma : 1.f);
 }
 
 void UknightSettingsSubsystem::RefreshActiveCamera()
