@@ -23,18 +23,18 @@ protected:
 
 	/** Extra arm length per cm of target radius. */
 	UPROPERTY(EditDefaultsOnly, Category="Lock On", meta=(ClampMin=0))
-	float ArmPerTargetRadius = 0.5f;
+	float ArmPerTargetRadius = 0.22f;
 
 	/** Extra arm length per cm between the Knight and the target, so close giants still fit. */
 	UPROPERTY(EditDefaultsOnly, Category="Lock On", meta=(ClampMin=0))
-	float ArmPerDistance = 0.1f;
+	float ArmPerDistance = 0.05f;
 
 	UPROPERTY(EditDefaultsOnly, Category="Lock On", meta=(ClampMin=0, Units="cm"))
-	float MaxArmLength = 1400.f;
+	float MaxArmLength = 760.f;
 
 	/** Extra pivot height per cm of target radius. */
 	UPROPERTY(EditDefaultsOnly, Category="Lock On", meta=(ClampMin=0))
-	float PivotHeightPerTargetRadius = 0.15f;
+	float PivotHeightPerTargetRadius = 0.12f;
 
 	/** Interpolation speed of the framing as the target moves or changes, independent of the mode blend. */
 	UPROPERTY(EditDefaultsOnly, Category="Lock On", meta=(ClampMin=0))

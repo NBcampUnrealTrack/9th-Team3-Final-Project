@@ -428,6 +428,11 @@ bool UknightCombatLibrary::SetAttackWarpTarget(AActor* Attacker, FName WarpTarge
 	{
 		return false;
 	}
+	// 공격 시작 순간 플레이어와 가장 가까운 부위로 한 번 더 즉시 갱신해, 대시 직후 공격해도 눈앞의 부위로 정확히 워프·보정되게 한다.
+	if (UknightTargetLockComponent* const TargetLock = Attacker->FindComponentByClass<UknightTargetLockComponent>())
+	{
+		TargetLock->RefreshAutoNearestPart(true);
+	}
 	FVector Location;
 	FRotator Rotation;
 	float Travel = 0.f;

@@ -6,6 +6,7 @@
 #include "knightGameplayAbility_PlungeAttack.generated.h"
 
 class UAnimMontage;
+class UAudioComponent;
 class UCameraShakeBase;
 class UNiagaraComponent;
 class UNiagaraSystem;
@@ -237,6 +238,8 @@ private:
 	void PlayMontage(UAnimMontage* Montage, bool bEndOnFinish);
 	void SpawnThrusters(float Scale);
 	void StopThrusters();
+	void PlayThrusterSound(USoundBase* Sound);
+	void StopThrusterSound(float FadeOutTime = 0.1f);
 	void UpdateThrusterRotation() const;
 	void UpdateLean(float DeltaTime, float TargetPitch);
 	void ResetLean();
@@ -258,6 +261,9 @@ private:
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UNiagaraComponent>> ThrusterComponents;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAudioComponent> ActiveThrusterAudio;
 
 	// 이번 발동에서 쓰는 몽타주 (발동할 때 스탠스로 고른다).
 	UPROPERTY(Transient)
