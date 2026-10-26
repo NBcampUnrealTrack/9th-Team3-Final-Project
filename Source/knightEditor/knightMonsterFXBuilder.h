@@ -18,6 +18,10 @@ class KNIGHTEDITOR_API UknightMonsterFXBuilder : public UBlueprintFunctionLibrar
 	GENERATED_BODY()
 
 public:
+	/** Bounded continuous environment dust: fine grains + soft wisps. User parameters are driven by AKnightSandstorm. */
+	UFUNCTION(BlueprintCallable, Category="Knight|FX")
+	static UNiagaraSystem* BuildSandstormDustSystem(const FString& PackagePath, UMaterialInterface* Material);
+
 	/**
 	 * 입에서 로컬 +X로 뻗는 불줄기. Reach(cm)는 불꽃이 닿는 거리, OwnerScale은 붙을 메시의 월드 스케일(잔열 8).
 	 * 스프라이트 크기는 cm 그대로 쓴다. 이미터 네 개(뒤에서 앞 순서로 Smoke, Fire, Core, Embers)를 만들고, 머티리얼이 없는
