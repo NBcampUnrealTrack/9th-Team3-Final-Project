@@ -1,5 +1,9 @@
 #include "Combat/knightGhostTrailActor.h"
 
+#include "Abilities/GameplayAbility.h"
+#include "AbilitySystem/Abilities/knightGameplayAbility_StanceSwitch.h"
+#include "TimerManager.h"
+
 #include "Components/PoseableMeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -56,6 +60,55 @@ AknightGhostTrailActor* AknightGhostTrailActor::SpawnGhostFromCharacter(
 	return Ghost;
 }
 
+void AknightGhostTrailActor::StartGhostTrailForAbility(UGameplayAbility* Ability, const FknightGhostTrailSettings& Settings, float Duration,
+	const FVector& StopLocation, TFunction<bool()> ShouldStop)
+{
+	UWorld* const World = Ability ? Ability->GetWorld() : nullptr;
+	const AActor* const Avatar = Ability ? Ability->GetAvatarActorFromActorInfo() : nullptr;
+	// 처음부터 기본 공격이 닿는 거리면(몬스터에 붙어 있으면) 잔상을 남기지 않는다.
+	if (!World || !Avatar || Duration <= 0.f || FVector::Dist2D(Avatar->GetActorLocation(), StopLocation) <= Settings.InRangeDistance)
+	{
+		return;
+	}
+	struct FTrail
+	{
+		TWeakObjectPtr<UGameplayAbility> WeakAbility;
+		FknightGhostTrailSettings Settings;
+		FVector StopLocation = FVector::ZeroVector;
+		TFunction<bool()> ShouldStop;
+		double EndTime = 0.0;
+		FTimerHandle Timer;
+	};
+	const TSharedRef<FTrail> Trail = MakeShared<FTrail>();
+	Trail->WeakAbility = Ability;
+	Trail->Settings = Settings;
+	Trail->StopLocation = StopLocation;
+	Trail->ShouldStop = MoveTemp(ShouldStop);
+	Trail->EndTime = World->GetTimeSeconds() + Duration;
+	const auto SpawnStep = [Trail]()
+	{
+		UGameplayAbility* const A = Trail->WeakAbility.Get();
+		const ACharacter* const Character = A ? Cast<ACharacter>(A->GetAvatarActorFromActorInfo()) : nullptr;
+		UWorld* const W = Character ? Character->GetWorld() : nullptr;
+		if (!W || !A->IsActive() || W->GetTimeSeconds() > Trail->EndTime
+			|| FVector::Dist2D(Character->GetActorLocation(), Trail->StopLocation) <= Trail->Settings.InRangeDistance
+			|| (Trail->ShouldStop && Trail->ShouldStop()))
+		{
+			if (W)
+			{
+				W->GetTimerManager().ClearTimer(Trail->Timer);
+			}
+			return;
+		}
+		const bool bTwoHanded = UknightGameplayAbility_StanceSwitch::IsTwoHanded(A->GetAbilitySystemComponentFromActorInfo());
+		SpawnGhostFromCharacter(Character, Trail->Settings.Material, bTwoHanded ? Trail->Settings.TwoHandedColor : Trail->Settings.OneHandedColor,
+			Trail->Settings.Lifetime, Trail->Settings.InitialOpacity);
+	};
+	// 락온 돌진처럼 출발할 때 하나를 바로 남기고, 그 뒤로 간격마다 남긴다.
+	SpawnStep();
+	World->GetTimerManager().SetTimer(Trail->Timer, FTimerDelegate::CreateLambda(SpawnStep), Settings.SpawnInterval, true);
+}
+
 void AknightGhostTrailActor::CaptureCharacterMeshes(
 	const ACharacter& Character,
 	UMaterialInterface* BaseMaterial,
@@ -102,7 +155,14 @@ void AknightGhostTrailActor::CaptureCharacterMeshes(
 			PoseComp->SetSkinnedAssetAndUpdate(SkelAsset);
 			PoseComp->RegisterComponent();
 			PoseComp->SetWorldTransform(SkelComp->GetComponentTransform());
-			PoseComp->CopyPoseFromSkeletalComponent(SkelComp);
+			// (2026-10-26) 본체 포즈를 따라가는 메시(LeaderPose, 예: 흑관 몸통)는 자기 포즈를 계산하지 않아 기본 자세만 남아 있다.
+			// 그 메시는 본체(리더)의 포즈를 뼈 이름으로 맞춰 복사한다. 흑관을 입으면 캐릭터 대신 망토 모양 잔상만 남던 문제.
+			USkeletalMeshComponent* PoseSource = SkelComp;
+			if (USkeletalMeshComponent* const Leader = Cast<USkeletalMeshComponent>(SkelComp->LeaderPoseComponent.Get()))
+			{
+				PoseSource = Leader;
+			}
+			PoseComp->CopyPoseFromSkeletalComponent(PoseSource);
 
 			const int32 NumMats = PoseComp->GetNumMaterials();
 			for (int32 MatIdx = 0; MatIdx < NumMats; ++MatIdx)

@@ -188,6 +188,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Lunge|Ghost Trail", meta=(EditCondition="bSpawnGhostTrail"))
 	FLinearColor TwoHandedGhostColor = FLinearColor(3.2f, 0.22f, 0.08f, 1.f);
 
+	/**
+	 * (2026-10-26 사용자 요청 '몬스터와 붙어 있을 때는 잔상 없이') 돌진이 멈출 지점까지 남은 거리가 이 값 이하면 잔상을 남기지 않는다
+	 * (이미 기본 공격이 닿는 거리). 돌진하다 이 안으로 들어와도 멈춘다. 점프 공격·대쉬공격(FknightGhostTrailSettings)과 같은 값. 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Lunge|Ghost Trail", meta=(ClampMin=0, Units="cm", EditCondition="bSpawnGhostTrail"))
+	float GhostInRangeDistance = 100.f;
+
 private:
 	UFUNCTION()
 	void OnLungeFinished();
@@ -227,6 +234,8 @@ private:
 	FTimerHandle BackThrusterTimer;
 	FTimerHandle BackThrusterStopTimer;
 	FTimerHandle GhostTrailTimer;
+	/** (2026-10-26) 돌진이 멈출 지점. 잔상은 여기까지 GhostInRangeDistance 안으로 들어오면 멈춘다. */
+	FVector GhostStopLocation = FVector::ZeroVector;
 
 	/** 이번 돌진 방향(수평 단위 벡터). */
 	FVector LungeDirection = FVector::ZeroVector;

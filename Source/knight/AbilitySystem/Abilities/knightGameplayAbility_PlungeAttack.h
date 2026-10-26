@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "AbilitySystem/Abilities/knightGameplayAbility.h"
 #include "Combat/knightCombatTypes.h"
+#include "Combat/knightGhostTrailActor.h"
 #include "knightGameplayAbility_PlungeAttack.generated.h"
 
 class UAnimMontage;
@@ -159,6 +160,16 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category="Plunge|Aim", meta=(ClampMin=1, ClampMax=180, Units="deg"))
 	float SoftTargetAngle = 60.f;
+
+	/**
+	 * (2026-10-26 사용자 요청) 점프 공격(bLeapToTarget)이 대상 쪽으로 뛰어갈 때 락온 돌진과 같은 잔상을 남긴다(대상이 있을 때만, 착지까지).
+	 * 공중 내려찍기(낙하)에는 남기지 않는다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Plunge|Ghost Trail")
+	bool bLeapGhostTrail = true;
+
+	UPROPERTY(EditDefaultsOnly, Category="Plunge|Ghost Trail", meta=(EditCondition="bLeapGhostTrail"))
+	FknightGhostTrailSettings LeapGhostTrailSettings;
 
 	/** 추진 이펙트 (로컬 -Z로 뿜는 시스템, NS_Knight_Thruster). 반동 때는 아래로, 낙하 때는 위로 뒤집어 뿜는다. */
 	UPROPERTY(EditDefaultsOnly, Category="Plunge|Effects")
