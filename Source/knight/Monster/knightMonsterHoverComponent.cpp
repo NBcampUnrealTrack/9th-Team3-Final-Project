@@ -28,8 +28,15 @@ void UknightMonsterHoverComponent::BeginPlay()
 
 void UknightMonsterHoverComponent::SetAirborne(bool bInAirborne, float BlendTime)
 {
-	AirAlphaTarget = bInAirborne ? 1.f : 0.f;
-	AirAlphaSpeed = BlendTime > 0.f ? 1.f / BlendTime : 0.f;
+	// BlendTime은 지상↔공중 전체를 옮기는 시간이라, 중간 높이에서 시작하면 남은 만큼만 걸린다.
+	const float Target = bInAirborne ? 1.f : 0.f;
+	SetAirAlpha(Target, BlendTime * FMath::Abs(Target - AirAlpha));
+}
+
+void UknightMonsterHoverComponent::SetAirAlpha(float Target, float BlendTime)
+{
+	AirAlphaTarget = FMath::Clamp(Target, 0.f, 1.f);
+	AirAlphaSpeed = BlendTime > 0.f ? FMath::Abs(AirAlphaTarget - AirAlpha) / BlendTime : 0.f;
 	if (AirAlphaSpeed <= 0.f)
 	{
 		AirAlpha = AirAlphaTarget;

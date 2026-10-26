@@ -8,6 +8,7 @@
 #include "Engine/World.h"
 #include "Monster/knightMonsterAirTurnComponent.h"
 #include "Monster/knightMonsterCharacterBase.h"
+#include "Monster/knightMonsterHoverComponent.h"
 #include "Monster/knightMonsterMovementComponent.h"
 #include "Monster/knightMonsterTargetingComponent.h"
 #include "System/knightGameplayTags.h"
@@ -90,6 +91,10 @@ void UknightGameplayAbility_MonsterTornadoAttack::HandleTick(int32 ActionNumber)
 			{
 				Phase = EPhase::Tired;
 				PhaseTime = 0.f;
+				if (UknightMonsterHoverComponent* const Hover = Monster->FindComponentByClass<UknightMonsterHoverComponent>())
+				{
+					Hover->SetAirAlpha(TiredAirAlpha, TiredTime);
+				}
 				UE_LOG(LogknightAI, Log, TEXT("%s: tornado summoned, tiring for %.1f s."), *GetNameSafe(Monster), TiredTime);
 			}
 			else
@@ -175,7 +180,12 @@ void UknightGameplayAbility_MonsterTornadoAttack::StartLand()
 	AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetAvatarActorFromActorInfo());
 	if (UknightMonsterAirTurnComponent* const AirTurn = Monster ? Monster->FindComponentByClass<UknightMonsterAirTurnComponent>() : nullptr)
 	{
-		AirTurn->EndAirTurnNow(0.5f);
+		AirTurn->EndAirTurnNow(LandDescendTime);
+	}
+	// 지침 중 내려온 높이에서 바닥까지 LandDescendTime이 걸리게 한다(EndAirTurnNow는 공중 높이 전체 기준).
+	if (UknightMonsterHoverComponent* const Hover = Monster ? Monster->FindComponentByClass<UknightMonsterHoverComponent>() : nullptr)
+	{
+		Hover->SetAirAlpha(0.f, LandDescendTime);
 	}
 	bLanded = true;
 	if (UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo())
@@ -213,10 +223,19 @@ void UknightGameplayAbility_MonsterTornadoAttack::EndAbility(const FGameplayAbil
 	SetAnimRate(1.f);
 
 	const AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetAvatarActorFromActorInfo());
-	if (UknightMonsterAirTurnComponent* const AirTurn = Monster && bLanded ? Monster->FindComponentByClass<UknightMonsterAirTurnComponent>() : nullptr)
+	UknightMonsterAirTurnComponent* const AirTurn = Monster ? Monster->FindComponentByClass<UknightMonsterAirTurnComponent>() : nullptr;
+	if (AirTurn && bLanded)
 	{
 		// 탈진 착지(딜 타임)가 끝난 뒤부터 지상 턴을 센다.
 		AirTurn->RestartGroundTurn();
+	}
+	else if (AirTurn && AirTurn->IsAirborne() && Phase == EPhase::Tired)
+	{
+		// 지치다가 끊겼는데 아직 공중이면 내려온 높이를 공중 높이로 되돌린다.
+		if (UknightMonsterHoverComponent* const Hover = Monster->FindComponentByClass<UknightMonsterHoverComponent>())
+		{
+			Hover->SetAirborne(true, 1.f);
+		}
 	}
 	if (UAbilitySystemComponent* const ASC = bLanded ? GetAbilitySystemComponentFromActorInfo() : nullptr)
 	{
