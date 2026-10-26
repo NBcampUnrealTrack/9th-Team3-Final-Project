@@ -15,8 +15,8 @@ class UAnimMontage;
  *   날갯짓: SummonMontage를 재생하며 타깃 쪽으로 돈다. SpawnTime에 몸 아래 바닥에 회오리를 만들고,
  *           분노 중이면 EnragedTornadoCount개를 SpawnInterval 간격으로 만든다. 여러 개면 좌우로 SpawnSpread씩 벌려 놓고
  *           첫 진행 방향도 SpreadAngle씩 벌려 양옆에서 조여 오게 한다. 0이면 각자 자리에서 타깃 쪽으로 나가 타깃 근처에서 엇갈린다.
- *   지침: ExhaustTime부터 TiredTime 동안 날갯짓(메시 애니메이션 전체)이 TiredAnimRate까지 점점 느려진다. 떨어질 것을 미리 보여
- *         플레이어가 다가갈 틈을 준다.
+ *   지침: ExhaustTime부터 TiredTime 동안 날갯짓(메시 애니메이션 전체)이 TiredAnimRate까지 점점 느려지고, 높이도 TiredAirAlpha까지
+ *         내려온다. 떨어질 것을 미리 보여 플레이어가 다가갈 틈을 준다. 착지 때는 남은 높이를 LandDescendTime 동안 내려온다.
  *   탈진 착지: 지침이 끝나면 공중 턴을 끝내고 LandMontage를 LandHoldTime 동안, 이어서 GetUpMontage를 재생한다(공격 없는 딜 타임).
  *             공중이 아니면 착지 없이 끝난다. 일어난 뒤부터 지상 턴이 처음부터 시작된다.
  *             착지부터 끝날 때까지 State.Monster.Collapsed를 붙인다(엎드린 몸·날개로 플레이어를 밀어내지 않음).
@@ -84,6 +84,14 @@ protected:
 	/** 지침이 끝날 때의 애니메이션 속도 배율. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Land", meta=(ClampMin=0.05, ClampMax=1))
 	float TiredAnimRate = 0.35f;
+
+	/** 지치는 동안 내려오는 높이(0 = 지상 높이, 1 = 공중 높이). 처음엔 천천히, 끝으로 갈수록 빨리 내려온다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Land", meta=(ClampMin=0, ClampMax=1))
+	float TiredAirAlpha = 0.35f;
+
+	/** 지침이 끝난 높이에서 바닥까지 내려오는 시간. 착지(LandMontage)와 함께 시작한다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Land", meta=(ClampMin=0, Units="s"))
+	float LandDescendTime = 0.8f;
 
 	/** 탈진 착지(바닥에 떨어져 엎드림). 비어 있으면 착지 없이 끝난다. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Land")
