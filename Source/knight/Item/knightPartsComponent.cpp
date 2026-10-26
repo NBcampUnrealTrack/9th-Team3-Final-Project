@@ -48,14 +48,7 @@ void UknightPartsComponent::ApplyLoadout()
 
 	for (const FGameplayTag& Slot : LoadoutSlots)
 	{
-		// The saved choice wins; the default fills slots the save has nothing for.
-		const UknightPartItemDefinition* Part = Progression ? Progression->GetEquippedPart(Slot) : nullptr;
-		if (!Part && !(Progression && Progression->IsSlotExplicitlyEmpty(Slot)))
-		{
-			const TObjectPtr<const UknightPartItemDefinition>* const Default = GetDefaultLoadout().FindByPredicate(
-				[&Slot](const UknightPartItemDefinition* Candidate) { return Candidate && Candidate->SlotTag == Slot; });
-			Part = Default ? Default->Get() : nullptr;
-		}
+		const UknightPartItemDefinition* const Part = GetLoadoutPartForSlot(Progression, Slot);
 		if (Part)
 		{
 			// 저장된 로드아웃은 적재 한도로 거부하지 않는다(아래에서 경고만).
@@ -68,6 +61,44 @@ void UknightPartsComponent::ApplyLoadout()
 	{
 		UE_LOG(Logknight, Warning, TEXT("%s: loadout weight %.1f exceeds load capacity %.1f."), *GetNameSafe(GetOwner()), GetTotalWeight(), LoadCapacity);
 	}
+}
+
+const UknightPartItemDefinition* UknightPartsComponent::GetLoadoutPartForSlot(const UknightProgressionSubsystem* Progression, FGameplayTag Slot) const
+{
+	// The saved choice wins; the default fills slots the save has nothing for.
+	const UknightPartItemDefinition* Part = Progression ? Progression->GetEquippedPart(Slot) : nullptr;
+	if (!Part && !(Progression && Progression->IsSlotExplicitlyEmpty(Slot)))
+	{
+		const TObjectPtr<const UknightPartItemDefinition>* const Default = GetDefaultLoadout().FindByPredicate(
+			[&Slot](const UknightPartItemDefinition* Candidate) { return Candidate && Candidate->SlotTag == Slot; });
+		Part = Default ? Default->Get() : nullptr;
+	}
+	return Part;
+}
+
+bool UknightPartsComponent::SyncLoadoutWithSave()
+{
+	const UGameInstance* const GameInstance = GetWorld() ? GetWorld()->GetGameInstance() : nullptr;
+	const UknightProgressionSubsystem* const Progression = GameInstance ? GameInstance->GetSubsystem<UknightProgressionSubsystem>() : nullptr;
+	bool bChanged = false;
+	for (const FGameplayTag& Slot : LoadoutSlots)
+	{
+		const UknightPartItemDefinition* const Wanted = GetLoadoutPartForSlot(Progression, Slot);
+		if (GetEquippedPart(Slot) == Wanted)
+		{
+			continue;
+		}
+		bChanged = true;
+		if (Wanted)
+		{
+			EquipPartUnchecked(Wanted, Progression ? Progression->GetUpgradeLevel(Wanted) : 0);
+		}
+		else
+		{
+			UnequipSlot(Slot);
+		}
+	}
+	return bChanged;
 }
 
 const TArray<TObjectPtr<const UknightPartItemDefinition>>& UknightPartsComponent::GetDefaultLoadout() const

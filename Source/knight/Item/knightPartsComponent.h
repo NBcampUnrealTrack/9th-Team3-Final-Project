@@ -13,6 +13,7 @@ class USkeletalMeshComponent;
 class UknightPartItemDefinition;
 class UknightWeaponItemDefinition;
 class UknightLoadoutDefinition;
+class UknightProgressionSubsystem;
 struct FknightPartStatModifier;
 
 /** Part is null when the slot was emptied. Item definitions are shared assets: listeners must not modify them. */
@@ -84,6 +85,12 @@ public:
 
 	/** Equips the saved loadout. Called by the Knight once its ability system is initialized. */
 	void ApplyLoadout();
+
+	/**
+	 * (2026-10-26) 저장된 장착(저장에 없는 칸은 기본 장착)과 다른 슬롯만 다시 입거나 벗는다. ApplyLoadout 뒤에 쓴다.
+	 * 메뉴의 나이트(AKnightMenuKnight)가 정비 화면에서 바꾼 장비를 따라갈 때 부른다. 바뀐 슬롯이 있으면 true.
+	 */
+	bool SyncLoadoutWithSave();
 
 	/** Equips a part into its slot, replacing what was there. 적재 한도를 넘으면 false(장착 안 함). */
 	UFUNCTION(BlueprintCallable, Category="Knight|Parts")
@@ -170,6 +177,9 @@ private:
 
 	/** 적재 한도 확인 없이 장착한다. EquipPart(확인 후)와 ApplyLoadout(확인 안 함)이 쓴다. */
 	bool EquipPartUnchecked(const UknightPartItemDefinition* Part, int32 UpgradeLevel);
+
+	/** (2026-10-26) 이 슬롯에 입을 파츠: 저장된 장착이 우선, 저장에 없고 일부러 비운 칸이 아니면 기본 장착(ApplyLoadout·SyncLoadoutWithSave 공용). */
+	const UknightPartItemDefinition* GetLoadoutPartForSlot(const UknightProgressionSubsystem* Progression, FGameplayTag Slot) const;
 
 	/** 장착 중량 합을 메카 Weight 스탯 기본값에 반영한다. Weight 스탯이 없는 소유자는 아무것도 하지 않는다. */
 	void UpdateWeightAttribute();
