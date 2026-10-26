@@ -92,6 +92,46 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Combat|Swing Trail", meta=(EditCondition="SwingTrail"))
 	bool bSwingTrailLight = false;
 
+	/** 켜면 스탠스(한손 / 양손 State.Stance.TwoHanded)에 따라 궤적 색·두께·광원을 자동으로 다르게 연출한다. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Combat|Swing Trail", meta=(EditCondition="SwingTrail"))
+	bool bUseStanceTrailVariation = true;
+
+	/** 한손 스탠스일 때 궤적 폭 배율. 날렵하고 예리한 청백색 궤적. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Combat|Swing Trail", meta=(ClampMin=0.1, EditCondition="SwingTrail && bUseStanceTrailVariation"))
+	float OneHandedTrailWidthMultiplier = 0.95f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Combat|Swing Trail", meta=(EditCondition="SwingTrail && bUseStanceTrailVariation"))
+	FLinearColor OneHandedTrailColorHead = FLinearColor(0.35f, 2.2f, 4.5f, 1.f);
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Combat|Swing Trail", meta=(EditCondition="SwingTrail && bUseStanceTrailVariation"))
+	FLinearColor OneHandedTrailColorTail = FLinearColor(0.05f, 0.3f, 1.2f, 1.f);
+
+	/** 양손 스탠스일 때 덮어쓸 나이아가라 에셋(비우면 기본 SwingTrail 사용). */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Combat|Swing Trail", meta=(EditCondition="SwingTrail && bUseStanceTrailVariation"))
+	TObjectPtr<UNiagaraSystem> TwoHandedSwingTrail;
+
+	/** 양손 스탠스일 때 궤적 폭 배율. 넓고 묵직한 진홍/화염 궤적. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Combat|Swing Trail", meta=(ClampMin=0.1, EditCondition="SwingTrail && bUseStanceTrailVariation"))
+	float TwoHandedTrailWidthMultiplier = 1.45f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Combat|Swing Trail", meta=(EditCondition="SwingTrail && bUseStanceTrailVariation"))
+	FLinearColor TwoHandedTrailColorHead = FLinearColor(4.5f, 0.25f, 0.08f, 1.f);
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Combat|Swing Trail", meta=(EditCondition="SwingTrail && bUseStanceTrailVariation"))
+	FLinearColor TwoHandedTrailColorTail = FLinearColor(1.2f, 0.02f, 0.0f, 1.f);
+
+	/** 양손 스탠스일 때 궤적 점광원 활성화 여부. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Combat|Swing Trail", meta=(EditCondition="SwingTrail && bUseStanceTrailVariation"))
+	bool bTwoHandedTrailLight = true;
+
+	/** 검을 휘두를 때 대기를 가르는 아지랑이(굴절) 트레일을 함께 켤지 여부. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Combat|Swing Trail", meta=(EditCondition="SwingTrail"))
+	bool bEnableRefractionTrail = true;
+
+	/** 대기 굴절 트레일 나이아가라 에셋 (기본: NS_Trail_refraction). */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Combat|Swing Trail", meta=(EditCondition="SwingTrail && bEnableRefractionTrail"))
+	TObjectPtr<UNiagaraSystem> RefractionTrail;
+
 private:
 	struct FActiveTrace
 	{
@@ -100,6 +140,8 @@ private:
 		TArray<FVector> PreviousPoints;
 		/** (2026-10-22) 이 판정 구간의 칼자국. */
 		TWeakObjectPtr<UNiagaraComponent> TrailFX;
+		/** 대기 굴절(아지랑이) 트레일. */
+		TWeakObjectPtr<UNiagaraComponent> RefractionFX;
 	};
 
 	void StartSwingTrail(FActiveTrace& Trace) const;

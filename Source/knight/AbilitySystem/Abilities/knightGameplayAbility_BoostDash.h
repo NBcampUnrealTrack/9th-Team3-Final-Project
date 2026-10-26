@@ -7,6 +7,7 @@
 class ACharacter;
 class UAnimMontage;
 class UCurveFloat;
+class UMaterialInterface;
 class UNiagaraComponent;
 class UNiagaraSystem;
 class USoundBase;
@@ -170,6 +171,34 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Dash|Noise", meta=(ClampMin=0, Units="cm"))
 	float NoiseRange = 0.f;
 
+	/** 퀵스텝 대시 이동 동안 메카 홀로그램 잔상(애프터이미지)을 남길지 여부. */
+	UPROPERTY(EditDefaultsOnly, Category="Dash|Ghost Trail")
+	bool bSpawnGhostTrail = true;
+
+	/** 잔상에 덮어쓸 반투명/애디티브 머티리얼 (비우면 M_Knight_GhostTrail). */
+	UPROPERTY(EditDefaultsOnly, Category="Dash|Ghost Trail", meta=(EditCondition="bSpawnGhostTrail"))
+	TObjectPtr<UMaterialInterface> GhostMaterial;
+
+	/** 대시 중 잔상을 찍는 간격(초). */
+	UPROPERTY(EditDefaultsOnly, Category="Dash|Ghost Trail", meta=(ClampMin=0.02, Units="s", EditCondition="bSpawnGhostTrail"))
+	float GhostSpawnInterval = 0.065f;
+
+	/** 잔상 하나가 서서히 사라지기까지 걸리는 시간(초). */
+	UPROPERTY(EditDefaultsOnly, Category="Dash|Ghost Trail", meta=(ClampMin=0.05, Units="s", EditCondition="bSpawnGhostTrail"))
+	float GhostLifetime = 0.26f;
+
+	/** 잔상 생성 직후 초기 불투명도 (GhostOpacity). */
+	UPROPERTY(EditDefaultsOnly, Category="Dash|Ghost Trail", meta=(ClampMin=0.05, ClampMax=1.0, EditCondition="bSpawnGhostTrail"))
+	float GhostInitialOpacity = 0.65f;
+
+	/** 한손 스탠스 대시 잔상 색상 (푸른 사이버 홀로그램 HDR). */
+	UPROPERTY(EditDefaultsOnly, Category="Dash|Ghost Trail", meta=(EditCondition="bSpawnGhostTrail"))
+	FLinearColor OneHandedGhostColor = FLinearColor(0.15f, 1.1f, 3.2f, 1.f);
+
+	/** 양손 스탠스 대시 잔상 색상 (진홍 오버드라이브 홀로그램 HDR). */
+	UPROPERTY(EditDefaultsOnly, Category="Dash|Ghost Trail", meta=(EditCondition="bSpawnGhostTrail"))
+	FLinearColor TwoHandedGhostColor = FLinearColor(3.2f, 0.22f, 0.08f, 1.f);
+
 private:
 	UAnimMontage* SelectDashMontage(const ACharacter& Character, const FVector& Direction) const;
 
@@ -203,12 +232,15 @@ private:
 	void StartBackThrusters(const ACharacter& Character);
 	void UpdateBackThrusters();
 	void StopBackThrusters();
+	void SpawnGhostStep();
+	void StopGhostTrail();
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UNiagaraComponent>> BackThrusters;
 
 	FTimerHandle BackThrusterTimer;
 	FTimerHandle BackThrusterStopTimer;
+	FTimerHandle GhostTrailTimer;
 
 	bool bInvulnerableApplied = false;
 	bool bCancelWindowApplied = false;

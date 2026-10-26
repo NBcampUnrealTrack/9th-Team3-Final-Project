@@ -199,6 +199,18 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Plunge|Impact", meta=(ClampMin=0))
 	float ImpactEffectScale = 2.f;
 
+	/** 착지 내려찍기 시 지면에 남는 균열 이펙트 (비우면 NS_Hit_GroundCrack). */
+	UPROPERTY(EditDefaultsOnly, Category="Plunge|Impact")
+	TObjectPtr<UNiagaraSystem> GroundCrackEffect;
+
+	/** 양손 또는 수직 급강하 내려찍기 시 추가로 터지는 지면 파열 이펙트 (비우면 NS_Hit_GroundRift). */
+	UPROPERTY(EditDefaultsOnly, Category="Plunge|Impact")
+	TObjectPtr<UNiagaraSystem> GroundRiftEffect;
+
+	/** 착지 내려찍기 시 지면에서 피어오르는 흙먼지 이펙트 (비우면 NS_Monster_GroundDust). */
+	UPROPERTY(EditDefaultsOnly, Category="Plunge|Impact")
+	TObjectPtr<UNiagaraSystem> GroundDustEffect;
+
 	/** 착지 타격 (Knight Melee Area가 보내는 Event.Melee.Hit에 쓴다). */
 	UPROPERTY(EditDefaultsOnly, Category="Plunge|Hit")
 	FknightMeleeHitParams HitParams;

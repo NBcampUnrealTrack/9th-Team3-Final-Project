@@ -6,6 +6,8 @@
 #include "knightGameplayAbility_HeavyAttack.generated.h"
 
 class UAnimMontage;
+class UNiagaraComponent;
+class UNiagaraSystem;
 
 /**
  * Secondary attack key (mouse thumb button): tap for the heavy combo, hold to charge.
@@ -97,6 +99,42 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Charge|Motion Warping", meta=(ClampMin=1, ClampMax=180, Units="deg", EditCondition="bUseSoftTarget"))
 	float SoftTargetAngle = 75.f;
 
+	/** 차지 중 기류·검신 발광·풀차지 섬광 및 해방 시 지면 균열 이펙트를 켤지 여부. */
+	UPROPERTY(EditDefaultsOnly, Category="Charge|Effects")
+	bool bPlayChargeEffects = true;
+
+	/** 차지 홀드 중 발밑에서 소용돌이치는 기류 이펙트 (비우면 NS_Monster_WindStreak). */
+	UPROPERTY(EditDefaultsOnly, Category="Charge|Effects", meta=(EditCondition="bPlayChargeEffects"))
+	TObjectPtr<UNiagaraSystem> ChargeAuraEffect;
+
+	/** 한손 스탠스 차지 중 검신에 감기는 푸른 에너지 이펙트 (비우면 NS_Sword_Scifi). */
+	UPROPERTY(EditDefaultsOnly, Category="Charge|Effects", meta=(EditCondition="bPlayChargeEffects"))
+	TObjectPtr<UNiagaraSystem> OneHandedChargeSwordEffect;
+
+	/** 양손 스탠스 차지 중 검신에 타오르는 화염 이펙트 (비우면 NS_Sword_Fire). */
+	UPROPERTY(EditDefaultsOnly, Category="Charge|Effects", meta=(EditCondition="bPlayChargeEffects"))
+	TObjectPtr<UNiagaraSystem> TwoHandedChargeSwordEffect;
+
+	/** 최대 차지(MaxChargeTime) 도달 순간 검에서 터지는 풀차지 완료 스파크 (비우면 NS_Knight_ParrySpark). */
+	UPROPERTY(EditDefaultsOnly, Category="Charge|Effects", meta=(EditCondition="bPlayChargeEffects"))
+	TObjectPtr<UNiagaraSystem> FullChargeBurstEffect;
+
+	/** 차지 해방 타격이 지면을 때릴 때 생성되는 바닥 균열 이펙트 (비우면 NS_Hit_GroundCrack). */
+	UPROPERTY(EditDefaultsOnly, Category="Charge|Effects", meta=(EditCondition="bPlayChargeEffects"))
+	TObjectPtr<UNiagaraSystem> ReleaseGroundCrackEffect;
+
+	/** 풀차지 또는 양손 차지 해방 시 추가로 터지는 대지 균열/파열 이펙트 (비우면 NS_Hit_GroundRift). */
+	UPROPERTY(EditDefaultsOnly, Category="Charge|Effects", meta=(EditCondition="bPlayChargeEffects"))
+	TObjectPtr<UNiagaraSystem> ReleaseGroundRiftEffect;
+
+	/** 차지 해방 타격 시 지면에서 피어오르는 흙먼지 이펙트 (비우면 NS_Monster_GroundDust). */
+	UPROPERTY(EditDefaultsOnly, Category="Charge|Effects", meta=(EditCondition="bPlayChargeEffects"))
+	TObjectPtr<UNiagaraSystem> ReleaseGroundDustEffect;
+
+	/** 차지 해방 몽타주 시작 후 지면 균열 이펙트가 터지기까지의 기준 지연 시간(초, 공격 속도에 반비례). */
+	UPROPERTY(EditDefaultsOnly, Category="Charge|Effects", meta=(ClampMin=0.02, Units="s", EditCondition="bPlayChargeEffects"))
+	float ReleaseGroundCrackDelay = 0.24f;
+
 private:
 	UFUNCTION()
 	void OnReleased(float TimeHeld);
@@ -119,6 +157,10 @@ private:
 	void TryHeavyStep();
 	bool CanStartCharge() const;
 	void StartCharge();
+	void StartChargeEffects();
+	void StopChargeEffects();
+	void OnFullChargeReached();
+	void SpawnReleaseGroundCrack();
 	void PlayLoop();
 	void PlayMontage(UAnimMontage* Montage, FName TaskName, bool bLoopOnEnd);
 	void Finish(bool bWasCancelled);
@@ -128,7 +170,16 @@ private:
 	FknightMeleeHitParams ActiveHitParams;
 	double ChargeStartTime = 0.0;
 	double TapDeadline = 0.0;
+	float LastReleaseChargeAlpha = 0.f;
 	bool bReleased = false;
 	bool bChargeStateApplied = false;
 	FTimerHandle TapTimer;
+	FTimerHandle FullChargeTimer;
+	FTimerHandle GroundCrackTimer;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UNiagaraComponent> ActiveChargeAuraFX;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UNiagaraComponent> ActiveChargeSwordFX;
 };

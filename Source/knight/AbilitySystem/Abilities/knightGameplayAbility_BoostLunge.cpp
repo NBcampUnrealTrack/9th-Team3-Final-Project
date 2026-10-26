@@ -10,6 +10,7 @@
 #include "Animation/AnimMontage.h"
 #include "Camera/CameraShakeBase.h"
 #include "Combat/knightCombatLibrary.h"
+#include "Combat/knightGhostTrailActor.h"
 #include "Combat/knightGroggyFeedbackComponent.h"
 #include "Combat/knightTargetLockComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -153,6 +154,14 @@ void UknightGameplayAbility_BoostLunge::ActivateAbility(const FGameplayAbilitySp
 	{
 		StartFootThrusters(*Character);
 	}
+	if (bSpawnGhostTrail)
+	{
+		SpawnGhostStep();
+		if (UWorld* const World = GetWorld(); World && GhostSpawnInterval > 0.f)
+		{
+			World->GetTimerManager().SetTimer(GhostTrailTimer, this, &ThisClass::SpawnGhostStep, GhostSpawnInterval, true);
+		}
+	}
 	if (LungeSound)
 	{
 		UGameplayStatics::PlaySoundAtLocation(Character, LungeSound, Character->GetActorLocation());
@@ -173,6 +182,7 @@ void UknightGameplayAbility_BoostLunge::OnLungeFinished()
 		return;
 	}
 	bStrikeStarted = true;
+	StopGhostTrail();
 
 	if (UWorld* const World = GetWorld(); World && BackThrusterLinger > 0.f && !BackThrusters.IsEmpty())
 	{
@@ -378,6 +388,30 @@ void UknightGameplayAbility_BoostLunge::StopBackThrusters()
 	BackThrusters.Reset();
 }
 
+void UknightGameplayAbility_BoostLunge::SpawnGhostStep()
+{
+	if (!bSpawnGhostTrail || !IsActive())
+	{
+		return;
+	}
+	const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	if (!Character)
+	{
+		return;
+	}
+	const bool bTwoHanded = UknightGameplayAbility_StanceSwitch::IsTwoHanded(GetAbilitySystemComponentFromActorInfo());
+	const FLinearColor GhostColor = bTwoHanded ? TwoHandedGhostColor : OneHandedGhostColor;
+	AknightGhostTrailActor::SpawnGhostFromCharacter(Character, GhostMaterial, GhostColor, GhostLifetime, GhostInitialOpacity);
+}
+
+void UknightGameplayAbility_BoostLunge::StopGhostTrail()
+{
+	if (UWorld* const World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(GhostTrailTimer);
+	}
+}
+
 void UknightGameplayAbility_BoostLunge::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
@@ -390,6 +424,7 @@ void UknightGameplayAbility_BoostLunge::EndAbility(const FGameplayAbilitySpecHan
 	}
 	StopBackThrusters();
 	StopFootThrusters();
+	StopGhostTrail();
 	RestoreGravity();
 	if (IsActive() && ActiveDashMontage && !bStrikeStarted)
 	{
