@@ -325,8 +325,7 @@ bool UknightGroggyFeedbackComponent::TryStartPredictedKnockdown(UGameplayAbility
 		|| TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_Invulnerable)
 		|| TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_Guarding)
 		|| TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_Parrying)
-		|| TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_HitReact_Knockdown)
-		|| TargetASC->HasMatchingGameplayTag(knightGameplayTags::Window_MeleeTrace))
+		|| TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_HitReact_Knockdown))
 	{
 		return false;
 	}
@@ -352,7 +351,7 @@ bool UknightGroggyFeedbackComponent::TryStartPredictedKnockdown(UGameplayAbility
 			return false;
 		}
 		RemainingToHit = (NextHitTime - MontagePosition) / MontageRate;
-		if (RemainingToHit > FMath::Max(PredictionLeadTime, 0.1f) || RemainingToHit < 0.08f)
+		if (RemainingToHit > FMath::Max(PredictionLeadTime, 0.1f) || RemainingToHit < 0.025f)
 		{
 			return false;
 		}
@@ -389,13 +388,14 @@ bool UknightGroggyFeedbackComponent::TryStartPredictedKnockdown(UGameplayAbility
 
 	FVector ClosestBodyPoint = TargetPoint;
 	// (돌진 베기는 StopDistance가 더 길 수 있어 아래 표면 허용치에 더해 준다.)
-	const float LeadSlack = bLeadMode ? 100.f : 0.f;
+	const float LeadSlack = bLeadMode ? 120.f : 0.f;
 	const float PointDistance2D = FVector::Dist2D(PlayerLoc, TargetPoint);
 	const float SurfaceDistance2D = FindClosestMonsterBodyDistance2D(Boss, PlayerLoc, TargetPoint, &ClosestBodyPoint);
 	const bool bIsLungingOrHeavyAttack = HitParams.PoiseDamage >= 20.f;
-	const float WarpSlack = bUsingWarpTarget ? 150.f : 0.f;
-	const float MaxSurfaceRange = (bIsLungingOrHeavyAttack ? 140.f : 70.f) + WarpSlack + LeadSlack;
-	const float MaxPointRange = (bIsLungingOrHeavyAttack ? 440.f : 310.f) + LeadSlack;
+	const float WarpSlack = bUsingWarpTarget ? 160.f : 0.f;
+	// 대검의 실제 타격 사거리(칼끝 리치 약 250~320cm)에 맞춰 표면·포인트 허용 거리를 넉넉히 잡는다.
+	const float MaxSurfaceRange = (bIsLungingOrHeavyAttack ? 260.f : 185.f) + WarpSlack + LeadSlack;
+	const float MaxPointRange = (bIsLungingOrHeavyAttack ? 540.f : 420.f) + LeadSlack;
 	if (SurfaceDistance2D > MaxSurfaceRange || PointDistance2D > MaxPointRange)
 	{
 		return false;
@@ -694,6 +694,31 @@ void UknightGroggyFeedbackComponent::HandleAnyPoiseBroken(AActor* InVictim, AAct
 		}
 	}
 
+	// 예측 슬로우 없이 터진 그로기(퍼펙트 가드 패링, 칼끝 사거리 타격 등)에서도 시네마틱 줌 + 포스트프로세스 연출이 빠지지 않게 건다.
+	if (!bPredictedContact)
+	{
+		if (AknightCharacter* const Player = Cast<AknightCharacter>(Owner))
+		{
+			if (APlayerController* const PC = Cast<APlayerController>(Player->GetController()))
+			{
+				if (PC->IsLocalController() && PC->GetViewTarget() == Player)
+				{
+					ZoomCameraManager = Cast<AknightPlayerCameraManager>(PC->PlayerCameraManager);
+					if (AknightPlayerCameraManager* const CameraManager = ZoomCameraManager.Get())
+					{
+						const double Now = FPlatformTime::Seconds();
+						CameraManager->StartKnockdownZoom(Player, PredictionZoomDegrees, 0.06f, Now);
+						CameraManager->PunchKnockdownZoom(ImpactZoomPunchDegrees, ImpactZoomPunchTime);
+						PredictedBoss = Cast<AknightMonsterCharacterBase>(InVictim);
+						bCameraBeatActive = true;
+						PresentationEndTime = Now + EffectiveFreezeTime + SlowReleaseTime + FMath::Max(PredictionZoomReturnTime, 0.f) + 0.2;
+						EnsureFeedbackTicker();
+					}
+				}
+			}
+		}
+	}
+
 	// 타격 큐 위치: 타격 지점이 있으면 거기(일반 공격·스킬), 없으면(패링 그로기) 상대 몸에서 나를 향한 표면 쪽.
 	CueParams = FGameplayCueParameters();
 	CueParams.Instigator = Owner;
@@ -872,7 +897,7 @@ void UknightGroggyFeedbackComponent::TickWatchedAttack()
 			continue;
 		}
 		const float StartRemaining = (Event.GetTriggerTime() - Position) / BaseRate;
-		if (StartRemaining <= SwingLeadTime && StartRemaining > 0.08f
+		if (StartRemaining <= SwingLeadTime && StartRemaining > 0.025f
 			&& TryStartPredictedKnockdown(Attack, WatchedHitParams))
 		{
 			bWatchedPredictionAttempted = true;
@@ -904,7 +929,6 @@ void UknightGroggyFeedbackComponent::TickPrediction()
 		|| TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_Guarding)
 		|| TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_Parrying)
 		|| TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_HitReact_Knockdown)
-		|| TargetASC->HasMatchingGameplayTag(knightGameplayTags::Window_MeleeTrace)
 		|| FPlatformTime::Seconds() - PredictionStartTime >= MaxPredictionDuration)
 	{
 		BeginPredictionReturn();
