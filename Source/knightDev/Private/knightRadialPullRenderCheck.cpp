@@ -1,6 +1,11 @@
-// Explicit isolated presentation check. No attack, hit, poise event or save mutation.
+// Explicit isolated presentation check. No attacks, damage or save mutation.
+// Optional GroggyHUD mode injects the existing poise-break notification and a death tag.
 #if WITH_EDITOR
 #include "Combat/knightGroggyFeedbackComponent.h"
+#include "Combat/knightHitReactionComponent.h"
+#include "Blueprint/WidgetBlueprintLibrary.h"
+#include "HUD/knightHUDSlowMotion.h"
+#include "System/knightGameplayTags.h"
 #include "Camera/knightPlayerCameraManager.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
@@ -49,6 +54,8 @@ struct FPullCheck
 	int32 Step=0, Failures=0, Assertions=0;
 	float BaseFOV=0, BaseIntensity=1, BaseScreenPercentage=100;
 	float BaseBlur=0, BasePullFOV=0;
+	bool bCheckGroggyHUD=false;
+	FIntRect BaseViewRect;
 	void SetPresentationFloat(const TCHAR* Name, float Value)
 	{ auto* Property=FindFProperty<FFloatProperty>(Feedback->GetClass(),Name); check(Property); Property->SetPropertyValue_InContainer(Feedback.Get(),Value); }
 	FVector4 BaseGain, BaseGamma;
@@ -59,6 +66,66 @@ struct FPullCheck
 		UE_LOG(LogTemp,Display,TEXT("RadialPullCheck capture=%s weight=%.4f FOV=%.4f rect=%s gain=%s gamma=%s"),Name,
 			Feedback->GetRadialPullWeight(),PC->PlayerCameraManager->GetFOVAngle(),*Observer->Rect.ToString(),*Observer->Gain.ToString(),*Observer->Gamma.ToString());
 		FScreenshotRequest::RequestScreenshot(FPaths::Combine(Directory,FString(Name)+TEXT(".png")),true,false);
+	}
+	// Explicit presentation event injection, not a melee hit, damage or a real boss kill.
+	void TriggerGroggyHUD()
+	{
+		UknightHitReactionComponent::OnAnyPoiseBroken.Broadcast(Boss.Get(),PC->GetPawn(),FGameplayEffectContextHandle());
+	}
+	void CheckUncroppedHUD()
+	{
+		TArray<UUserWidget*> Widgets;
+		UWidgetBlueprintLibrary::GetAllWidgetsOfClass(World.Get(),Widgets,UknightHUDSlowMotion::StaticClass(),false);
+		Check(Widgets.Num()==1,TEXT("one live slow-motion HUD"));
+		for (UUserWidget* Widget : Widgets)
+		{
+			Check(!Widget->GetWidgetFromName(TEXT("Img_LetterboxTop")) && !Widget->GetWidgetFromName(TEXT("Img_LetterboxBottom")),TEXT("no letterbox widgets in live HUD"));
+		}
+		Check(Observer->Rect==BaseViewRect,TEXT("gameplay view rectangle unchanged"));
+		Check(BaseGain.Equals(Observer->Gain,.0001f)&&BaseGamma.Equals(Observer->Gamma,.0001f),TEXT("brightness gamma unchanged"));
+	}
+	bool TickGroggyHUD(double Now)
+	{
+		switch (Step)
+		{
+		case 1:
+			BaseFOV=PC->PlayerCameraManager->GetFOVAngle(); BaseViewRect=Observer->Rect;
+			BaseGain=Observer->Gain; BaseGamma=Observer->Gamma;
+			CheckUncroppedHUD(); Capture(TEXT("00_normal")); Next=Now+.3; break;
+		case 2: TriggerGroggyHUD(); Next=Now+.16; break;
+		case 3:
+			Check(Feedback->IsPresentationActive(),TEXT("groggy freeze/release and HUD event active"));
+			CheckUncroppedHUD(); Capture(TEXT("01_groggy")); Next=Now+1.5; break;
+		case 4:
+			Check(!Feedback->IsPresentationActive(),TEXT("groggy naturally recovered"));
+			Check(FMath::IsNearlyEqual(BaseFOV,PC->PlayerCameraManager->GetFOVAngle(),.001f),TEXT("recovery restores FOV"));
+			CheckUncroppedHUD(); Capture(TEXT("02_recovery")); Next=Now+.3; break;
+		case 5: TriggerGroggyHUD(); Next=Now+.12; break;
+		case 6: TriggerGroggyHUD(); Next=Now+.16; break;
+		case 7:
+			Check(Feedback->IsPresentationActive(),TEXT("repeated groggy active"));
+			CheckUncroppedHUD(); Capture(TEXT("03_repeated"));
+			CastChecked<AknightPlayerController>(PC.Get())->CancelKnockdownPresentation(); Next=Now+.8; break;
+		case 8:
+			Check(!Feedback->IsPresentationActive()&&Feedback->GetRadialPullWeight()==0.f,TEXT("interruption cancels presentation"));
+			Check(FMath::IsNearlyEqual(BaseFOV,PC->PlayerCameraManager->GetFOVAngle(),.001f),TEXT("interruption restores FOV"));
+			CheckUncroppedHUD(); Capture(TEXT("04_interrupted")); Next=Now+.3; break;
+		case 9:
+			// IsDead reads State.Dead. No health/damage/result/save operation is invoked.
+			Feedback->PlayRadialPull(Boss.Get(),Boss->GetActorLocation());
+			CastChecked<AknightCharacter>(PC->GetPawn())->GetAbilitySystemComponent()->AddLooseGameplayTag(knightGameplayTags::State_Dead);
+			Check(Feedback->GetRadialPullWeight()==0.f,TEXT("death state cancels radial pull"));
+			CastChecked<AknightPlayerController>(PC.Get())->CancelKnockdownPresentation(); Next=Now+.8; break;
+		case 10:
+			CheckUncroppedHUD(); Capture(TEXT("05_death_state_cleanup"));
+			CastChecked<AknightCharacter>(PC->GetPawn())->GetAbilitySystemComponent()->RemoveLooseGameplayTag(knightGameplayTags::State_Dead);
+			Next=Now+.3; break;
+		default:
+			Feedback->CancelKnockdownPresentation(); Observer.Reset();
+			UE_LOG(LogTemp,Display,TEXT("GroggyHUDCheck COMPLETE assertions=%d failures=%d; injected presentation/death state, no combat/input automation"),Assertions,Failures);
+			FPlatformMisc::RequestExit(false); return false;
+		}
+		++Step; return true;
 	}
 	bool Tick(float)
 	{
@@ -87,6 +154,7 @@ struct FPullCheck
 			Observer=FSceneViewExtensions::NewExtension<FPullObserver>();
 			Next=Now+10; ++Step; return true;
 		}
+		if (bCheckGroggyHUD) return TickGroggyHUD(Now);
 		auto* Settings=PC->GetLocalPlayer()->GetSubsystem<UknightSettingsSubsystem>()->GetSharedSettings();
 		switch(Step)
 		{
@@ -165,10 +233,12 @@ struct FPullCheck
 void StartPullCheck(const TArray<FString>& Args,UWorld* World)
 {
 	FString UserDir, Namespace;
-	if(!World || Args.Num()!=1 || !FParse::Value(FCommandLine::Get(),TEXT("UserDir="),UserDir) || !UserDir.Contains(TEXT("KnightRadial"))
+	if(!World || Args.Num()<1 || Args.Num()>2 || (Args.Num()==2 && Args[1]!=TEXT("GroggyHUD"))
+		|| !FParse::Value(FCommandLine::Get(),TEXT("UserDir="),UserDir) || !UserDir.Contains(TEXT("KnightRadial"))
 		|| !FParse::Value(FCommandLine::Get(),TEXT("KnightSaveTestNamespace="),Namespace) || !Namespace.StartsWith(TEXT("Radial")))
 	{ UE_LOG(LogTemp,Error,TEXT("RadialPullCheck requires isolated KnightRadial UserDir and Radial namespace")); return; }
 	auto Run=MakeShared<FPullCheck>(); Run->World=World; Run->Directory=Args[0]; Run->Deadline=FPlatformTime::Seconds()+180;
+	Run->bCheckGroggyHUD=Args.Num()==2;
 	FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([Run](float Delta){return Run->Tick(Delta);}));
 }
 FAutoConsoleCommandWithWorldAndArgs Command(TEXT("knight.RadialPullCheck"),TEXT("Isolated real-render presentation check."),FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&StartPullCheck),ECVF_Cheat);
