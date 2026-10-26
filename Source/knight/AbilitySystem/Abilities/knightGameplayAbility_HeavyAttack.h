@@ -131,9 +131,16 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Charge|Effects", meta=(EditCondition="bPlayChargeEffects"))
 	TObjectPtr<UNiagaraSystem> ReleaseGroundDustEffect;
 
-	/** 차지 해방 몽타주 시작 후 지면 균열 이펙트가 터지기까지의 기준 지연 시간(초, 공격 속도에 반비례). */
+	/**
+	 * 차지 해방 몽타주의 MeleeTrace 판정 구간(시작~끝) 중 지면 균열 이펙트가 터질 진행 비율(0 = 휘두르기 시작, 0.8 = 베기 끝 무렵 지면 타격 순간, 1 = 판정 종료).
+	 * 몽타주 재생 위치(Montage_GetPosition)를 직접 추적하므로 기갑 타이밍(Lock 멈춤)·히트스탑·슬로모션과 100% 동기화된다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Charge|Effects", meta=(ClampMin=0.0, ClampMax=1.0, EditCondition="bPlayChargeEffects"))
+	float ReleaseGroundCrackSwingProgress = 0.8f;
+
+	/** 몽타주에 MeleeTrace 노티파이가 없을 때 사용할 폴백 몽타주 위치(초). */
 	UPROPERTY(EditDefaultsOnly, Category="Charge|Effects", meta=(ClampMin=0.02, Units="s", EditCondition="bPlayChargeEffects"))
-	float ReleaseGroundCrackDelay = 0.24f;
+	float ReleaseGroundCrackDelay = 0.60f;
 
 private:
 	UFUNCTION()
@@ -160,6 +167,7 @@ private:
 	void StartChargeEffects();
 	void StopChargeEffects();
 	void OnFullChargeReached();
+	void CheckReleaseGroundCrackTiming();
 	void SpawnReleaseGroundCrack();
 	void PlayLoop();
 	void PlayMontage(UAnimMontage* Montage, FName TaskName, bool bLoopOnEnd);
@@ -171,6 +179,7 @@ private:
 	double ChargeStartTime = 0.0;
 	double TapDeadline = 0.0;
 	float LastReleaseChargeAlpha = 0.f;
+	float ReleaseCrackTargetPosition = 0.60f;
 	bool bReleased = false;
 	bool bChargeStateApplied = false;
 	FTimerHandle TapTimer;
