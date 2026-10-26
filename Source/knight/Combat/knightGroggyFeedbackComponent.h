@@ -33,6 +33,10 @@ class UGameplayAbility;
 class UAnimMontage;
 class USoundClass;
 class USoundMix;
+class UMaterialInterface;
+class UMaterialInstanceDynamic;
+class FknightGroggyPullViewExtension;
+class FSceneView;
 
 /** 그로기 연출 단계 알림. bImpact = false: 예측 슬로우 시작, true: 그로기 명중(멈춤 시작). */
 DECLARE_MULTICAST_DELEGATE_OneParam(FknightGroggyPresentationEvent, bool /*bImpact*/);
@@ -73,9 +77,32 @@ public:
 	/** 연출이 시작될 때(예측 슬로우, 그로기 명중) 알린다. 끝은 IsPresentationActive로 확인한다. */
 	FknightGroggyPresentationEvent OnPresentationEvent;
 
+	/** Presentation only. Called at the existing prediction/poise-break notifications. */
+	void PlayRadialPull(AActor* Target, const FVector& WorldFocus);
+	void CancelRadialPull();
+	float GetRadialPullFOVOffset();
+	float GetRadialPullWeight();
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Radial Pull")
+	TObjectPtr<UMaterialInterface> RadialPullMaterial;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Radial Pull", meta=(ClampMin=0, ClampMax=1, Units="s"))
+	float RadialPullDuration = 0.22f;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Radial Pull", meta=(ClampMin=0, Units="s"))
+	float RadialPullAttackTime = 0.035f;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Radial Pull", meta=(ClampMin=0.001, Units="s"))
+	float RadialPullReleaseTime = 0.185f;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Radial Pull", meta=(ClampMin=0, ClampMax=0.12))
+	float RadialPullBlurStrength = 0.055f;
+	/** Radius in viewport heights; independent of output aspect ratio/screen percentage. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Radial Pull", meta=(ClampMin=0, ClampMax=1))
+	float RadialPullClearRadius = 0.18f;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Radial Pull", meta=(ClampMin=0, ClampMax=10, Units="deg"))
+	float RadialPullFOVDegrees = 3.f;
 
 	/**
 	 * 거의 멈춰 있는 시간(초). 히트스탑 컴포넌트로 건다(같은 순간의 일반 타격·패링 히트스탑보다 길면 늘어남).
@@ -196,6 +223,18 @@ protected:
 	float PredictionZoomReturnTime = 0.18f;
 
 private:
+	friend class FknightGroggyPullViewExtension;
+	void InitializeRadialPull();
+	void ShutdownRadialPull();
+	void ApplyRadialPullView(FSceneView& View);
+	TSharedPtr<FknightGroggyPullViewExtension, ESPMode::ThreadSafe> RadialPullViewExtension;
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> RadialPullMID;
+	TWeakObjectPtr<AActor> RadialPullTarget;
+	TWeakObjectPtr<AActor> RadialPullViewTarget;
+	FVector RadialPullWorldFocus = FVector::ZeroVector;
+	double RadialPullStartTime = -1.0;
+	float RadialPullStartWeight = 0.f;
 	/** 내가 일으킨 그로기면 멈춤과 타격 큐를 내고, FreezeTime 뒤 풀기를 예약한다. 남이 일으켰거나 내가 그로기에 빠진 경우는 무시. */
 	void HandleAnyPoiseBroken(AActor* Victim, AActor* Instigator, const FGameplayEffectContextHandle& Context);
 

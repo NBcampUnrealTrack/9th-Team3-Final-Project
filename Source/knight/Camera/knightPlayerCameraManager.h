@@ -9,6 +9,7 @@ class UknightCameraModifier_Darkness;
 class UknightCameraModifier_Deafen;
 class UknightCameraModifier_RoarShockwave;
 class UPrimitiveComponent;
+class UknightGroggyFeedbackComponent;
 
 /**
  * Global camera concerns only: pitch limits, combat shakes, and cinematic view targets (Sequencer camera
@@ -70,6 +71,7 @@ public:
 
 	/** The player's CameraShakeScale setting. Screen effects that move or distort the view scale with it too. */
 	float GetShakeScale() const;
+	void SetRadialPullSource(UknightGroggyFeedbackComponent* Source);
 
 protected:
 	virtual void UpdateViewTarget(FTViewTarget& OutVT, float DeltaTime) override;
@@ -89,6 +91,7 @@ protected:
 	TSubclassOf<UknightCameraModifier_Deafen> DeafenClass;
 
 private:
+	TWeakObjectPtr<UknightGroggyFeedbackComponent> RadialPullSource;
 	TWeakObjectPtr<AActor> KnockdownViewTarget;
 	double KnockdownZoomStartTime = 0.0;
 	double KnockdownZoomReturnStartTime = 0.0;

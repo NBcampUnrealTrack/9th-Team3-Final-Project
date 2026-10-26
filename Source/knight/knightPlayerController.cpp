@@ -97,6 +97,12 @@ void AknightPlayerController::CancelKnockdownPresentation()
 	if (AknightPlayerCameraManager* const CameraManager = Cast<AknightPlayerCameraManager>(PlayerCameraManager))
 	{
 		CameraManager->CancelKnockdownZoom();
+		// Settings pause skips the world's camera update. Rebuild from the current
+		// camera before pausing, so a cancelled presentation cannot freeze its FOV.
+		if (GetWorld() && !GetWorld()->bIsTearingDown && GetViewTarget())
+		{
+			CameraManager->UpdateCamera(0.f);
+		}
 	}
 }
 

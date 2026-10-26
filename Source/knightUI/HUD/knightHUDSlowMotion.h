@@ -10,7 +10,7 @@ class UknightVM_PlayerStatus;
 
 /**
  * Screen effects for the slow-motion moments.
- *   Groggy presentation (the Knight breaks a target's poise): black bars slide in from the top and bottom, the screen edges turn cyan
+ *   Groggy presentation (the Knight breaks a target's poise): black bars slide in from the top and bottom
  *   and the rest of the HUD dims while it lasts (prediction slow, freeze, slow release). A short white flash marks the hit.
  *   Knockdown (the Knight is knocked down): the screen edges flash white and fade out.
  * Sits under the rest of the HUD in WBP_HUDLayout and dims the HUD widgets drawn after it. Ticks only while an effect is showing.
@@ -51,7 +51,7 @@ protected:
 	float GroggyExitTime = 0.3f;
 
 	UPROPERTY(EditAnywhere, Category="Knight|HUD|Groggy", meta=(ClampMin=0, ClampMax=1))
-	float GroggyEdgeOpacity = 0.7f;
+	float GroggyEdgeOpacity = 0.7f; // Legacy asset compatibility only; Img_Edge stays collapsed.
 
 	/** How far the other HUD widgets fade while the bars are in (0.5 = half opacity). */
 	UPROPERTY(EditAnywhere, Category="Knight|HUD|Groggy", meta=(ClampMin=0, ClampMax=1))
