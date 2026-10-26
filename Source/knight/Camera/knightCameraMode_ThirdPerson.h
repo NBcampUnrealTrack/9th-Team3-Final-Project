@@ -20,7 +20,7 @@ protected:
 
 	/** Distance behind the pivot at level pitch. */
 	UPROPERTY(EditDefaultsOnly, Category="Third Person", meta=(ClampMin=0, Units="cm"))
-	float ArmLength = 450.f;
+	float ArmLength = 340.f;
 
 	/** Optional arm length multiplier by view pitch (degrees). Pulls the camera in when looking up. */
 	UPROPERTY(EditDefaultsOnly, Category="Third Person")

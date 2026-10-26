@@ -477,6 +477,62 @@ namespace knightMonsterFX
 	}
 }
 
+UNiagaraSystem* UknightMonsterFXBuilder::BuildSandstormDustSystem(const FString& PackagePath, UMaterialInterface* Material)
+{
+	using namespace knightMonsterFX;
+	if (!Material) return nullptr;
+	FSpriteLayer Fine;
+	Fine.Name = TEXT("FineDust"); Fine.Material = Material; Fine.Rate = 160.f;
+	Fine.Life = FVector2f(2.f,4.f); Fine.SizeMin = FVector2f(4.f,8.f); Fine.SizeMax = FVector2f(9.f,18.f);
+	Fine.BoxSize = FVector3f(20000,20000,4000); Fine.bUseVelocity = true;
+	Fine.VelocityMin = Fine.VelocityMax = FVector3f(350,80,0);
+	Fine.CurlStrength = 35.f; Fine.CurlFrequency = .001f;
+	Fine.ColorKeys = {{0.f,1.f},{1.f,1.f}};
+	Fine.AlphaKeys = {{0.f,0.f},{.2f,.32f},{.65f,.32f},{1.f,0.f}};
+	Fine.SizeKeys = {{0.f,1.f},{1.f,1.f}};
+	FSpriteLayer Wisps = Fine;
+	Wisps.Name = TEXT("SoftWisps"); Wisps.Rate = 12.f; Wisps.Life = FVector2f(4.f,6.f);
+	Wisps.SizeMin = FVector2f(220.f,140.f); Wisps.SizeMax = FVector2f(520.f,280.f);
+	Wisps.AlphaKeys = {{0.f,0.f},{.25f,.12f},{.7f,.12f},{1.f,0.f}};
+	Wisps.CurlStrength = 55.f;
+	const FSpriteLayer Layers[] = {Fine,Wisps};
+	UNiagaraSystem* System = BuildLayeredSystem(PackagePath,Layers,350.f,1.f,FVector(-60000),FVector(60000));
+	if (!System) return nullptr;
+	auto Parameter = [System](FName Name, const FNiagaraTypeDefinition& Type, auto Value)
+	{
+		FNiagaraVariable Var(Type,Name); Var.SetValue(Value);
+		System->GetExposedParameters().AddParameter(Var);
+		System->GetExposedParameters().SetParameterData(Var.GetData(),Var);
+	};
+	Parameter(TEXT("User.FineRate"),FNiagaraTypeDefinition::GetFloatDef(),160.f);
+	Parameter(TEXT("User.WispRate"),FNiagaraTypeDefinition::GetFloatDef(),12.f);
+	Parameter(TEXT("User.BoxSize"),FNiagaraTypeDefinition::GetVec3Def(),FVector3f(20000,20000,4000));
+	Parameter(TEXT("User.WindVelocity"),FNiagaraTypeDefinition::GetVec3Def(),FVector3f(350,80,0));
+	Parameter(TEXT("User.SizeScale"),FNiagaraTypeDefinition::GetVec2Def(),FVector2f(1.f));
+	FNiagaraVariable MaterialVar(FNiagaraTypeDefinition(UMaterialInterface::StaticClass()),TEXT("User.DustMaterial"));
+	System->GetExposedParameters().AddParameter(MaterialVar);
+	System->GetExposedParameters().SetUObject(Material,MaterialVar);
+	auto Bind = [](FNiagaraDistributionBase& D,FName Name,const FNiagaraTypeDefinition& Type)
+	{
+		D.Mode = ENiagaraDistributionMode::Binding; D.ParameterBinding = FNiagaraVariableBase(Type,Name);
+	};
+	for (int32 Index=0;Index<System->GetEmitterHandles().Num();++Index)
+	{
+		UNiagaraStatelessEmitter* E = System->GetEmitterHandle(Index).GetStatelessEmitter();
+		if (!E) continue;
+		Bind(E->GetSpawnInfoByIndex(0)->Rate,Index==0?TEXT("User.FineRate"):TEXT("User.WispRate"),FNiagaraTypeDefinition::GetFloatDef());
+		Bind(Get<UNiagaraStatelessModule_ShapeLocation>(*E)->BoxSize,TEXT("User.BoxSize"),FNiagaraTypeDefinition::GetVec3Def());
+		Bind(Get<UNiagaraStatelessModule_AddVelocity>(*E)->LinearVelocityDistribution,TEXT("User.WindVelocity"),FNiagaraTypeDefinition::GetVec3Def());
+		Bind(Get<UNiagaraStatelessModule_ScaleSpriteSize>(*E)->ScaleDistribution,TEXT("User.SizeScale"),FNiagaraTypeDefinition::GetVec2Def());
+		Get<UNiagaraStatelessModule_SpriteRotationRate>(*E)->RotationRateDistribution.InitRange(-12.f,12.f);
+		for (UNiagaraRendererProperties* R:E->GetRenderers())
+			if (UNiagaraSpriteRendererProperties* S=Cast<UNiagaraSpriteRendererProperties>(R)) S->MaterialUserParamBinding.Parameter=MaterialVar;
+		E->PostEditChange();
+	}
+	System->SetFixedBounds(FBox(FVector(-60000),FVector(60000)));
+	return Finish(System,false);
+}
+
 UNiagaraSystem* UknightMonsterFXBuilder::BuildBreathSystem(const FString& PackagePath, UMaterialInterface* FireMaterial, UMaterialInterface* CoreMaterial,
 	UMaterialInterface* SmokeMaterial, UMaterialInterface* EmberMaterial, float Reach, float OwnerScale)
 {

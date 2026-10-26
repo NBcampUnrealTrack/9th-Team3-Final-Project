@@ -32,6 +32,9 @@ public:
 	/** 공중 높이(내리지 않고 AirLift만큼 더 띄움)와 지상 높이 사이를 BlendTime 동안 옮긴다. 0이면 바로 바꾼다. */
 	void SetAirborne(bool bInAirborne, float BlendTime);
 
+	/** 지상(0)과 공중(1) 사이 높이 Target으로 지금 높이에서 BlendTime 동안 옮긴다(지쳐 조금씩 내려앉기). */
+	void SetAirAlpha(float Target, float BlendTime);
+
 	/** 0 = 지상 높이, 1 = 공중 높이. */
 	float GetAirAlpha() const { return AirAlpha; }
 

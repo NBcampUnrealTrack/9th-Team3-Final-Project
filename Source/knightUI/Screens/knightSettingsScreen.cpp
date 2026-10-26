@@ -3,6 +3,7 @@
 #include "Blueprint/WidgetTree.h"
 #include "CommonTextBlock.h"
 #include "Components/PanelWidget.h"
+#include "Components/Image.h"
 #include "Components/ScrollBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "HAL/IConsoleManager.h"
@@ -72,6 +73,8 @@ void UknightSettingsScreen::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
 	SetIsFocusable(true);
+	CalibrationBackdrop = Cast<UImage>(WidgetTree->FindWidget(TEXT("Img_Backdrop")));
+	if (CalibrationBackdrop) OriginalBackdropTint = CalibrationBackdrop->GetColorAndOpacity();
 
 	for (int32 Index = 0; Index < TabCount; ++Index)
 	{
@@ -119,6 +122,13 @@ bool UknightSettingsScreen::IsCapturingKey() const
 
 void UknightSettingsScreen::HandleTabChanged()
 {
+	if (CalibrationBackdrop)
+	{
+		FLinearColor Tint = OriginalBackdropTint;
+		// Only the background becomes translucent; row text/controls keep full opacity.
+		if (GetCurrentTab() == 3) Tint.A = FMath::Min(Tint.A, 0.35f);
+		CalibrationBackdrop->SetColorAndOpacity(Tint);
+	}
 	const bool bHadFocus = HasFocusedDescendants();
 	Box_Rows->ClearChildren();
 	Rows.Reset();

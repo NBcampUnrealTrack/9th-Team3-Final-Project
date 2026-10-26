@@ -10,6 +10,7 @@
 #include "Combat/knightCombatLibrary.h"
 #include "Combat/knightGroggyFeedbackComponent.h"
 #include "Combat/knightHitStopComponent.h"
+#include "Components/AudioComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
@@ -117,10 +118,7 @@ void UknightGameplayAbility_PlungeAttack::ActivateAbility(const FGameplayAbility
 	PlayMontage(ActiveStartMontage, false);
 	bThrustersReversed = false;
 	SpawnThrusters(BoostThrusterScale);
-	if (BoostSound)
-	{
-		UGameplayStatics::PlaySoundAtLocation(Character, BoostSound, Character->GetActorLocation());
-	}
+	PlayThrusterSound(BoostSound);
 	if (BoostShake)
 	{
 		if (APlayerController* const PC = Cast<APlayerController>(Character->GetController()))
@@ -210,6 +208,38 @@ void UknightGameplayAbility_PlungeAttack::StopThrusters()
 	ThrusterComponents.Reset();
 }
 
+void UknightGameplayAbility_PlungeAttack::PlayThrusterSound(USoundBase* Sound)
+{
+	StopThrusterSound(0.08f);
+	const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	USceneComponent* const AttachComp = Character ? Character->GetRootComponent() : nullptr;
+	if (!Sound || !AttachComp)
+	{
+		return;
+	}
+	ActiveThrusterAudio = UGameplayStatics::SpawnSoundAttached(
+		Sound, AttachComp, NAME_None, FVector::ZeroVector, EAttachLocation::KeepRelativeOffset, true);
+}
+
+void UknightGameplayAbility_PlungeAttack::StopThrusterSound(float FadeOutTime)
+{
+	if (ActiveThrusterAudio)
+	{
+		if (ActiveThrusterAudio->IsPlaying())
+		{
+			if (FadeOutTime > 0.f)
+			{
+				ActiveThrusterAudio->FadeOut(FadeOutTime, 0.f);
+			}
+			else
+			{
+				ActiveThrusterAudio->Stop();
+			}
+		}
+		ActiveThrusterAudio = nullptr;
+	}
+}
+
 void UknightGameplayAbility_PlungeAttack::UpdateThrusterRotation() const
 {
 	const AActor* const Avatar = GetAvatarActorFromActorInfo();
@@ -275,10 +305,7 @@ void UknightGameplayAbility_PlungeAttack::StartDive()
 	PlayMontage(ActiveLoopMontage, false);
 	bThrustersReversed = true;
 	SpawnThrusters(DiveThrusterScale);
-	if (DiveSound)
-	{
-		UGameplayStatics::PlaySoundAtLocation(Character, DiveSound, Character->GetActorLocation());
-	}
+	PlayThrusterSound(DiveSound);
 }
 
 void UknightGameplayAbility_PlungeAttack::StartLeap()
@@ -345,10 +372,7 @@ void UknightGameplayAbility_PlungeAttack::StartLeap()
 		bThrustersReversed = false;
 		SpawnThrusters(BoostThrusterScale);
 	}
-	if (BoostSound)
-	{
-		UGameplayStatics::PlaySoundAtLocation(Character, BoostSound, Start);
-	}
+	PlayThrusterSound(BoostSound);
 	World->GetTimerManager().SetTimer(TickTimer, this, &ThisClass::TickPlunge, PlungeTickInterval, true);
 }
 
@@ -508,6 +532,7 @@ void UknightGameplayAbility_PlungeAttack::StartLand()
 		World->GetTimerManager().ClearTimer(TickTimer);
 	}
 	StopThrusters();
+	StopThrusterSound(0.1f);
 	ResetLean();
 	RestoreMovement();
 	// 착지 흔들림·착지 경직은 무브먼트 컴포넌트가 떨어진 속도로 이미 처리했다. 여기서는 내려찍는 동작과 타격.
@@ -669,6 +694,7 @@ void UknightGameplayAbility_PlungeAttack::EndAbility(const FGameplayAbilitySpecH
 	}
 	// 공중에서 끊긴 경우(피격 등)에도 중력·공중 조작·기울기·추진기를 원래대로 돌린다.
 	StopThrusters();
+	StopThrusterSound(0.1f);
 	ResetLean();
 	RestoreMovement();
 	if (Phase != EPhase::Land && IsActive())
