@@ -37,6 +37,7 @@ class UGameplayEffect;
  * (2026-10-08) 가드 중 다른 입력 (사용자 결정):
  *   - 가드 중에는 Window.Cancel을 켜 두어 공격·강공격·퀵스텝(나중에 점프 어빌리티)이 바로 가드를 대신한다.
  *   - 가드 중에는 이동을 잠근다(제자리, 몸도 돌지 않음). 새로 누른 이동 입력이 들어오면 가드를 내리고 이동한다.
+ *     (2026-10-26) 기본은 이동 입력으로 가드가 풀리지 않는다(bMoveInputCancelsGuard). 가드 키를 떼거나 퀵스텝·공격·점프로 끊는다.
  *     가드를 올릴 때 누르고 있던 방향키는 새 입력이 아니다: 그 방향을 바로 바라보는 데에만 쓴다(락온 중 제외).
  *   - 가드 키를 누른 채 다른 행동을 하고 나도 가드는 자동으로 다시 올라가지 않는다
  *     (자동으로 올라가면 키를 새로 누르지 않아도 퍼펙트 가드 판정 시간이 다시 생기므로).
@@ -72,6 +73,13 @@ protected:
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Guard", meta=(ClampMin=0, Units="deg"))
 	float GuardLockOnTurnRate = 540.f;
+
+	/**
+	 * (2026-10-26 사용자 결정 '비숙련자는 가드 중 움직이면 가드가 풀리는 게 불편') 켜면 가드 중 새로 누른 이동 입력이 가드를 내리고 이동한다(예전 동작).
+	 * 끄면(기본) 가드 키를 누르고 있는 동안 방향키를 눌러도 가드가 유지된다. 몸 방향은 그대로 카메라·락온 대상을 따라간다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Guard")
+	bool bMoveInputCancelsGuard = false;
 
 	/** Optional looping guard pose. The ability ends on input release, not when this montage ends. */
 	UPROPERTY(EditDefaultsOnly, Category="Guard")
@@ -159,7 +167,7 @@ private:
 	/** EnterGuardStance로 켠 것을 끈다. */
 	void ExitGuardStance();
 
-	/** 새로 누른 이동 입력이 들어오면 가드를 내린다(잠금이 풀리며 그대로 이동). */
+	/** 가드 중 몸 돌리기(락온 대상·카메라), 그리고 bMoveInputCancelsGuard면 새로 누른 이동 입력에 가드를 내린다(잠금이 풀리며 그대로 이동). */
 	void CheckMoveCancel();
 
 	bool bParryTagApplied = false;
