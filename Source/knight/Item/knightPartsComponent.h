@@ -13,6 +13,7 @@ class USkeletalMeshComponent;
 class UknightPartItemDefinition;
 class UknightWeaponItemDefinition;
 class UknightLoadoutDefinition;
+class UknightProgressionSubsystem;
 struct FknightPartStatModifier;
 
 /** Part is null when the slot was emptied. Item definitions are shared assets: listeners must not modify them. */
@@ -85,6 +86,12 @@ public:
 	/** Equips the saved loadout. Called by the Knight once its ability system is initialized. */
 	void ApplyLoadout();
 
+	/**
+	 * (2026-10-26) 저장된 장착(저장에 없는 칸은 기본 장착)과 다른 슬롯만 다시 입거나 벗는다. ApplyLoadout 뒤에 쓴다.
+	 * 메뉴의 나이트(AKnightMenuKnight)가 정비 화면에서 바꾼 장비를 따라갈 때 부른다. 바뀐 슬롯이 있으면 true.
+	 */
+	bool SyncLoadoutWithSave();
+
 	/** Equips a part into its slot, replacing what was there. 적재 한도를 넘으면 false(장착 안 함). */
 	UFUNCTION(BlueprintCallable, Category="Knight|Parts")
 	bool EquipPart(const UknightPartItemDefinition* Part, int32 UpgradeLevel);
@@ -118,6 +125,13 @@ public:
 	 * (2026-10-13) 원본 부위 메시(BodyRegions)도 넣는다. 본체 대신 그려지는 메시라 본체와 같은 효과를 받아야 한다.
 	 */
 	void GetPartMeshes(TArray<UMeshComponent*>& OutMeshes) const;
+
+	/**
+	 * (2026-10-26) 무기 메시를 몸 메시의 소켓으로 옮긴다(검 뽑기·넣기 노티파이, 자동으로 검 넣기).
+	 * 그 소켓이 장착한 무기 파츠의 붙일 소켓(Attachment.AttachSocket, 보통 손 weapon_r)이면 워크벤치에서 맞춘 위치·회전·크기로 붙이고,
+	 * 다른 소켓(등 weapon_back)이면 지금처럼 소켓에 딱 붙인다. 예전에는 뽑을 때도 딱 붙여서 워크벤치 값이 사라졌다.
+	 */
+	static void AttachWeaponToSocket(UMeshComponent* WeaponMesh, USkeletalMeshComponent* Body, FName Socket);
 
 	UPROPERTY(BlueprintAssignable, Category="Knight|Parts")
 	FknightEquipmentChanged OnEquipmentChanged;
@@ -163,6 +177,9 @@ private:
 
 	/** 적재 한도 확인 없이 장착한다. EquipPart(확인 후)와 ApplyLoadout(확인 안 함)이 쓴다. */
 	bool EquipPartUnchecked(const UknightPartItemDefinition* Part, int32 UpgradeLevel);
+
+	/** (2026-10-26) 이 슬롯에 입을 파츠: 저장된 장착이 우선, 저장에 없고 일부러 비운 칸이 아니면 기본 장착(ApplyLoadout·SyncLoadoutWithSave 공용). */
+	const UknightPartItemDefinition* GetLoadoutPartForSlot(const UknightProgressionSubsystem* Progression, FGameplayTag Slot) const;
 
 	/** 장착 중량 합을 메카 Weight 스탯 기본값에 반영한다. Weight 스탯이 없는 소유자는 아무것도 하지 않는다. */
 	void UpdateWeightAttribute();

@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "AbilitySystem/Abilities/knightGameplayAbility.h"
 #include "Combat/knightCombatTypes.h"
+#include "Input/knightMovePressTracker.h"
 #include "knightGameplayAbility_HeavyAttack.generated.h"
 
 class UAnimMontage;
@@ -20,6 +21,11 @@ class UNiagaraSystem;
  *                                     whose hits use ReleaseHitParams scaled up to MaxChargeMultiplier after MaxChargeTime.
  * Charging starts only when no other attack / guard / dash is running, or inside Window.Cancel (it cancels them).
  * While charging the owner has State.Charging and other attacks are blocked.
+ *
+ * (2026-10-26 사용자 결정) 해방부터는 일반 공격과 같은 캔슬 규칙: 해방할 때 교체 가능 배타 그룹으로 바뀌어(ChangeActivationGroupWhileActive)
+ *   캔슬 창(Window.Cancel) 전에는 가드·퀵스텝·점프가 안 되고, 캔슬 창 처음 AttackRecoveryDashOnlyTime(0.25초)은 퀵스텝과 다음 공격만,
+ *   그 뒤에는 가드·이동·점프도 된다. 모으는 동안은 지금처럼 독립 그룹이라 가드·퀵스텝으로 그만둘 수 있다.
+ *   행동 에너지: 모으는 동안 ChargeStaminaCost를 조금씩, 해방할 때 ReleaseStaminaCost. 계수·그로기는 FullCharge* 값까지 오른다.
  *
  * Bind to InputTag.Attack.Secondary. The heavy combo steps are ordinary knightGameplayAbility_MeleeAttack Blueprints
  * with no input tag; chain them with Combo tags exactly like the light combo.
@@ -77,6 +83,31 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category="Charge", meta=(ClampMin=1))
 	float MaxChargeMultiplier = 2.f;
+
+	/**
+	 * (2026-10-26 사용자 결정) 풀차지(MaxChargeTime) 때의 계수·그로기. 0보다 크면 MaxChargeMultiplier 대신
+	 * ReleaseHitParams 값(기본 55/25)에서 이 값까지 차지 시간에 따라 오른다(풀차지 120/60). 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Charge", meta=(ClampMin=0))
+	float FullChargeMotionValue = 120.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Charge", meta=(ClampMin=0))
+	float FullChargePoiseDamage = 60.f;
+
+	/**
+	 * (2026-10-26 사용자 결정) 차지 행동 에너지. 모으는 동안 MaxChargeTime에 걸쳐 ChargeStaminaCost만큼 조금씩 쓰고(풀차지면 25),
+	 * 해방(돌진)할 때 ReleaseStaminaCost를 더 쓴다(풀차지 합 40). 0보다 많아야 모으기 시작하고, 시작한 뒤에는 모자라도
+	 * 끝까지 쓴다(가불). 이 어빌리티의 StaminaCost(시작할 때 한 번)는 쓰지 않는다(0). 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Charge|Cost", meta=(ClampMin=0))
+	float ChargeStaminaCost = 25.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Charge|Cost", meta=(ClampMin=0))
+	float ReleaseStaminaCost = 15.f;
+
+	/** (2026-10-26) 해방 후딜을 이동으로 끊을 때 해방 모션이 빠지는 시간(일반 공격의 RecoveryCancelBlendOut과 같은 값). */
+	UPROPERTY(EditDefaultsOnly, Category="Charge", meta=(ClampMin=0, Units="s"))
+	float ReleaseMoveCancelBlendOut = 0.25f;
 
 	/** Warp target of the release montage, set when the button is released. */
 	UPROPERTY(EditDefaultsOnly, Category="Charge|Motion Warping")
@@ -172,6 +203,10 @@ private:
 	void PlayLoop();
 	void PlayMontage(UAnimMontage* Montage, FName TaskName, bool bLoopOnEnd);
 	void Finish(bool bWasCancelled);
+	/** (2026-10-26) 모으는 동안 행동 에너지를 조금씩 쓴다(ChargeStaminaCost를 MaxChargeTime에 걸쳐). */
+	void TickChargeStamina();
+	/** (2026-10-26) 해방 후딜: 캔슬 창이 열리고 후딜이 지난 뒤 새로 누른 이동 입력이면 해방 모션을 끊는다(일반 공격과 같은 규칙). */
+	void CheckReleaseMoveCancel();
 
 	enum class EPhase : uint8 { Deciding, TapBuffer, Charging, Releasing };
 	EPhase Phase = EPhase::Deciding;
@@ -185,6 +220,15 @@ private:
 	FTimerHandle TapTimer;
 	FTimerHandle FullChargeTimer;
 	FTimerHandle GroundCrackTimer;
+
+	// (2026-10-26) 차지 행동 에너지·해방 후딜.
+	FTimerHandle ChargeStaminaTimer;
+	FTimerHandle ReleaseMoveCancelTimer;
+	double LastChargeStaminaTime = 0.0;
+	float ChargeStaminaSpent = 0.f;
+	/** 모으는 동안 다른 공격을 막아 둔 상태(해방하면 풀고 일반 공격 규칙에 맡긴다). */
+	bool bAttackBlockApplied = false;
+	FknightMovePressTracker ReleaseMovePress;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UNiagaraComponent> ActiveChargeAuraFX;

@@ -162,7 +162,9 @@ void UknightGameplayAbility_BoostLunge::ActivateAbility(const FGameplayAbilitySp
 	{
 		StartFootThrusters(*Character);
 	}
-	if (bSpawnGhostTrail)
+	// (2026-10-26) 이미 기본 공격이 닿는 거리(멈출 지점까지 GhostInRangeDistance 이하)면 잔상을 남기지 않는다.
+	GhostStopLocation = Character->GetActorLocation() + ToDestination;
+	if (bSpawnGhostTrail && Distance > GhostInRangeDistance)
 	{
 		SpawnGhostStep();
 		if (UWorld* const World = GetWorld(); World && GhostSpawnInterval > 0.f)
@@ -405,6 +407,12 @@ void UknightGameplayAbility_BoostLunge::SpawnGhostStep()
 	const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
 	if (!Character)
 	{
+		return;
+	}
+	// (2026-10-26) 돌진하다 기본 공격이 닿는 거리로 들어오면 더 남기지 않는다(몬스터에 붙은 잔상).
+	if (FVector::Dist2D(Character->GetActorLocation(), GhostStopLocation) <= GhostInRangeDistance)
+	{
+		StopGhostTrail();
 		return;
 	}
 	const bool bTwoHanded = UknightGameplayAbility_StanceSwitch::IsTwoHanded(GetAbilitySystemComponentFromActorInfo());

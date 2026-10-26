@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "AbilitySystem/Abilities/knightGameplayAbility.h"
 #include "Combat/knightCombatTypes.h"
+#include "Combat/knightGhostTrailActor.h"
 #include "Input/knightMovePressTracker.h"
 #include "knightGameplayAbility_MeleeAttack.generated.h"
 
@@ -137,6 +138,16 @@ protected:
 	/** The lunge toward the warp location takes at most this long and ends with the warp window (the first trace). */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Motion Warping", meta=(ClampMin=0.05, Units="s", EditCondition="bLungeWithCode"))
 	float MaxLungeTime = 0.35f;
+
+	/**
+	 * (2026-10-26 사용자 요청) 대상 쪽으로 돌진할 때(워프 대상을 찾았을 때) 락온 돌진과 같은 잔상을 워프 구간 끝까지 남긴다.
+	 * 대쉬공격(GA_Knight_RunAttack)이 켠다. 다른 공격은 꺼 둔다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Ghost Trail")
+	bool bLungeGhostTrail = false;
+
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Ghost Trail", meta=(EditCondition="bLungeGhostTrail"))
+	FknightGhostTrailSettings LungeGhostTrailSettings;
 
 	/**
 	 * (2026-10-14) 공격 중 애니 루트 모션 이동 거리 배율(ACharacter::AnimRootMotionTranslationScale).

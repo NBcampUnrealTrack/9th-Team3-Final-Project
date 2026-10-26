@@ -366,6 +366,13 @@ void UknightGameplayAbility_MeleeAttack::StartAttack()
 	{
 		UknightCombatLibrary::StartAttackLunge(this, Montage, Rate, WarpLocation, WarpTravel, MaxLungeTime);
 	}
+	// (2026-10-26) 돌진 잔상(대쉬공격): 워프 구간이 끝날 때(첫 판정 직전)까지. 코드 돌진·루트 모션 워프 둘 다 이 구간에 움직인다.
+	// 멈출 지점(WarpLocation)까지 1m(InRangeDistance) 안이면 기본 공격이 닿는 거리라 남기지 않는다.
+	if (bLunge && bLungeGhostTrail)
+	{
+		AknightGhostTrailActor::StartGhostTrailForAbility(this, LungeGhostTrailSettings,
+			UknightCombatLibrary::GetWarpWindowEnd(Montage) / FMath::Max(Rate, 0.01f), WarpLocation);
+	}
 	// (2026-10-20) 패링 반격은 휘두르기 전(워프 구간 끝)까지 대상을 따라간다.
 	TrackWarpEndTime = bWarpToParriedAttacker && bLunge ? UknightCombatLibrary::GetWarpWindowEnd(Montage) : -1.f;
 	if (TrackWarpEndTime > 0.f)

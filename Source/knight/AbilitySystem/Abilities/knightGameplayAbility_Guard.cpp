@@ -52,6 +52,19 @@ float UknightGameplayAbility_Guard::GetPerfectGuardWindow() const
 	return ASC && ASC->HasAttributeSetForAttribute(Attribute) ? ASC->GetNumericAttribute(Attribute) : ParryWindow;
 }
 
+bool UknightGameplayAbility_Guard::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
+{
+	if (!Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags))
+	{
+		return false;
+	}
+	// (2026-10-26) 퍼펙트 가드 없이 내린 직후 ReguardLockoutTime 동안은 다시 못 올린다(가드 연타 막기).
+	// 여기서 막아야 누르고 있는 동안 bRetryPressWhileHeld가 잠금이 풀리는 순간 올려 준다.
+	const UWorld* const World = GetWorld();
+	return !World || LastGuardEndTime < 0.0 || World->GetTimeSeconds() - LastGuardEndTime >= ReguardLockoutTime;
+}
+
 void UknightGameplayAbility_Guard::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
 {
@@ -76,11 +89,25 @@ void UknightGameplayAbility_Guard::ActivateAbility(const FGameplayAbilitySpecHan
 		}
 	}
 	EnterGuardStance();
+	bGuardRaised = true;
+	bParriedThisGuard = false;
 
 	// 퍼펙트 가드 판정 시간은 누를 때 한 번 읽는다. 가드 도중 스탯이 바뀌면 다음 가드부터 반영된다. (2026-10-08)
 	// (2026-10-15 사용자 결정) 후딜 중 미리 눌러 두었다가 나중에 올라간 가드도 올라간 순간부터 판정 시간 전부를 준다.
 	// 가드를 올린 순간 맞았는데 퍼펙트가 안 되면 불쾌하기 때문(누른 순간부터 세는 방식은 버림).
-	const float PerfectGuardWindow = GetPerfectGuardWindow();
+	float PerfectGuardWindow = GetPerfectGuardWindow();
+
+	// (2026-10-26) 퍼펙트 가드 없이 내린 뒤 PerfectGuardRearmTime 안에 다시 올렸으면 판정을 줄인다: 처음 x RearmPerfectGuardScale, 연속 두 번째부터 0.
+	const UWorld* const World = GetWorld();
+	const float SinceLastGuard = World && LastGuardEndTime >= 0.0 ? static_cast<float>(World->GetTimeSeconds() - LastGuardEndTime) : -1.f;
+	QuickReguardCount = SinceLastGuard >= 0.f && SinceLastGuard < PerfectGuardRearmTime ? QuickReguardCount + 1 : 0;
+	if (QuickReguardCount > 0)
+	{
+		const float FullWindow = PerfectGuardWindow;
+		PerfectGuardWindow = QuickReguardCount == 1 ? PerfectGuardWindow * RearmPerfectGuardScale : 0.f;
+		UE_LOG(LogknightCombat, Log, TEXT("%s: guard raised %.2fs after the last one (quick re-guard %d) -> perfect guard window %.3f -> %.3f"),
+			*GetNameSafe(GetAvatarActorFromActorInfo()), SinceLastGuard, QuickReguardCount, FullWindow, PerfectGuardWindow);
+	}
 
 	if (PerfectGuardWindow > 0.f && ParrySucceededEventTag.IsValid())
 	{
@@ -185,6 +212,8 @@ void UknightGameplayAbility_Guard::OnParrySucceeded(FGameplayEventData Payload)
 		}
 	}
 	// End the guard so the attack key can start the counter right away.
+	// (2026-10-26) 패링으로 내려간 가드는 연타 막기(다시 올리기 잠금·판정 감소)를 적용하지 않는다(EndAbility).
+	bParriedThisGuard = true;
 	ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
 	const AActor* const Attacker = Payload.Instigator.Get();
 	EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, false);
@@ -366,5 +395,16 @@ void UknightGameplayAbility_Guard::EndAbility(const FGameplayAbilitySpecHandle H
 {
 	RemoveParryTag();
 	ExitGuardStance();
+	// (2026-10-26) 가드 연타 막기: 퍼펙트 가드 없이 내린 시각을 기록한다. 패링했으면 처음부터 다시 센다.
+	if (bGuardRaised)
+	{
+		bGuardRaised = false;
+		const UWorld* const World = GetWorld();
+		LastGuardEndTime = bParriedThisGuard || !World ? -1.0 : World->GetTimeSeconds();
+		if (bParriedThisGuard)
+		{
+			QuickReguardCount = 0;
+		}
+	}
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }

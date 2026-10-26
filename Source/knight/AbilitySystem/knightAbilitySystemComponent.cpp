@@ -565,6 +565,12 @@ bool UknightAbilitySystemComponent::IsActionHoldingBoostRecovery() const
 	{
 		return true;
 	}
+	// (2026-10-26 사용자 결정) 차지를 모으는 동안(State.Charging, 해방 전이라 아직 독립 그룹)도 회복을 미룬다.
+	// 해방한 뒤에는 교체 가능 배타 공격이 되어 아래 일반 공격 규칙을 받는다.
+	if (HasMatchingGameplayTag(knightGameplayTags::State_Charging) && !IsExclusiveAttackActive())
+	{
+		return true;
+	}
 	// 캔슬 창이 열리기 전 = 아직 휘두르는 중. 캔슬 창이 열려 있으면(후딜 뒤 꼬리 동작) 이동으로 끊을 수 있으니 회복한다.
 	return !HasMatchingGameplayTag(knightGameplayTags::Window_Cancel) && IsExclusiveAttackActive();
 }
@@ -587,6 +593,25 @@ void UknightAbilitySystemComponent::CancelActivationGroupAbilities(EknightAbilit
 				KnightAbility->CancelAbility(Spec.Handle, AbilityActorInfo.Get(), KnightAbility->GetCurrentActivationInfo(), true);
 			}
 		}
+	}
+}
+
+void UknightAbilitySystemComponent::NotifyActivationGroupChanged(const UknightGameplayAbility* Ability, EknightAbilityActivationGroup OldGroup,
+	EknightAbilityActivationGroup NewGroup)
+{
+	if (!Ability || OldGroup == NewGroup)
+	{
+		return;
+	}
+	int32& OldCount = ActivationGroupCounts[static_cast<uint8>(OldGroup)];
+	if (ensure(OldCount > 0))
+	{
+		OldCount--;
+	}
+	ActivationGroupCounts[static_cast<uint8>(NewGroup)]++;
+	if (NewGroup != EknightAbilityActivationGroup::Independent)
+	{
+		CancelActivationGroupAbilities(EknightAbilityActivationGroup::Exclusive_Replaceable, Ability);
 	}
 }
 
@@ -615,6 +640,13 @@ void UknightAbilitySystemComponent::NotifyAbilityActivated(const FGameplayAbilit
 	if (Group != EknightAbilityActivationGroup::Independent)
 	{
 		CancelActivationGroupAbilities(EknightAbilityActivationGroup::Exclusive_Replaceable, KnightAbility);
+		// (2026-10-26) 차지를 모으는 중(State.Charging, 해방 전이라 독립 그룹)에 가드·퀵스텝 같은 배타 어빌리티가 나가면 차지를 취소한다.
+		// 그대로 두면 차지가 끝나지 않고 새 행동과 같이 돌았다. 해방한 뒤의 차지는 배타 그룹이라 위에서 이미 끊긴다.
+		if (HasMatchingGameplayTag(knightGameplayTags::State_Charging))
+		{
+			const FGameplayTagContainer ChargeTags(knightGameplayTags::Ability_Attack_Charge);
+			CancelAbilities(&ChargeTags, nullptr, Ability);
+		}
 	}
 
 	const int32 ExclusiveCount = ActivationGroupCounts[static_cast<uint8>(EknightAbilityActivationGroup::Exclusive_Replaceable)]

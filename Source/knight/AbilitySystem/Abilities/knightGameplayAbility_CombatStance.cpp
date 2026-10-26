@@ -6,6 +6,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
+#include "Item/knightPartsComponent.h"
 #include "System/knightGameplayTags.h"
 #include "TimerManager.h"
 
@@ -274,7 +275,8 @@ void UknightGameplayAbility_CombatStance::AttachWeaponToBack() const
 	{
 		if (Mesh != CharacterMesh && Mesh->ComponentHasTag(WeaponComponentTag))
 		{
-			Mesh->AttachToComponent(CharacterMesh, FAttachmentTransformRules::SnapToTargetNotIncludingScale, BackSocket);
+			// (2026-10-26) 노티파이와 같은 함수로 옮긴다(손 소켓이면 워크벤치 위치를 쓰고, 등은 지금처럼 딱 붙인다).
+			UknightPartsComponent::AttachWeaponToSocket(Mesh, CharacterMesh, BackSocket);
 			return;
 		}
 	}

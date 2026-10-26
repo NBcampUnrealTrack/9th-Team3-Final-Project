@@ -319,11 +319,12 @@ void UknightGameplayAbility_PlungeAttack::StartLeap()
 	}
 	FaceScreenCenterForPlungeAttack(Character, GetAbilitySystemComponentFromActorInfo());
 	const FVector Start = Character->GetActorLocation();
-	FVector Destination;
-	FRotator AimRotation;
+	FVector Destination = Start;
+	FRotator AimRotation = FRotator::ZeroRotator;
 	float Travel = 0.f;
-	if (MaxAimDistance > 0.f && UknightCombatLibrary::ComputeAttackWarp(Character, MaxAimDistance, AimStopDistance, true, SoftTargetRange,
-		SoftTargetAngle, Destination, AimRotation, Travel))
+	const bool bHasLeapTarget = MaxAimDistance > 0.f && UknightCombatLibrary::ComputeAttackWarp(Character, MaxAimDistance, AimStopDistance, true,
+		SoftTargetRange, SoftTargetAngle, Destination, AimRotation, Travel);
+	if (bHasLeapTarget)
 	{
 		Character->SetActorRotation(FRotator(0.f, AimRotation.Yaw, 0.f));
 	}
@@ -358,6 +359,14 @@ void UknightGameplayAbility_PlungeAttack::StartLeap()
 	// 뛰어가는 동안은 점프 자세, 도착 지점에서 LeapSwingDistance 안으로 들어오면 휘두른다.
 	bLeapSwingStarted = !ActiveLeapPoseMontage || GetLeapRemainingDistance() <= LeapSwingDistance;
 	PlayMontage(bLeapSwingStarted ? ActiveStartMontage.Get() : ActiveLeapPoseMontage.Get(), false);
+	// (2026-10-26) 대상 쪽으로 뛰어갈 때만 락온 돌진과 같은 잔상. 휘두르기가 시작되거나(bLeapSwingStarted) 도착 지점 1m 안이면
+	// 멈추고, 처음부터 휘두르는 거리면 남기지 않는다(몬스터에 붙어 있을 때). 착지(Time)나 어빌리티가 끝나도 멈춘다.
+	if (bLeapGhostTrail && bHasLeapTarget && !bLeapSwingStarted)
+	{
+		const TWeakObjectPtr<ThisClass> WeakThis(this);
+		AknightGhostTrailActor::StartGhostTrailForAbility(this, LeapGhostTrailSettings, Time, LeapDestination,
+			[WeakThis]() { return !WeakThis.IsValid() || WeakThis->bLeapSwingStarted; });
+	}
 	if (ThrusterEffect)
 	{
 		bThrustersReversed = false;

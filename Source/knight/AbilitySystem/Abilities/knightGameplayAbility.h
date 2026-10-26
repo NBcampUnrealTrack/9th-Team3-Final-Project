@@ -65,6 +65,13 @@ public:
 	/** Activates OnSpawn abilities. Called when granted and again when the avatar changes. */
 	void TryActivateAbilityOnSpawn(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec) const;
 
+	/**
+	 * (2026-10-26) 실행 중에 활성화 그룹을 바꾼다. ASC의 그룹별 실행 수도 같이 고친다(배타 그룹으로 바꾸면 실행 중인 교체 가능 배타 어빌리티를 끊음).
+	 * 예: 차지 공격은 모으는 동안 독립 그룹이다가, 해방할 때 일반 공격처럼 교체 가능 배타 그룹이 된다(캔슬 창·후딜 규칙을 같이 받게).
+	 * 끝난 뒤 원래 그룹으로 되돌리는 건 부른 어빌리티가 EndAbility에서 한다(인스턴스가 다음 발동에도 남으므로).
+	 */
+	void ChangeActivationGroupWhileActive(EknightAbilityActivationGroup NewGroup);
+
 	virtual bool CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 		const FGameplayTagContainer* SourceTags = nullptr, const FGameplayTagContainer* TargetTags = nullptr,
 		FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;

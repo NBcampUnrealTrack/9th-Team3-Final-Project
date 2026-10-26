@@ -2,6 +2,7 @@
 
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/Actor.h"
+#include "Item/knightPartsComponent.h"
 
 void UknightAnimNotify_AttachWeapon::Notify(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation, const FAnimNotifyEventReference& EventReference)
 {
@@ -19,7 +20,8 @@ void UknightAnimNotify_AttachWeapon::Notify(USkeletalMeshComponent* MeshComp, UA
 	{
 		if (Mesh != MeshComp && Mesh->ComponentHasTag(WeaponComponentTag))
 		{
-			Mesh->AttachToComponent(MeshComp, FAttachmentTransformRules::SnapToTargetNotIncludingScale, Socket);
+			// (2026-10-26) 손 소켓이면 무기 파츠의 워크벤치 위치·회전을 다시 적용한다(UknightPartsComponent::AttachWeaponToSocket).
+			UknightPartsComponent::AttachWeaponToSocket(Mesh, MeshComp, Socket);
 			return;
 		}
 	}

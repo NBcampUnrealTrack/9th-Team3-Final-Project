@@ -187,6 +187,13 @@ public:
 
 	void CancelActivationGroupAbilities(EknightAbilityActivationGroup Group, const UknightGameplayAbility* IgnoreAbility);
 
+	/**
+	 * (2026-10-26) 실행 중인 어빌리티의 활성화 그룹이 OldGroup에서 NewGroup으로 바뀌었을 때 그룹별 실행 수를 고친다
+	 * (UknightGameplayAbility::ChangeActivationGroupWhileActive가 부른다). 배타 그룹으로 바뀌면 새로 발동할 때처럼
+	 * 실행 중인 교체 가능 배타 어빌리티를 끊는다.
+	 */
+	void NotifyActivationGroupChanged(const UknightGameplayAbility* Ability, EknightAbilityActivationGroup OldGroup, EknightAbilityActivationGroup NewGroup);
+
 	// 태그 관계
 	void SetTagRelationshipMapping(UknightAbilityTagRelationshipMapping* NewMapping);
 	void GetAdditionalActivationTagRequirements(const FGameplayTagContainer& AbilityTags,
