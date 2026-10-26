@@ -396,16 +396,18 @@ namespace
 				return Cast<UCommonButtonBase>(Widget->WidgetTree->FindWidget(
 					FName(*FString::Printf(TEXT("Phase8_SocketCandidate%d"), Index))));
 			};
-			UTextBlock* const Name = Cast<UTextBlock>(Widget->WidgetTree->FindWidget(TEXT("Txt_PartName")));
-			UTextBlock* const State = Cast<UTextBlock>(Widget->WidgetTree->FindWidget(TEXT("Txt_PartState")));
-			UTextBlock* const Bonus = Cast<UTextBlock>(Widget->WidgetTree->FindWidget(TEXT("Txt_Bonus")));
-			UCommonButtonBase* const Equip = Cast<UCommonButtonBase>(Widget->WidgetTree->FindWidget(TEXT("Btn_Execute")));
-			UCommonButtonBase* const Unequip = Cast<UCommonButtonBase>(Widget->WidgetTree->FindWidget(TEXT("Btn_Unequip")));
+			UTextBlock* const Name = Cast<UTextBlock>(Widget->WidgetTree->FindWidget(TEXT("SocketDetailTitle")));
+			UTextBlock* const State = Cast<UTextBlock>(Widget->WidgetTree->FindWidget(TEXT("SocketAssignmentSummary")));
+			UTextBlock* const Bonus = Cast<UTextBlock>(Widget->WidgetTree->FindWidget(TEXT("SocketEffectsText")));
+			UCommonButtonBase* const Equip = Cast<UCommonButtonBase>(Widget->WidgetTree->FindWidget(TEXT("SocketEquipAction")));
+			UCommonButtonBase* const Unequip = Cast<UCommonButtonBase>(Widget->WidgetTree->FindWidget(TEXT("SocketUnequipAction")));
 			Check(SlotButton(0) && SlotButton(1) && SlotButton(2) && Name && State && Bonus && Equip && Unequip,
 				TEXT("exactly three visible slot controls and required detail controls exist"));
 			if (!SlotButton(0) || !SlotButton(1) || !SlotButton(2) || !Name || !State || !Bonus || !Equip || !Unequip)
 				return;
 			Check(Name->GetText().ToString().Contains(TEXT("활성")), TEXT("fresh entry selects no slot and shows combined effects"));
+			Check(!SlotButton(0)->GetSelected() && !SlotButton(1)->GetSelected() && !SlotButton(2)->GetSelected()
+				&& CandidateButton(0) && !CandidateButton(0)->GetSelected() && !SlotButton(3), TEXT("three positions and owned list start with no selection"));
 			if (Mode == TEXT("Zero"))
 			{
 				SlotButton(0)->OnClicked().Broadcast();
@@ -414,6 +416,9 @@ namespace
 			}
 			else if (Mode == TEXT("Widget"))
 			{
+				CandidateButton(0)->OnClicked().Broadcast();
+				Check(Name->GetText().ToString().Contains(TEXT("활성")) && Save->EquippedSocketItems.IsEmpty(),
+					TEXT("candidate can be selected before slot without changing combined view"));
 				SlotButton(2)->OnClicked().Broadcast();
 				Check(Name->GetText().ToString().Contains(TEXT("활성")), TEXT("locked slot click cannot select"));
 				SlotButton(0)->OnClicked().Broadcast();
@@ -422,11 +427,17 @@ namespace
 				if (CandidateButton(0)) CandidateButton(0)->OnClicked().Broadcast();
 				Check(Name->GetText().ToString().Contains(TEXT("빈 소켓")) && Save->EquippedSocketItems.IsEmpty(),
 					TEXT("candidate selection does not appear equipped or mutate save"));
+				Check(!Widget->HandleConfirmKey() && Save->EquippedSocketItems.IsEmpty(),
+					TEXT("shared confirm route cannot equip a candidate; explicit action owns the transaction"));
 				SlotButton(0)->OnClicked().Broadcast();
 				Check(Name->GetText().ToString().Contains(TEXT("활성")) && Save->EquippedSocketItems.IsEmpty(),
 					TEXT("same slot click deselects without unequipping"));
 				SlotButton(0)->OnClicked().Broadcast();
+				UCommonButtonBase* OldSlot = SlotButton(0);
+				UCommonButtonBase* OldCandidate = CandidateButton(0);
 				Check(Saves->SelectSlot(TEXT("Phase8WidgetOther")), TEXT("profile change accepted"));
+				OldSlot->OnClicked().Broadcast(); OldCandidate->OnClicked().Broadcast();
+				Equip->OnClicked().Broadcast(); Saves->OnSaveFinished.Broadcast(true);
 				Check(Name->GetText().ToString().Contains(TEXT("활성")) && State->GetText().ToString().Contains(TEXT("해금 0"))
 					&& Save->EquippedSocketItems.IsEmpty(), TEXT("profile change clears slot and candidate without old-profile mutation"));
 			}
@@ -445,6 +456,10 @@ namespace
 					TEXT("selected equipped slot shows its actual individual effect"));
 				SlotButton(1)->OnClicked().Broadcast();
 				Check(Name->GetText().ToString().Contains(TEXT("활성")), TEXT("reselection restores combined effects"));
+				Check(Save->EquippedSocketItems[1] == AttackId, TEXT("same equipped slot click only deselects and never unequips"));
+				SlotButton(2)->OnClicked().Broadcast();
+				Check(Bonus->GetText().ToString().Contains(TEXT("기준")) && !Bonus->GetText().ToString().Contains(TEXT("%")),
+					TEXT("charge detail uses guards-per-kit context rather than percentage"));
 			}
 			else if (Mode == TEXT("Overflow"))
 			{
@@ -477,7 +492,7 @@ namespace
 				{
 					const int32 CandidateIndex = Mode == TEXT("Equip") || Attack->DisplayName.ToString() < Repair->DisplayName.ToString() ? 0 : 1;
 					if (CandidateButton(CandidateIndex)) CandidateButton(CandidateIndex)->OnClicked().Broadcast();
-					Equip->OnClicked().Broadcast();
+					if (UFunction* Click = Equip->FindFunction(TEXT("HandleButtonClicked"))) Equip->ProcessEvent(Click, nullptr);
 				}
 				const FPrimaryAssetId Expected = Mode == TEXT("Equip") ? RepairId : Mode == TEXT("Replace") ? AttackId : FPrimaryAssetId();
 				Check(Save->EquippedSocketItems.IsValidIndex(0) && Save->EquippedSocketItems[0] == Expected
@@ -486,6 +501,7 @@ namespace
 				Check(Mode == TEXT("Unequip") ? Name->GetText().ToString().Contains(TEXT("빈 소켓"))
 					: Name->GetText().EqualTo(Mode == TEXT("Replace") ? Attack->DisplayName : Repair->DisplayName),
 					TEXT("valid selected slot remains selected and shows actual post-action state"));
+				Saves->OnSaveFinished.Broadcast(false);
 				Saves->OnSaveFinished.Broadcast(true);
 				Check(Save->EquippedSocketItems[0] == Expected && Save->ItemCounts.FindRef(RepairId) == 1,
 					TEXT("save completion callback never replays socket mutation"));

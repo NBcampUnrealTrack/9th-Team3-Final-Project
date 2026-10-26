@@ -533,6 +533,7 @@ void UKnightMaintenanceWidget::NativeOnInitialized()
 
 	}
 	BuildEnhancementPresentation();
+	BuildSocketPresentation();
 	if (Btn_Execute) Btn_Execute->OnClicked().AddWeakLambda(this, [this]() { RequestExecute(); });
 	if (Btn_Unequip) Btn_Unequip->OnClicked().AddWeakLambda(this, [this]() { UnequipSelection(); });
 	if (Btn_Execute) Btn_Execute->OnLockClicked().AddWeakLambda(this, [this]() { if (Txt_Status) Txt_Status->SetText(ExecuteLockReason); });
@@ -602,14 +603,17 @@ void UKnightMaintenanceWidget::ApplyDestinationLayout()
 	if (MaintenanceBackdrop)
 	{
 		MaintenanceBackdrop->SetVisibility(bCrafting ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
-		MaintenanceBackdrop->SetBrushColor(FLinearColor(.003f, .008f, .016f, bEnhancement ? 1.f : .55f));
+		MaintenanceBackdrop->SetBrushColor(FLinearColor(.003f, .008f, .016f, 1.f));
 		if (UCanvasPanelSlot* BackgroundSlot = Cast<UCanvasPanelSlot>(MaintenanceBackdrop->Slot))
-			BackgroundSlot->SetOffsets(FMargin(bEnhancement ? 0.f : 24.f));
+			BackgroundSlot->SetOffsets(FMargin(0.f));
 	}
+	const bool bSockets = Destination == EKnightMaintenanceDestination::Sockets;
+	if (SocketColumns) SocketColumns->SetVisibility(bSockets ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
+	if (SocketInputHints) SocketInputHints->SetVisibility(bSockets ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 	if (EnhancementColumns) EnhancementColumns->SetVisibility(bEnhancement ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
 	if (EnhancementInputHints) EnhancementInputHints->SetVisibility(bEnhancement ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 	if (UWidget* Hints = WidgetTree ? WidgetTree->FindWidget(TEXT("Panel_Hints")) : nullptr)
-		Hints->SetVisibility(bEnhancement ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
+		Hints->SetVisibility(!bCrafting ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
 	if (CraftingEdgeShade) CraftingEdgeShade->SetVisibility(bCrafting ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 	if (!WidgetTree) return;
 	for (bool bRight : { false, true })
@@ -617,7 +621,7 @@ void UKnightMaintenanceWidget::ApplyDestinationLayout()
 		UBorder* Frame = Cast<UBorder>(WidgetTree->FindWidget(bRight ? TEXT("Frame_Panel_Right") : TEXT("Frame_Panel_Left")));
 		UCanvasPanelSlot* FrameSlot = Frame ? Cast<UCanvasPanelSlot>(Frame->Slot) : nullptr;
 		if (!FrameSlot) continue;
-		Frame->SetVisibility(bEnhancement ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
+		Frame->SetVisibility(!bCrafting ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
 		// Crafting preserves the live camera view between side panels. Other destinations keep their layout.
 		FrameSlot->SetAnchors(bRight ? FAnchors(bCrafting ? 0.69f : 0.5f, 0.f, 1.f, 1.f)
 			: FAnchors(0.f, 0.f, bCrafting ? 0.31f : 0.5f, 1.f));
@@ -654,6 +658,9 @@ void UKnightMaintenanceWidget::Open(EKnightMaintenanceDestination InDestination,
 	SelectedSocketSlot = INDEX_NONE;
 	SelectedSocketItem = nullptr;
 	SelectedSocketCandidateId = FPrimaryAssetId();
+	SocketSelectionProfileId.Reset();
+	SelectedSocketAssignmentId = FPrimaryAssetId();
+	SocketFeedback = FText::GetEmpty();
 	SocketSlotButtons.Reset();
 	SocketCandidateButtons.Reset();
 	SocketCandidateIds.Reset();
@@ -683,7 +690,7 @@ void UKnightMaintenanceWidget::Open(EKnightMaintenanceDestination InDestination,
 			: LOCTEXT("SocketsDestination", "소켓"));
 	for (UCommonButtonBase* const Button : { Btn_Craft.Get(), Btn_Weapon.Get(), Btn_Armor.Get() })
 		if (Button) Button->SetVisibility(bCrafting ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-	if (CurrencyText) CurrencyText->SetVisibility(bCrafting || InDestination == EKnightMaintenanceDestination::Enhancement ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	if (CurrencyText) CurrencyText->SetVisibility(ESlateVisibility::HitTestInvisible);
 	RefreshCurrency();
 	SetCategory(bCrafting ? (bStartInMaterials ? 4 : 0) : Destination == EKnightMaintenanceDestination::Enhancement ? 1 : 3, false);
 }
@@ -697,6 +704,9 @@ bool UKnightMaintenanceWidget::IsMaterialQuantityInputFocused() const
 void UKnightMaintenanceWidget::Close()
 {
 	SelectedSocketCandidateId = FPrimaryAssetId();
+	SocketSelectionProfileId.Reset();
+	SelectedSocketAssignmentId = FPrimaryAssetId();
+	SocketFeedback = FText::GetEmpty();
 	SocketSlotButtons.Reset();
 	SocketCandidateButtons.Reset();
 	SocketCandidateIds.Reset();
@@ -1541,156 +1551,6 @@ void UKnightMaintenanceWidget::ConfirmEquipmentReplacement()
 	ExecuteSelection();
 }
 
-void UKnightMaintenanceWidget::RebuildSocketList()
-{
-	if (!List_Items || !WidgetTree) return;
-	int32 FocusedSlot = INDEX_NONE;
-	FPrimaryAssetId FocusedCandidate;
-	for (int32 Index = 0; Index < SocketSlotButtons.Num(); ++Index)
-		if (SocketSlotButtons[Index] && (SocketSlotButtons[Index]->HasAnyUserFocus() || SocketSlotButtons[Index]->HasFocusedDescendants()))
-			FocusedSlot = Index;
-	for (int32 Index = 0; Index < SocketCandidateButtons.Num() && Index < SocketCandidateIds.Num(); ++Index)
-		if (SocketCandidateButtons[Index] && (SocketCandidateButtons[Index]->HasAnyUserFocus() || SocketCandidateButtons[Index]->HasFocusedDescendants()))
-			FocusedCandidate = SocketCandidateIds[Index];
-	List_Items->ClearChildren();
-	Entries.Reset();
-	SocketListButtons.Reset();
-	SocketSlotButtons.Reset();
-	SocketCandidateButtons.Reset();
-	SocketCandidateIds.Reset();
-	UknightProgressionSubsystem* const Progression = GetProgression();
-	const int32 Slots = Progression ? Progression->GetUnlockedSharedSocketSlots() : 0;
-	TArray<FKnightSocketAssignment> Assignments;
-	const bool bAssignmentsComplete = Progression && Progression->GetSocketAssignments(Assignments);
-	if (SelectedSocketSlot >= FMath::Min(Slots, 3) || SelectedSocketSlot < INDEX_NONE)
-	{
-		SelectedSocketSlot = INDEX_NONE;
-		SelectedSocketItem = nullptr;
-		SelectedSocketCandidateId = FPrimaryAssetId();
-	}
-	const TSubclassOf<UCommonButtonBase> ButtonClass = LoadClass<UCommonButtonBase>(nullptr,
-		TEXT("/Game/Knight/UI/Common/WBP_KnightButton.WBP_KnightButton_C"));
-	if (!ButtonClass || !GetOwningPlayer()) return;
-	auto AddSection = [this](const FText& Label)
-	{
-		UCommonTextBlock* const Heading = NewRowText(WidgetTree, BodyStyle(), ETextJustify::Left);
-		Heading->SetText(Label);
-		Heading->SetColorAndOpacity(Frost);
-		if (UScrollBoxSlot* const Row = Cast<UScrollBoxSlot>(List_Items->AddChild(Heading)))
-			Row->SetPadding(FMargin(0.f, 12.f, 0.f, 12.f));
-	};
-	AddSection(LOCTEXT("SocketPositionsHeading", "공용 소켓"));
-	auto AddButton = [this, ButtonClass](FName Name, const FText& Label, TFunction<void()> OnClick,
-		bool bSelected, bool bLocked, UTexture2D* Icon) -> UCommonButtonBase*
-	{
-		UCommonButtonBase* const Button = CreateWidget<UCommonButtonBase>(GetOwningPlayer(), ButtonClass, Name);
-		if (!Button) return nullptr;
-		SetButtonLabel(Button, Label);
-		KnightMaintenancePresentation::ConfigureButton(Button, true);
-		SetSelected(Button, bSelected);
-		Button->OnClicked().AddWeakLambda(this, [Click = MoveTemp(OnClick)]() { Click(); });
-		if (bLocked) SetButtonLocked(Button, true, LOCTEXT("SocketLockedReason", "이 소켓 칸은 아직 해금되지 않았습니다."));
-		UWidget* RowContent = Button;
-		if (Icon)
-		{
-			UHorizontalBox* const Row = WidgetTree->ConstructWidget<UHorizontalBox>();
-			USizeBox* const IconFrame = WidgetTree->ConstructWidget<USizeBox>();
-			IconFrame->SetWidthOverride(40.f);
-			IconFrame->SetHeightOverride(40.f);
-			UImage* const Image = WidgetTree->ConstructWidget<UImage>();
-			Image->SetBrushFromTexture(Icon);
-			IconFrame->AddChild(Image);
-			Row->AddChildToHorizontalBox(IconFrame)->SetPadding(FMargin(0.f, 0.f, 8.f, 0.f));
-			Row->AddChildToHorizontalBox(Button)->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-			RowContent = Row;
-		}
-		if (UScrollBoxSlot* const ScrollSlot = Cast<UScrollBoxSlot>(List_Items->AddChild(RowContent)))
-			ScrollSlot->SetPadding(FMargin(24.f, 6.f, 24.f, 6.f));
-		SocketListButtons.Add(Button);
-		return Button;
-	};
-	for (int32 Index = 0; Index < 3; ++Index)
-	{
-		const bool bUnlocked = Index < Slots;
-		const FKnightSocketAssignment* const Assignment = Assignments.IsValidIndex(Index) ? &Assignments[Index] : nullptr;
-		const bool bUnresolved = bUnlocked && Assignment && Assignment->ItemId.IsValid() && !Assignment->Item;
-		const UknightSocketItemDefinition* const Equipped = Assignment ? Assignment->Item.Get() : nullptr;
-		const FText State = !bUnlocked ? LOCTEXT("SocketLocked", "잠김")
-			: bUnresolved ? LOCTEXT("SocketUnresolved", "장착 정보 확인 불가")
-			: Equipped ? (Equipped->DisplayName.IsEmpty() ? FText::FromString(Equipped->GetName()) : Equipped->DisplayName)
-			: LOCTEXT("SocketEmpty", "빈 칸");
-		UCommonButtonBase* const Button = AddButton(FName(*FString::Printf(TEXT("Phase8_SocketSlot%d"), Index)),
-			FText::Format(LOCTEXT("SocketSlotRow", "소켓 {0} · {1}"), Index + 1, State),
-			[this, Index]() { SelectSocketSlot(Index); }, SelectedSocketSlot == Index, !bUnlocked,
-			Equipped ? Equipped->Icon.LoadSynchronous() : nullptr);
-		SocketSlotButtons.Add(Button);
-	}
-	if (SelectedSocketSlot == INDEX_NONE)
-	{
-		UCommonTextBlock* const Prompt = NewRowText(WidgetTree, BodyStyle(), ETextJustify::Left);
-		Prompt->SetText(LOCTEXT("SocketSelectPrompt", "해금된 소켓 칸을 선택하세요. 같은 칸을 다시 누르면 전체 효과로 돌아갑니다."));
-		Prompt->SetAutoWrapText(true);
-		List_Items->AddChild(Prompt);
-	}
-	TArray<FknightItemStack> Owned;
-	const bool bOwnedComplete = Progression && Progression->GetOwnedSockets(Owned);
-	Owned.Sort([](const FknightItemStack& A, const FknightItemStack& B)
-	{
-		return A.Item && B.Item ? A.Item->DisplayName.ToString() < B.Item->DisplayName.ToString() : A.Item != nullptr;
-	});
-	SelectedSocketItem = nullptr;
-	for (const FknightItemStack& Stack : Owned)
-		if (Stack.Count > 0 && Stack.Item && Stack.Item->GetPrimaryAssetId() == SelectedSocketCandidateId)
-			SelectedSocketItem = Cast<UknightSocketItemDefinition>(Stack.Item);
-	if (!SelectedSocketItem) SelectedSocketCandidateId = FPrimaryAssetId();
-	if (SelectedSocketSlot != INDEX_NONE)
-	{
-		AddSection(LOCTEXT("SocketOwnedHeading", "보유 소켓"));
-		if (!bOwnedComplete)
-		{
-			UCommonTextBlock* const Warning = NewRowText(WidgetTree, BodyStyle(), ETextJustify::Left);
-			Warning->SetText(LOCTEXT("SocketOwnedUnresolved", "보유 소켓 정의 일부를 확인할 수 없습니다. 장착은 보류됩니다."));
-			Warning->SetAutoWrapText(true);
-			List_Items->AddChild(Warning);
-		}
-		if (Owned.IsEmpty())
-		{
-			UCommonTextBlock* const Empty = NewRowText(WidgetTree, BodyStyle(), ETextJustify::Left);
-			Empty->SetText(LOCTEXT("SocketNoOwned", "보유 소켓 아이템이 없습니다."));
-			List_Items->AddChild(Empty);
-		}
-		for (const FknightItemStack& Stack : Owned)
-		{
-			const UknightSocketItemDefinition* const Item = Cast<UknightSocketItemDefinition>(Stack.Item);
-			if (!Item || Stack.Count <= 0) continue;
-			const int32 Available = Progression->GetAvailableSocketItemCount(Item);
-			const FText Name = Item->DisplayName.IsEmpty() ? FText::FromString(Item->GetName()) : Item->DisplayName;
-			UCommonButtonBase* const Button = AddButton(FName(*FString::Printf(TEXT("Phase8_SocketCandidate%d"), SocketCandidateButtons.Num())),
-				FText::Format(LOCTEXT("SocketOwnedRow", "{0} · 보유 {1} / 사용 가능 {2}\n{3}"),
-					Name, Stack.Count, Available, SocketItemEffectText(Item)),
-				[this, Item]() { SelectSocketCandidate(Item); }, SelectedSocketCandidateId == Item->GetPrimaryAssetId(),
-				false, Item->Icon.LoadSynchronous());
-			SocketCandidateButtons.Add(Button);
-			SocketCandidateIds.Add(Item->GetPrimaryAssetId());
-		}
-	}
-	if (!bAssignmentsComplete && Txt_Status)
-		Txt_Status->SetText(LOCTEXT("SocketAssignmentsUnresolved", "장착 소켓 정보를 모두 확인할 수 없습니다. 변경은 보류됩니다."));
-	else if (Slots > 3 && Txt_Status)
-		Txt_Status->SetText(LOCTEXT("SocketOverflowReadonly", "저장된 소켓 칸이 3개를 초과합니다. 모든 효과는 유지되며 이 화면에서는 변경할 수 없습니다."));
-	RefreshTabButtons();
-	RefreshSocketDetails();
-	if (FocusedSlot >= 0 && SocketSlotButtons.IsValidIndex(FocusedSlot) && SocketSlotButtons[FocusedSlot])
-		SocketSlotButtons[FocusedSlot]->SetFocus();
-	else if (FocusedCandidate.IsValid())
-		for (int32 Index = 0; Index < SocketCandidateIds.Num(); ++Index)
-			if (SocketCandidateIds[Index] == FocusedCandidate && SocketCandidateButtons[Index])
-			{
-				SocketCandidateButtons[Index]->SetFocus();
-				break;
-			}
-}
-
 bool UKnightMaintenanceWidget::CanEditSocketProfile() const
 {
 	const UknightProgressionSubsystem* const Progression = GetProgression();
@@ -1717,35 +1577,36 @@ bool UKnightMaintenanceWidget::CanEquipSocketCandidate(int32 SlotIndex, const Uk
 
 void UKnightMaintenanceWidget::SelectSocketSlot(int32 SlotIndex)
 {
-	const UknightProgressionSubsystem* const Progression = GetProgression();
-	if (!Progression || SlotIndex < 0 || SlotIndex >= 3
-		|| SlotIndex >= Progression->GetUnlockedSharedSocketSlots()) return;
+	const auto* Saves = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
+	const UknightProgressionSubsystem* Progression = GetProgression();
+	if (Category != 3 || bBusy || (Panel_Confirm && Panel_Confirm->IsVisible()) || !Saves || !Saves->HasSelectedSlot()
+		|| !Progression || SlotIndex < 0 || SlotIndex >= 3 || SlotIndex >= Progression->GetUnlockedSharedSocketSlots()) return;
+	SocketSelectionProfileId = Saves->GetActiveSlotId();
 	SelectedSocketSlot = SelectedSocketSlot == SlotIndex ? INDEX_NONE : SlotIndex;
-	SelectedSocketCandidateId = FPrimaryAssetId();
-	SelectedSocketItem = nullptr;
-	if (Txt_Status) Txt_Status->SetText(FText::GetEmpty());
+	SocketFeedback = FText::GetEmpty();
 	RebuildSocketList();
 }
 
 void UKnightMaintenanceWidget::SelectSocketCandidate(const UknightSocketItemDefinition* Item)
 {
-	const UknightProgressionSubsystem* const Progression = GetProgression();
-	if (!Item || !Progression || SelectedSocketSlot < 0 || SelectedSocketSlot >= 3
-		|| SelectedSocketSlot >= Progression->GetUnlockedSharedSocketSlots()) return;
+	const auto* Saves = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
+	const UknightProgressionSubsystem* Progression = GetProgression();
+	if (Category != 3 || bBusy || (Panel_Confirm && Panel_Confirm->IsVisible()) || !Saves || !Saves->HasSelectedSlot() || !Item || !Progression) return;
 	TArray<FknightItemStack> Owned;
 	if (!Progression->GetOwnedSockets(Owned) || !Owned.ContainsByPredicate([Item](const FknightItemStack& Stack)
 	{
 		return Stack.Count > 0 && Stack.Item == Item;
 	})) return;
+	SocketSelectionProfileId = Saves->GetActiveSlotId();
 	SelectedSocketCandidateId = Item->GetPrimaryAssetId();
 	SelectedSocketItem = Item;
-	if (Txt_Status) Txt_Status->SetText(FText::GetEmpty());
+	SocketFeedback = FText::GetEmpty();
 	RebuildSocketList();
 }
 
 void UKnightMaintenanceWidget::RequestSocketEquip()
 {
-	if (bBusy || Category != 3 || SelectedSocketSlot < 0 || SelectedSocketSlot >= 3) return;
+	if (bBusy || Category != 3 || (Panel_Confirm && Panel_Confirm->IsVisible()) || SelectedSocketSlot < 0 || SelectedSocketSlot >= 3) return;
 	UknightProgressionSubsystem* const Progression = GetProgression();
 	UknightSaveSubsystem* const Saves = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
 	const UknightSocketItemDefinition* const Candidate = SelectedSocketItem.Get();
@@ -1755,11 +1616,15 @@ void UKnightMaintenanceWidget::RequestSocketEquip()
 	{
 		return Stack.Count > 0 && Stack.Item == Candidate;
 	});
-	if (!Saves || !Saves->CanStartAtomicTransaction() || !CanEditSocketProfile() || !bOwnedComplete
+	TArray<FKnightSocketAssignment> CurrentAssignments;
+	const bool bSameAssignment = Progression && Progression->GetSocketAssignments(CurrentAssignments)
+		&& CurrentAssignments.IsValidIndex(SelectedSocketSlot)
+		&& CurrentAssignments[SelectedSocketSlot].ItemId == SelectedSocketAssignmentId;
+	if (!bSameAssignment || !Saves || Saves->GetActiveSlotId() != SocketSelectionProfileId || !Saves->CanStartAtomicTransaction() || !CanEditSocketProfile() || !bOwnedComplete
 		|| !bStillOwned || Candidate->GetPrimaryAssetId() != SelectedSocketCandidateId
 		|| !CanEquipSocketCandidate(SelectedSocketSlot, Candidate))
 	{
-		if (Txt_Status) Txt_Status->SetText(LOCTEXT("SocketEquipRejected", "소켓 장착 불가: 슬롯·보유·중복·저장 상태를 확인하세요."));
+		SocketFeedback = LOCTEXT("SocketEquipRejected", "소켓 장착 불가: 슬롯·보유·중복·저장 상태를 확인하세요.");
 		RebuildSocketList();
 		return;
 	}
@@ -1774,21 +1639,25 @@ void UKnightMaintenanceWidget::RequestSocketEquip()
 		bSocketSaveFailed = false;
 		PendingSocketProfileId = Saves->GetActiveSlotId();
 	}
-	if (Txt_Status) Txt_Status->SetText(bSuccess ? LOCTEXT("SocketEquipped", "소켓을 장착했습니다.")
-		: LOCTEXT("SocketEquipRejected", "소켓 장착 불가: 슬롯·보유·중복·저장 상태를 확인하세요."));
+	SocketFeedback = bSuccess ? LOCTEXT("SocketEquipped", "소켓을 장착했습니다.")
+		: LOCTEXT("SocketEquipRejected", "소켓 장착 불가: 슬롯·보유·중복·저장 상태를 확인하세요.");
 	RebuildSocketList();
 }
 
 void UKnightMaintenanceWidget::RequestSocketUnequip()
 {
-	if (bBusy || Category != 3 || SelectedSocketSlot < 0 || SelectedSocketSlot >= 3) return;
+	if (bBusy || Category != 3 || (Panel_Confirm && Panel_Confirm->IsVisible()) || SelectedSocketSlot < 0 || SelectedSocketSlot >= 3) return;
 	UknightProgressionSubsystem* const Progression = GetProgression();
 	UknightSaveSubsystem* const Saves = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
-	if (!Saves || !Saves->CanStartAtomicTransaction() || !CanEditSocketProfile() || !Progression
+	TArray<FKnightSocketAssignment> CurrentAssignments;
+	const bool bSameAssignment = Progression && Progression->GetSocketAssignments(CurrentAssignments)
+		&& CurrentAssignments.IsValidIndex(SelectedSocketSlot)
+		&& CurrentAssignments[SelectedSocketSlot].ItemId == SelectedSocketAssignmentId;
+	if (!bSameAssignment || !Saves || Saves->GetActiveSlotId() != SocketSelectionProfileId || !Saves->CanStartAtomicTransaction() || !CanEditSocketProfile() || !Progression
 		|| SelectedSocketSlot >= Progression->GetUnlockedSharedSocketSlots()
 		|| !Progression->GetEquippedSocketItem(SelectedSocketSlot))
 	{
-		if (Txt_Status) Txt_Status->SetText(LOCTEXT("SocketUnequipRejected", "소켓 해제 불가: 장착·슬롯·저장 상태를 확인하세요."));
+		SocketFeedback = LOCTEXT("SocketUnequipRejected", "소켓 해제 불가: 장착·슬롯·저장 상태를 확인하세요.");
 		RebuildSocketList();
 		return;
 	}
@@ -1803,13 +1672,14 @@ void UKnightMaintenanceWidget::RequestSocketUnequip()
 		bSocketSaveFailed = false;
 		PendingSocketProfileId = Saves->GetActiveSlotId();
 	}
-	if (Txt_Status) Txt_Status->SetText(bSuccess ? LOCTEXT("SocketUnequipped", "소켓을 해제했습니다.")
-		: LOCTEXT("SocketUnequipRejected", "소켓 해제 불가: 장착·슬롯·저장 상태를 확인하세요."));
+	SocketFeedback = bSuccess ? LOCTEXT("SocketUnequipped", "소켓을 해제했습니다.")
+		: LOCTEXT("SocketUnequipRejected", "소켓 해제 불가: 장착·슬롯·저장 상태를 확인하세요.");
 	RebuildSocketList();
 }
 
 void UKnightMaintenanceWidget::RefreshSocketDetails()
 {
+	if (Category != 3) return;
 	UknightProgressionSubsystem* const Progression = GetProgression();
 	const int32 Slots = Progression ? Progression->GetUnlockedSharedSocketSlots() : 0;
 	TArray<FKnightSocketAssignment> Assignments;
@@ -1818,37 +1688,25 @@ void UKnightMaintenanceWidget::RefreshSocketDetails()
 		? &Assignments[SelectedSocketSlot] : nullptr;
 	const UknightSocketItemDefinition* const Equipped = Assignment ? Assignment->Item.Get() : nullptr;
 	const bool bUnresolved = Assignment && Assignment->ItemId.IsValid() && !Equipped;
-	if (Txt_PartName) Txt_PartName->SetText(SelectedSocketSlot == INDEX_NONE
-		? LOCTEXT("SocketCombinedTitle", "현재 활성 소켓 효과")
+	SelectedSocketAssignmentId = Assignment ? Assignment->ItemId : FPrimaryAssetId();
+	if (SocketDetailTitle) SocketDetailTitle->SetText(SelectedSocketSlot == INDEX_NONE
+		? LOCTEXT("SocketCombinedTitle", "전체 활성 장착 효과")
 		: bUnresolved ? LOCTEXT("SocketUnknownTitle", "장착 소켓 확인 불가")
-		: Equipped ? (Equipped->DisplayName.IsEmpty() ? FText::FromString(Equipped->GetName()) : Equipped->DisplayName)
-		: LOCTEXT("SocketEmptyTitle", "빈 소켓 칸"));
-	if (Txt_PartState) Txt_PartState->SetText(Slots > 3
-		? FText::Format(LOCTEXT("SocketOverflowState", "해금 {0}칸 · 화면 표시 3칸 · 읽기 전용"), Slots)
-		: FText::Format(LOCTEXT("SocketState", "해금 {0} / 3칸 · {1}"), Slots,
-			SelectedSocketSlot == INDEX_NONE ? LOCTEXT("SocketNoSelection", "전체 효과")
-			: FText::Format(LOCTEXT("SocketSelectedIndex", "소켓 {0} 선택"), SelectedSocketSlot + 1)));
-	if (Txt_PartDesc)
+		: Equipped ? Equipped->DisplayName : LOCTEXT("SocketEmptyTitle", "빈 소켓 칸"));
+	int32 AssignedCount = 0;
+	for (const FKnightSocketAssignment& Entry : Assignments)
 	{
-		Txt_PartDesc->SetText(SelectedSocketSlot == INDEX_NONE
-			? LOCTEXT("SocketCombinedDescription", "실제로 장착된 소켓의 합산 효과입니다. 왼쪽에서 해금된 칸을 선택하세요.")
-			: bUnresolved ? FText::Format(LOCTEXT("SocketUnknownId", "저장된 아이템 ID: {0}"),
-				FText::FromString(Assignment->ItemId.ToString()))
-			: Equipped ? Equipped->Description
+		AssignedCount += Entry.ItemId.IsValid() ? 1 : 0;
+	}
+	if (SocketAssignmentSummary) SocketAssignmentSummary->SetText(Slots > 3
+		? FText::Format(LOCTEXT("SocketOverflowState", "장착 {0} / {1} · 해금 {1}칸\n화면 표시 3칸 · 읽기 전용"), AssignedCount, Slots)
+		: FText::Format(LOCTEXT("SocketActualState", "장착 현황  {0} / {1} · 해금 {1}칸"), AssignedCount, Slots));
+	if (SocketDetailDescription) SocketDetailDescription->SetText(SelectedSocketSlot == INDEX_NONE
+		? FText::GetEmpty() : bUnresolved
+			? FText::Format(LOCTEXT("SocketUnknownId", "저장된 아이템 ID: {0}"), FText::FromString(Assignment->ItemId.ToString()))
+			: Equipped ? (Equipped->Effect == EKnightSocketEffect::SocketGaugeCharge
+				? LOCTEXT("SocketGuardDescription", "키트 충전에 필요한 퍼펙트 가드 횟수를 줄입니다. 최소 횟수는 1회입니다.") : Equipped->Description)
 			: LOCTEXT("SocketEmptyDescription", "보유 소켓을 선택한 다음 장착을 누르세요."));
-		Txt_PartDesc->SetVisibility(ESlateVisibility::HitTestInvisible);
-	}
-	if (Img_Selected)
-	{
-		UTexture2D* const Icon = Equipped ? Equipped->Icon.LoadSynchronous() : nullptr;
-		if (Icon) Img_Selected->SetBrushFromTexture(Icon);
-		Img_Selected->SetVisibility(Icon ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
-		if (UWidget* Thumbnail = WidgetTree ? WidgetTree->FindWidget(TEXT("SelectedImageFrame")) : nullptr)
-			Thumbnail->SetVisibility(Icon ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
-	}
-	if (Stats_Rows) Stats_Rows->SetVisibility(ESlateVisibility::Collapsed);
-	if (Txt_ActiveSets) Txt_ActiveSets->SetVisibility(ESlateVisibility::Collapsed);
-	if (Txt_SetInfo) Txt_SetInfo->SetVisibility(ESlateVisibility::Collapsed);
 	TArray<FText> Lines;
 	if (SelectedSocketSlot == INDEX_NONE && Progression)
 	{
@@ -1904,10 +1762,10 @@ void UKnightMaintenanceWidget::RefreshSocketDetails()
 	}
 	else Lines.Add(LOCTEXT("SocketEmptyEffect", "이 칸에는 활성 효과가 없습니다. 보유 아이템을 선택한 뒤 장착하세요."));
 	if (!bAssignmentsComplete) Lines.Add(LOCTEXT("SocketIncompleteSummary", "일부 장착 정의가 확인되지 않아 효과 요약이 불완전할 수 있습니다."));
-	if (Txt_Bonus)
+	if (SocketEffectsText)
 	{
-		Txt_Bonus->SetText(FText::Join(FText::FromString(TEXT("\n")), Lines));
-		Txt_Bonus->SetVisibility(ESlateVisibility::HitTestInvisible);
+		SocketEffectsText->SetText(FText::Join(FText::FromString(TEXT("\n")), Lines));
+		SocketEffectsText->SetVisibility(ESlateVisibility::HitTestInvisible);
 	}
 	TArray<FknightItemStack> Owned;
 	const bool bOwnedComplete = Progression && Progression->GetOwnedSockets(Owned);
@@ -1917,21 +1775,39 @@ void UKnightMaintenanceWidget::RefreshSocketDetails()
 		return Stack.Count > 0 && Stack.Item == Candidate;
 	});
 	const UknightSaveSubsystem* const Saves = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
-	const bool bCanMutate = !bBusy && CanEditSocketProfile() && Saves && Saves->CanStartAtomicTransaction();
-	if (Btn_Execute)
+	const bool bCanMutate = !bBusy && CanEditSocketProfile() && Saves && Saves->GetActiveSlotId() == SocketSelectionProfileId && Saves->CanStartAtomicTransaction();
+	if (SocketEquipButton)
 	{
-		SetButtonLabel(Btn_Execute, Equipped ? LOCTEXT("SocketReplace", "소켓 교체") : LOCTEXT("SocketEquip", "소켓 장착"));
-		Btn_Execute->SetVisibility(ESlateVisibility::Visible);
-		SetButtonLocked(Btn_Execute, !bCanMutate || !bOwnedComplete || !bCandidateOwned
+		SetButtonLabel(SocketEquipButton, Equipped ? LOCTEXT("SocketReplaceAction", "교체") : LOCTEXT("SocketEquipAction", "장착"));
+		SocketEquipButton->SetVisibility(ESlateVisibility::Visible);
+		SetButtonLocked(SocketEquipButton, !bCanMutate || !bOwnedComplete || !bCandidateOwned
 			|| !CanEquipSocketCandidate(SelectedSocketSlot, Candidate),
 			LOCTEXT("SocketEquipUnavailable", "보유 수량과 소켓 칸을 확인하세요."));
 	}
-	if (Btn_Unequip)
+	if (SocketUnequipButton)
 	{
-		Btn_Unequip->SetVisibility(ESlateVisibility::Visible);
-		SetButtonLocked(Btn_Unequip, !bCanMutate || !Equipped,
+		SocketUnequipButton->SetVisibility(ESlateVisibility::Visible);
+		SetButtonLocked(SocketUnequipButton, !bCanMutate || !Equipped,
 			LOCTEXT("SocketSlotEmpty", "선택한 칸이 비어 있거나 변경할 수 없습니다."));
 	}
+	if (SocketCandidateText)
+	{
+		const FText Position = SelectedSocketSlot == INDEX_NONE ? LOCTEXT("SocketChoosePosition", "장착할 소켓 칸을 선택하세요.")
+			: FText::Format(LOCTEXT("SocketChosenPosition", "소켓 {0} · {1}"), SelectedSocketSlot + 1,
+				Equipped ? Equipped->DisplayName : bUnresolved ? LOCTEXT("SocketUnknownTitle", "장착 소켓 확인 불가") : LOCTEXT("SocketEmptyTitle", "빈 소켓 칸"));
+		SocketCandidateText->SetText(Candidate
+			? FText::Format(LOCTEXT("SocketPendingCandidate", "{0}\n\n장착 후보: {1}\n{2}"), Position, Candidate->DisplayName, SocketItemEffectText(Candidate))
+			: FText::Format(LOCTEXT("SocketChooseCandidate", "{0}\n\n왼쪽 목록에서 장착할 소켓을 선택하세요."), Position));
+	}
+	FText Notice = SocketFeedback;
+	if (!Saves || !Saves->HasSelectedSlot()) Notice = LOCTEXT("SocketNoProfile", "저장 슬롯을 선택하세요.");
+	else if (!bAssignmentsComplete) Notice = LOCTEXT("SocketAssignmentsUnresolved", "장착 소켓 정보를 모두 확인할 수 없습니다. 변경은 보류됩니다.");
+	else if (Slots > 3) Notice = LOCTEXT("SocketOverflowReadonly", "저장된 소켓 칸이 3개를 초과합니다. 모든 효과는 유지되며 이 화면에서는 변경할 수 없습니다.");
+	else if (!Saves->CanStartAtomicTransaction()) Notice = LOCTEXT("SocketSavePending", "저장 처리 중이거나 저장 복구가 필요합니다. 변경은 잠시 보류됩니다.");
+	else if (Notice.IsEmpty() && Candidate && SelectedSocketSlot != INDEX_NONE && !CanEquipSocketCandidate(SelectedSocketSlot, Candidate))
+		Notice = LOCTEXT("SocketConstraint", "이미 장착된 항목이거나 사용 가능 수량·중복 장착 조건을 충족하지 않습니다.");
+	if (SocketFeedbackText) { SocketFeedbackText->SetText(Notice); SocketFeedbackText->SetVisibility(Notice.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible); }
+
 }
 
 void UKnightMaintenanceWidget::SelectEntry(UKnightMaintenanceEntryWidget* Entry)
@@ -1972,11 +1848,7 @@ bool UKnightMaintenanceWidget::HandleConfirmKey()
 		return false; // The actual Upgrade button owns its single click handler.
 	}
 	if (Category == 2) return false; // Fixed slot selection is never an equip request.
-	if (Category == 3)
-	{
-		for (UCommonButtonBase* Button : SocketListButtons)
-			if (Button && (Button->HasAnyUserFocus() || Button->HasFocusedDescendants())) return false;
-	}
+	if (Category == 3) return false; // Slot/candidate clicks select only; explicit action buttons own mutations.
 	for (UKnightMaintenanceEntryWidget* Entry : Entries)
 	{
 		// 포커스는 버튼 내부 위젯(자손)에 있다.
@@ -2689,6 +2561,9 @@ void UKnightMaintenanceWidget::HandleProgressionChanged()
 void UKnightMaintenanceWidget::HandleActiveSlotChanged(const FString& SlotId)
 {
 	SelectedSocketCandidateId = FPrimaryAssetId();
+	SocketSelectionProfileId.Reset();
+	SelectedSocketAssignmentId = FPrimaryAssetId();
+	SocketFeedback = FText::GetEmpty();
 	bAwaitingSocketSave = false;
 	bSocketSaveFailed = false;
 	PendingSocketProfileId.Reset();
@@ -2728,14 +2603,14 @@ void UKnightMaintenanceWidget::HandleSaveFinished(bool bSuccess)
 	if (bAwaitingSocketSave)
 	{
 		const UknightSaveSubsystem* const Saves = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
-		if (Saves && Saves->GetActiveSlotId() == PendingSocketProfileId && Txt_Status)
+		if (Saves && Saves->GetActiveSlotId() == PendingSocketProfileId)
 		{
 			if (!bSuccess)
 			{
-				Txt_Status->SetText(LOCTEXT("SocketSaveFailed", "소켓 변경은 메모리에 반영됐지만 저장에 실패했습니다. 같은 상태의 저장을 재시도해야 합니다."));
+				SocketFeedback = LOCTEXT("SocketSaveFailed", "소켓 변경은 메모리에 반영됐지만 저장에 실패했습니다. 같은 상태의 저장을 재시도해야 합니다.");
 				bSocketSaveFailed = true;
 			}
-			else if (bSocketSaveFailed) Txt_Status->SetText(LOCTEXT("SocketSaveRecovered", "소켓 변경 저장 완료"));
+			else if (bSocketSaveFailed) SocketFeedback = LOCTEXT("SocketSaveRecovered", "소켓 변경 저장 완료");
 		}
 		if (bSuccess)
 		{
