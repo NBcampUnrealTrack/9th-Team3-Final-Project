@@ -2,6 +2,7 @@
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystem/knightAbilitySystemComponent.h"
+#include "AbilitySystem/Attributes/knightAttributeSet.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
@@ -15,6 +16,7 @@
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/Controller.h"
+#include "Input/knightInputBufferComponent.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
@@ -49,10 +51,12 @@ UknightGameplayAbility_HeavyAttack::UknightGameplayAbility_HeavyAttack(const FOb
 	ActivationBlockedTags.AddTag(knightGameplayTags::State_HitReact);
 	LoopHitParams.MotionValue = 15.f;
 	LoopHitParams.PoiseDamage = 5.f;
-	ReleaseHitParams.MotionValue = 80.f;
-	ReleaseHitParams.PoiseDamage = 40.f;
+	// (2026-10-26 사용자 결정) 80/40 → 55/25(짧게 누르면 강공격 1~2타 수준). 풀차지는 FullChargeMotionValue·FullChargePoiseDamage(120/60).
+	ReleaseHitParams.MotionValue = 55.f;
+	ReleaseHitParams.PoiseDamage = 25.f;
 	// 차지를 시작할 때 쓰는 행동 에너지. 탭 강공격 콤보는 각 강공격 단계(일반 공격 BP)의 값을 쓴다. 2026-10-09 임시값.
-	StaminaCost = 20.f;
+	// (2026-10-26 사용자 결정) 시작 비용 20 → 0. 대신 모으는 동안 ChargeStaminaCost, 해방할 때 ReleaseStaminaCost를 쓴다.
+	StaminaCost = 0.f;
 }
 
 void UknightGameplayAbility_HeavyAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
@@ -85,17 +89,47 @@ void UknightGameplayAbility_HeavyAttack::OnReleased(float TimeHeld)
 	else if (Phase == EPhase::Charging)
 	{
 		StopChargeEffects();
+		// (2026-10-26) 마지막 틱 뒤에 모은 몫까지 쓰고 모으기 소모를 멈춘 뒤, 해방(돌진) 비용을 쓴다. 모자라도 쓴다(가불).
+		TickChargeStamina();
 		Phase = EPhase::Releasing;
 		UWorld* const World = GetWorld();
+		if (World)
+		{
+			World->GetTimerManager().ClearTimer(ChargeStaminaTimer);
+		}
+		ApplyStaminaCost(ReleaseStaminaCost);
+
+		// (2026-10-26 사용자 결정) 해방부터는 일반 공격과 같은 캔슬 규칙을 받는다(교체 가능 배타 그룹, 클래스 설명 참고).
+		// 모으는 동안 막아 둔 다른 공격도 풀어서, 다음 공격은 그룹 규칙(캔슬 창부터)대로 나간다.
+		ChangeActivationGroupWhileActive(EknightAbilityActivationGroup::Exclusive_Replaceable);
+		if (bAttackBlockApplied)
+		{
+			bAttackBlockApplied = false;
+			if (UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo())
+			{
+				ASC->UnBlockAbilitiesWithTags(FGameplayTagContainer(knightGameplayTags::Ability_Attack));
+			}
+		}
+		if (const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo()); Character && World)
+		{
+			ReleaseMovePress.Reset(*Character);
+			World->GetTimerManager().SetTimer(ReleaseMoveCancelTimer, this, &ThisClass::CheckReleaseMoveCancel, 0.02f, true);
+		}
+
 		const double Held = (World ? World->GetTimeSeconds() : ChargeStartTime) - ChargeStartTime;
 		const float Alpha = FMath::Clamp(static_cast<float>(Held) / MaxChargeTime, 0.f, 1.f);
 		LastReleaseChargeAlpha = Alpha;
-		const float Scale = FMath::Lerp(1.f, MaxChargeMultiplier, Alpha);
+		// (2026-10-26) 풀차지 값(FullCharge*)이 있으면 ReleaseHitParams 값에서 그 값까지, 없으면 MaxChargeMultiplier배까지 오른다.
+		const float MotionScale = FMath::Lerp(1.f, FullChargeMotionValue > 0.f && ReleaseHitParams.MotionValue > 0.f
+			? FullChargeMotionValue / ReleaseHitParams.MotionValue : MaxChargeMultiplier, Alpha);
+		const float PoiseScale = FMath::Lerp(1.f, FullChargePoiseDamage > 0.f && ReleaseHitParams.PoiseDamage > 0.f
+			? FullChargePoiseDamage / ReleaseHitParams.PoiseDamage : MaxChargeMultiplier, Alpha);
 		// (2026-10-20) 스탠스 보정(한손/양손)을 먼저 곱하고 차지 배율을 곱한다.
 		ActiveHitParams = GetStanceScaledHitParams(ReleaseHitParams);
-		ActiveHitParams.MotionValue *= Scale;
-		ActiveHitParams.PoiseDamage *= Scale;
-		UE_LOG(LogknightAbility, Log, TEXT("%s: released after %.2fs charge, x%.2f (MV %.0f)"), *GetName(), Held, Scale, ActiveHitParams.MotionValue);
+		ActiveHitParams.MotionValue *= MotionScale;
+		ActiveHitParams.PoiseDamage *= PoiseScale;
+		UE_LOG(LogknightAbility, Log, TEXT("%s: released after %.2fs charge, MV x%.2f (%.0f), poise x%.2f (%.0f), stamina %.1f + %.1f"),
+			*GetName(), Held, MotionScale, ActiveHitParams.MotionValue, PoiseScale, ActiveHitParams.PoiseDamage, ChargeStaminaSpent, ReleaseStaminaCost);
 		if (ChargeReleaseMontage)
 		{
 			FaceScreenCenterForHeavyAttack(Cast<ACharacter>(GetAvatarActorFromActorInfo()), GetAbilitySystemComponentFromActorInfo());
@@ -150,6 +184,12 @@ bool UknightGameplayAbility_HeavyAttack::CanStartCharge() const
 {
 	const UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();
 	if (!ASC || !ChargeLoopMontage)
+	{
+		return false;
+	}
+	// (2026-10-26) 시작 비용이 없어도 행동 에너지가 0보다 많아야 모으기 시작한다(0 이하면 행동 불가, 다른 행동과 같은 규칙).
+	const FGameplayAttribute Gauge = UknightAttributeSet::GetBoostGaugeAttribute();
+	if (ChargeStaminaCost + ReleaseStaminaCost > 0.f && ASC->HasAttributeSetForAttribute(Gauge) && ASC->GetNumericAttribute(Gauge) <= 0.f)
 	{
 		return false;
 	}
@@ -221,8 +261,17 @@ void UknightGameplayAbility_HeavyAttack::StartCharge()
 	ASC->CancelAbilities(&Interrupt, nullptr, this);
 	FGameplayTagContainer Blocked(knightGameplayTags::Ability_Attack);
 	ASC->BlockAbilitiesWithTags(Blocked);
+	bAttackBlockApplied = true;
 	ASC->AddLooseGameplayTag(knightGameplayTags::State_Charging);
 	bChargeStateApplied = true;
+
+	// (2026-10-26) 모으는 동안 행동 에너지를 조금씩 쓴다(TickChargeStamina).
+	ChargeStaminaSpent = 0.f;
+	LastChargeStaminaTime = ChargeStartTime;
+	if (ChargeStaminaCost > 0.f && GetWorld())
+	{
+		GetWorld()->GetTimerManager().SetTimer(ChargeStaminaTimer, this, &ThisClass::TickChargeStamina, 0.1f, true);
+	}
 
 	UAbilityTask_WaitGameplayEvent* const HitTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, knightGameplayTags::Event_Melee_Hit, nullptr, false, true);
 	HitTask->EventReceived.AddDynamic(this, &ThisClass::OnMeleeHitEvent);
@@ -505,6 +554,66 @@ void UknightGameplayAbility_HeavyAttack::OnMeleeHitEvent(FGameplayEventData Payl
 	}
 }
 
+void UknightGameplayAbility_HeavyAttack::TickChargeStamina()
+{
+	UWorld* const World = GetWorld();
+	if (!World || Phase != EPhase::Charging || ChargeStaminaSpent >= ChargeStaminaCost)
+	{
+		if (World)
+		{
+			World->GetTimerManager().ClearTimer(ChargeStaminaTimer);
+		}
+		return;
+	}
+	// 풀차지(MaxChargeTime)까지 ChargeStaminaCost를 고르게 나눠 쓴다. 풀차지 뒤에 더 누르고 있어도 더 쓰지 않는다.
+	const double Now = World->GetTimeSeconds();
+	const float Amount = FMath::Min(ChargeStaminaCost * static_cast<float>(Now - LastChargeStaminaTime) / FMath::Max(MaxChargeTime, 0.1f),
+		ChargeStaminaCost - ChargeStaminaSpent);
+	LastChargeStaminaTime = Now;
+	if (Amount > 0.f)
+	{
+		ChargeStaminaSpent += Amount;
+		ApplyStaminaCost(Amount);
+	}
+}
+
+void UknightGameplayAbility_HeavyAttack::CheckReleaseMoveCancel()
+{
+	UWorld* const World = GetWorld();
+	const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	const UknightAbilitySystemComponent* const KnightASC = GetKnightAbilitySystemComponentFromActorInfo();
+	if (!World || !Character || !KnightASC || !IsActive() || Phase != EPhase::Releasing)
+	{
+		if (World)
+		{
+			World->GetTimerManager().ClearTimer(ReleaseMoveCancelTimer);
+		}
+		return;
+	}
+	// 일반 공격(UknightGameplayAbility_MeleeAttack::CheckMoveCancel)과 같은 규칙: 캔슬 창 밖에서도 새 누름은 추적하고,
+	// 캔슬 창이 열리고 후딜(퀵스텝만 되는 시간)이 지나면 새로 누른 이동 입력으로 해방 모션을 끊는다.
+	ReleaseMovePress.Update(*Character);
+	if (!KnightASC->HasMatchingGameplayTag(knightGameplayTags::Window_Cancel) || KnightASC->IsAttackRecoveryDashOnly())
+	{
+		return;
+	}
+	if (!ReleaseMovePress.HasFreshPress() || Character->GetLastMovementInputVector().IsNearlyZero())
+	{
+		return;
+	}
+	// 공격·가드·대시 입력이 버퍼에 남아 있으면 이동 캔슬보다 그 입력을 우선한다(일반 공격과 같음).
+	if (const UknightInputBufferComponent* const InputBuffer = Character->FindComponentByClass<UknightInputBufferComponent>())
+	{
+		if (InputBuffer->HasBufferedInput(InputBuffer->GetBufferedInputTag()))
+		{
+			return;
+		}
+	}
+	World->GetTimerManager().ClearTimer(ReleaseMoveCancelTimer);
+	MontageStop(ReleaseMoveCancelBlendOut);
+	Finish(false);
+}
+
 void UknightGameplayAbility_HeavyAttack::Finish(bool bWasCancelled)
 {
 	if (IsActive())
@@ -528,14 +637,24 @@ void UknightGameplayAbility_HeavyAttack::EndAbility(const FGameplayAbilitySpecHa
 	{
 		World->GetTimerManager().ClearTimer(TapTimer);
 		World->GetTimerManager().ClearTimer(GroundCrackTimer);
+		World->GetTimerManager().ClearTimer(ChargeStaminaTimer);
+		World->GetTimerManager().ClearTimer(ReleaseMoveCancelTimer);
+	}
+	UAbilitySystemComponent* const OwnerASC = ActorInfo ? ActorInfo->AbilitySystemComponent.Get() : nullptr;
+	if (bAttackBlockApplied)
+	{
+		bAttackBlockApplied = false;
+		if (OwnerASC)
+		{
+			OwnerASC->UnBlockAbilitiesWithTags(FGameplayTagContainer(knightGameplayTags::Ability_Attack));
+		}
 	}
 	if (bChargeStateApplied)
 	{
 		bChargeStateApplied = false;
-		if (UAbilitySystemComponent* const ASC = ActorInfo ? ActorInfo->AbilitySystemComponent.Get() : nullptr)
+		if (OwnerASC)
 		{
-			ASC->RemoveLooseGameplayTag(knightGameplayTags::State_Charging);
-			ASC->UnBlockAbilitiesWithTags(FGameplayTagContainer(knightGameplayTags::Ability_Attack));
+			OwnerASC->RemoveLooseGameplayTag(knightGameplayTags::State_Charging);
 		}
 		if (bWasCancelled)
 		{
@@ -544,4 +663,7 @@ void UknightGameplayAbility_HeavyAttack::EndAbility(const FGameplayAbilitySpecHa
 	}
 	Phase = EPhase::Deciding;
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
+	// (2026-10-26) 해방 때 바꾼 활성화 그룹을 되돌린다. 다음 발동은 다시 독립 그룹으로 시작한다(탭 강공격 단계를 막지 않게).
+	// ASC의 그룹 수는 위 EndAbility가 바뀐 그룹 기준으로 이미 뺐다.
+	ChangeActivationGroupWhileActive(EknightAbilityActivationGroup::Independent);
 }

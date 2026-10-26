@@ -25,6 +25,20 @@ UknightAbilitySystemComponent* UknightGameplayAbility::GetKnightAbilitySystemCom
 	return CurrentActorInfo ? Cast<UknightAbilitySystemComponent>(CurrentActorInfo->AbilitySystemComponent.Get()) : nullptr;
 }
 
+void UknightGameplayAbility::ChangeActivationGroupWhileActive(EknightAbilityActivationGroup NewGroup)
+{
+	if (ActivationGroup == NewGroup)
+	{
+		return;
+	}
+	const EknightAbilityActivationGroup OldGroup = ActivationGroup;
+	ActivationGroup = NewGroup;
+	if (UknightAbilitySystemComponent* const KnightASC = IsActive() ? GetKnightAbilitySystemComponentFromActorInfo() : nullptr)
+	{
+		KnightASC->NotifyActivationGroupChanged(this, OldGroup, NewGroup);
+	}
+}
+
 bool UknightGameplayAbility::CheckCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 	FGameplayTagContainer* OptionalRelevantTags) const
 {
