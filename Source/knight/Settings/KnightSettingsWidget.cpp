@@ -341,8 +341,9 @@ void UKnightSettingsWidget::GetTabSections(int32 Tab, TArray<FKnightSettingSecti
 		View.Items.Add(Slider(TEXT("FOV"), LOCTEXT("FOV", "시야각"), LOCTEXT("FOVDesc", "카메라가 보여 주는 범위입니다. 넓을수록 주변이 잘 보이지만 멀미가 날 수 있습니다."), 60.f, 110.f));
 
 		FKnightSettingSection& Light = AddSection(INVTEXT("BRIGHTNESS"));
-		Light.Items.Add(Slider(TEXT("Gamma"), LOCTEXT("Gamma", "감마"), FText::GetEmpty(), 80.f, 120.f));
-		Light.Items.Add(Slider(TEXT("Brightness"), LOCTEXT("Brightness", "밝기"), FText::GetEmpty(), 80.f, 120.f));
+		Light.Items.Add(Slider(TEXT("Gamma"), LOCTEXT("Gamma", "감마"), LOCTEXT("GammaDesc", "게임 장면의 중간 밝기를 조절합니다. 100이 기본값입니다."), 80.f, 120.f));
+		Light.Items.Add(Slider(TEXT("Brightness"), LOCTEXT("Brightness", "밝기"), LOCTEXT("BrightnessDesc", "기존 장면에 밝기 보정을 적용합니다. 조명과 자동 노출 설정은 유지됩니다."), 80.f, 120.f));
+		Light.Note = LOCTEXT("CalibrationNote", "장면에 즉시 미리 적용됩니다. 적용하면 저장하고, 되돌리면 이전 값으로 복원합니다. UI와 타이틀 영상은 보정 대상이 아닙니다.");
 	}
 
 	for (FKnightSettingSection& Section : OutSections)

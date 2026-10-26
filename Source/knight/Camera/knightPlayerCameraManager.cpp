@@ -183,26 +183,8 @@ void AknightPlayerCameraManager::UpdateCamera(float DeltaTime)
 		}
 	}
 
-	const ULocalPlayer* const LocalPlayer = PCOwner ? PCOwner->GetLocalPlayer() : nullptr;
-	UknightSettingsSubsystem* const Settings = LocalPlayer ? LocalPlayer->GetSubsystem<UknightSettingsSubsystem>() : nullptr;
-	if (!Settings) return;
-	float Offset, Brightness, Gamma;
-	Settings->GetEffectiveDisplaySettings(Offset, Brightness, Gamma);
-	if (FMath::IsNearlyEqual(Brightness, 1.f) && FMath::IsNearlyEqual(Gamma, 1.f)) return;
-
-	// Keep scene and camera post process intact. This final camera blend only overrides the user's calibration.
-	FPostProcessSettings Calibration;
-	if (!FMath::IsNearlyEqual(Brightness, 1.f))
-	{
-		Calibration.bOverride_ColorGain = true;
-		Calibration.ColorGain = FVector4(Brightness, Brightness, Brightness, 1.f);
-	}
-	if (!FMath::IsNearlyEqual(Gamma, 1.f))
-	{
-		Calibration.bOverride_ColorGamma = true;
-		Calibration.ColorGamma = FVector4(Gamma, Gamma, Gamma, 1.f);
-	}
-	AddCachedPPBlend(Calibration, 1.f, VTBlendOrder_Override);
+	// Brightness/gamma compose on the final game view after all volume/camera blends.
+	// A camera PP override would replace authored grading and depend on camera ticks.
 }
 
 float AknightPlayerCameraManager::GetShakeScale() const

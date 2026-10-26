@@ -5,6 +5,7 @@
 #include "knightSettingsSubsystem.generated.h"
 
 class UknightSharedSettings;
+class FknightDisplayCalibrationViewExtension;
 
 /** Loads and saves the local player's UknightSharedSettings. Gameplay reads settings through here. */
 UCLASS()
@@ -13,6 +14,8 @@ class KNIGHT_API UknightSettingsSubsystem : public ULocalPlayerSubsystem
 	GENERATED_BODY()
 
 public:
+	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
+	virtual void Deinitialize() override;
 	/** Loaded on first access (which also applies the audio volumes). Never null once a local player exists. */
 	UFUNCTION(BlueprintCallable, Category="Knight|Settings")
 	UknightSharedSettings* GetSharedSettings();
@@ -40,6 +43,7 @@ protected:
 	virtual void PlayerControllerChanged(APlayerController* NewPlayerController) override;
 
 private:
+	TSharedPtr<FknightDisplayCalibrationViewExtension, ESPMode::ThreadSafe> DisplayCalibration;
 	void RegisterMappableContexts();
 	bool bMappableContextsRegistered = false;
 	UPROPERTY(Transient)
