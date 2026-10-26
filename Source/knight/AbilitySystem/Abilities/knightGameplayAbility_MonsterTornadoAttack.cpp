@@ -153,6 +153,10 @@ void UknightGameplayAbility_MonsterTornadoAttack::StartLand()
 		AirTurn->EndAirTurnNow(0.5f);
 	}
 	bLanded = true;
+	if (UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		ASC->AddLooseGameplayTag(knightGameplayTags::State_Monster_Collapsed);
+	}
 	Phase = EPhase::Land;
 	PhaseTime = 0.f;
 	if (!LandMontage)
@@ -187,6 +191,10 @@ void UknightGameplayAbility_MonsterTornadoAttack::EndAbility(const FGameplayAbil
 	{
 		// 탈진 착지(딜 타임)가 끝난 뒤부터 지상 턴을 센다.
 		AirTurn->RestartGroundTurn();
+	}
+	if (UAbilitySystemComponent* const ASC = bLanded ? GetAbilitySystemComponentFromActorInfo() : nullptr)
+	{
+		ASC->RemoveLooseGameplayTag(knightGameplayTags::State_Monster_Collapsed);
 	}
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }

@@ -22,6 +22,8 @@ namespace knightMonsterPushOut
 	constexpr float Skin = 2.f;
 	// 발밑을 이만큼 쓸어 몸 윗면에 서 있거나 걸쳐 있는지 본다.
 	constexpr float StandProbe = 5.f;
+	// 메시 바디에서 빠져나오는 방향의 수평 성분이 이보다 작으면 위에서 누른 것으로 보고 중심선 기준으로 민다.
+	constexpr float MinHorizontalMTD = 0.3f;
 }
 
 UknightMonsterPushOutComponent::UknightMonsterPushOutComponent()
@@ -30,8 +32,11 @@ UknightMonsterPushOutComponent::UknightMonsterPushOutComponent()
 	// 몬스터와 플레이어가 이번 프레임 이동을 마친 뒤에 겹침을 본다.
 	PrimaryComponentTick.TickGroup = TG_PostPhysics;
 	ShallowMeshPushOutTags.AddTag(knightGameplayTags::State_HitReact_Knockdown);
+	ShallowMeshPushOutTags.AddTag(knightGameplayTags::State_HitReact_Groggy);
+	ShallowMeshPushOutTags.AddTag(knightGameplayTags::State_Monster_Collapsed);
 	PassThroughPawnTags.AddTag(knightGameplayTags::State_Monster_PassThroughPawns);
 	PassThroughBoneTags.AddTag(knightGameplayTags::State_HitReact_Knockdown);
+	PassThroughBoneTags.AddTag(knightGameplayTags::State_HitReact_Groggy);
 	PassThroughBoneTags.AddTag(knightGameplayTags::State_Monster_Exhausted);
 	PassThroughBoneTags.AddTag(knightGameplayTags::State_Monster_Collapsed);
 }
@@ -124,12 +129,26 @@ void UknightMonsterPushOutComponent::TickComponent(float DeltaTime, ELevelTick T
 		// 캡슐이 플레이어를 통과시키는 동안에는 캡슐 안에 들어온 플레이어도 밀어낸다. 다시 막을 때 겹쳐 있으면 엔진이 한 번에 튕겨 내기 때문이다.
 		const bool bInsideCapsule = bCapsulePassingThrough && IsOverlappingPrimitive(Character, MovementCapsule, 0.f);
 		bAnyInsideCapsule |= bInsideCapsule;
-		if (!bInsideCapsule && !IsOverlappingBody(Character, MeshPenetration) && !IsStandingOnBody(Character))
+		FVector Direction;
+		float Distance = UE_BIG_NUMBER;
+		if (MeshPenetration > 0.f && !bInsideCapsule && !IsOverlappingBlockers(Character) && !IsStandingOnBody(Character))
+		{
+			// 엎드린 몸에는 파고든 만큼만 밀어 낸다. 계속 몸 쪽으로 걸어도 그 자리에 붙어 선다.
+			if (!FindMeshPushOut(Character, MeshPenetration, Direction, Distance))
+			{
+				continue;
+			}
+		}
+		else if (bInsideCapsule || IsOverlappingBody(Character, MeshPenetration) || IsStandingOnBody(Character))
+		{
+			Direction = GetPushDirection(Character->GetActorLocation());
+		}
+		else
 		{
 			continue;
 		}
 
-		const FVector Delta = GetPushDirection(Character->GetActorLocation()) * PushSpeed * DeltaTime;
+		const FVector Delta = Direction * FMath::Min(PushSpeed * DeltaTime, Distance);
 		// 이미 몸과 겹친 상태라 몬스터를 무시하고 옮긴다. 벽·지형에는 그대로 막히고, 막히면 벽을 따라 미끄러진다.
 		const bool bWasIgnoring = Capsule->GetMoveIgnoreActors().Contains(Owner);
 		Capsule->IgnoreActorWhenMoving(Owner, true);
@@ -218,6 +237,68 @@ bool UknightMonsterPushOutComponent::IsOverlappingBody(const ACharacter* Charact
 		}
 	}
 	return false;
+}
+
+bool UknightMonsterPushOutComponent::IsOverlappingBlockers(const ACharacter* Character) const
+{
+	for (const UPrimitiveComponent* const Primitive : BodyPrimitives)
+	{
+		if (Primitive != MeshPrimitive && IsOverlappingPrimitive(Character, Primitive, 0.f))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+bool UknightMonsterPushOutComponent::FindMeshPushOut(const ACharacter* Character, float Penetration, FVector& OutDirection, float& OutDistance) const
+{
+	const USkeletalMeshComponent* const Mesh = Cast<USkeletalMeshComponent>(MeshPrimitive);
+	if (!Mesh || !Mesh->IsQueryCollisionEnabled())
+	{
+		return false;
+	}
+	// IsOverlappingMeshBodies와 같은 크기로 줄인 캡슐이라, 빠져나오는 거리가 곧 허용 깊이를 넘은 만큼이다.
+	const UCapsuleComponent* const Capsule = Character->GetCapsuleComponent();
+	const float Radius = Capsule->GetScaledCapsuleRadius() - knightMonsterPushOut::Skin;
+	const float HalfHeight = Capsule->GetScaledCapsuleHalfHeight() - knightMonsterPushOut::Skin;
+	const float Shrink = FMath::Clamp(Penetration, 0.f, Radius - knightMonsterPushOut::Skin);
+	if (Radius - Shrink <= 0.f)
+	{
+		return false;
+	}
+	const FVector Location = Capsule->GetComponentLocation();
+	const FCollisionShape Shape = FCollisionShape::MakeCapsule(Radius - Shrink, HalfHeight - Shrink);
+	const bool bSkipBones = IsBonePassThrough();
+	FMTDResult Deepest;
+	Deepest.Distance = 0.f;
+	bool bFound = false;
+	for (int32 BodyIndex = 0; BodyIndex < Mesh->Bodies.Num(); ++BodyIndex)
+	{
+		const FBodyInstance* const Body = Mesh->Bodies[BodyIndex];
+		FMTDResult MTD;
+		if (Body && !(bSkipBones && PassThroughBodies.Contains(BodyIndex)) && Body->OverlapTest(Location, Capsule->GetComponentQuat(), Shape, &MTD)
+			&& (!bFound || MTD.Distance > Deepest.Distance))
+		{
+			Deepest = MTD;
+			bFound = true;
+		}
+	}
+	if (!bFound)
+	{
+		return false;
+	}
+	const FVector Horizontal = FVector(Deepest.Direction.X, Deepest.Direction.Y, 0.f);
+	if (Horizontal.Size() < knightMonsterPushOut::MinHorizontalMTD)
+	{
+		OutDirection = GetPushDirection(Location);
+		OutDistance = UE_BIG_NUMBER;
+		return true;
+	}
+	OutDirection = Horizontal.GetUnsafeNormal();
+	// 비스듬히 빠져나오는 몫을 수평 이동으로 채운다.
+	OutDistance = Deepest.Distance / Horizontal.Size();
+	return true;
 }
 
 bool UknightMonsterPushOutComponent::IsOverlappingPrimitive(const ACharacter* Character, const UPrimitiveComponent* Primitive, float Penetration) const

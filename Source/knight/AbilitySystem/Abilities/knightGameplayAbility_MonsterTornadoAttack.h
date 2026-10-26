@@ -17,6 +17,7 @@ class UAnimMontage;
  *           첫 진행 방향도 SpreadAngle씩 벌려 양옆에서 조여 오게 한다. 0이면 각자 자리에서 타깃 쪽으로 나가 타깃 근처에서 엇갈린다.
  *   탈진 착지: ExhaustTime에 공중 턴을 끝내고 LandMontage를 LandHoldTime 동안, 이어서 GetUpMontage를 재생한다(공격 없는 딜 타임).
  *             공중이 아니면 착지 없이 끝난다. 일어난 뒤부터 지상 턴이 처음부터 시작된다.
+ *             착지부터 끝날 때까지 State.Monster.Collapsed를 붙인다(엎드린 몸·날개로 플레이어를 밀어내지 않음).
  *
  * 회오리는 어빌리티와 따로 움직이므로 착지하는 동안에도 타깃을 쫓는다. 회피만 되게 하려면 HitParams.DamageEffect에
  * 가드 범위 0인 피해 실행을 쓰고 bCanBeParried를 끈다.
