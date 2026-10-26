@@ -24,6 +24,7 @@ public class knightDev : ModuleRules
 			"GameplayTags",
 			"GameplayTasks",
 			"knight",
+			"knightUI",
 			"knightInventory",
 			"knightPerfTracker",
 			"UMG"

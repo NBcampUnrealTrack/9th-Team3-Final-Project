@@ -12,6 +12,7 @@ class UPanelWidget;
 class UScrollBox;
 class USoundBase;
 class UknightSettingRow;
+class UImage;
 
 /**
  * Category button on the left of the settings screen: English caption over the label, marker when selected.
@@ -182,6 +183,10 @@ protected:
 	TObjectPtr<UknightButtonBase> Btn_PromptContinue;
 
 private:
+	UPROPERTY(Transient)
+	TObjectPtr<UImage> CalibrationBackdrop;
+	FLinearColor OriginalBackdropTint = FLinearColor::White;
+
 	UknightSettingsTab* GetTabButton(int32 Index) const;
 	void HandleRowFocused(UknightSettingRow* Row, bool bKeyboardFocus);
 	void HandleRowEdited(FName Id, const FString& Value);
