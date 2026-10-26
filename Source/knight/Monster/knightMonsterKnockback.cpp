@@ -3,7 +3,22 @@
 #include "GameFramework/Actor.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "knight.h"
+
+namespace knightMonsterKnockback
+{
+	/** 날리는 속도 중 앞쪽 비율. 달려오는 몬스터보다 한참 느려야 몸 앞에 붙어 같이 밀려가지 않는다. */
+	constexpr float ForwardRatio = 0.25f;
+	/** 몸 옆으로 벗어날 때 두 캡슐 사이에 두는 여유. */
+	constexpr float SideMargin = 50.f;
+
+	float GetRadius(const AActor& Actor)
+	{
+		const ACharacter* const Character = Cast<ACharacter>(&Actor);
+		return Character && Character->GetCapsuleComponent() ? Character->GetCapsuleComponent()->GetScaledCapsuleRadius() : Actor.GetSimpleCollisionRadius();
+	}
+}
 
 void FknightMonsterKnockback::Start(const AActor& Monster, AActor& Target, float Speed, float Time)
 {
@@ -13,10 +28,15 @@ void FknightMonsterKnockback::Start(const AActor& Monster, AActor& Target, float
 	}
 	const FVector Forward = Monster.GetActorForwardVector().GetSafeNormal2D();
 	const FVector Right = Monster.GetActorRightVector().GetSafeNormal2D();
-	Side = FVector::DotProduct(Target.GetActorLocation() - Monster.GetActorLocation(), Right) >= 0.f ? Right : -Right;
+	const float Lateral = FVector::DotProduct(Target.GetActorLocation() - Monster.GetActorLocation(), Right);
+	Side = Lateral >= 0.f ? Right : -Right;
+	SourceMonster = &Monster;
 	Actor = &Target;
 	bFlipped = false;
-	Velocity = (Side * 2.f + Forward).GetSafeNormal() * Speed;
+	// 가드로 세기가 줄어도 몸 옆까지는 밀어 낸다.
+	Clearance = knightMonsterKnockback::GetRadius(Monster) + knightMonsterKnockback::GetRadius(Target) + knightMonsterKnockback::SideMargin;
+	const float SideSpeed = FMath::Max(Speed, (Clearance - FMath::Abs(Lateral)) / Time);
+	Velocity = Side * SideSpeed + Forward * Speed * knightMonsterKnockback::ForwardRatio;
 	Remaining = Time;
 	UE_LOG(LogknightAI, Verbose, TEXT("%s: knockback %s at %.0f cm/s for %.2fs."), *Monster.GetName(), *Target.GetName(), Speed, Time);
 }
@@ -50,12 +70,20 @@ void FknightMonsterKnockback::Tick(float DeltaTime)
 	{
 		Target->AddActorWorldOffset(Delta, true, &Blocked);
 	}
-	// 한쪽이 벽에 막혔으면 반대쪽으로 한 번 바꿔 날린다. 몸 앞에 붙은 채 밀려가지 않게 한다.
+	Remaining -= Step;
+	// 한쪽이 벽에 막혔으면 반대쪽으로 한 번 바꿔 날린다. 경로를 건너 반대쪽 몸 옆까지 가도록 남은 시간을 늘린다.
 	if (Blocked.bBlockingHit && !bFlipped)
 	{
 		bFlipped = true;
+		const float SideSpeed = FMath::Abs(FVector::DotProduct(Velocity, Side));
+		const AActor* const MonsterActor = SourceMonster.Get();
+		const float Lateral = MonsterActor ? FMath::Abs(FVector::DotProduct(Target->GetActorLocation() - MonsterActor->GetActorLocation(), Side)) : 0.f;
 		Velocity -= 2.f * FVector::DotProduct(Velocity, Side) * Side;
-		UE_LOG(LogknightAI, Verbose, TEXT("%s: knockback blocked by %s, flipped side."), *Target->GetName(), *GetNameSafe(Blocked.GetActor()));
+		Side = -Side;
+		if (SideSpeed > KINDA_SMALL_NUMBER)
+		{
+			Remaining = FMath::Max(Remaining, (Lateral + Clearance) / SideSpeed);
+		}
+		UE_LOG(LogknightAI, Verbose, TEXT("%s: knockback blocked by %s, flipped side for %.2fs."), *Target->GetName(), *GetNameSafe(Blocked.GetActor()), Remaining);
 	}
-	Remaining -= Step;
 }

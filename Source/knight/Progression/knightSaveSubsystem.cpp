@@ -7,6 +7,7 @@
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "Progression/knightSaveGame.h"
+#include "Quest/KnightProgressionIds.h"
 #include "Raid/knightRaidSubsystem.h"
 #include "knight.h"
 
@@ -189,6 +190,29 @@ bool UknightSaveSubsystem::MigrateSave(UknightSaveGame& Save) const
 		if (!Entry.Key.IsValid() || Entry.Value < 0) return false;
 	}
 	Save.CompletedQuestIds.Remove(NAME_None);
+	// ID-only compatibility, not new progress: normalize in the loaded snapshot and let
+	// the existing save commit persist it. Never award rewards or infer quest success from stage clears.
+	TSet<FName> Completed;
+	for (FName Id : Save.CompletedQuestIds) Completed.Add(KnightProgressionIds::Quest(Id));
+	Save.CompletedQuestIds = MoveTemp(Completed);
+	TSet<FName> Unlocked;
+	for (FName Id : Save.UnlockedStages) Unlocked.Add(KnightProgressionIds::Stage(Id));
+	Save.UnlockedStages = MoveTemp(Unlocked);
+	TMap<FName, FknightStageRecord> Records;
+	for (const auto& Entry : Save.StageRecords)
+	{
+		const FName Id = KnightProgressionIds::Stage(Entry.Key);
+		if (FknightStageRecord* Existing = Records.Find(Id))
+		{
+			// Old/canonical keys describe the same history; summing would double-count it.
+			Existing->ClearCount = FMath::Max(Existing->ClearCount, Entry.Value.ClearCount);
+			if (Entry.Value.BestClearTime > 0.f && (Existing->BestClearTime <= 0.f
+				|| Entry.Value.BestClearTime < Existing->BestClearTime))
+				Existing->BestClearTime = Entry.Value.BestClearTime;
+		}
+		else Records.Add(Id, Entry.Value);
+	}
+	Save.StageRecords = MoveTemp(Records);
 	Save.FirstDefeatedBossIds.Remove(NAME_None);
 	if (Save.Money < 0 || Save.UnlockedSharedSocketSlots < 0) return false;
 	if (Save.EquippedSocketItems.Num() > Save.UnlockedSharedSocketSlots) return false;

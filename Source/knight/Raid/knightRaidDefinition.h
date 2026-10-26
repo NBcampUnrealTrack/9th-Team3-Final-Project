@@ -77,6 +77,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Raid")
 	FName RequiredClearedStageId;
 
+	/** Confirmed quest completion required even for an explicitly unlocked stage. Empty keeps the existing stage rules. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Raid")
+	FName RequiredCompletedQuestId;
+
 	/** Monster that must be defeated. Monsters placed in the map with this definition are the targets. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Raid")
 	TObjectPtr<const UknightMonsterDefinition> TargetMonster;

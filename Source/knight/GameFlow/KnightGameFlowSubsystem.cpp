@@ -1,4 +1,5 @@
 #include "KnightGameFlowSubsystem.h"
+#include "Quest/KnightProgressionIds.h"
 
 #include "KnightFlowSettings.h"
 #include "Engine/Engine.h"
@@ -92,7 +93,7 @@ bool UKnightGameFlowSubsystem::GetStageDefinitions(TArray<FKnightStageDefinition
 	{
 		if (!Stage.StageId.IsNone())
 		{
-			IdCounts.FindOrAdd(Stage.StageId)++;
+			IdCounts.FindOrAdd(KnightProgressionIds::Stage(Stage.StageId))++;
 		}
 	}
 	for (const FKnightStageDefinition& Stage : Catalog->Stages)
@@ -101,7 +102,7 @@ bool UKnightGameFlowSubsystem::GetStageDefinitions(TArray<FKnightStageDefinition
 		{
 			UE_LOG(Logknight, Error, TEXT("StageCatalog %s has a stage with an empty StageId."), *Catalog->GetPathName());
 		}
-		else if (IdCounts.FindChecked(Stage.StageId) != 1)
+		else if (IdCounts.FindChecked(KnightProgressionIds::Stage(Stage.StageId)) != 1)
 		{
 			UE_LOG(Logknight, Error, TEXT("StageCatalog %s has duplicate StageId %s; all matching entries are excluded."),
 				*Catalog->GetPathName(), *Stage.StageId.ToString());
@@ -118,6 +119,7 @@ bool UKnightGameFlowSubsystem::GetStageDefinitions(TArray<FKnightStageDefinition
 				if (!bEditorPIE) continue;
 			}
 			OutStages.Add(Stage);
+			OutStages.Last().StageId = KnightProgressionIds::Stage(Stage.StageId);
 		}
 	}
 	return !OutStages.IsEmpty();
@@ -125,6 +127,7 @@ bool UKnightGameFlowSubsystem::GetStageDefinitions(TArray<FKnightStageDefinition
 
 bool UKnightGameFlowSubsystem::FindStageDefinition(FName StageId, FKnightStageDefinition& OutStage) const
 {
+	StageId = KnightProgressionIds::Stage(StageId);
 	OutStage = FKnightStageDefinition();
 	if (StageId.IsNone())
 	{
@@ -139,7 +142,7 @@ bool UKnightGameFlowSubsystem::FindStageDefinition(FName StageId, FKnightStageDe
 	const FKnightStageDefinition* Found = nullptr;
 	for (const FKnightStageDefinition& Stage : Catalog->Stages)
 	{
-		if (Stage.StageId == StageId)
+		if (KnightProgressionIds::Stage(Stage.StageId) == StageId)
 		{
 			if (Found)
 			{
@@ -155,6 +158,7 @@ bool UKnightGameFlowSubsystem::FindStageDefinition(FName StageId, FKnightStageDe
 		return false;
 	}
 	OutStage = *Found;
+	OutStage.StageId = StageId;
 	return true;
 }
 
@@ -257,6 +261,7 @@ bool UKnightGameFlowSubsystem::RequestStartQuest(FName QuestId, FText& OutReason
 
 bool UKnightGameFlowSubsystem::RequestStartStageInternal(FName StageId, const UKnightQuestDefinition* Quest, FText& OutReason)
 {
+	StageId = KnightProgressionIds::Stage(StageId);
 	if (bTravelPending)
 	{
 		OutReason = LOCTEXT("TravelAlreadyPending", "A level transition is already in progress.");
@@ -298,8 +303,8 @@ bool UKnightGameFlowSubsystem::RequestStartStageInternal(FName StageId, const UK
 	PendingQuestContext = FKnightQuestRunContext();
 	if (Quest)
 	{
-		PendingQuestContext.QuestId = Quest->QuestId;
-		PendingQuestContext.StageId = Quest->StageId;
+		PendingQuestContext.QuestId = KnightProgressionIds::Quest(Quest->QuestId);
+		PendingQuestContext.StageId = StageId;
 		PendingQuestContext.BossId = Quest->BossId;
 		PendingQuestContext.Difficulty = Quest->Difficulty;
 		if (const UknightSaveSubsystem* const Saves = GameInstance->GetSubsystem<UknightSaveSubsystem>())

@@ -48,10 +48,11 @@ void UknightMonsterPushOutComponent::BeginPlay()
 	const AActor* const Owner = GetOwner();
 	if (Owner)
 	{
-		TArray<UknightMonsterBodyBlockerComponent*> Blockers;
-		Owner->GetComponents<UknightMonsterBodyBlockerComponent>(Blockers);
-		BodyPrimitives.Append(Blockers);
-		TopPrimitives.Append(Blockers);
+		TArray<UknightMonsterBodyBlockerComponent*> BlockerComponents;
+		Owner->GetComponents<UknightMonsterBodyBlockerComponent>(BlockerComponents);
+		Blockers.Append(BlockerComponents);
+		BodyPrimitives.Append(BlockerComponents);
+		TopPrimitives.Append(BlockerComponents);
 		const ACharacter* const Character = Cast<ACharacter>(Owner);
 		MovementCapsule = Character ? Character->GetCapsuleComponent() : nullptr;
 		// 이동 캡슐이 플레이어를 막으면 그 윗면에도 올라설 수 있다.
@@ -110,6 +111,13 @@ void UknightMonsterPushOutComponent::TickComponent(float DeltaTime, ELevelTick T
 	}
 
 	const float MeshPenetration = IsShallowMeshPushOut() ? ShallowMeshPenetration : 0.f;
+	const bool bLying = MeshPenetration > 0.f;
+	if (bLowerBlockersWhileLying && bLying && !bBlockersLowered && !Blockers.IsEmpty())
+	{
+		SetBlockersLowered(true);
+	}
+	bIgnoreBlockers = bBlockersLowered && bLying;
+	bool bAnyInsideBlockers = false;
 	const bool bWantPassThrough = WantsPassThroughPawns();
 	if (bWantPassThrough && !bCapsulePassingThrough)
 	{
@@ -129,6 +137,8 @@ void UknightMonsterPushOutComponent::TickComponent(float DeltaTime, ELevelTick T
 		// 캡슐이 플레이어를 통과시키는 동안에는 캡슐 안에 들어온 플레이어도 밀어낸다. 다시 막을 때 겹쳐 있으면 엔진이 한 번에 튕겨 내기 때문이다.
 		const bool bInsideCapsule = bCapsulePassingThrough && IsOverlappingPrimitive(Character, MovementCapsule, 0.f);
 		bAnyInsideCapsule |= bInsideCapsule;
+		// 일어난 뒤 내려 둔 상자 자리에 남은 플레이어는 아래에서 몸 밖으로 밀어 내고, 모두 빠지면 다시 막는다.
+		bAnyInsideBlockers |= bBlockersLowered && !bIgnoreBlockers && IsOverlappingBlockers(Character);
 		FVector Direction;
 		float Distance = UE_BIG_NUMBER;
 		if (MeshPenetration > 0.f && !bInsideCapsule && !IsOverlappingBlockers(Character) && !IsStandingOnBody(Character))
@@ -171,6 +181,28 @@ void UknightMonsterPushOutComponent::TickComponent(float DeltaTime, ELevelTick T
 	{
 		SetCapsulePassThrough(false);
 	}
+	if (bBlockersLowered && !bLying && !bAnyInsideBlockers)
+	{
+		SetBlockersLowered(false);
+	}
+}
+
+void UknightMonsterPushOutComponent::SetBlockersLowered(bool bLowered)
+{
+	for (UPrimitiveComponent* const Blocker : Blockers)
+	{
+		if (Blocker)
+		{
+			Blocker->SetCollisionResponseToChannel(ECC_Pawn, bLowered ? ECR_Ignore : ECR_Block);
+		}
+	}
+	bBlockersLowered = bLowered;
+	UE_LOG(LogknightAI, Verbose, TEXT("%s body blockers %s pawns."), *GetNameSafe(GetOwner()), bLowered ? TEXT("pass") : TEXT("block"));
+}
+
+bool UknightMonsterPushOutComponent::ShouldSkip(const UPrimitiveComponent* Primitive) const
+{
+	return bIgnoreBlockers && Blockers.Contains(Primitive);
 }
 
 bool UknightMonsterPushOutComponent::WantsPassThroughPawns() const
@@ -231,7 +263,7 @@ bool UknightMonsterPushOutComponent::IsOverlappingBody(const ACharacter* Charact
 			}
 			continue;
 		}
-		if (IsOverlappingPrimitive(Character, Primitive, Primitive == MeshPrimitive ? MeshPenetration : 0.f))
+		if (!ShouldSkip(Primitive) && IsOverlappingPrimitive(Character, Primitive, Primitive == MeshPrimitive ? MeshPenetration : 0.f))
 		{
 			return true;
 		}
@@ -243,7 +275,7 @@ bool UknightMonsterPushOutComponent::IsOverlappingBlockers(const ACharacter* Cha
 {
 	for (const UPrimitiveComponent* const Primitive : BodyPrimitives)
 	{
-		if (Primitive != MeshPrimitive && IsOverlappingPrimitive(Character, Primitive, 0.f))
+		if (Primitive != MeshPrimitive && !ShouldSkip(Primitive) && IsOverlappingPrimitive(Character, Primitive, 0.f))
 		{
 			return true;
 		}
@@ -370,7 +402,7 @@ bool UknightMonsterPushOutComponent::IsStandingOnBody(const ACharacter* Characte
 	const FQuat Rotation = Capsule->GetComponentQuat();
 	for (UPrimitiveComponent* const Primitive : TopPrimitives)
 	{
-		if (!Primitive || !Primitive->IsQueryCollisionEnabled())
+		if (!Primitive || !Primitive->IsQueryCollisionEnabled() || ShouldSkip(Primitive))
 		{
 			continue;
 		}

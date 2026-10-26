@@ -52,6 +52,9 @@ struct FknightMonsterAreaImpact
  *
  * KnockbackSpeed를 주면 맞은 대상을 몬스터 진행 경로 옆으로 날려 보낸다(몸통 박치기에 맞고 몸 앞에 붙어 끌려가지 않게).
  *
+ * 시각(WindupTime, Impacts, LungeStartTime 등)은 몬스터 시간(CustomTimeDilation을 곱한 시간)으로 잰다. 히트스톱으로 몽타주가
+ * 멈추는 동안 판정 시계도 같이 멈추므로, 예비 동작 중에 맞아도 판정이 애니메이션보다 먼저 나오지 않는다.
+ *
  * 디버그: knight.Monster.DrawAttacks 1 이면 예고(주황)와 타격 지점(빨강)을 그린다.
  */
 UCLASS()
@@ -64,6 +67,10 @@ public:
 
 	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 		const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData) override;
+
+#if WITH_EDITOR
+	virtual EDataValidationResult IsDataValid(class FDataValidationContext& Context) const override;
+#endif
 
 protected:
 	/** 오버랩을 실행하고 타격을 적용한다. 타격 순간에 효과를 더하려면 오버라이드한다. */
@@ -155,29 +162,15 @@ protected:
 	FGameplayTag TelegraphCue;
 
 private:
+	/** 몬스터 시간을 한 칸 진행하고, 그 사이에 지난 돌진·판정·후딜 시각을 처리한다. */
 	UFUNCTION()
-	void HandleWindupFinished();
+	void HandleClockTick(int32 ActionNumber);
 
-	UFUNCTION()
 	void StartLunge();
-
-	UFUNCTION()
-	void HandleActiveTick(int32 ActionNumber);
-
-	UFUNCTION()
-	void StartRecovery(int32 ActionNumber = 0);
-
-	UFUNCTION()
-	void HandleRecoveryFinished();
-
-	UFUNCTION()
-	void HandleImpactTime();
 
 	UFUNCTION()
 	void HandleKnockbackTick(int32 ActionNumber);
 
-	/** NextImpact 판정까지 기다린다. 남은 판정이 없으면 후딜로 넘어간다. Now는 발동부터 지난 시간이다. */
-	void ScheduleNextImpact(float Now);
 	void ApplyImpact(const FknightMonsterAreaImpact& Impact);
 	void HitArea(const FVector& Center, float Radius);
 
@@ -188,4 +181,13 @@ private:
 	TSet<TWeakObjectPtr<AActor>> HitActors;
 	int32 NextImpact = 0;
 	FknightMonsterKnockback Knockback;
+
+	/** 발동부터 지난 몬스터 시간. */
+	float Elapsed = 0.f;
+	/** 판정이 모두 끝나 후딜이 시작된 몬스터 시간. 아직이면 음수. */
+	float RecoveryStart = -1.f;
+	/** ActiveTime 동안 다음 오버랩을 할 몬스터 시간. */
+	float NextActiveCheck = 0.f;
+	bool bLungeStarted = false;
+	bool bWindupDone = false;
 };
