@@ -1463,6 +1463,382 @@ UNiagaraSystem* UknightMonsterFXBuilder::BuildSonicWaterSpraySystem(const FStrin
 	return Finish(System, false);
 }
 
+UNiagaraSystem* UknightMonsterFXBuilder::BuildTornadoSystem(const FString& PackagePath, UMaterialInterface* SprayMaterial,
+	UMaterialInterface* MistMaterial, float Radius, float Height, FLinearColor Tint)
+{
+	using namespace knightMonsterFX;
+	if (!SprayMaterial || !MistMaterial)
+	{
+		return nullptr;
+	}
+	// 밑동 물안개: 수면에서 바깥으로 낮게 퍼지며 부푼다. 기둥 밑동을 감싸는 치마처럼 보인다.
+	FSpriteLayer Skirt;
+	Skirt.Name = TEXT("Skirt");
+	Skirt.Material = MistMaterial;
+	Skirt.Rate = 60.f;
+	Skirt.Life = FVector2f(0.9f, 1.4f);
+	Skirt.SizeMin = FVector2f(Radius * 0.7f);
+	Skirt.SizeMax = FVector2f(Radius * 1.2f);
+	Skirt.CurlStrength = 250.f;
+	Skirt.CurlFrequency = 0.003f;
+	Skirt.Drag = 1.2f;
+	Skirt.Rise = 80.f;
+	Skirt.ColorKeys = { {0.f, 1.f}, {1.f, 1.f} };
+	Skirt.AlphaKeys = { {0.f, 0.f}, {0.2f, 0.4f}, {0.7f, 0.2f}, {1.f, 0.f} };
+	Skirt.SizeKeys = { {0.f, 0.6f}, {1.f, 1.8f} };
+	Skirt.SortOrder = 1;
+
+	// 물보라 막: 밑동에서 비스듬히 솟았다가 중력으로 떨어지는 물줄기. 부드러운 결을 속도 방향으로 늘여 막처럼 보이게 한다.
+	FSpriteLayer Sheet;
+	Sheet.Name = TEXT("Sheet");
+	Sheet.Material = MistMaterial;
+	Sheet.Rate = 180.f;
+	Sheet.Life = FVector2f(0.5f, 0.8f);
+	Sheet.SizeMin = FVector2f(50.f, 140.f);
+	Sheet.SizeMax = FVector2f(90.f, 280.f);
+	Sheet.Rise = -1600.f;
+	Sheet.Drag = 0.5f;
+	Sheet.ColorKeys = { {0.f, 1.f}, {1.f, 1.f} };
+	Sheet.AlphaKeys = { {0.f, 0.f}, {0.1f, 0.35f}, {0.6f, 0.2f}, {1.f, 0.f} };
+	Sheet.SizeKeys = { {0.f, 0.4f}, {0.3f, 1.f}, {1.f, 1.3f} };
+	Sheet.Alignment = ENiagaraSpriteAlignment::VelocityAligned;
+	Sheet.SortOrder = 2;
+
+	// 물방울: 막보다 높이, 멀리 튀는 작은 점.
+	FSpriteLayer Drops = Sheet;
+	Drops.Name = TEXT("Drops");
+	Drops.Material = SprayMaterial;
+	Drops.Rate = 70.f;
+	Drops.Life = FVector2f(0.6f, 1.f);
+	Drops.SizeMin = FVector2f(4.f, 8.f);
+	Drops.SizeMax = FVector2f(7.f, 16.f);
+	Drops.AlphaKeys = { {0.f, 0.f}, {0.1f, 0.22f}, {0.7f, 0.14f}, {1.f, 0.f} };
+	Drops.SizeKeys = { {0.f, 1.f}, {1.f, 0.7f} };
+	Drops.SortOrder = 3;
+
+	// 기둥 물안개: 깔때기 안을 감아 오르는 옅은 물안개(컴포넌트 회전으로 돈다).
+	FSpriteLayer Column;
+	Column.Name = TEXT("Column");
+	Column.Material = MistMaterial;
+	Column.Rate = 45.f;
+	Column.Life = FVector2f(0.8f, 1.2f);
+	Column.SizeMin = FVector2f(Radius * 0.7f);
+	Column.SizeMax = FVector2f(Radius * 1.1f);
+	Column.CurlStrength = 150.f;
+	Column.CurlFrequency = 0.004f;
+	Column.ColorKeys = { {0.f, 1.f}, {1.f, 1.f} };
+	Column.AlphaKeys = { {0.f, 0.f}, {0.3f, 0.22f}, {1.f, 0.f} };
+	Column.SizeKeys = { {0.f, 0.7f}, {1.f, 1.3f} };
+	Column.SortOrder = 0;
+
+	// 꼭대기 물안개: 깔때기 위 끝에서 바깥으로 천천히 흩어진다.
+	FSpriteLayer Top;
+	Top.Name = TEXT("Top");
+	Top.Material = MistMaterial;
+	Top.Rate = 16.f;
+	Top.Life = FVector2f(1.2f, 1.8f);
+	Top.SizeMin = FVector2f(Radius * 0.9f);
+	Top.SizeMax = FVector2f(Radius * 1.5f);
+	Top.CurlStrength = 200.f;
+	Top.CurlFrequency = 0.002f;
+	Top.Drag = 0.8f;
+	Top.ColorKeys = { {0.f, 1.f}, {1.f, 1.f} };
+	Top.AlphaKeys = { {0.f, 0.f}, {0.3f, 0.12f}, {1.f, 0.f} };
+	Top.SizeKeys = { {0.f, 0.7f}, {1.f, 1.6f} };
+	Top.SortOrder = 0;
+
+	// 감아 오르는 물줄기: 밑동 둘레에서 위로 세차게 치솟는 긴 물줄기(속도 정렬). 컴포넌트 회전으로 기둥을 따라 돈다.
+	FSpriteLayer Climb;
+	Climb.Name = TEXT("Climb");
+	Climb.Material = MistMaterial;
+	Climb.Rate = 70.f;
+	Climb.Life = FVector2f(0.5f, 0.8f);
+	Climb.SizeMin = FVector2f(40.f, 260.f);
+	Climb.SizeMax = FVector2f(80.f, 520.f);
+	Climb.Rise = -400.f;
+	Climb.ColorKeys = { {0.f, 1.f}, {1.f, 1.f} };
+	Climb.AlphaKeys = { {0.f, 0.f}, {0.15f, 0.3f}, {0.7f, 0.18f}, {1.f, 0.f} };
+	Climb.SizeKeys = { {0.f, 0.6f}, {0.3f, 1.f}, {1.f, 1.2f} };
+	Climb.Alignment = ENiagaraSpriteAlignment::VelocityAligned;
+	Climb.SortOrder = 2;
+
+	// 떨어져 나가는 물: 기둥 겉에서 바깥으로 내던져져 떨어지는 물방울. 힘이 실린 회오리처럼 보이게 한다.
+	FSpriteLayer Shed = Drops;
+	Shed.Name = TEXT("Shed");
+	Shed.Rate = 140.f;
+	Shed.Life = FVector2f(0.6f, 1.f);
+	Shed.Rise = -1400.f;
+	Shed.SizeMin = FVector2f(5.f, 12.f);
+	Shed.SizeMax = FVector2f(9.f, 24.f);
+	Shed.AlphaKeys = { {0.f, 0.f}, {0.1f, 0.3f}, {0.7f, 0.18f}, {1.f, 0.f} };
+
+	const FSpriteLayer Layers[] = { Skirt, Sheet, Drops, Column, Top, Climb, Shed };
+	const float Margin = Radius * 3.f;
+	UNiagaraSystem* const System = BuildLayeredSystem(PackagePath, Layers, 0.f, 1.f, FVector(-Margin, -Margin, -200.f), FVector(Margin, Margin, Height * 1.4f));
+	if (!System)
+	{
+		return nullptr;
+	}
+	for (int32 Index = 0; Index < System->GetEmitterHandles().Num(); ++Index)
+	{
+		UNiagaraStatelessEmitter* const Emitter = System->GetEmitterHandle(Index).GetStatelessEmitter();
+		if (!Emitter || !Layers[FMath::Min(Index, 6)].Material)
+		{
+			continue;
+		}
+		switch (Index)
+		{
+		case 5:
+			// 밑동 링에서 아주 깊은 한 점에서 멀어지는 방향: 거의 곧장 위로, 수명 동안 기둥 높이의 40~70%를 오른다.
+			SetRingFromPoint(*Emitter, FVector2f(Radius * 0.35f, Radius * 0.6f), FRotator3f::ZeroRotator, FVector3f(0.f, 0.f, -Height * 3.f),
+				FVector2f(Height * 0.9f, Height * 1.3f), FVector3f(0.f, 0.f, 40.f));
+			break;
+		case 6:
+			if (UNiagaraStatelessModule_ShapeLocation* const Shape = Get<UNiagaraStatelessModule_ShapeLocation>(*Emitter))
+			{
+				Shape->ShapePrimitive = ENSM_ShapePrimitive::Cylinder;
+				Shape->CylinderHeight.InitConstant(Height * 0.7f);
+				Shape->CylinderRadius.InitRange(Radius * 0.45f, Radius * 0.65f);
+				Shape->CylinderHeightMidpoint.InitConstant(0.5f);
+				Shape->bCylinderSurfaceOnly = false;
+				Shape->TransformOffset = FNiagaraDistributionPosition(FVector3f(0.f, 0.f, Height * 0.4f));
+			}
+			if (UNiagaraStatelessModule_AddVelocity* const Velocity = Get<UNiagaraStatelessModule_AddVelocity>(*Emitter))
+			{
+				// 기둥 가운데 아래 한 점에서 멀어지는 방향: 바깥으로, 조금 위로 내던져진다.
+				Velocity->VelocityType = ENSM_VelocityType::FromPoint;
+				Velocity->CoordinateSpace = ENiagaraCoordinateSpace::Local;
+				Velocity->PointOrigin = FVector3f(0.f, 0.f, Height * 0.2f);
+				Velocity->PointVelocityDistribution.InitRange(700.f, 1200.f);
+				Velocity->PointVelocityScale.InitConstant(1.f);
+			}
+			break;
+		case 0:
+			// 밑동 링에서 바깥으로, 조금 위로.
+			SetRingFromPoint(*Emitter, FVector2f(Radius * 0.4f, Radius * 0.9f), FRotator3f::ZeroRotator, FVector3f(0.f, 0.f, -Radius * 0.6f),
+				FVector2f(300.f, 600.f), FVector3f(0.f, 0.f, 30.f));
+			break;
+		case 1:
+		case 2:
+			// 원점이 깊을수록 위로 곧게 솟는다. 물방울이 막보다 높고 멀리 간다.
+			SetRingFromPoint(*Emitter, FVector2f(Radius * 0.3f, Radius * 0.6f), FRotator3f::ZeroRotator, FVector3f(0.f, 0.f, -Radius * 0.7f),
+				Index == 1 ? FVector2f(800.f, 1200.f) : FVector2f(700.f, 1100.f), FVector3f(0.f, 0.f, 20.f));
+			break;
+		case 3:
+			if (UNiagaraStatelessModule_ShapeLocation* const Shape = Get<UNiagaraStatelessModule_ShapeLocation>(*Emitter))
+			{
+				// 깔때기 아래 70% 높이, 판정 반지름 절반 안쪽.
+				Shape->ShapePrimitive = ENSM_ShapePrimitive::Cylinder;
+				Shape->CylinderHeight.InitConstant(Height * 0.7f);
+				Shape->CylinderRadius.InitRange(Radius * 0.15f, Radius * 0.45f);
+				Shape->CylinderHeightMidpoint.InitConstant(0.5f);
+				Shape->bCylinderSurfaceOnly = false;
+				Shape->TransformOffset = FNiagaraDistributionPosition(FVector3f(0.f, 0.f, Height * 0.4f));
+			}
+			if (UNiagaraStatelessModule_AddVelocity* const Velocity = Get<UNiagaraStatelessModule_AddVelocity>(*Emitter))
+			{
+				// 깊은 아래 한 점에서 멀어지는 방향: 거의 위로, 위로 갈수록 조금 벌어진다.
+				Velocity->VelocityType = ENSM_VelocityType::FromPoint;
+				Velocity->CoordinateSpace = ENiagaraCoordinateSpace::Local;
+				Velocity->PointOrigin = FVector3f(0.f, 0.f, -Height);
+				Velocity->PointVelocityDistribution.InitRange(Height * 0.3f, Height * 0.5f);
+				Velocity->PointVelocityScale.InitConstant(1.f);
+			}
+			break;
+		default:
+			SetRingFromPoint(*Emitter, FVector2f(Radius * 0.8f, Radius * 1.3f), FRotator3f::ZeroRotator, FVector3f(0.f, 0.f, Height * 0.8f),
+				FVector2f(150.f, 300.f), FVector3f(0.f, 0.f, Height));
+			break;
+		}
+		SetTint(*Emitter, Tint);
+		Emitter->PostEditChange();
+	}
+	return Finish(System, false);
+}
+
+UNiagaraSystem* UknightMonsterFXBuilder::BuildTornadoFormSystem(const FString& PackagePath, UMaterialInterface* SprayMaterial,
+	UMaterialInterface* MistMaterial, float Radius, FLinearColor Tint)
+{
+	using namespace knightMonsterFX;
+	if (!SprayMaterial || !MistMaterial)
+	{
+		return nullptr;
+	}
+	// 물보라 고리: 소용돌이 둘레에서 낮게 솟았다 떨어지는 물 벽(컴포넌트 회전으로 고리가 돈다).
+	FSpriteLayer Ring;
+	Ring.Name = TEXT("Ring");
+	Ring.Material = MistMaterial;
+	Ring.Rate = 300.f;
+	Ring.Life = FVector2f(0.5f, 0.8f);
+	Ring.SizeMin = FVector2f(70.f, 150.f);
+	Ring.SizeMax = FVector2f(120.f, 300.f);
+	Ring.Rise = -1400.f;
+	Ring.ColorKeys = { {0.f, 1.f}, {1.f, 1.f} };
+	Ring.AlphaKeys = { {0.f, 0.f}, {0.15f, 0.35f}, {0.7f, 0.2f}, {1.f, 0.f} };
+	Ring.SizeKeys = { {0.f, 0.5f}, {0.4f, 1.f}, {1.f, 1.2f} };
+	Ring.Alignment = ENiagaraSpriteAlignment::VelocityAligned;
+	Ring.SortOrder = 1;
+
+	// 물방울: 고리에서 튀는 작은 점.
+	FSpriteLayer Drops = Ring;
+	Drops.Name = TEXT("Drops");
+	Drops.Material = SprayMaterial;
+	Drops.Rate = 90.f;
+	Drops.SizeMin = FVector2f(4.f, 8.f);
+	Drops.SizeMax = FVector2f(7.f, 16.f);
+	Drops.AlphaKeys = { {0.f, 0.f}, {0.1f, 0.3f}, {0.7f, 0.15f}, {1.f, 0.f} };
+	Drops.SizeKeys = { {0.f, 1.f}, {1.f, 0.7f} };
+	Drops.SortOrder = 2;
+
+	// 빨려 드는 물안개: 바깥에서 소용돌이 가운데로 수면을 따라 모인다.
+	FSpriteLayer Inflow;
+	Inflow.Name = TEXT("Inflow");
+	Inflow.Material = MistMaterial;
+	Inflow.Rate = 40.f;
+	Inflow.Life = FVector2f(0.8f, 1.1f);
+	Inflow.SizeMin = FVector2f(Radius * 0.5f);
+	Inflow.SizeMax = FVector2f(Radius * 0.9f);
+	Inflow.CurlStrength = 150.f;
+	Inflow.CurlFrequency = 0.003f;
+	Inflow.ColorKeys = { {0.f, 1.f}, {1.f, 1.f} };
+	Inflow.AlphaKeys = { {0.f, 0.f}, {0.4f, 0.3f}, {1.f, 0.f} };
+	Inflow.SizeKeys = { {0.f, 1.2f}, {1.f, 0.6f} };
+	Inflow.SortOrder = 0;
+
+	const FSpriteLayer Layers[] = { Inflow, Ring, Drops };
+	const float Margin = Radius * 3.f;
+	UNiagaraSystem* const System = BuildLayeredSystem(PackagePath, Layers, 0.f, 1.f, FVector(-Margin, -Margin, -200.f), FVector(Margin, Margin, Radius * 2.f));
+	if (!System)
+	{
+		return nullptr;
+	}
+	for (int32 Index = 0; Index < System->GetEmitterHandles().Num(); ++Index)
+	{
+		UNiagaraStatelessEmitter* const Emitter = System->GetEmitterHandle(Index).GetStatelessEmitter();
+		if (!Emitter || !Layers[FMath::Min(Index, 2)].Material)
+		{
+			continue;
+		}
+		if (Index == 0)
+		{
+			SetRingFromPoint(*Emitter, FVector2f(Radius * 1.3f, Radius * 1.8f), FRotator3f::ZeroRotator, FVector3f(0.f, 0.f, 20.f),
+				FVector2f(-Radius * 1.0f, -Radius * 1.4f), FVector3f(0.f, 0.f, 30.f));
+		}
+		else
+		{
+			// 고리 둘레의 깊은 한 점에서 멀어지는 방향: 거의 위로 낮게. 물방울은 조금 더 높이.
+			SetRingFromPoint(*Emitter, FVector2f(Radius * 0.7f, Radius * 1.0f), FRotator3f::ZeroRotator, FVector3f(0.f, 0.f, -Radius * 1.5f),
+				Index == 1 ? FVector2f(450.f, 750.f) : FVector2f(650.f, 1000.f), FVector3f(0.f, 0.f, 10.f));
+		}
+		SetTint(*Emitter, Tint);
+		Emitter->PostEditChange();
+	}
+	return Finish(System, false);
+}
+
+UNiagaraSystem* UknightMonsterFXBuilder::BuildTornadoBurstSystem(const FString& PackagePath, UMaterialInterface* SprayMaterial,
+	UMaterialInterface* MistMaterial, float Radius, float Height, bool bCollapse, FLinearColor Tint)
+{
+	using namespace knightMonsterFX;
+	if (!SprayMaterial || !MistMaterial)
+	{
+		return nullptr;
+	}
+	// 물 막: 터짐은 밑동에서 바깥·위로 크게 솟구치고, 쏟아짐은 기둥 높이에서 바깥으로 벌어지며 떨어진다.
+	FSpriteLayer Sheet;
+	Sheet.Name = TEXT("Sheet");
+	Sheet.Material = MistMaterial;
+	Sheet.Rate = bCollapse ? 300.f : 1000.f;
+	Sheet.Life = bCollapse ? FVector2f(0.8f, 1.3f) : FVector2f(0.8f, 1.2f);
+	Sheet.SizeMin = FVector2f(80.f, 220.f);
+	Sheet.SizeMax = FVector2f(160.f, 480.f);
+	Sheet.Rise = -1800.f;
+	Sheet.Drag = 0.4f;
+	Sheet.ColorKeys = { {0.f, 1.f}, {1.f, 1.f} };
+	Sheet.AlphaKeys = { {0.f, 0.f}, {0.08f, 0.4f}, {0.6f, 0.22f}, {1.f, 0.f} };
+	Sheet.SizeKeys = { {0.f, 0.5f}, {0.3f, 1.f}, {1.f, 1.3f} };
+	Sheet.Alignment = ENiagaraSpriteAlignment::VelocityAligned;
+	Sheet.SortOrder = 1;
+
+	FSpriteLayer Drops = Sheet;
+	Drops.Name = TEXT("Drops");
+	Drops.Material = SprayMaterial;
+	Drops.Rate = bCollapse ? 500.f : 900.f;
+	Drops.SizeMin = FVector2f(6.f, 12.f);
+	Drops.SizeMax = FVector2f(10.f, 26.f);
+	Drops.AlphaKeys = { {0.f, 0.f}, {0.08f, 0.35f}, {0.7f, 0.2f}, {1.f, 0.f} };
+	Drops.SizeKeys = { {0.f, 1.f}, {1.f, 0.7f} };
+	Drops.SortOrder = 2;
+
+	// 물안개: 낮게 넓게 퍼지며 오래 남는다.
+	FSpriteLayer Mist;
+	Mist.Name = TEXT("Mist");
+	Mist.Material = MistMaterial;
+	Mist.Rate = bCollapse ? 160.f : 260.f;
+	Mist.Life = FVector2f(1.6f, 2.4f);
+	Mist.SizeMin = FVector2f(Radius * 1.3f);
+	Mist.SizeMax = FVector2f(Radius * 2.f);
+	Mist.CurlStrength = 200.f;
+	Mist.CurlFrequency = 0.002f;
+	Mist.Drag = 1.2f;
+	Mist.Rise = 40.f;
+	Mist.ColorKeys = { {0.f, 1.f}, {1.f, 1.f} };
+	Mist.AlphaKeys = { {0.f, 0.f}, {0.15f, 0.25f}, {1.f, 0.f} };
+	Mist.SizeKeys = { {0.f, 0.6f}, {1.f, 2.f} };
+	Mist.SortOrder = 0;
+
+	const FSpriteLayer Layers[] = { Mist, Sheet, Drops };
+	const float Margin = Radius * 5.f;
+	UNiagaraSystem* const System = BuildLayeredSystem(PackagePath, Layers, 0.f, 1.f, FVector(-Margin, -Margin, -200.f), FVector(Margin, Margin, Height * 1.3f),
+		bCollapse ? 0.35f : 0.1f);
+	if (!System)
+	{
+		return nullptr;
+	}
+	for (int32 Index = 0; Index < System->GetEmitterHandles().Num(); ++Index)
+	{
+		UNiagaraStatelessEmitter* const Emitter = System->GetEmitterHandle(Index).GetStatelessEmitter();
+		if (!Emitter || !Layers[FMath::Min(Index, 2)].Material)
+		{
+			continue;
+		}
+		if (Index == 0)
+		{
+			SetRingFromPoint(*Emitter, FVector2f(Radius * 0.5f, Radius * 1.2f), FRotator3f::ZeroRotator, FVector3f(0.f, 0.f, -Radius * 0.3f),
+				FVector2f(500.f, 900.f), FVector3f(0.f, 0.f, 60.f));
+		}
+		else if (!bCollapse)
+		{
+			SetRingFromPoint(*Emitter, FVector2f(Radius * 0.3f, Radius * 0.7f), FRotator3f::ZeroRotator, FVector3f(0.f, 0.f, -Radius * 0.8f),
+				Index == 1 ? FVector2f(1800.f, 2800.f) : FVector2f(2000.f, 3200.f), FVector3f(0.f, 0.f, 30.f));
+		}
+		else
+		{
+			if (UNiagaraStatelessModule_ShapeLocation* const Shape = Get<UNiagaraStatelessModule_ShapeLocation>(*Emitter))
+			{
+				// 기둥 높이 전체에서 쏟아진다.
+				Shape->ShapePrimitive = ENSM_ShapePrimitive::Cylinder;
+				Shape->CylinderHeight.InitConstant(Height * 0.8f);
+				Shape->CylinderRadius.InitRange(Radius * 0.3f, Radius * 0.7f);
+				Shape->CylinderHeightMidpoint.InitConstant(0.5f);
+				Shape->bCylinderSurfaceOnly = false;
+				Shape->TransformOffset = FNiagaraDistributionPosition(FVector3f(0.f, 0.f, Height * 0.45f));
+			}
+			if (UNiagaraStatelessModule_AddVelocity* const Velocity = Get<UNiagaraStatelessModule_AddVelocity>(*Emitter))
+			{
+				Velocity->VelocityType = ENSM_VelocityType::FromPoint;
+				Velocity->CoordinateSpace = ENiagaraCoordinateSpace::Local;
+				Velocity->PointOrigin = FVector3f(0.f, 0.f, Height * 0.5f);
+				Velocity->PointVelocityDistribution.InitRange(200.f, 500.f);
+				Velocity->PointVelocityScale.InitConstant(1.f);
+			}
+		}
+		SetTint(*Emitter, Tint);
+		Emitter->PostEditChange();
+	}
+	return Finish(System, false);
+}
+
 UNiagaraSystem* UknightMonsterFXBuilder::BuildSonicImpactSystem(const FString& PackagePath, UStaticMesh* WaveMesh, UMaterialInterface* RingMaterial,
 	UMaterialInterface* ShardMaterial, UMaterialInterface* GustMaterial, UMaterialInterface* FlashMaterial, float Radius, int32 ShardCount,
 	int32 GustCount, float RingGrow, bool bSideways)
