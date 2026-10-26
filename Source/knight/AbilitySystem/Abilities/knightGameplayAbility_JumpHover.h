@@ -14,6 +14,8 @@ class USoundBase;
  * 점프 / 체공 (Space, InputTag.Jump). 누른 순간의 상태로 동작이 정해진다.
  *   - 땅 위: 점프. 누르고 있는 동안 엔진 점프 유지 시간만큼 더 높이 뜨고, 떼면 끝난다.
  *     몽타주(공격·검 뽑기·대시 등)가 재생 중이면 점프하지 않는다.
+ *     (2026-10-26) 단, 가드·이동으로 끊을 수 있는 때(캔슬 창이 열려 있고 공격 후딜이 지난 뒤)에는 하던 동작을 끊고 뛴다.
+ *     이 판단은 CanActivateAbility에서 해서, 미리 눌러 둔 점프도 입력 버퍼에 남아 있다가 그때 바로 나간다.
  *   - 공중: 체공. 키를 누르고 있는 동안 떠 있고, 떼거나 부스트 게이지가 0이 되면 떨어진다.
  *
  * 체공 느낌 (2026-10-08, "아이언맨처럼"):
@@ -37,6 +39,9 @@ class KNIGHT_API UknightGameplayAbility_JumpHover : public UknightGameplayAbilit
 public:
 	UknightGameplayAbility_JumpHover(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
+	virtual bool CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+		const FGameplayTagContainer* SourceTags = nullptr, const FGameplayTagContainer* TargetTags = nullptr,
+		FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
 	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 		const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData) override;
 	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
