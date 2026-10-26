@@ -23,7 +23,7 @@ public:
 	FVector ResolveCameraLocation(const AActor* ViewOwner, const FVector& Pivot, const FVector& DesiredLocation, float DeltaTime);
 
 	/** (2026-10-23) 벽에 막혀 카메라가 당겨진 만큼 넓힐 시야각(도). 카메라 컴포넌트가 모드의 시야각에 더한다. */
-	float GetCloseUpExtraFOV() const { return CloseUpExtraFOV * (1.f - CurrentFraction); }
+	float GetCloseUpExtraFOV() const { return CloseUpExtraFOV * SmoothedCloseUp; }
 
 protected:
 	UPROPERTY(EditAnywhere, Category="Occlusion", meta=(ClampMin=1, Units="cm"))
@@ -57,6 +57,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Occlusion|Close Up", meta=(ClampMin=0, Units="cm"))
 	float CloseUpRaise = 40.f;
 
+	/** (2026-10-26) 위 시야각·높이 보정이 당긴 정도를 따라가는 속도. 작을수록 벽 근처에서 덜 흔들리지만 늦게 따라간다. 바뀔 수 있는 값. */
+	UPROPERTY(EditAnywhere, Category="Occlusion|Close Up", meta=(ClampMin=0.1))
+	float CloseUpBlendSpeed = 4.f;
+
 	/**
 	 * (2026-10-20) 카메라가 물(워터 바디) 속으로 들어가지 않게 수면 + MinHeightAboveWater 아래로는 내리지 않는다.
 	 * 수면은 충돌이 아니라 워터 바디 질의(UknightWaterRippleSubsystem::FindWaterSurface)로 찾는다.
@@ -78,4 +82,8 @@ protected:
 private:
 	/** 0..1 fraction of the pivot-to-camera distance currently allowed. */
 	float CurrentFraction = 1.f;
+
+	/** (2026-10-26) 부드럽게 따라가는 당긴 정도(0..1, 시야각 보정용)와 지금 올린 높이(cm). */
+	float SmoothedCloseUp = 0.f;
+	float SmoothedRaise = 0.f;
 };

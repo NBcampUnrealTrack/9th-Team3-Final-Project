@@ -81,28 +81,38 @@ protected:
 	/**
 	 * (2026-10-23 사용자 요청 '휘두르는 건 묵직한데 화면이 너무 정적') 공격 휘두르기 카메라 연출을 쓸지.
 	 * PIE 콘솔 knight.Camera.AttackKick 0/1로 바로 비교할 수 있다. 아래 값은 모두 바뀔 수 있는 값.
+	 * (2026-10-26 사용자 '공격 때 카메라 흔들림은 일단 빼고') 기본으로 끔. 다시 쓰려면 BP_Knight에서 켜면 된다.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Camera|Attack Kick")
-	bool bAttackCameraKick = true;
+	bool bAttackCameraKick = false;
 
-	/** 준비 동작(락) 동안 시야각 변화(음수 = 조임). 휘두르면 풀린다. */
+	/**
+	 * 준비 동작(락) 동안 시야각 변화(음수 = 조임). 휘두르면 SwingRiseTime 동안 풀린다.
+	 * (2026-10-26 사용자 '너무 인위적으로 흔들림') 크기를 절반으로(조임 -2 → -1, 튐 4 → 2, 밀기 25 → 12)
+	 * 하고, 한 프레임에 최대치로 튀던 것을 부드럽게 올라갔다 내려오게 바꿨다.
+	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Camera|Attack Kick", meta=(Units="deg", EditCondition="bAttackCameraKick"))
-	float WindupFOV = -2.f;
+	float WindupFOV = -1.f;
 
-	/** 휘두르는 순간 시야각이 튀는 크기. SwingKickDuration 동안 0으로 돌아온다. */
+	/** 휘두를 때 시야각이 넓어지는 크기. SwingRiseTime 동안 올라가고 SwingKickDuration에 0으로 돌아온다. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Camera|Attack Kick", meta=(Units="deg", EditCondition="bAttackCameraKick"))
-	float SwingFOV = 4.f;
+	float SwingFOV = 2.f;
 
-	/** 휘두르는 순간 카메라를 보는 방향(캐릭터 쪽)으로 미는 거리. */
+	/** 휘두를 때 카메라를 보는 방향(캐릭터 쪽)으로 미는 거리. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Camera|Attack Kick", meta=(ClampMin=0, Units="cm", EditCondition="bAttackCameraKick"))
-	float SwingPush = 25.f;
+	float SwingPush = 12.f;
 
+	/** 휘두르기 연출이 최대가 되기까지 걸리는 시간(이만큼 부드럽게 올라간다). */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Camera|Attack Kick", meta=(ClampMin=0.01, Units="s", EditCondition="bAttackCameraKick"))
+	float SwingRiseTime = 0.06f;
+
+	/** 휘두르기 연출 전체 길이(올라가는 시간 포함). */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Camera|Attack Kick", meta=(ClampMin=0.05, Units="s", EditCondition="bAttackCameraKick"))
-	float SwingKickDuration = 0.35f;
+	float SwingKickDuration = 0.45f;
 
 	/** 준비 동작 조임이 들어가는 시간. 휘두르기가 안 오면(공격이 끊김) WindupTimeout 뒤 저절로 풀린다. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Camera|Attack Kick", meta=(ClampMin=0.01, Units="s", EditCondition="bAttackCameraKick"))
-	float WindupBlendTime = 0.08f;
+	float WindupBlendTime = 0.12f;
 
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Camera|Attack Kick", meta=(ClampMin=0.1, Units="s", EditCondition="bAttackCameraKick"))
 	float WindupTimeout = 0.6f;
@@ -115,6 +125,9 @@ private:
 	float WindupStrength = 0.f;
 	double SwingStartTime = -1.0;
 	float SwingStrength = 0.f;
+	/** 휘두르기가 시작될 때 남아 있던 연출(준비 동작 조임·앞 공격의 휘두르기). 새 휘두르기가 올라가는 동안 부드럽게 풀어 끊김이 없게 한다. */
+	float CarriedFOVAtSwing = 0.f;
+	float CarriedPushAtSwing = 0.f;
 
 	TSubclassOf<UknightCameraMode> DetermineCameraMode() const;
 
