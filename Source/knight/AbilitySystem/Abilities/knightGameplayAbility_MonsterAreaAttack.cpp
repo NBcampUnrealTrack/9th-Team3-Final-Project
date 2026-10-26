@@ -5,7 +5,6 @@
 #include "Abilities/Tasks/AbilityTask_ApplyRootMotionConstantForce.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_Repeat.h"
-#include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "Combat/knightCombatLibrary.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -20,10 +19,20 @@
 #include "knight.h"
 #include "knightPerfCounters.h"
 
+#if WITH_EDITOR
+#include "Misc/DataValidation.h"
+#endif
+
+#define LOCTEXT_NAMESPACE "knightMonsterAreaAttack"
+
 namespace knightMonsterAreaAttack
 {
-	/** 판정이 유지되는 동안 오버랩을 다시 하는 간격. */
+	/** 판정이 유지되는 동안 오버랩을 다시 하는 간격(몬스터 시간). */
 	constexpr float ActiveCheckInterval = 1.f / 20.f;
+	/** 판정 시계를 진행하는 간격(실제 시간). 판정 시각은 최대 이만큼 늦을 수 있다. */
+	constexpr float ClockInterval = 1.f / 60.f;
+	/** 시계 반복 횟수 상한. 어빌리티가 끝나면 시계도 같이 끝난다. */
+	constexpr int32 MaxClockTicks = 100000;
 }
 
 UknightGameplayAbility_MonsterAreaAttack::UknightGameplayAbility_MonsterAreaAttack(const FObjectInitializer& ObjectInitializer)
@@ -72,46 +81,72 @@ void UknightGameplayAbility_MonsterAreaAttack::ActivateAbility(const FGameplayAb
 		MontageTask->ReadyForActivation();
 	}
 
-	if (LungeMaxDistance > 0.f && LungeEndTime > LungeStartTime)
-	{
-		UAbilityTask_WaitDelay* const LungeDelayTask = UAbilityTask_WaitDelay::WaitDelay(this, LungeStartTime);
-		LungeDelayTask->OnFinish.AddDynamic(this, &ThisClass::StartLunge);
-		LungeDelayTask->ReadyForActivation();
-	}
-
-	if (!Impacts.IsEmpty())
-	{
-		NextImpact = 0;
-		ScheduleNextImpact(0.f);
-		return;
-	}
-	UAbilityTask_WaitDelay* const WindupTask = UAbilityTask_WaitDelay::WaitDelay(this, WindupTime);
-	WindupTask->OnFinish.AddDynamic(this, &ThisClass::HandleWindupFinished);
-	WindupTask->ReadyForActivation();
+	Elapsed = 0.f;
+	RecoveryStart = -1.f;
+	NextImpact = 0;
+	bLungeStarted = false;
+	bWindupDone = false;
+	// 월드 시간으로 기다리면 히트스톱 동안 몽타주만 멈추고 판정은 그대로 나간다. 몬스터 시간으로 직접 센다.
+	UAbilityTask_Repeat* const ClockTask = UAbilityTask_Repeat::RepeatAction(this, knightMonsterAreaAttack::ClockInterval, knightMonsterAreaAttack::MaxClockTicks);
+	ClockTask->OnPerformAction.AddDynamic(this, &ThisClass::HandleClockTick);
+	ClockTask->ReadyForActivation();
 }
 
-void UknightGameplayAbility_MonsterAreaAttack::ScheduleNextImpact(float Now)
+void UknightGameplayAbility_MonsterAreaAttack::HandleClockTick(int32 ActionNumber)
 {
-	if (!Impacts.IsValidIndex(NextImpact))
+	const AActor* const Avatar = GetAvatarActorFromActorInfo();
+	if (!Avatar)
 	{
-		StartRecovery();
 		return;
 	}
-	UAbilityTask_WaitDelay* const ImpactTask = UAbilityTask_WaitDelay::WaitDelay(this, FMath::Max(0.f, Impacts[NextImpact].Time - Now));
-	ImpactTask->OnFinish.AddDynamic(this, &ThisClass::HandleImpactTime);
-	ImpactTask->ReadyForActivation();
-}
+	Elapsed += knightMonsterAreaAttack::ClockInterval * FMath::Max(Avatar->CustomTimeDilation, 0.f);
 
-void UknightGameplayAbility_MonsterAreaAttack::HandleImpactTime()
-{
-	if (!Impacts.IsValidIndex(NextImpact))
+	if (!bLungeStarted && LungeMaxDistance > 0.f && LungeEndTime > LungeStartTime && Elapsed >= LungeStartTime)
 	{
-		return;
+		bLungeStarted = true;
+		StartLunge();
 	}
-	const FknightMonsterAreaImpact& Impact = Impacts[NextImpact];
-	ApplyImpact(Impact);
-	++NextImpact;
-	ScheduleNextImpact(Impact.Time);
+
+	if (RecoveryStart < 0.f)
+	{
+		if (!Impacts.IsEmpty())
+		{
+			// 판정 간격이 시계 간격보다 짧아도 빠뜨리지 않게, 지난 판정을 모두 처리한다.
+			while (Impacts.IsValidIndex(NextImpact) && Elapsed >= Impacts[NextImpact].Time)
+			{
+				ApplyImpact(Impacts[NextImpact]);
+				++NextImpact;
+			}
+			if (!Impacts.IsValidIndex(NextImpact))
+			{
+				RecoveryStart = Elapsed;
+			}
+		}
+		else if (Elapsed >= WindupTime)
+		{
+			if (!bWindupDone)
+			{
+				bWindupDone = true;
+				OnImpact();
+				NextActiveCheck = WindupTime + knightMonsterAreaAttack::ActiveCheckInterval;
+			}
+			const float ActiveEnd = WindupTime + ActiveTime;
+			while (NextActiveCheck <= FMath::Min(Elapsed, ActiveEnd))
+			{
+				OnImpact();
+				NextActiveCheck += knightMonsterAreaAttack::ActiveCheckInterval;
+			}
+			if (Elapsed >= ActiveEnd)
+			{
+				RecoveryStart = Elapsed;
+			}
+		}
+	}
+
+	if (RecoveryStart >= 0.f && Elapsed >= RecoveryStart + RecoveryTime)
+	{
+		EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, false);
+	}
 }
 
 void UknightGameplayAbility_MonsterAreaAttack::ApplyImpact(const FknightMonsterAreaImpact& Impact)
@@ -163,38 +198,6 @@ void UknightGameplayAbility_MonsterAreaAttack::StartLunge()
 		ERootMotionFinishVelocityMode::ClampVelocity, FVector::ZeroVector, 0.f, false);
 	LungeTask->ReadyForActivation();
 	UE_LOG(LogknightAI, Verbose, TEXT("%s: %s lunges %.0f cm over %.2f s."), *GetNameSafe(Monster), *GetName(), Distance, Duration);
-}
-
-void UknightGameplayAbility_MonsterAreaAttack::HandleWindupFinished()
-{
-	OnImpact();
-	if (ActiveTime <= 0.f)
-	{
-		StartRecovery();
-		return;
-	}
-	const int32 Checks = FMath::Max(1, FMath::RoundToInt(ActiveTime / knightMonsterAreaAttack::ActiveCheckInterval));
-	UAbilityTask_Repeat* const ActiveTask = UAbilityTask_Repeat::RepeatAction(this, knightMonsterAreaAttack::ActiveCheckInterval, Checks);
-	ActiveTask->OnPerformAction.AddDynamic(this, &ThisClass::HandleActiveTick);
-	ActiveTask->OnFinished.AddDynamic(this, &ThisClass::StartRecovery);
-	ActiveTask->ReadyForActivation();
-}
-
-void UknightGameplayAbility_MonsterAreaAttack::HandleActiveTick(int32 ActionNumber)
-{
-	OnImpact();
-}
-
-void UknightGameplayAbility_MonsterAreaAttack::StartRecovery(int32 ActionNumber)
-{
-	UAbilityTask_WaitDelay* const RecoveryTask = UAbilityTask_WaitDelay::WaitDelay(this, RecoveryTime);
-	RecoveryTask->OnFinish.AddDynamic(this, &ThisClass::HandleRecoveryFinished);
-	RecoveryTask->ReadyForActivation();
-}
-
-void UknightGameplayAbility_MonsterAreaAttack::HandleRecoveryFinished()
-{
-	EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, false);
 }
 
 void UknightGameplayAbility_MonsterAreaAttack::OnImpact()
@@ -282,3 +285,31 @@ FVector UknightGameplayAbility_MonsterAreaAttack::GetAreaCenter() const
 	}
 	return Avatar->GetActorTransform().TransformPosition(AreaOffset);
 }
+
+#if WITH_EDITOR
+EDataValidationResult UknightGameplayAbility_MonsterAreaAttack::IsDataValid(FDataValidationContext& Context) const
+{
+	EDataValidationResult Result = CombineDataValidationResults(Super::IsDataValid(Context), EDataValidationResult::Valid);
+	for (int32 Index = 0; Index < Impacts.Num(); ++Index)
+	{
+		if (Impacts[Index].Socket.IsNone())
+		{
+			Context.AddError(FText::Format(LOCTEXT("EmptyImpactSocket", "Impacts[{0}] has no socket."), Index));
+			Result = EDataValidationResult::Invalid;
+		}
+		if (Index > 0 && Impacts[Index].Time < Impacts[Index - 1].Time)
+		{
+			Context.AddError(FText::Format(LOCTEXT("ImpactOrder", "Impacts[{0}] comes before Impacts[{1}]. Keep impacts in time order."), Index, Index - 1));
+			Result = EDataValidationResult::Invalid;
+		}
+	}
+	if (LungeMaxDistance > 0.f && LungeEndTime <= LungeStartTime)
+	{
+		Context.AddError(LOCTEXT("LungeTime", "LungeEndTime must be after LungeStartTime."));
+		Result = EDataValidationResult::Invalid;
+	}
+	return Result;
+}
+#endif
+
+#undef LOCTEXT_NAMESPACE

@@ -46,6 +46,8 @@ void UknightGameplayAbility_MonsterMeleeAttack::HandleMeleeHit(FGameplayEventDat
 	const FHitResult* const Hit = Payload.TargetData.Num() > 0 && Payload.TargetData.Get(0) ? Payload.TargetData.Get(0)->GetHitResult() : nullptr;
 	if (Hit)
 	{
-		UknightCombatLibrary::ApplyMeleeHit(GetAvatarActorFromActorInfo(), *Hit, HitParams);
+		const EknightHitOutcome Outcome = UknightCombatLibrary::ApplyMeleeHit(GetAvatarActorFromActorInfo(), *Hit, HitParams);
+		UE_LOG(LogknightAI, Verbose, TEXT("%s: %s melee hit %s (outcome %d)."), *GetNameSafe(GetAvatarActorFromActorInfo()), *GetName(),
+			*GetNameSafe(Hit->GetActor()), static_cast<int32>(Outcome));
 	}
 }
