@@ -6,7 +6,9 @@
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "Abilities/Tasks/AbilityTask_WaitInputRelease.h"
+#include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
+#include "Animation/knightAnimNotifyState_MeleeTrace.h"
 #include "Combat/knightCombatLibrary.h"
 #include "Combat/knightGroggyFeedbackComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -114,8 +116,20 @@ void UknightGameplayAbility_HeavyAttack::OnReleased(float TimeHeld)
 			}
 			if (bPlayChargeEffects && World)
 			{
-				const float CrackDelay = ReleaseGroundCrackDelay / FMath::Max(GetAttackSpeed(), 0.01f);
-				World->GetTimerManager().SetTimer(GroundCrackTimer, this, &ThisClass::SpawnReleaseGroundCrack, CrackDelay, false);
+				// 기갑 타이밍(Windup 감속 + Lock 정지)·히트스탑·슬로모션으로 실제 휘두르기 시각이 늦춰지므로,
+				// 단순 시간 타이머 대신 몽타주의 실제 MeleeTrace 구간(예: 0.47s~0.65s) 재생 위치를 추적해 검이 땅을 가르는 순간에 균열을 생성한다.
+				ReleaseCrackTargetPosition = ReleaseGroundCrackDelay;
+				for (const FAnimNotifyEvent& Event : ChargeReleaseMontage->Notifies)
+				{
+					if (Event.NotifyStateClass && Event.NotifyStateClass->IsA<UknightAnimNotifyState_MeleeTrace>())
+					{
+						const float TraceStart = Event.GetTriggerTime();
+						const float TraceEnd = Event.GetEndTriggerTime();
+						ReleaseCrackTargetPosition = FMath::Lerp(TraceStart, TraceEnd, FMath::Clamp(ReleaseGroundCrackSwingProgress, 0.f, 1.f));
+						break;
+					}
+				}
+				World->GetTimerManager().SetTimer(GroundCrackTimer, this, &ThisClass::CheckReleaseGroundCrackTiming, 0.015f, true);
 			}
 		}
 		else
@@ -367,6 +381,30 @@ void UknightGameplayAbility_HeavyAttack::OnFullChargeReached()
 		UNiagaraFunctionLibrary::SpawnSystemAttached(
 			DistortionAsset, AttachTarget, AttachSocket, FVector::ZeroVector, FRotator::ZeroRotator,
 			EAttachLocation::SnapToTarget, true, true);
+	}
+}
+
+void UknightGameplayAbility_HeavyAttack::CheckReleaseGroundCrackTiming()
+{
+	UWorld* const World = GetWorld();
+	const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	const UAnimInstance* const Anim = Character && Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr;
+	if (!IsActive() || Phase != EPhase::Releasing || !ChargeReleaseMontage || !Anim || !Anim->Montage_IsPlaying(ChargeReleaseMontage))
+	{
+		if (World)
+		{
+			World->GetTimerManager().ClearTimer(GroundCrackTimer);
+		}
+		return;
+	}
+
+	if (Anim->Montage_GetPosition(ChargeReleaseMontage) >= ReleaseCrackTargetPosition)
+	{
+		if (World)
+		{
+			World->GetTimerManager().ClearTimer(GroundCrackTimer);
+		}
+		SpawnReleaseGroundCrack();
 	}
 }
 
