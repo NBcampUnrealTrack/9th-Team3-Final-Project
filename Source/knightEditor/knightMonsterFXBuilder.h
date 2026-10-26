@@ -93,6 +93,38 @@ public:
 		UMaterialInterface* ShardMaterial, UMaterialInterface* GustMaterial, UMaterialInterface* FlashMaterial, float Radius = 180.f,
 		int32 ShardCount = 14, int32 GustCount = 10, float RingGrow = 2.6f, bool bSideways = false);
 
+	/**
+	 * 초음파 브레스 예고(잔향): 가슴에서 맥박처럼 밝아지는 옅은 빛과, 주위 Radius(cm)에서 가슴으로 빨려 드는 바람결·연기 결.
+	 * 가슴 소켓에 스케일 1(절대 스케일)로 붙인다. Tint는 바람결·연기·빛의 색 배율(공명해방은 푸르게).
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|FX")
+	static UNiagaraSystem* BuildSonicChargeSystem(const FString& PackagePath, UMaterialInterface* GlowMaterial, UMaterialInterface* StreakMaterial,
+		UMaterialInterface* WispMaterial, float Radius = 600.f, FLinearColor Tint = FLinearColor::White);
+
+	/**
+	 * 초음파 브레스 기둥을 따라 아래(로컬 -Z)로 쏟아지는 바람결과 연기 결. 위 끝(가슴)에 붙이고, 로컬 Length(cm) 아래가 바닥이 되도록
+	 * 실제 기둥 높이에 맞춰 컴포넌트를 Z로 늘인다(가로 크기는 그대로). Radius(cm)는 기둥 아래 끝 반지름.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|FX")
+	static UNiagaraSystem* BuildSonicPillarSystem(const FString& PackagePath, UMaterialInterface* StreakMaterial, UMaterialInterface* WispMaterial,
+		float Radius = 400.f, float Length = 1000.f, FLinearColor Tint = FLinearColor::White);
+
+	/**
+	 * 초음파 브레스 기둥이 바닥에 닿는 자리에서 바닥을 따라 바깥으로 퍼지는 바람결과 연기 결(계속 생성). 기둥 아래 끝에 스케일 1로 붙인다.
+	 * bTrail이면 대신 지나간 자리에 남겨 두는 일회성 연기 한 번(월드에 스폰, 스스로 끝남)을 만든다.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|FX")
+	static UNiagaraSystem* BuildSonicGroundSystem(const FString& PackagePath, UMaterialInterface* StreakMaterial, UMaterialInterface* WispMaterial,
+		float Radius = 400.f, bool bTrail = false, FLinearColor Tint = FLinearColor::White);
+
+	/**
+	 * 초음파 브레스가 수면을 가르는 자리: 양옆(로컬 ±Y)으로 갈라져 솟았다 떨어지는 물보라 막과, 낮게 퍼지는 물안개(계속 생성).
+	 * 수면 위 닿는 자리에 스케일 1로 붙이고, 로컬 +X가 지나가는 방향이다. Width(cm)는 갈라지는 폭의 절반.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|FX")
+	static UNiagaraSystem* BuildSonicWaterSpraySystem(const FString& PackagePath, UMaterialInterface* SprayMaterial, UMaterialInterface* MistMaterial,
+		float Width = 400.f, FLinearColor Tint = FLinearColor::White);
+
 	/** 위로 솟구치는 불꽃 한 번(가시 발사). 월드에 스폰하는 용도라 cm 그대로다. */
 	UFUNCTION(BlueprintCallable, Category="Knight|FX")
 	static UNiagaraSystem* BuildFireBurstSystem(const FString& PackagePath, UMaterialInterface* Material, float Height = 800.f);

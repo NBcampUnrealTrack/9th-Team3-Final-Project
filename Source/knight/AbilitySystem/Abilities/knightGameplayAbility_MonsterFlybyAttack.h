@@ -7,6 +7,109 @@
 
 class UAbilityTask_Repeat;
 class UAnimMontage;
+class UMaterialInstanceDynamic;
+class UMaterialInterface;
+class UNiagaraComponent;
+class UNiagaraSystem;
+class UStaticMesh;
+class UStaticMeshComponent;
+
+/**
+ * 지나가며 바닥을 때리는 공격의 보이는 부분. 경고 동안 가슴(BeamBone)에 모이는 빛, 지나가는 동안 가슴에서 바닥까지 이어진 기둥,
+ * 기둥이 바닥(또는 수면)에 닿는 자리의 바람과 물결. 공명해방(State.Monster.Enraged) 중에는 Enraged 쪽을 쓰고, 비어 있으면 기본을 쓴다.
+ * 모두 비우면 아무것도 보이지 않는다(판정은 그대로).
+ */
+USTRUCT(BlueprintType)
+struct FknightFlybyBeamEffects
+{
+	GENERATED_BODY()
+
+	/** 경고 동안 BeamBone에 붙는다. 지나가기가 시작되거나 공격이 끊기면 바로 끈다. */
+	UPROPERTY(EditDefaultsOnly, Category="Effects")
+	TObjectPtr<UNiagaraSystem> Warning;
+
+	UPROPERTY(EditDefaultsOnly, Category="Effects")
+	TObjectPtr<UNiagaraSystem> EnragedWarning;
+
+	/** 기둥 메시. 피벗이 위 가운데이고 -Z로 100cm, 아래 끝 반지름 100cm로 만든다(높이·반지름에 맞춰 늘린다). */
+	UPROPERTY(EditDefaultsOnly, Category="Effects|Pillar")
+	TObjectPtr<UStaticMesh> PillarMesh;
+
+	/** 스칼라 파라미터 Fade(0~1)로 나타나고 사라진다. */
+	UPROPERTY(EditDefaultsOnly, Category="Effects|Pillar")
+	TObjectPtr<UMaterialInterface> PillarMaterial;
+
+	UPROPERTY(EditDefaultsOnly, Category="Effects|Pillar")
+	TObjectPtr<UMaterialInterface> EnragedPillarMaterial;
+
+	/** 기둥 아래 끝 반지름. 0이면 HalfWidth. */
+	UPROPERTY(EditDefaultsOnly, Category="Effects|Pillar", meta=(ClampMin=0, Units="cm"))
+	float PillarRadius = 0.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Effects|Pillar", meta=(ClampMin=0, Units="s"))
+	float FadeTime = 0.15f;
+
+	/** 기둥을 따라 내려가는 바람결. 가슴에서 아래(-Z)로 PillarStreakLength만큼 가도록 만들고, 실제 기둥 높이에 맞춰 Z로 늘인다. */
+	UPROPERTY(EditDefaultsOnly, Category="Effects|Pillar")
+	TObjectPtr<UNiagaraSystem> PillarStreaks;
+
+	UPROPERTY(EditDefaultsOnly, Category="Effects|Pillar")
+	TObjectPtr<UNiagaraSystem> EnragedPillarStreaks;
+
+	UPROPERTY(EditDefaultsOnly, Category="Effects|Pillar", meta=(ClampMin=1, Units="cm"))
+	float PillarStreakLength = 1000.f;
+
+	/** 기둥이 바닥(또는 수면)에 닿는 자리. 바닥을 따라 바깥으로 퍼지는 바람. */
+	UPROPERTY(EditDefaultsOnly, Category="Effects|Ground")
+	TObjectPtr<UNiagaraSystem> Ground;
+
+	UPROPERTY(EditDefaultsOnly, Category="Effects|Ground")
+	TObjectPtr<UNiagaraSystem> EnragedGround;
+
+	/** 지나간 자리에 남기는 일회성 연기. 바닥(또는 수면)에 GroundTrailSpacing마다 스폰한다. */
+	UPROPERTY(EditDefaultsOnly, Category="Effects|Ground")
+	TObjectPtr<UNiagaraSystem> GroundTrail;
+
+	UPROPERTY(EditDefaultsOnly, Category="Effects|Ground")
+	TObjectPtr<UNiagaraSystem> EnragedGroundTrail;
+
+	UPROPERTY(EditDefaultsOnly, Category="Effects|Ground", meta=(ClampMin=1, Units="cm"))
+	float GroundTrailSpacing = 500.f;
+
+	/** 수면을 지날 때 이만큼 갈 때마다 물결을 하나 낸다. */
+	/** 기둥이 닿은 수면을 이 간격마다 눌러 지나간 자리에 골을 판다. 촘촘히 이어 누르면 양옆으로 V자 물결이 퍼진다. */
+	UPROPERTY(EditDefaultsOnly, Category="Effects|Water", meta=(ClampMin=1, Units="cm"))
+	float WaterRippleSpacing = 50.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Effects|Water", meta=(ClampMin=0, Units="cm"))
+	float WaterRippleRadius = 300.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Effects|Water", meta=(ClampMin=0, Units="cm"))
+	float WaterRippleDepth = 10.f;
+
+	/** 수면을 지나는 동안(과 그 뒤 2초) 물결 높이 상한. 0이면 물결 설정의 MaxHeight 그대로. */
+	UPROPERTY(EditDefaultsOnly, Category="Effects|Water", meta=(ClampMin=0, Units="cm"))
+	float WaterMaxHeight = 35.f;
+
+	/** 수면에 닿은 자리에서 양옆으로 갈라져 튀는 물보라 막과 물안개. 수면 위에 있는 동안만 켠다. */
+	UPROPERTY(EditDefaultsOnly, Category="Effects|Water")
+	TObjectPtr<UNiagaraSystem> WaterSpray;
+
+	/** 수면을 지날 때 물보라. 비우면 물결 설정의 SplashHeavySystem. */
+	UPROPERTY(EditDefaultsOnly, Category="Effects|Water")
+	TObjectPtr<UNiagaraSystem> WaterSplash;
+
+	/** 이만큼 갈 때마다 물보라를 하나 낸다. 0이면 물보라 없음. */
+	UPROPERTY(EditDefaultsOnly, Category="Effects|Water", meta=(ClampMin=0, Units="cm"))
+	float WaterSplashSpacing = 700.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Effects|Water", meta=(ClampMin=0))
+	float WaterSplashScale = 0.7f;
+
+	/** 플레이어가 띠(HalfWidth)에서 이만큼 더 바깥까지 있으면 화면이 자글거린다. 음수면 화면 연출 없음. */
+	UPROPERTY(EditDefaultsOnly, Category="Effects|Screen", meta=(Units="cm"))
+	float JitterMargin = 150.f;
+};
 
 /**
  * 공중 턴의 날짐승이 타깃 머리 위를 일자로 빠르게 지나가며 아래 바닥을 띠 모양으로 때리는 공격(잔향 초음파 브레스).
@@ -16,6 +119,7 @@ class UAnimMontage;
  *             지나가는 동안 BeamBone(가슴) 아래 바닥에서 반지름 HalfWidth 구체로 때린다(폭 HalfWidth*2 띠). 대상마다 한 번.
  *
  * 회피만 되게 하려면 HitParams.DamageEffect에 가드 범위 0인 피해 실행을 쓰고 bCanBeParried를 끈다.
+ * 보이는 부분은 Effects(경고 빛, 가슴에서 바닥까지 이어진 기둥, 바닥·수면에 닿는 바람과 물결). 기둥 아래의 플레이어는 화면이 자글거린다.
  * 디버그: knight.Monster.DrawAttacks 1 이면 경고 중 지나갈 띠와 판정 구체를 그린다.
  */
 UCLASS()
@@ -61,6 +165,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Hit", meta=(ClampMin=1, Units="cm"))
 	float HalfWidth = 300.f;
 
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Effects")
+	FknightFlybyBeamEffects Effects;
+
 private:
 	UFUNCTION()
 	void HandleTick(int32 ActionNumber);
@@ -69,9 +176,44 @@ private:
 	void ApplyHits();
 	void SetWarning(bool bOn);
 
+	/** 가슴 아래 판정 중심(바닥 높이)과 가슴 위치. */
+	void GetBeam(FVector& OutChest, FVector& OutGround) const;
+	void StartBeamEffects();
+	void UpdateBeamEffects();
+	void UpdateWater(const FVector& Chest, const FVector& Ground, float& InOutBottomZ);
+	void StopEffects();
+
 	TWeakObjectPtr<UAbilityTask_Repeat> TickTask;
 	TWeakObjectPtr<UAnimMontage> PlayingWarning;
 	TSet<TWeakObjectPtr<AActor>> HitActors;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UNiagaraComponent> WarningComponent;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UStaticMeshComponent> PillarComponent;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> PillarMaterialInstance;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UNiagaraComponent> StreakComponent;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UNiagaraComponent> GroundComponent;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UNiagaraComponent> SprayComponent;
+
+	bool bEnraged = false;
+	/** 수면 위를 지난 거리(물결·물보라 간격용). 수면을 벗어나면 다시 센다. */
+	float WaterTravel = 0.f;
+	float WaterSplashTravel = 0.f;
+	FVector LastWaterPoint = FVector::ZeroVector;
+	/** 마지막 연기 자국을 남긴 자리. */
+	FVector LastTrailPoint = FVector::ZeroVector;
+	bool bTrailStarted = false;
+	bool bOverWater = false;
 	bool bPassing = false;
 	bool bWarningApplied = false;
 	float PhaseTime = 0.f;

@@ -1017,6 +1017,362 @@ UNiagaraSystem* UknightMonsterFXBuilder::BuildSonicWaveSystem(const FString& Pac
 	return Finish(System, false);
 }
 
+namespace knightMonsterFX
+{
+	/** 링(RingRotation으로 돌린 원)에서 생겨 PointOrigin에서 멀어지는 방향으로 나간다. Speed가 음수면 그 점으로 빨려 든다. */
+	void SetRingFromPoint(UNiagaraStatelessEmitter& Emitter, FVector2f RingRadius, const FRotator3f& RingRotation, const FVector3f& PointOrigin,
+		FVector2f Speed, const FVector3f& Offset = FVector3f::ZeroVector)
+	{
+		if (UNiagaraStatelessModule_ShapeLocation* const Shape = Get<UNiagaraStatelessModule_ShapeLocation>(Emitter))
+		{
+			Shape->ShapePrimitive = ENSM_ShapePrimitive::Ring;
+			Shape->RingRadius.InitRange(RingRadius.X, RingRadius.Y);
+			Shape->DiscCoverage.InitConstant(0.f);
+			Shape->ShapeRotation.InitConstant(RingRotation);
+			Shape->TransformOffset = FNiagaraDistributionPosition(Offset);
+		}
+		if (UNiagaraStatelessModule_AddVelocity* const Velocity = Get<UNiagaraStatelessModule_AddVelocity>(Emitter))
+		{
+			Velocity->VelocityType = ENSM_VelocityType::FromPoint;
+			Velocity->CoordinateSpace = ENiagaraCoordinateSpace::Local;
+			Velocity->PointOrigin = PointOrigin;
+			Velocity->PointVelocityDistribution.InitRange(Speed.X, Speed.Y);
+			Velocity->PointVelocityScale.InitConstant(1.f);
+		}
+	}
+
+	void SetTint(UNiagaraStatelessEmitter& Emitter, const FLinearColor& Tint)
+	{
+		if (UNiagaraStatelessModule_InitializeParticle* const Init = Get<UNiagaraStatelessModule_InitializeParticle>(Emitter))
+		{
+			Init->ColorDistribution = FNiagaraDistributionColor(Tint);
+		}
+	}
+}
+
+UNiagaraSystem* UknightMonsterFXBuilder::BuildSonicChargeSystem(const FString& PackagePath, UMaterialInterface* GlowMaterial,
+	UMaterialInterface* StreakMaterial, UMaterialInterface* WispMaterial, float Radius, FLinearColor Tint)
+{
+	using namespace knightMonsterFX;
+	if (!GlowMaterial)
+	{
+		return nullptr;
+	}
+	// 빛: 가슴에서 짧게 깜빡이며 겹치는 옅은 빛(발광을 낮게, 하얗게 날아가지 않게).
+	FSpriteLayer Glow;
+	Glow.Name = TEXT("Glow");
+	Glow.Material = GlowMaterial;
+	Glow.Rate = 24.f;
+	Glow.Life = FVector2f(0.25f, 0.4f);
+	Glow.SizeMin = FVector2f(Radius * 0.6f);
+	Glow.SizeMax = FVector2f(Radius * 0.9f);
+	Glow.ColorKeys = { {0.f, 0.6f}, {1.f, 0.6f} };
+	Glow.AlphaKeys = { {0.f, 0.f}, {0.3f, 0.45f}, {1.f, 0.f} };
+	Glow.SizeKeys = { {0.f, 0.6f}, {1.f, 1.2f} };
+	Glow.SpawnRadius = 15.f;
+	Glow.SortOrder = 2;
+
+	// 빨려 드는 바람결: 주위 링에서 생겨 가슴으로 모인다(속도 정렬, 수명 동안 거의 가슴까지 닿음).
+	FSpriteLayer Streaks;
+	Streaks.Name = TEXT("Inflow");
+	Streaks.Material = StreakMaterial;
+	Streaks.Rate = 150.f;
+	Streaks.Life = FVector2f(0.28f, 0.38f);
+	Streaks.SizeMin = FVector2f(5.f, 140.f);
+	Streaks.SizeMax = FVector2f(10.f, 280.f);
+	Streaks.ColorKeys = { {0.f, 1.f}, {1.f, 1.f} };
+	Streaks.AlphaKeys = { {0.f, 0.f}, {0.3f, 0.45f}, {0.8f, 0.3f}, {1.f, 0.f} };
+	Streaks.SizeKeys = { {0.f, 0.5f}, {0.4f, 1.f}, {1.f, 0.6f} };
+	Streaks.Alignment = ENiagaraSpriteAlignment::VelocityAligned;
+	Streaks.SortOrder = 1;
+
+	// 빨려 드는 연기 결: 같은 링보다 조금 바깥에서 천천히 모여든다.
+	FSpriteLayer Wisps;
+	Wisps.Name = TEXT("Wisps");
+	Wisps.Material = WispMaterial;
+	Wisps.Rate = 18.f;
+	Wisps.Life = FVector2f(0.8f, 1.1f);
+	Wisps.SizeMin = FVector2f(140.f);
+	Wisps.SizeMax = FVector2f(240.f);
+	Wisps.CurlStrength = 200.f;
+	Wisps.CurlFrequency = 0.004f;
+	Wisps.ColorKeys = { {0.f, 1.f}, {1.f, 1.f} };
+	Wisps.AlphaKeys = { {0.f, 0.f}, {0.4f, 0.14f}, {1.f, 0.f} };
+	Wisps.SizeKeys = { {0.f, 1.2f}, {1.f, 0.5f} };
+	Wisps.SortOrder = 0;
+
+	const FSpriteLayer Layers[] = { Wisps, Streaks, Glow };
+	const FVector Bounds(Radius * 1.6f);
+	UNiagaraSystem* const System = BuildLayeredSystem(PackagePath, Layers, 0.f, 1.f, -Bounds, Bounds);
+	if (!System)
+	{
+		return nullptr;
+	}
+	for (int32 Index = 0; Index < System->GetEmitterHandles().Num(); ++Index)
+	{
+		UNiagaraStatelessEmitter* const Emitter = System->GetEmitterHandle(Index).GetStatelessEmitter();
+		if (!Emitter || !Layers[FMath::Min(Index, 2)].Material)
+		{
+			continue;
+		}
+		if (Index == 0)
+		{
+			// 수평 링 둘레에서 위아래로 조금 흩어진 자리. 수명 동안 링 반지름의 70%쯤 들어온다.
+			SetRingFromPoint(*Emitter, FVector2f(Radius * 0.8f, Radius * 1.2f), FRotator3f(0.f, 0.f, 0.f), FVector3f::ZeroVector, FVector2f(-450.f, -650.f));
+		}
+		else if (Index == 1)
+		{
+			// 비스듬히 기운 링(가슴을 감싸는 여러 각도)에서 가슴으로 곧장 빨려 든다.
+			SetRingFromPoint(*Emitter, FVector2f(Radius * 0.7f, Radius), FRotator3f(0.f, 0.f, 0.f), FVector3f::ZeroVector, FVector2f(-1500.f, -2000.f));
+			if (UNiagaraStatelessModule_ShapeLocation* const Shape = Get<UNiagaraStatelessModule_ShapeLocation>(*Emitter))
+			{
+				FNiagaraDistributionRangeRotator& Tilt = Shape->ShapeRotation;
+				Tilt.Mode = ENiagaraDistributionMode::NonUniformRange;
+				Tilt.Min = FRotator3f(-60.f, 0.f, -60.f);
+				Tilt.Max = FRotator3f(60.f, 180.f, 60.f);
+				Tilt.ChannelConstantsAndRanges = { -60.f, 0.f, -60.f, 60.f, 180.f, 60.f };
+			}
+		}
+		SetTint(*Emitter, Tint);
+		Emitter->PostEditChange();
+	}
+	return Finish(System, false);
+}
+
+UNiagaraSystem* UknightMonsterFXBuilder::BuildSonicPillarSystem(const FString& PackagePath, UMaterialInterface* StreakMaterial,
+	UMaterialInterface* WispMaterial, float Radius, float Length, FLinearColor Tint)
+{
+	using namespace knightMonsterFX;
+	if (!StreakMaterial)
+	{
+		return nullptr;
+	}
+	// 바람결: 기둥 안 여러 높이에서 생겨 아래로, 조금 바깥으로 쏟아진다. 수명 동안 기둥 높이의 절반쯤 내려간다.
+	FSpriteLayer Streaks;
+	Streaks.Name = TEXT("Streaks");
+	Streaks.Material = StreakMaterial;
+	Streaks.Rate = 160.f;
+	Streaks.Life = FVector2f(0.22f, 0.34f);
+	Streaks.SizeMin = FVector2f(5.f, 160.f);
+	Streaks.SizeMax = FVector2f(9.f, 360.f);
+	Streaks.ColorKeys = { {0.f, 1.f}, {1.f, 1.f} };
+	Streaks.AlphaKeys = { {0.f, 0.f}, {0.2f, 0.14f}, {0.7f, 0.08f}, {1.f, 0.f} };
+	Streaks.SizeKeys = { {0.f, 0.4f}, {0.35f, 1.f}, {1.f, 1.2f} };
+	Streaks.Alignment = ENiagaraSpriteAlignment::VelocityAligned;
+	Streaks.SortOrder = 1;
+
+	// 연기 결: 기둥 둘레에서 천천히 내려오며 커지고 흩어진다.
+	FSpriteLayer Wisps;
+	Wisps.Name = TEXT("Wisps");
+	Wisps.Material = WispMaterial;
+	Wisps.Rate = 30.f;
+	Wisps.Life = FVector2f(0.6f, 1.f);
+	Wisps.SizeMin = FVector2f(Radius * 0.5f);
+	Wisps.SizeMax = FVector2f(Radius * 0.9f);
+	Wisps.CurlStrength = 300.f;
+	Wisps.CurlFrequency = 0.003f;
+	Wisps.Drag = 1.f;
+	Wisps.ColorKeys = { {0.f, 1.f}, {1.f, 1.f} };
+	Wisps.AlphaKeys = { {0.f, 0.f}, {0.3f, 0.1f}, {1.f, 0.f} };
+	Wisps.SizeKeys = { {0.f, 0.6f}, {1.f, 1.8f} };
+	Wisps.SortOrder = 0;
+
+	const FSpriteLayer Layers[] = { Wisps, Streaks };
+	const float Margin = Radius * 2.f;
+	UNiagaraSystem* const System = BuildLayeredSystem(PackagePath, Layers, 0.f, 1.f, FVector(-Margin, -Margin, -Length - Margin), FVector(Margin, Margin, Margin));
+	if (!System)
+	{
+		return nullptr;
+	}
+	for (int32 Index = 0; Index < System->GetEmitterHandles().Num(); ++Index)
+	{
+		UNiagaraStatelessEmitter* const Emitter = System->GetEmitterHandle(Index).GetStatelessEmitter();
+		if (!Emitter || !Layers[FMath::Min(Index, 1)].Material)
+		{
+			continue;
+		}
+		const bool bStreaks = Index == 1;
+		if (UNiagaraStatelessModule_ShapeLocation* const Shape = Get<UNiagaraStatelessModule_ShapeLocation>(*Emitter))
+		{
+			// 위 끝(0)부터 Length 아래까지의 원기둥 겉면 근처. 아래로 갈수록 기둥이 넓어지는 것은 퍼지는 속도로 맞춘다.
+			Shape->ShapePrimitive = ENSM_ShapePrimitive::Cylinder;
+			Shape->CylinderHeight.InitConstant(Length * (bStreaks ? 0.85f : 0.9f));
+			Shape->CylinderRadius.InitRange(Radius * (bStreaks ? 0.35f : 0.5f), Radius * (bStreaks ? 0.7f : 0.8f));
+			Shape->CylinderHeightMidpoint.InitConstant(0.5f);
+			Shape->bCylinderSurfaceOnly = false;
+			Shape->TransformOffset = FNiagaraDistributionPosition(FVector3f(0.f, 0.f, -Length * (bStreaks ? 0.45f : 0.5f)));
+		}
+		if (UNiagaraStatelessModule_AddVelocity* const Velocity = Get<UNiagaraStatelessModule_AddVelocity>(*Emitter))
+		{
+			// 기둥 위쪽 높은 한 점에서 멀어지는 방향: 아래로 쏟아지며 조금 바깥으로 벌어진다.
+			Velocity->VelocityType = ENSM_VelocityType::FromPoint;
+			Velocity->CoordinateSpace = ENiagaraCoordinateSpace::Local;
+			Velocity->PointOrigin = FVector3f(0.f, 0.f, Length * 1.5f);
+			Velocity->PointVelocityDistribution.InitRange(bStreaks ? Length * 1.6f : Length * 0.2f, bStreaks ? Length * 2.2f : Length * 0.35f);
+			Velocity->PointVelocityScale.InitConstant(1.f);
+		}
+		SetTint(*Emitter, Tint);
+		Emitter->PostEditChange();
+	}
+	return Finish(System, false);
+}
+
+UNiagaraSystem* UknightMonsterFXBuilder::BuildSonicGroundSystem(const FString& PackagePath, UMaterialInterface* StreakMaterial,
+	UMaterialInterface* WispMaterial, float Radius, bool bTrail, FLinearColor Tint)
+{
+	using namespace knightMonsterFX;
+	if (!WispMaterial)
+	{
+		return nullptr;
+	}
+	// 바람결: 닿는 자리 링에서 바닥을 따라 바깥으로, 아주 조금 위로 쓸려 나간다.
+	FSpriteLayer Streaks;
+	Streaks.Name = TEXT("Streaks");
+	Streaks.Material = bTrail ? nullptr : StreakMaterial;
+	Streaks.Rate = 120.f;
+	Streaks.Life = FVector2f(0.22f, 0.36f);
+	Streaks.SizeMin = FVector2f(5.f, 90.f);
+	Streaks.SizeMax = FVector2f(9.f, 200.f);
+	Streaks.ColorKeys = { {0.f, 1.f}, {1.f, 1.f} };
+	Streaks.AlphaKeys = { {0.f, 0.f}, {0.2f, 0.16f}, {0.7f, 0.08f}, {1.f, 0.f} };
+	Streaks.SizeKeys = { {0.f, 0.4f}, {0.35f, 1.f}, {1.f, 1.2f} };
+	Streaks.Alignment = ENiagaraSpriteAlignment::VelocityAligned;
+	Streaks.SortOrder = 1;
+
+	// 연기 결: 바닥에서 피어올라 바깥으로 흩어진다. 자국(bTrail)은 더 오래, 더 옅게 남는다.
+	FSpriteLayer Wisps;
+	Wisps.Name = TEXT("Wisps");
+	Wisps.Material = WispMaterial;
+	Wisps.Rate = bTrail ? 60.f : 35.f;
+	Wisps.Life = bTrail ? FVector2f(1.2f, 1.8f) : FVector2f(0.6f, 1.f);
+	Wisps.SizeMin = FVector2f(Radius * 0.45f);
+	Wisps.SizeMax = FVector2f(Radius * 0.8f);
+	Wisps.CurlStrength = 300.f;
+	Wisps.CurlFrequency = 0.003f;
+	Wisps.Drag = 1.5f;
+	Wisps.Rise = bTrail ? 60.f : 0.f;
+	Wisps.ColorKeys = { {0.f, 1.f}, {1.f, 1.f} };
+	Wisps.AlphaKeys = { {0.f, 0.f}, {0.2f, bTrail ? 0.06f : 0.1f}, {1.f, 0.f} };
+	Wisps.SizeKeys = { {0.f, 0.6f}, {1.f, 2.4f} };
+	Wisps.SortOrder = 0;
+
+	const FSpriteLayer Layers[] = { Wisps, Streaks };
+	const float Margin = Radius * 3.f;
+	UNiagaraSystem* const System = BuildLayeredSystem(PackagePath, Layers, 0.f, 1.f, FVector(-Margin, -Margin, -200.f), FVector(Margin, Margin, Radius * 2.f),
+		bTrail ? 0.1f : 0.f);
+	if (!System)
+	{
+		return nullptr;
+	}
+	for (int32 Index = 0; Index < System->GetEmitterHandles().Num(); ++Index)
+	{
+		UNiagaraStatelessEmitter* const Emitter = System->GetEmitterHandle(Index).GetStatelessEmitter();
+		if (!Emitter || !Layers[FMath::Min(Index, 1)].Material)
+		{
+			continue;
+		}
+		const bool bStreaks = Index == 1;
+		// 바닥 아래 한 점에서 멀어지는 방향: 바깥으로, 조금 위로.
+		SetRingFromPoint(*Emitter, bStreaks ? FVector2f(Radius * 0.4f, Radius * 0.8f) : FVector2f(Radius * 0.3f, Radius * 0.9f), FRotator3f(0.f, 0.f, 0.f),
+			FVector3f(0.f, 0.f, bStreaks ? -Radius * 0.25f : -Radius * 0.8f), bStreaks ? FVector2f(1500.f, 2400.f) : FVector2f(350.f, 700.f),
+			FVector3f(0.f, 0.f, bStreaks ? 30.f : 60.f));
+		SetTint(*Emitter, Tint);
+		Emitter->PostEditChange();
+	}
+	return Finish(System, false);
+}
+
+UNiagaraSystem* UknightMonsterFXBuilder::BuildSonicWaterSpraySystem(const FString& PackagePath, UMaterialInterface* SprayMaterial,
+	UMaterialInterface* MistMaterial, float Width, FLinearColor Tint)
+{
+	using namespace knightMonsterFX;
+	if (!SprayMaterial)
+	{
+		return nullptr;
+	}
+	// 물보라 막: 가는 물줄기(속도 정렬)가 닿는 자리 양옆에서 비스듬히 솟았다가 중력으로 떨어진다. 촘촘해서 막처럼 읽힌다.
+	// 부드러운 결(MistMaterial)을 속도 방향으로 길게 늘여 물이 찢겨 나가는 막처럼 보이게 한다.
+	FSpriteLayer Sheet;
+	Sheet.Name = TEXT("Sheet");
+	Sheet.Material = MistMaterial ? MistMaterial : SprayMaterial;
+	Sheet.Rate = 160.f;
+	Sheet.Life = FVector2f(0.4f, 0.65f);
+	Sheet.SizeMin = FVector2f(50.f, 140.f);
+	Sheet.SizeMax = FVector2f(90.f, 280.f);
+	Sheet.Rise = -1800.f;
+	Sheet.Drag = 0.6f;
+	Sheet.ColorKeys = { {0.f, 1.f}, {1.f, 1.f} };
+	Sheet.AlphaKeys = { {0.f, 0.f}, {0.1f, 0.3f}, {0.6f, 0.2f}, {1.f, 0.f} };
+	Sheet.SizeKeys = { {0.f, 0.4f}, {0.3f, 1.f}, {1.f, 1.3f} };
+	Sheet.Alignment = ENiagaraSpriteAlignment::VelocityAligned;
+	Sheet.SortOrder = 1;
+
+	// 물방울: 막보다 높이, 멀리 튀는 작고 짧은 점들.
+	FSpriteLayer Drops = Sheet;
+	Drops.Name = TEXT("Drops");
+	Drops.Material = SprayMaterial;
+	Drops.Rate = 90.f;
+	Drops.Life = FVector2f(0.5f, 0.8f);
+	Drops.SizeMin = FVector2f(5.f, 10.f);
+	Drops.SizeMax = FVector2f(9.f, 22.f);
+	Drops.AlphaKeys = { {0.f, 0.f}, {0.1f, 0.35f}, {0.7f, 0.25f}, {1.f, 0.f} };
+	Drops.SizeKeys = { {0.f, 1.f}, {1.f, 0.7f} };
+	Drops.SortOrder = 2;
+
+	// 물안개: 갈라진 물 위로 낮게 퍼지며 남는 옅은 안개.
+	FSpriteLayer Mist;
+	Mist.Name = TEXT("Mist");
+	Mist.Material = MistMaterial;
+	Mist.Rate = 40.f;
+	Mist.Life = FVector2f(0.8f, 1.3f);
+	Mist.SizeMin = FVector2f(Width * 0.5f);
+	Mist.SizeMax = FVector2f(Width * 0.9f);
+	Mist.CurlStrength = 200.f;
+	Mist.CurlFrequency = 0.003f;
+	Mist.Drag = 1.2f;
+	Mist.Rise = 40.f;
+	Mist.ColorKeys = { {0.f, 1.f}, {1.f, 1.f} };
+	Mist.AlphaKeys = { {0.f, 0.f}, {0.2f, 0.12f}, {1.f, 0.f} };
+	Mist.SizeKeys = { {0.f, 0.6f}, {1.f, 2.2f} };
+	Mist.SortOrder = 0;
+
+	const FSpriteLayer Layers[] = { Mist, Sheet, Drops };
+	const float Margin = Width * 3.f;
+	UNiagaraSystem* const System = BuildLayeredSystem(PackagePath, Layers, 0.f, 1.f, FVector(-Margin, -Margin, -200.f), FVector(Margin, Margin, Width * 2.5f));
+	if (!System)
+	{
+		return nullptr;
+	}
+	for (int32 Index = 0; Index < System->GetEmitterHandles().Num(); ++Index)
+	{
+		UNiagaraStatelessEmitter* const Emitter = System->GetEmitterHandle(Index).GetStatelessEmitter();
+		if (!Emitter || !Layers[FMath::Min(Index, 2)].Material)
+		{
+			continue;
+		}
+		const bool bMist = Index == 0;
+		if (UNiagaraStatelessModule_ShapeLocation* const Shape = Get<UNiagaraStatelessModule_ShapeLocation>(*Emitter))
+		{
+			// 지나가는 방향(X)으로 얇고 옆(Y)으로 긴 띠. 가운데 아래 한 점에서 멀어지므로 +Y 쪽은 +Y로, -Y 쪽은 -Y로 갈라진다.
+			Shape->ShapePrimitive = ENSM_ShapePrimitive::Box;
+			Shape->BoxSize.InitConstant(FVector3f(Width * 0.4f, Width * (bMist ? 1.6f : 1.2f), 10.f));
+			Shape->TransformOffset = FNiagaraDistributionPosition(FVector3f(-Width * 0.1f, 0.f, 10.f));
+		}
+		if (UNiagaraStatelessModule_AddVelocity* const Velocity = Get<UNiagaraStatelessModule_AddVelocity>(*Emitter))
+		{
+			Velocity->VelocityType = ENSM_VelocityType::FromPoint;
+			Velocity->CoordinateSpace = ENiagaraCoordinateSpace::Local;
+			// 원점이 깊을수록 위로 곧게 솟고, 얕을수록 옆으로 눕는다.
+			Velocity->PointOrigin = FVector3f(Width * 0.3f, 0.f, bMist ? -Width * 0.3f : (Index == 1 ? -Width * 0.55f : -Width * 0.35f));
+			Velocity->PointVelocityDistribution.InitRange(bMist ? 300.f : (Index == 1 ? 900.f : 1100.f), bMist ? 600.f : (Index == 1 ? 1500.f : 1900.f));
+			Velocity->PointVelocityScale.InitConstant(1.f);
+		}
+		SetTint(*Emitter, Tint);
+		Emitter->PostEditChange();
+	}
+	return Finish(System, false);
+}
+
 UNiagaraSystem* UknightMonsterFXBuilder::BuildSonicImpactSystem(const FString& PackagePath, UStaticMesh* WaveMesh, UMaterialInterface* RingMaterial,
 	UMaterialInterface* ShardMaterial, UMaterialInterface* GustMaterial, UMaterialInterface* FlashMaterial, float Radius, int32 ShardCount,
 	int32 GustCount, float RingGrow, bool bSideways)

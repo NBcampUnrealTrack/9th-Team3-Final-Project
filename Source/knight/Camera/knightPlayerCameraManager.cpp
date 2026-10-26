@@ -320,6 +320,14 @@ void AknightPlayerCameraManager::StartSonicNearMiss()
 	}
 }
 
+void AknightPlayerCameraManager::HoldSonicJitter()
+{
+	if (UknightCameraModifier_Deafen* const Modifier = knightCamera::FindOrAddModifier(*this, DeafenClass))
+	{
+		Modifier->HoldJitter();
+	}
+}
+
 void AknightPlayerCameraManager::ForEachLocalCamera(const UObject* WorldContext, TFunctionRef<void(AknightPlayerCameraManager&)> Function)
 {
 	UWorld* const World = WorldContext ? WorldContext->GetWorld() : nullptr;
