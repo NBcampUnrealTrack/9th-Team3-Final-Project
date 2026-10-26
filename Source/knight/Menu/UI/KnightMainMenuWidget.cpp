@@ -92,6 +92,13 @@ void UKnightMainMenuWidget::NativeOnInitialized()
 void UKnightMainMenuWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (UknightProgressionSubsystem* Progress = GI->GetSubsystem<UknightProgressionSubsystem>())
+			Progress->OnProgressionChanged.AddUniqueDynamic(this, &ThisClass::HandleQuestProgressChanged);
+		if (UknightSaveSubsystem* Saves = GI->GetSubsystem<UknightSaveSubsystem>())
+			Saves->OnActiveSlotChanged.AddUniqueDynamic(this, &ThisClass::HandleQuestProfileChanged);
+	}
 	ApplyPage(EKnightMainMenuPage::Home, true);
 	const UknightSaveSubsystem* const Save = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
 	if (Text_ActiveProfile)
@@ -121,6 +128,13 @@ void UKnightMainMenuWidget::NativeConstruct()
 
 void UKnightMainMenuWidget::NativeDestruct()
 {
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (UknightProgressionSubsystem* Progress = GI->GetSubsystem<UknightProgressionSubsystem>())
+			Progress->OnProgressionChanged.RemoveDynamic(this, &ThisClass::HandleQuestProgressChanged);
+		if (UknightSaveSubsystem* Saves = GI->GetSubsystem<UknightSaveSubsystem>())
+			Saves->OnActiveSlotChanged.RemoveDynamic(this, &ThisClass::HandleQuestProfileChanged);
+	}
 	if (MaintenanceWidget) MaintenanceWidget->Close();
 	if (MaintenanceCameraRig.IsValid()) MaintenanceCameraRig->SetMaintenanceView(false);
 	if (SettingsWidget)
@@ -140,6 +154,26 @@ void UKnightMainMenuWidget::NativeDestruct()
 		QuestWidget->OnSelectionChanged.RemoveAll(this);
 	}
 	Super::NativeDestruct();
+}
+
+void UKnightMainMenuWidget::HandleQuestProgressChanged()
+{
+	if (CurrentPage != EKnightMainMenuPage::Stage) return;
+	RebuildMapMarkers();
+	if (QuestWidget) QuestWidget->RefreshQuests();
+}
+
+void UKnightMainMenuWidget::HandleQuestProfileChanged(const FString& SlotId)
+{
+	SelectedStageId = NAME_None;
+	if (Map_Stages) { Map_Stages->SetSelectedStage(NAME_None); Map_Stages->SetSelectedQuest(NAME_None); }
+	if (QuestWidget) QuestWidget->SelectQuest(NAME_None);
+	if (CurrentPage == EKnightMainMenuPage::Stage)
+	{
+		RebuildMapMarkers();
+		ShowSelectedRegionQuests();
+		RefreshStageDetails();
+	}
 }
 
 bool UKnightMainMenuWidget::ShowPage(EKnightMainMenuPage NewPage)

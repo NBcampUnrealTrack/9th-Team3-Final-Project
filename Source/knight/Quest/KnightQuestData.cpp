@@ -1,4 +1,5 @@
 #include "Quest/KnightQuestData.h"
+#include "Quest/KnightProgressionIds.h"
 
 #include "Engine/GameInstance.h"
 #include "Codex/KnightCodexData.h"
@@ -30,7 +31,7 @@ bool UKnightQuestDefinition::HasValidConfiguration(FText& OutReason) const
 	}
 	for (const FName Prerequisite : PrerequisiteQuestIds)
 	{
-		if (Prerequisite.IsNone() || Prerequisite == QuestId)
+		if (Prerequisite.IsNone() || KnightProgressionIds::Quest(Prerequisite) == KnightProgressionIds::Quest(QuestId))
 		{
 			OutReason = LOCTEXT("BadPrerequisite", "선행 퀘스트 ID가 올바르지 않습니다.");
 			return false;
@@ -69,21 +70,22 @@ void UKnightQuestCatalog::GetQuestDefinitions(TArray<UKnightQuestDefinition*>& O
 	TMap<FName, int32> Counts;
 	for (const UKnightQuestDefinition* Quest : Quests)
 	{
-		if (Quest && !Quest->QuestId.IsNone()) ++Counts.FindOrAdd(Quest->QuestId);
+		if (Quest && !Quest->QuestId.IsNone()) ++Counts.FindOrAdd(KnightProgressionIds::Quest(Quest->QuestId));
 	}
 	for (UKnightQuestDefinition* Quest : Quests)
 	{
-		if (Quest && !Quest->QuestId.IsNone() && Counts.FindRef(Quest->QuestId) == 1) OutQuests.Add(Quest);
+		if (Quest && !Quest->QuestId.IsNone() && Counts.FindRef(KnightProgressionIds::Quest(Quest->QuestId)) == 1) OutQuests.Add(Quest);
 	}
 }
 
 UKnightQuestDefinition* UKnightQuestCatalog::FindQuest(FName QuestId) const
 {
+	QuestId = KnightProgressionIds::Quest(QuestId);
 	if (QuestId.IsNone()) return nullptr;
 	UKnightQuestDefinition* Found = nullptr;
 	for (UKnightQuestDefinition* Quest : Quests)
 	{
-		if (!Quest || Quest->QuestId != QuestId) continue;
+		if (!Quest || KnightProgressionIds::Quest(Quest->QuestId) != QuestId) continue;
 		if (Found) return nullptr;
 		Found = Quest;
 	}
