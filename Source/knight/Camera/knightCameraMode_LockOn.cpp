@@ -5,8 +5,8 @@
 
 UknightCameraMode_LockOn::UknightCameraMode_LockOn()
 {
-	ArmLength = 550.f;
-	FieldOfView = 85.f;
+	ArmLength = 380.f;
+	FieldOfView = 82.f;
 	PivotLagSpeed = 8.f;
 }
 
@@ -27,7 +27,7 @@ void UknightCameraMode_LockOn::UpdateView(float DeltaTime)
 	const AActor* const Owner = GetTargetActor();
 	const UknightTargetLockComponent* const TargetLock = Owner ? Owner->FindComponentByClass<UknightTargetLockComponent>() : nullptr;
 	FVector LockedLocation;
-	if (TargetLock && TargetLock->GetLockedTargetLocation(LockedLocation))
+	if (TargetLock && TargetLock->GetLockedCameraLocation(LockedLocation))
 	{
 		const float Radius = TargetLock->GetLockedTargetRadius();
 		const float Distance = FVector::Dist2D(Owner->GetActorLocation(), LockedLocation);

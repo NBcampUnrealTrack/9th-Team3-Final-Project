@@ -96,6 +96,16 @@ public:
 
 	bool GetLockedTargetLocation(FVector& OutLocation) const;
 
+	/**
+	 * 카메라와 이동(스트레이프) 기준이 되는 안정적인 보스 중심 위치.
+	 * 부위 소켓(머리·꼬리 등)의 요동이나 자동 부위 전환에 흔들리지 않도록 대상 중심부를 반환한다.
+	 */
+	UFUNCTION(BlueprintPure, Category="Knight|LockOn")
+	bool GetLockedCameraLocation(FVector& OutLocation) const;
+
+	/** 자동 부위 타겟팅이 켜져 있을 때(수동 핀 고정 중이 아니면) 현재 플레이어 위치에서 가장 알맞은 부위로 즉시 갱신한다. */
+	void RefreshAutoNearestPart(bool bIgnoreCooldown = false);
+
 	/** Radius reported by the locked target, for camera framing. Zero without a lock. */
 	float GetLockedTargetRadius() const;
 
@@ -165,6 +175,40 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|LockOn|Camera")
 	bool bRotateControllerToTarget = true;
 
+	/**
+	 * (방안 1 + 수동 부위 락온 하이브리드) 카메라는 보스 중심부(75%)를 축으로 삼고 현재 선택한 부위(25%, CameraPartLocationWeight)만
+	 * 부드럽게 반영해, 부위 조준감을 살리면서 머리·꼬리 요동으로 인한 카메라 멀미를 막는다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|LockOn|Camera")
+	bool bLockCameraToTargetCenter = true;
+
+	/** 카메라 시점 계산 시 선택한 부위 위치를 섞는 비율(0 = 보스 중심 100%, 0.25 = 보스 중심 75% + 선택 부위 25%, 1 = 부위 100%). */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|LockOn|Camera", meta=(ClampMin=0, ClampMax=1, EditCondition="bLockCameraToTargetCenter"))
+	float CameraPartLocationWeight = 0.25f;
+
+	/** 카메라 중심점이 보스 이동·부위 전환을 따라가는 보간 속도. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|LockOn|Camera", meta=(ClampMin=0, EditCondition="bLockCameraToTargetCenter"))
+	float CameraFocusInterpSpeed = 10.f;
+
+	/**
+	 * 락온 중 플레이어 위치에 따라 가까운 부위를 자동으로 바꿀지 여부.
+	 * 기본값 false: 플레이어가 직접 선택한 부위를 끝까지 유지한다(팀 피드백 반영).
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|LockOn|AutoPart")
+	bool bAutoSelectNearestPart = false;
+
+	/** 자동 부위 전환 시 경계에서 마커가 깜빡이지 않도록 하는 거리 여유치(cm). 새 부위가 현재 부위보다 이 값 이상 더 가까워야 바뀐다. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|LockOn|AutoPart", meta=(ClampMin=0, Units="cm", EditCondition="bAutoSelectNearestPart"))
+	float AutoPartSwitchHysteresis = 70.f;
+
+	/** 자동 부위 전환 최소 간격(초). */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|LockOn|AutoPart", meta=(ClampMin=0, Units="s", EditCondition="bAutoSelectNearestPart"))
+	float AutoPartSwitchMinInterval = 0.22f;
+
+	/** 마우스 휠이나 패드 스틱으로 수동 부위 전환을 했을 때 자동 부위 변경을 멈추고 핀 고정하는 시간(초). */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|LockOn|AutoPart", meta=(ClampMin=0, Units="s", EditCondition="bAutoSelectNearestPart"))
+	float ManualPartPinDuration = 4.5f;
+
 	UPROPERTY(EditDefaultsOnly, Category="Knight|LockOn|Camera", meta=(ClampMin=0))
 	float ControlRotationInterpSpeed = 8.f;
 
@@ -181,6 +225,13 @@ protected:
 	/** 락온 중 시점 입력(마우스·패드 오른쪽 스틱)으로 대상을 바꾼다(다크소울 방식). 끄면 휠로만 바꾼다. (2026-10-14) */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|LockOn|Switch")
 	bool bSwitchByLookInput = true;
+
+	/**
+	 * 마우스 휠로 부위를 전환할 때 화면 좌우 좌표 대신 몬스터 부위 정의 순서(머리 ↔ 앞다리 ↔ 몸통 ↔ 뒷다리 ↔ 꼬리)대로
+	 * 끝에서 처음으로 순환(Wrap-Around)하며 막힘없이 전환한다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|LockOn|Switch")
+	bool bCyclePartsInOrder = true;
 
 	/**
 	 * 마우스 이동으로도 바꿀지. (2026-10-15) '마우스 이동에 락온이 바뀌는 게 너무 불편하다'는 의견으로 기본 끔.
@@ -230,6 +281,8 @@ private:
 	/** 카메라 앞쪽(MaxLockAngle 안)·시야가 트인 지점 중 플레이어와 가장 가까운 지점. 없으면 false. */
 	bool FindNearestPointInView(FCandidate& OutCandidate) const;
 	void SetLock(const FCandidate& Candidate);
+	FVector ComputeTargetCenterLocation(const AActor* Target) const;
+	bool SelectBestPartOnActor(AActor* Target, bool bUseHysteresis, FCandidate& OutCandidate) const;
 	/**
 	 * 잠근 지점이 아직 대상의 락온 지점 목록에 있는지 본다. 빠졌으면(잘려 나간 꼬리 등) InOutLocation(잃은 지점 위치)에서
 	 * 가장 가까운 같은 대상의 지점으로 옮기고 InOutLocation을 새 위치로 바꾼다. 남은 지점이 없으면 false.
@@ -247,6 +300,10 @@ private:
 	FName LockedSocket;
 	FGameplayTag LockedPartTag;
 	float TimeOutOfSight = 0.f;
+	FVector SmoothedCameraFocusLocation = FVector::ZeroVector;
+	bool bHasSmoothedCameraFocus = false;
+	double LastAutoPartSwitchTime = -1.0;
+	double ManualPartPinEndTime = -1.0;
 
 	// 시점 입력 전환 상태 (실제 시간 기준).
 	FVector2D SwitchMouseSum = FVector2D::ZeroVector;

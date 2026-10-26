@@ -91,6 +91,9 @@ void UknightHUDLockOnMarker::RefreshLockState()
 	if (!Target)
 	{
 		ShownTarget.Reset();
+		ShownSocket = NAME_None;
+		bHasLastWorldLocation = false;
+		PartTransitionOffset = FVector::ZeroVector;
 		StopTicking();
 		SetVisibility(ESlateVisibility::Collapsed);
 		return;
@@ -105,6 +108,9 @@ void UknightHUDLockOnMarker::RefreshLockState()
 	{
 		// A new lock (or a switch to another target) replays the whole open motion.
 		ShownTarget = Target;
+		ShownSocket = TargetLock->GetLockedSocket();
+		bHasLastWorldLocation = false;
+		PartTransitionOffset = FVector::ZeroVector;
 		AnimTime = 0.f;
 		FlashElapsed = TNumericLimits<float>::Max();
 		ShownDistance = -1;
@@ -185,6 +191,14 @@ void UknightHUDLockOnMarker::TickMarker(UWorld* World, ELevelTick TickType, floa
 	// Real time, so the open motion keeps its speed in slow motion.
 	const float Step = FMath::Min(static_cast<float>(FApp::GetDeltaTime()), 0.05f);
 	AnimTime += Step;
+	if (!PartTransitionOffset.IsNearlyZero(0.5f))
+	{
+		PartTransitionOffset = FMath::VInterpTo(PartTransitionOffset, FVector::ZeroVector, Step, 20.f);
+	}
+	else
+	{
+		PartTransitionOffset = FVector::ZeroVector;
+	}
 	if (FlashElapsed < FlashTime)
 	{
 		FlashElapsed += Step;
@@ -202,6 +216,16 @@ bool UknightHUDLockOnMarker::UpdateLayout()
 	{
 		return false;
 	}
+
+	const FName CurrentSocket = TargetLock->GetLockedSocket();
+	if (bHasLastWorldLocation && CurrentSocket != ShownSocket)
+	{
+		PartTransitionOffset = LastWorldLocation - WorldLocation;
+	}
+	ShownSocket = CurrentSocket;
+	WorldLocation += PartTransitionOffset;
+	LastWorldLocation = WorldLocation;
+	bHasLastWorldLocation = true;
 
 	FVector2D ScreenPixels;
 	if (!UGameplayStatics::ProjectWorldToScreen(PC, WorldLocation, ScreenPixels, true))

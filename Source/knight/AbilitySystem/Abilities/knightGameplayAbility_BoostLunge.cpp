@@ -77,6 +77,14 @@ void UknightGameplayAbility_BoostLunge::ActivateAbility(const FGameplayAbilitySp
 		UE_LOG(LogknightAbility, Error, TEXT("%s has no StrikeMontage."), *GetName());
 	}
 
+	if (Character)
+	{
+		if (UknightTargetLockComponent* const TargetLock = Character->FindComponentByClass<UknightTargetLockComponent>())
+		{
+			TargetLock->RefreshAutoNearestPart(true);
+		}
+	}
+
 	// 락온 대상 앞 도착 지점. 락온만 쓴다(소프트 타깃 없음).
 	FVector Destination;
 	FRotator FaceRotation;

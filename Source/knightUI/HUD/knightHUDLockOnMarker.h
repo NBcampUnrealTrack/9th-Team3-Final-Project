@@ -156,6 +156,10 @@ private:
 
 	TWeakObjectPtr<UknightVM_PlayerStatus> ViewModel;
 	TWeakObjectPtr<AActor> ShownTarget;
+	FName ShownSocket = NAME_None;
+	FVector LastWorldLocation = FVector::ZeroVector;
+	FVector PartTransitionOffset = FVector::ZeroVector;
+	bool bHasLastWorldLocation = false;
 	FDelegateHandle Ticker;
 	FDelegateHandle PartConditionHandle;
 	float AnimTime = 0.f;

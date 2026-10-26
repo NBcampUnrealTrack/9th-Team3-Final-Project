@@ -2,15 +2,19 @@
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/OverlapResult.h"
 #include "Engine/World.h"
+#include "GameFramework/Character.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "GenericTeamAgentInterface.h"
 #include "HAL/IConsoleManager.h"
 #include "Combat/knightCombatLibrary.h"
+#include "Monster/knightMonsterCharacterBase.h"
+#include "Monster/knightMonsterDefinition.h"
 #include "NativeGameplayTags.h"
 #include "System/knightGameplayTags.h"
 #include "knight.h"
@@ -134,7 +138,13 @@ bool UknightTargetLockComponent::TryLockOn()
 	{
 		return false;
 	}
-	SetLock(*Best);
+	ManualPartPinEndTime = -1.0;
+	FCandidate InitialLock = *Best;
+	if (bAutoSelectNearestPart && Best->Actor.IsValid())
+	{
+		SelectBestPartOnActor(Best->Actor.Get(), false, InitialLock);
+	}
+	SetLock(InitialLock);
 	return true;
 }
 
@@ -149,6 +159,9 @@ void UknightTargetLockComponent::ClearLockOn()
 	LockedSocket = NAME_None;
 	LockedPartTag = FGameplayTag();
 	TimeOutOfSight = 0.f;
+	bHasSmoothedCameraFocus = false;
+	LastAutoPartSwitchTime = -1.0;
+	ManualPartPinEndTime = -1.0;
 	SetComponentTickEnabled(false);
 	SetLockedOnTag(false);
 	SetFarTag(false);
@@ -157,6 +170,45 @@ void UknightTargetLockComponent::ClearLockOn()
 
 void UknightTargetLockComponent::SwitchTarget(bool bRight)
 {
+	AActor* const Target = LockedActor.Get();
+	if (bCyclePartsInOrder && Target && Target->GetClass()->ImplementsInterface(UTargetableInterface::StaticClass()))
+	{
+		const TArray<FknightTargetPoint> Points = ITargetableInterface::Execute_QueryTargetPoints(Target);
+		TArray<FknightTargetPoint> ValidPoints;
+		ValidPoints.Reserve(Points.Num());
+		int32 CurrentIndex = INDEX_NONE;
+		for (const FknightTargetPoint& Point : Points)
+		{
+			if (!Point.Component)
+			{
+				continue;
+			}
+			if (Point.Component == LockedComponent.Get() && Point.SocketName == LockedSocket)
+			{
+				CurrentIndex = ValidPoints.Num();
+			}
+			ValidPoints.Add(Point);
+		}
+		if (ValidPoints.Num() > 1)
+		{
+			if (CurrentIndex == INDEX_NONE)
+			{
+				CurrentIndex = 0;
+			}
+			const int32 Step = bRight ? 1 : -1;
+			const int32 NextIndex = (CurrentIndex + Step + ValidPoints.Num()) % ValidPoints.Num();
+			if (const UWorld* const World = GetWorld(); World && ManualPartPinDuration > 0.f)
+			{
+				ManualPartPinEndTime = World->GetRealTimeSeconds() + ManualPartPinDuration;
+			}
+			SetLock({ Target, ValidPoints[NextIndex] });
+			UE_LOG(LogknightCombat, Log, TEXT("%s: lock-on wheel cycle (%s) -> %s %s (%d/%d)."),
+				*GetNameSafe(GetOwner()), bRight ? TEXT("next") : TEXT("prev"),
+				*GetNameSafe(Target), *ValidPoints[NextIndex].PartTag.ToString(), NextIndex + 1, ValidPoints.Num());
+			return;
+		}
+	}
+
 	FVector CurrentLocation;
 	const APawn* const Pawn = Cast<APawn>(GetOwner());
 	APlayerController* const PC = Pawn ? Cast<APlayerController>(Pawn->GetController()) : nullptr;
@@ -179,6 +231,8 @@ void UknightTargetLockComponent::SwitchTarget(bool bRight)
 
 	const FCandidate* Best = nullptr;
 	float BestScore = TNumericLimits<float>::Max();
+	const FCandidate* WrapBest = nullptr;
+	float WrapExtremeX = bRight ? TNumericLimits<float>::Max() : TNumericLimits<float>::Lowest();
 	for (const FCandidate& Candidate : Candidates)
 	{
 		if (Candidate.Point.Component == LockedComponent.Get() && Candidate.Point.SocketName == LockedSocket)
@@ -192,21 +246,30 @@ void UknightTargetLockComponent::SwitchTarget(bool bRight)
 			continue;
 		}
 		const float DeltaX = Screen.X - CurrentScreen.X;
-		if ((bRight && DeltaX <= 0.f) || (!bRight && DeltaX >= 0.f))
+		if ((bRight && DeltaX > 0.f) || (!bRight && DeltaX < 0.f))
 		{
-			continue;
+			// Horizontal distance dominates; vertical offset only separates stacked points.
+			const float Score = FMath::Abs(DeltaX) + 0.5f * FMath::Abs(Screen.Y - CurrentScreen.Y);
+			if (Score < BestScore)
+			{
+				BestScore = Score;
+				Best = &Candidate;
+			}
 		}
-		// Horizontal distance dominates; vertical offset only separates stacked points.
-		const float Score = FMath::Abs(DeltaX) + 0.5f * FMath::Abs(Screen.Y - CurrentScreen.Y);
-		if (Score < BestScore)
+		else if ((bRight && Screen.X < WrapExtremeX) || (!bRight && Screen.X > WrapExtremeX))
 		{
-			BestScore = Score;
-			Best = &Candidate;
+			WrapExtremeX = Screen.X;
+			WrapBest = &Candidate;
 		}
 	}
-	if (Best)
+	const FCandidate* const Chosen = Best ? Best : WrapBest;
+	if (Chosen)
 	{
-		SetLock(*Best);
+		if (const UWorld* const World = GetWorld(); World && ManualPartPinDuration > 0.f)
+		{
+			ManualPartPinEndTime = World->GetRealTimeSeconds() + ManualPartPinDuration;
+		}
+		SetLock(*Chosen);
 	}
 }
 
@@ -272,6 +335,10 @@ bool UknightTargetLockComponent::SwitchTargetInDirection(FVector2D ScreenDirecti
 	if (!Best)
 	{
 		return false;
+	}
+	if (const UWorld* const World = GetWorld(); World && ManualPartPinDuration > 0.f)
+	{
+		ManualPartPinEndTime = World->GetRealTimeSeconds() + ManualPartPinDuration;
 	}
 	SetLock(*Best);
 	return true;
@@ -360,6 +427,164 @@ bool UknightTargetLockComponent::GetLockedTargetLocation(FVector& OutLocation) c
 	return true;
 }
 
+bool UknightTargetLockComponent::GetLockedCameraLocation(FVector& OutLocation) const
+{
+	AActor* const Target = LockedActor.Get();
+	if (!Target)
+	{
+		return false;
+	}
+	if (!bLockCameraToTargetCenter)
+	{
+		return GetLockedTargetLocation(OutLocation);
+	}
+	OutLocation = bHasSmoothedCameraFocus ? SmoothedCameraFocusLocation : ComputeTargetCenterLocation(Target);
+	return true;
+}
+
+FVector UknightTargetLockComponent::ComputeTargetCenterLocation(const AActor* Target) const
+{
+	if (!Target)
+	{
+		return FVector::ZeroVector;
+	}
+	const FVector RootLocation = Target->GetActorLocation();
+	const ACharacter* const Character = Cast<ACharacter>(Target);
+	const USkeletalMeshComponent* const Mesh = Character ? Character->GetMesh() : nullptr;
+	if (!Mesh)
+	{
+		return RootLocation;
+	}
+
+	const AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(Target);
+	const UknightMonsterDefinition* const Definition = Monster ? Monster->GetMonsterDefinition() : nullptr;
+	FName CoreSocket = Definition && !Definition->FallbackLockOnSocket.IsNone()
+		? Definition->FallbackLockOnSocket : FName(TEXT("spine_03"));
+	if (!Mesh->DoesSocketExist(CoreSocket))
+	{
+		CoreSocket = Mesh->DoesSocketExist(TEXT("pelvis")) ? FName(TEXT("pelvis")) : NAME_None;
+	}
+	// 캡슐 중심을 기본 앵커로 두고 몸통 코어(spine_03/pelvis) 변위를 제한적으로 반영해,
+	// 보스가 머리·꼬리를 크게 휘두르거나 부위가 바뀔 때 카메라가 흔들리지 않으면서도 다운·비행 높이는 자연스럽게 따라간다.
+	FVector CenterLocation = RootLocation;
+	if (!CoreSocket.IsNone())
+	{
+		const FVector CoreLocation = Mesh->GetSocketLocation(CoreSocket);
+		const FVector Offset = CoreLocation - RootLocation;
+		const FVector HorizontalOffset = FVector(Offset.X, Offset.Y, 0.f).GetClampedToMaxSize(120.f);
+		const float VerticalOffset = FMath::Clamp(Offset.Z, -100.f, 140.f);
+		CenterLocation = RootLocation + HorizontalOffset * 0.3f + FVector(0.f, 0.f, VerticalOffset * 0.35f);
+	}
+
+	// (75:25 하이브리드 안정화 카메라) 보스 중심(75%)을 축으로 삼고 내가 고른 부위(25%) 쪽으로 시선을 부드럽게 기울인다.
+	if (CameraPartLocationWeight > 0.f && Target == LockedActor.Get())
+	{
+		FVector PartLocation = FVector::ZeroVector;
+		if (GetLockedTargetLocation(PartLocation))
+		{
+			CenterLocation = FMath::Lerp(CenterLocation, PartLocation, FMath::Clamp(CameraPartLocationWeight, 0.f, 1.f));
+		}
+	}
+	return CenterLocation;
+}
+
+bool UknightTargetLockComponent::SelectBestPartOnActor(AActor* Target, bool bUseHysteresis, FCandidate& OutCandidate) const
+{
+	const AActor* const Owner = GetOwner();
+	if (!Owner || !Target || !Target->GetClass()->ImplementsInterface(UTargetableInterface::StaticClass()))
+	{
+		return false;
+	}
+
+	const TArray<FknightTargetPoint> Points = ITargetableInterface::Execute_QueryTargetPoints(Target);
+	if (Points.IsEmpty())
+	{
+		return false;
+	}
+
+	const FVector OwnerLocation = Owner->GetActorLocation();
+	FVector PreferredForward = Owner->GetActorForwardVector().GetSafeNormal2D();
+	if (const APawn* const Pawn = Cast<APawn>(Owner))
+	{
+		const FVector MoveInput = Pawn->GetLastMovementInputVector().GetSafeNormal2D();
+		if (!MoveInput.IsNearlyZero())
+		{
+			PreferredForward = (PreferredForward + MoveInput).GetSafeNormal2D();
+		}
+	}
+
+	const FknightTargetPoint* BestPoint = nullptr;
+	float BestScore = TNumericLimits<float>::Max();
+	for (const FknightTargetPoint& Point : Points)
+	{
+		if (!Point.Component)
+		{
+			continue;
+		}
+		const FVector PointLocation = Point.GetLocation();
+		const float Dist2D = FVector::Dist2D(OwnerLocation, PointLocation);
+		const float DeltaZ = FMath::Abs(PointLocation.Z - OwnerLocation.Z);
+		// 플레이어 수평 위치를 최우선으로 보되, 높이 차이와 바라보는/이동하는 방향에 가산점을 준다.
+		float Score = Dist2D + DeltaZ * 0.38f;
+
+		const FVector Dir2D = (PointLocation - OwnerLocation).GetSafeNormal2D();
+		if (!Dir2D.IsNearlyZero() && !PreferredForward.IsNearlyZero())
+		{
+			Score -= FVector::DotProduct(PreferredForward, Dir2D) * 45.f;
+		}
+
+		const bool bIsCurrentPoint = Point.Component == LockedComponent.Get() && Point.SocketName == LockedSocket;
+		if (bUseHysteresis && bIsCurrentPoint)
+		{
+			Score -= AutoPartSwitchHysteresis;
+		}
+
+		if (Score < BestScore)
+		{
+			BestScore = Score;
+			BestPoint = &Point;
+		}
+	}
+
+	if (!BestPoint)
+	{
+		return false;
+	}
+	OutCandidate.Actor = Target;
+	OutCandidate.Point = *BestPoint;
+	return true;
+}
+
+void UknightTargetLockComponent::RefreshAutoNearestPart(bool bIgnoreCooldown)
+{
+	AActor* const Target = LockedActor.Get();
+	const UWorld* const World = GetWorld();
+	if (!bAutoSelectNearestPart || !Target || !World)
+	{
+		return;
+	}
+	const double Now = World->GetRealTimeSeconds();
+	if (ManualPartPinEndTime > 0.0 && Now < ManualPartPinEndTime)
+	{
+		return;
+	}
+	if (!bIgnoreCooldown && LastAutoPartSwitchTime >= 0.0 && Now - LastAutoPartSwitchTime < AutoPartSwitchMinInterval)
+	{
+		return;
+	}
+
+	FCandidate BestCandidate;
+	if (!SelectBestPartOnActor(Target, !bIgnoreCooldown, BestCandidate))
+	{
+		return;
+	}
+	if (BestCandidate.Point.Component != LockedComponent.Get() || BestCandidate.Point.SocketName != LockedSocket)
+	{
+		LastAutoPartSwitchTime = Now;
+		SetLock(BestCandidate);
+	}
+}
+
 float UknightTargetLockComponent::GetLockedTargetRadius() const
 {
 	AActor* const Target = LockedActor.Get();
@@ -445,7 +670,23 @@ void UknightTargetLockComponent::TickComponent(float DeltaTime, ELevelTick TickT
 		ClearLockOn();
 		return;
 	}
-	if (FVector::DistSquared(GetOwner()->GetActorLocation(), TargetLocation) > FMath::Square(BreakRange))
+
+	// (방안 1) 플레이어 위치 변화에 따라 가장 가까운 부위로 자동 타겟팅 갱신.
+	if (bAutoSelectNearestPart)
+	{
+		RefreshAutoNearestPart(false);
+		GetLockedTargetLocation(TargetLocation);
+	}
+
+	const FVector DesiredCameraCenter = ComputeTargetCenterLocation(Target);
+	SmoothedCameraFocusLocation = bHasSmoothedCameraFocus && CameraFocusInterpSpeed > 0.f
+		? FMath::VInterpTo(SmoothedCameraFocusLocation, DesiredCameraCenter, DeltaTime, CameraFocusInterpSpeed)
+		: DesiredCameraCenter;
+	bHasSmoothedCameraFocus = true;
+
+	const FVector CameraFocusLocation = bLockCameraToTargetCenter ? SmoothedCameraFocusLocation : TargetLocation;
+	if (FVector::DistSquared(GetOwner()->GetActorLocation(), CameraFocusLocation) > FMath::Square(BreakRange)
+		&& FVector::DistSquared(GetOwner()->GetActorLocation(), TargetLocation) > FMath::Square(BreakRange))
 	{
 		ClearLockOn();
 		return;
@@ -453,7 +694,10 @@ void UknightTargetLockComponent::TickComponent(float DeltaTime, ELevelTick TickT
 
 	FVector ViewLocation;
 	FRotator ViewRotation;
-	if (GetViewPoint(ViewLocation, ViewRotation) && !HasLineOfSight(ViewLocation, TargetLocation, LockedActor.Get()))
+	const bool bHasLOS = !GetViewPoint(ViewLocation, ViewRotation)
+		|| HasLineOfSight(ViewLocation, CameraFocusLocation, LockedActor.Get())
+		|| HasLineOfSight(ViewLocation, TargetLocation, LockedActor.Get());
+	if (!bHasLOS)
 	{
 		TimeOutOfSight += DeltaTime;
 		if (TimeOutOfSight > LoseSightGraceTime)
@@ -617,13 +861,19 @@ bool UknightTargetLockComponent::FindNearestPointInView(FCandidate& OutCandidate
 
 void UknightTargetLockComponent::SetLock(const FCandidate& Candidate)
 {
-	const bool bChanged = LockedActor.Get() != Candidate.Actor.Get() || LockedComponent.Get() != Candidate.Point.Component
+	const bool bActorChanged = LockedActor.Get() != Candidate.Actor.Get();
+	const bool bChanged = bActorChanged || LockedComponent.Get() != Candidate.Point.Component
 		|| LockedSocket != Candidate.Point.SocketName;
 	LockedActor = Candidate.Actor;
 	LockedComponent = Candidate.Point.Component.Get();
 	LockedSocket = Candidate.Point.SocketName;
 	LockedPartTag = Candidate.Point.PartTag;
 	TimeOutOfSight = 0.f;
+	if (bActorChanged && LockedActor.IsValid())
+	{
+		SmoothedCameraFocusLocation = ComputeTargetCenterLocation(LockedActor.Get());
+		bHasSmoothedCameraFocus = true;
+	}
 	SetComponentTickEnabled(true);
 	SetLockedOnTag(true);
 	if (bChanged)
@@ -673,7 +923,7 @@ void UknightTargetLockComponent::UpdateControlRotation(float DeltaTime) const
 	FVector TargetLocation;
 	FVector ViewLocation;
 	FRotator ViewRotation;
-	if (!Controller || !GetLockedTargetLocation(TargetLocation) || !GetViewPoint(ViewLocation, ViewRotation))
+	if (!Controller || !GetLockedCameraLocation(TargetLocation) || !GetViewPoint(ViewLocation, ViewRotation))
 	{
 		return;
 	}
