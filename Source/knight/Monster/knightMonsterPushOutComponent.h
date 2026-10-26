@@ -66,6 +66,13 @@ protected:
 	float ShallowMeshPenetration = 30.f;
 
 	/**
+	 * ShallowMeshPushOutTags 중에는 몸 아래 차단 상자가 플레이어를 막지 않게 한다. 엎드리면 배 밑 틈이 없어 상자가 필요 없고,
+	 * 선 자세 기준인 상자 윗면에 플레이어가 올라타 미끄러져 내려온다. 일어난 뒤에는 상자 자리에 남은 플레이어를 밀어 낸 다음 다시 막는다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Push Out", meta=(EditCondition="bPushOutOfMesh"))
+	bool bLowerBlockersWhileLying = true;
+
+	/**
 	 * 몬스터에 이 태그 중 하나가 있으면 이동 캡슐이 플레이어(Pawn)를 막지 않는다. 기본값 State.Monster.PassThroughPawns:
 	 * 구르기·몸통박치기 어빌리티가 ActivationOwnedTags로 붙인다. 막으면 몸이 플레이어 앞에서 멈춰 끝까지 덮치지 못한다.
 	 * 그동안 캡슐 안에 들어온 플레이어는 몸 밖으로 밀어내고, 태그가 빠져도 플레이어가 캡슐 밖으로 나간 뒤에 다시 막는다.
@@ -104,6 +111,9 @@ private:
 	bool IsOverlappingMeshBodies(const class ACharacter* Character, float Penetration) const;
 	bool WantsPassThroughPawns() const;
 	void SetCapsulePassThrough(bool bPassThrough);
+	void SetBlockersLowered(bool bLowered);
+	/** 엎드려 차단 상자를 내려 둔 동안에는 상자를 몸으로 보지 않는다. */
+	bool ShouldSkip(const UPrimitiveComponent* Primitive) const;
 	FVector GetPushDirection(const FVector& Location) const;
 
 	UPROPERTY(Transient)
@@ -126,4 +136,13 @@ private:
 	/** 캡슐이 지금 플레이어를 통과시키는 중인지와, 통과 전의 Pawn 응답(되돌릴 값). */
 	bool bCapsulePassingThrough = false;
 	TEnumAsByte<ECollisionResponse> SavedCapsulePawnResponse = ECR_Block;
+
+	/** 몸 아래 차단 상자(BodyPrimitives 중 메시가 아닌 것). */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UPrimitiveComponent>> Blockers;
+
+	/** 차단 상자가 지금 플레이어를 막지 않는 중인지. */
+	bool bBlockersLowered = false;
+	/** 이번 틱에 차단 상자를 몸으로 보지 않는다(엎드려 내려 둔 동안). */
+	bool bIgnoreBlockers = false;
 };
