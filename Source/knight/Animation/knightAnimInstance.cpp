@@ -9,6 +9,8 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
 #include "Sound/SoundBase.h"
 #include "System/knightGameplayTags.h"
 
@@ -152,6 +154,19 @@ void UknightAnimInstance::UpdateFootsteps(const float DeltaSeconds, const AChara
 			{
 				Foot.LastStepTime = Now;
 				UGameplayStatics::PlaySoundAtLocation(&Character, Sound, FootLocation, FootstepVolume);
+				if (bSpawnFootstepRunDust && KnightMovement && KnightMovement->IsRunning())
+				{
+					UNiagaraSystem* DustAsset = FootstepRunDustEffect;
+					if (!DustAsset)
+					{
+						DustAsset = LoadObject<UNiagaraSystem>(nullptr, TEXT("/Game/Knight/Creatures/Shared/Effects/NS_Monster_RunDust.NS_Monster_RunDust"));
+					}
+					if (DustAsset)
+					{
+						UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, DustAsset, FootLocation, Character.GetActorRotation(),
+							FVector(FootstepRunDustScale), true, true, ENCPoolMethod::AutoRelease);
+					}
+				}
 #if !UE_BUILD_SHIPPING
 				if (CVarDebugFootsteps.GetValueOnGameThread() > 0)
 				{

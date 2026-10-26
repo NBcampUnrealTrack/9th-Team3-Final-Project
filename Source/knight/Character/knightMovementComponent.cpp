@@ -11,6 +11,8 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
 #include "Sound/SoundBase.h"
 #include "TimerManager.h"
 #include "System/knightGameplayTags.h"
@@ -228,14 +230,29 @@ void UknightMovementComponent::HandleLandingImpact(float ImpactSpeed)
 	}
 
 	// (2026-10-22) 착지 소리: 발 밑(캡슐 바닥)에서, 세게 떨어질수록 크게.
+	const FVector Feet = CharacterOwner->GetActorLocation() - FVector(0.f, 0.f, CharacterOwner->GetSimpleCollisionHalfHeight());
 	if (LandingSound)
 	{
-		const FVector Feet = CharacterOwner->GetActorLocation() - FVector(0.f, 0.f, CharacterOwner->GetSimpleCollisionHalfHeight());
 		UGameplayStatics::PlaySoundAtLocation(CharacterOwner, LandingSound, Feet, FMath::Lerp(LandingSoundMinVolume, LandingSoundMaxVolume, Alpha));
 	}
 
-	// 세게 떨어지면 무게를 받아내느라 잠깐 출발하지 못한다. 퀵스텝·가드 잠금(MoveInputLockCount)과는 따로 둔다.
 	UWorld* const World = GetWorld();
+	if (bSpawnLandingDust && World)
+	{
+		UNiagaraSystem* DustAsset = LandingDustEffect;
+		if (!DustAsset)
+		{
+			DustAsset = LoadObject<UNiagaraSystem>(nullptr, TEXT("/Game/Knight/Creatures/Shared/Effects/NS_Monster_GroundDust.NS_Monster_GroundDust"));
+		}
+		if (DustAsset)
+		{
+			const float DustScale = FMath::Lerp(0.55f, 1.25f, Alpha);
+			UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, DustAsset, Feet, CharacterOwner->GetActorRotation(),
+				FVector(DustScale), true, true, ENCPoolMethod::AutoRelease);
+		}
+	}
+
+	// 세게 떨어지면 무게를 받아내느라 잠깐 출발하지 못한다. 퀵스텝·가드 잠금(MoveInputLockCount)과는 따로 둔다.
 	if (World && LandingRecoveryMinSpeed > 0.f && LandingRecoveryMaxTime > 0.f && ImpactSpeed >= LandingRecoveryMinSpeed)
 	{
 		const float RecoveryAlpha = FMath::Clamp((ImpactSpeed - LandingRecoveryMinSpeed) / FMath::Max(MaxSpeed - LandingRecoveryMinSpeed, 1.f), 0.f, 1.f);

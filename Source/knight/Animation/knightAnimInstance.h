@@ -8,6 +8,7 @@
 class ACharacter;
 class UAbilitySystemComponent;
 class UAnimMontage;
+class UNiagaraSystem;
 class USoundBase;
 
 /**
@@ -116,6 +117,18 @@ protected:
 	/** 같은 발이 다시 소리 내기까지 최소 간격. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Footstep", meta=(ClampMin=0, Units="s"))
 	float FootstepCooldown = 0.2f;
+
+	/** 달리기(IsRunning) 중 발이 땅에 닿을 때 발밑에서 흙먼지 이펙트를 피어오르게 할지 여부. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Footstep")
+	bool bSpawnFootstepRunDust = true;
+
+	/** 달리기 발걸음 흙먼지 이펙트 (비우면 NS_Monster_RunDust). */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Footstep", meta=(EditCondition="bSpawnFootstepRunDust"))
+	TObjectPtr<UNiagaraSystem> FootstepRunDustEffect;
+
+	/** 달리기 발걸음 흙먼지 크기 배율. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Footstep", meta=(ClampMin=0.1, EditCondition="bSpawnFootstepRunDust"))
+	float FootstepRunDustScale = 0.65f;
 
 private:
 	/** (2026-10-22) 발소리 검사. 게임 스레드(NativeUpdateAnimation)에서 부른다. */

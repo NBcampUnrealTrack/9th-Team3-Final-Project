@@ -537,13 +537,59 @@ void UknightGameplayAbility_PlungeAttack::OnImpact()
 			HitStop->ApplyHitStop(ImpactSelfHitStop);
 		}
 	}
+	const ACharacter* const Character = Cast<ACharacter>(Avatar);
+	const float HalfHeight = Character && Character->GetCapsuleComponent() ? Character->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() : 90.f;
+	const FVector Feet = Avatar->GetActorLocation() - FVector(0.f, 0.f, HalfHeight) + Avatar->GetActorForwardVector() * 100.f;
 	if (ImpactEffect)
 	{
-		const ACharacter* const Character = Cast<ACharacter>(Avatar);
-		const float HalfHeight = Character && Character->GetCapsuleComponent() ? Character->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() : 90.f;
-		const FVector Feet = Avatar->GetActorLocation() - FVector(0.f, 0.f, HalfHeight) + Avatar->GetActorForwardVector() * 100.f;
 		UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, ImpactEffect, Feet, Avatar->GetActorRotation(), FVector(ImpactEffectScale),
 			true, true, ENCPoolMethod::AutoRelease);
+	}
+
+	FVector GroundImpactLoc = Feet;
+	FHitResult GroundHit;
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(knightPlungeImpactCrack), false, Avatar);
+	if (World->LineTraceSingleByObjectType(GroundHit, Feet + FVector(0.f, 0.f, 150.f),
+		Feet - FVector(0.f, 0.f, 350.f), FCollisionObjectQueryParams(ECC_WorldStatic), QueryParams))
+	{
+		GroundImpactLoc = GroundHit.ImpactPoint;
+	}
+
+	const bool bTwoHanded = UknightGameplayAbility_StanceSwitch::IsTwoHanded(GetAbilitySystemComponentFromActorInfo());
+	UNiagaraSystem* CrackAsset = GroundCrackEffect;
+	if (!CrackAsset)
+	{
+		CrackAsset = LoadObject<UNiagaraSystem>(nullptr, TEXT("/Game/SlashHitVFX/NS/NS_Hit_GroundCrack.NS_Hit_GroundCrack"));
+	}
+	if (CrackAsset)
+	{
+		UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, CrackAsset, GroundImpactLoc, Avatar->GetActorRotation(),
+			FVector(bTwoHanded ? 1.35f : 1.05f), true, true, ENCPoolMethod::AutoRelease);
+	}
+
+	if (!bLeapToTarget || bTwoHanded)
+	{
+		UNiagaraSystem* RiftAsset = GroundRiftEffect;
+		if (!RiftAsset)
+		{
+			RiftAsset = LoadObject<UNiagaraSystem>(nullptr, TEXT("/Game/SlashHitVFX/NS/NS_Hit_GroundRift.NS_Hit_GroundRift"));
+		}
+		if (RiftAsset)
+		{
+			UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, RiftAsset, GroundImpactLoc, Avatar->GetActorRotation(),
+				FVector(bTwoHanded ? 1.15f : 0.9f), true, true, ENCPoolMethod::AutoRelease);
+		}
+	}
+
+	UNiagaraSystem* DustAsset = GroundDustEffect;
+	if (!DustAsset)
+	{
+		DustAsset = LoadObject<UNiagaraSystem>(nullptr, TEXT("/Game/Knight/Creatures/Shared/Effects/NS_Monster_GroundDust.NS_Monster_GroundDust"));
+	}
+	if (DustAsset)
+	{
+		UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, DustAsset, GroundImpactLoc, Avatar->GetActorRotation(),
+			FVector(bTwoHanded ? 1.3f : 1.0f), true, true, ENCPoolMethod::AutoRelease);
 	}
 }
 

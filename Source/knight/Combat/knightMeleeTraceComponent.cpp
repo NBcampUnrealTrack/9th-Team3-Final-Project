@@ -103,30 +103,82 @@ void UknightMeleeTraceComponent::StartSwingTrail(FActiveTrace& Trace) const
 	}
 	const FVector BladeDir = Blade / Length;
 
+	UNiagaraSystem* TrailAsset = SwingTrail;
+	float WidthMultiplier = 1.f;
+	bool bLightOn = bSwingTrailLight;
+	FLinearColor ColorHead = SwingTrailColorHead;
+	FLinearColor ColorTail = SwingTrailColorTail;
+
+	if (bUseStanceTrailVariation)
+	{
+		if (const UAbilitySystemComponent* const ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner()))
+		{
+			const bool bTwoHanded = ASC->HasMatchingGameplayTag(knightGameplayTags::State_Stance_TwoHanded);
+			if (bTwoHanded)
+			{
+				if (TwoHandedSwingTrail)
+				{
+					TrailAsset = TwoHandedSwingTrail;
+				}
+				WidthMultiplier = TwoHandedTrailWidthMultiplier;
+				ColorHead = TwoHandedTrailColorHead;
+				ColorTail = TwoHandedTrailColorTail;
+				bLightOn = bTwoHandedTrailLight;
+			}
+			else
+			{
+				WidthMultiplier = OneHandedTrailWidthMultiplier;
+				ColorHead = OneHandedTrailColorHead;
+				ColorTail = OneHandedTrailColorTail;
+			}
+		}
+	}
+
 	// 시작 소켓에 붙여 칼과 같이 움직이게 하고, 위치·회전은 월드 기준으로 맞춘 뒤 상대값으로 고정된다.
 	// 이펙트가 리본 폭을 로컬 -Z(User.AxisOffset)로 펼치므로 -Z를 칼날 방향으로 돌린다.
-	UNiagaraComponent* const FX = UNiagaraFunctionLibrary::SpawnSystemAttached(SwingTrail, Mesh, Trace.Params.StartSocket,
+	UNiagaraComponent* const FX = UNiagaraFunctionLibrary::SpawnSystemAttached(TrailAsset, Mesh, Trace.Params.StartSocket,
 		FVector::ZeroVector, FRotator::ZeroRotator, EAttachLocation::SnapToTarget, /*bAutoDestroy*/ true, /*bAutoActivate*/ false);
 	if (!FX)
 	{
 		return;
 	}
 	const FVector Center = (Start + End) * 0.5f + BladeDir * SwingTrailCenterOffset;
-	FX->SetWorldLocationAndRotation(Center, FRotationMatrix::MakeFromZ(-BladeDir).Rotator());
-	FX->SetVariableFloat(TEXT("User.Width"), Length * SwingTrailWidthScale);
-	FX->SetVariableBool(TEXT("User.LightOn"), bSwingTrailLight);
+	const FRotator TrailRot = FRotationMatrix::MakeFromZ(-BladeDir).Rotator();
+	FX->SetWorldLocationAndRotation(Center, TrailRot);
+	FX->SetVariableFloat(TEXT("User.Width"), Length * SwingTrailWidthScale * WidthMultiplier);
+	FX->SetVariableBool(TEXT("User.LightOn"), bLightOn);
 	if (SwingTrailLife > 0.f)
 	{
 		FX->SetVariableFloat(TEXT("User.Life"), SwingTrailLife);
 	}
-	if (bOverrideSwingTrailColor)
+	if (bOverrideSwingTrailColor || bUseStanceTrailVariation)
 	{
-		FX->SetVariableLinearColor(TEXT("User.ColorHead"), SwingTrailColorHead);
-		FX->SetVariableLinearColor(TEXT("User.ColorTail"), SwingTrailColorTail);
-		FX->SetVariableLinearColor(TEXT("User.ColorDark"), SwingTrailColorTail);
+		FX->SetVariableLinearColor(TEXT("User.ColorHead"), ColorHead);
+		FX->SetVariableLinearColor(TEXT("User.ColorTail"), ColorTail);
+		FX->SetVariableLinearColor(TEXT("User.ColorDark"), ColorTail);
 	}
 	FX->Activate(true);
 	Trace.TrailFX = FX;
+
+	if (bEnableRefractionTrail)
+	{
+		UNiagaraSystem* RefractionAsset = RefractionTrail;
+		if (!RefractionAsset)
+		{
+			RefractionAsset = LoadObject<UNiagaraSystem>(nullptr, TEXT("/Game/SlashHitVFX/NS/NS_Trail_refraction.NS_Trail_refraction"));
+		}
+		if (RefractionAsset)
+		{
+			if (UNiagaraComponent* const RefFX = UNiagaraFunctionLibrary::SpawnSystemAttached(RefractionAsset, Mesh, Trace.Params.StartSocket,
+				FVector::ZeroVector, FRotator::ZeroRotator, EAttachLocation::SnapToTarget, /*bAutoDestroy*/ true, /*bAutoActivate*/ false))
+			{
+				RefFX->SetWorldLocationAndRotation(Center, TrailRot);
+				RefFX->SetVariableFloat(TEXT("User.Width"), Length * SwingTrailWidthScale * WidthMultiplier);
+				RefFX->Activate(true);
+				Trace.RefractionFX = RefFX;
+			}
+		}
+	}
 }
 
 void UknightMeleeTraceComponent::StopSwingTrail(FActiveTrace& Trace)
@@ -137,6 +189,12 @@ void UknightMeleeTraceComponent::StopSwingTrail(FActiveTrace& Trace)
 		FX->Deactivate();
 	}
 	Trace.TrailFX.Reset();
+
+	if (UNiagaraComponent* const RefFX = Trace.RefractionFX.Get())
+	{
+		RefFX->Deactivate();
+	}
+	Trace.RefractionFX.Reset();
 }
 
 void UknightMeleeTraceComponent::StopAllTraces()

@@ -8,6 +8,7 @@
 class ACharacter;
 class UAnimMontage;
 class UCameraShakeBase;
+class UMaterialInterface;
 class UNiagaraComponent;
 class UNiagaraSystem;
 class USoundBase;
@@ -165,6 +166,28 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Lunge|Effects", meta=(ClampMin=0))
 	float LungeShakeScale = 0.4f;
 
+	/** 부스트 돌진 이동 동안 메카 홀로그램 잔상을 남길지 여부. */
+	UPROPERTY(EditDefaultsOnly, Category="Lunge|Ghost Trail")
+	bool bSpawnGhostTrail = true;
+
+	UPROPERTY(EditDefaultsOnly, Category="Lunge|Ghost Trail", meta=(EditCondition="bSpawnGhostTrail"))
+	TObjectPtr<UMaterialInterface> GhostMaterial;
+
+	UPROPERTY(EditDefaultsOnly, Category="Lunge|Ghost Trail", meta=(ClampMin=0.02, Units="s", EditCondition="bSpawnGhostTrail"))
+	float GhostSpawnInterval = 0.06f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Lunge|Ghost Trail", meta=(ClampMin=0.05, Units="s", EditCondition="bSpawnGhostTrail"))
+	float GhostLifetime = 0.28f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Lunge|Ghost Trail", meta=(ClampMin=0.05, ClampMax=1.0, EditCondition="bSpawnGhostTrail"))
+	float GhostInitialOpacity = 0.65f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Lunge|Ghost Trail", meta=(EditCondition="bSpawnGhostTrail"))
+	FLinearColor OneHandedGhostColor = FLinearColor(0.15f, 1.1f, 3.2f, 1.f);
+
+	UPROPERTY(EditDefaultsOnly, Category="Lunge|Ghost Trail", meta=(EditCondition="bSpawnGhostTrail"))
+	FLinearColor TwoHandedGhostColor = FLinearColor(3.2f, 0.22f, 0.08f, 1.f);
+
 private:
 	UFUNCTION()
 	void OnLungeFinished();
@@ -181,6 +204,8 @@ private:
 	void StartFootThrusters(const ACharacter& Character);
 	void StopFootThrusters();
 	void RestoreGravity();
+	void SpawnGhostStep();
+	void StopGhostTrail();
 
 	/** 지금 스탠스(한손/양손)에 맞는 몽타주. 한손용이 비어 있으면 양손용. */
 	UAnimMontage* PickStanceMontage(UAnimMontage* TwoHanded, UAnimMontage* OneHanded) const;
@@ -201,6 +226,7 @@ private:
 
 	FTimerHandle BackThrusterTimer;
 	FTimerHandle BackThrusterStopTimer;
+	FTimerHandle GhostTrailTimer;
 
 	/** 이번 돌진 방향(수평 단위 벡터). */
 	FVector LungeDirection = FVector::ZeroVector;

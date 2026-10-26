@@ -4,6 +4,7 @@
 #include "AbilitySystem/Attributes/knightAttributeSet.h"
 #include "Abilities/Tasks/AbilityTask_ApplyRootMotionConstantForce.h"
 #include "Character/knightMovementComponent.h"
+#include "Combat/knightGhostTrailActor.h"
 #include "Combat/knightTargetLockComponent.h"
 #include "Engine/World.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
@@ -160,6 +161,14 @@ void UknightGameplayAbility_BoostDash::StartDash(ACharacter& Character)
 	DashTask->ReadyForActivation();
 
 	StartBackThrusters(Character);
+	if (bSpawnGhostTrail)
+	{
+		SpawnGhostStep();
+		if (UWorld* const World = GetWorld(); World && GhostSpawnInterval > 0.f)
+		{
+			World->GetTimerManager().SetTimer(GhostTrailTimer, this, &ThisClass::SpawnGhostStep, GhostSpawnInterval, true);
+		}
+	}
 
 	UAbilitySystemComponent* const CueASC = DashCueTag.IsValid() ? GetAbilitySystemComponentFromActorInfo() : nullptr;
 	if (UAbilitySystemComponent* const ASC = CueASC)
@@ -213,6 +222,7 @@ UAnimMontage* UknightGameplayAbility_BoostDash::SelectDashMontage(const ACharact
 
 void UknightGameplayAbility_BoostDash::OnDashFinished()
 {
+	StopGhostTrail();
 	// 등 부스터는 이동이 끝나면 잠깐 뒤에 끈다. (2026-10-12)
 	if (UWorld* const World = GetWorld(); World && BackThrusterLinger > 0.f)
 	{
@@ -386,6 +396,31 @@ void UknightGameplayAbility_BoostDash::StopBackThrusters()
 	BackThrusters.Reset();
 }
 
+void UknightGameplayAbility_BoostDash::SpawnGhostStep()
+{
+	if (!bSpawnGhostTrail || !IsActive())
+	{
+		return;
+	}
+	const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	if (!Character)
+	{
+		return;
+	}
+	const UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();
+	const bool bTwoHanded = ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_Stance_TwoHanded);
+	const FLinearColor GhostColor = bTwoHanded ? TwoHandedGhostColor : OneHandedGhostColor;
+	AknightGhostTrailActor::SpawnGhostFromCharacter(Character, GhostMaterial, GhostColor, GhostLifetime, GhostInitialOpacity);
+}
+
+void UknightGameplayAbility_BoostDash::StopGhostTrail()
+{
+	if (UWorld* const World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(GhostTrailTimer);
+	}
+}
+
 void UknightGameplayAbility_BoostDash::OnInvulnerabilityEnded()
 {
 	RemoveInvulnerability();
@@ -409,6 +444,7 @@ void UknightGameplayAbility_BoostDash::EndAbility(const FGameplayAbilitySpecHand
 	RemoveInvulnerability();
 	ReleaseRecoveryState();
 	StopBackThrusters();
+	StopGhostTrail();
 
 	// 이동이 끝나기 전에 끊긴 대시(피격 등)도 쿨타임은 건다. 비용 부족 등으로 시작도 못 했으면 걸지 않는다.
 	StartCooldown();

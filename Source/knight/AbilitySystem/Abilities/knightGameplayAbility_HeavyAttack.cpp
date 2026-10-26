@@ -9,9 +9,15 @@
 #include "Animation/AnimMontage.h"
 #include "Combat/knightCombatLibrary.h"
 #include "Combat/knightGroggyFeedbackComponent.h"
+#include "Components/CapsuleComponent.h"
+#include "Components/MeshComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/Controller.h"
+#include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
 #include "TimerManager.h"
 #include "System/knightGameplayTags.h"
 #include "knight.h"
@@ -78,10 +84,12 @@ void UknightGameplayAbility_HeavyAttack::OnReleased(float TimeHeld)
 	}
 	else if (Phase == EPhase::Charging)
 	{
+		StopChargeEffects();
 		Phase = EPhase::Releasing;
-		const UWorld* const World = GetWorld();
+		UWorld* const World = GetWorld();
 		const double Held = (World ? World->GetTimeSeconds() : ChargeStartTime) - ChargeStartTime;
 		const float Alpha = FMath::Clamp(static_cast<float>(Held) / MaxChargeTime, 0.f, 1.f);
+		LastReleaseChargeAlpha = Alpha;
 		const float Scale = FMath::Lerp(1.f, MaxChargeMultiplier, Alpha);
 		// (2026-10-20) 스탠스 보정(한손/양손)을 먼저 곱하고 차지 배율을 곱한다.
 		ActiveHitParams = GetStanceScaledHitParams(ReleaseHitParams);
@@ -103,6 +111,11 @@ void UknightGameplayAbility_HeavyAttack::OnReleased(float TimeHeld)
 			{
 				// 발사 몽타주와 같은 배속(행동 속도)을 넘겨야 돌진이 모션과 같이 끝난다. (2026-10-08)
 				UknightCombatLibrary::StartAttackLunge(this, ChargeReleaseMontage, GetAttackSpeed(), WarpLocation, WarpTravel, 0.25f);
+			}
+			if (bPlayChargeEffects && World)
+			{
+				const float CrackDelay = ReleaseGroundCrackDelay / FMath::Max(GetAttackSpeed(), 0.01f);
+				World->GetTimerManager().SetTimer(GroundCrackTimer, this, &ThisClass::SpawnReleaseGroundCrack, CrackDelay, false);
 			}
 		}
 		else
@@ -215,6 +228,11 @@ void UknightGameplayAbility_HeavyAttack::StartCharge()
 	HitTask->EventReceived.AddDynamic(this, &ThisClass::OnMeleeHitEvent);
 	HitTask->ReadyForActivation();
 
+	if (bPlayChargeEffects)
+	{
+		StartChargeEffects();
+	}
+
 	if (ChargeStartMontage)
 	{
 		PlayMontage(ChargeStartMontage, TEXT("ChargeStart"), false);
@@ -222,6 +240,200 @@ void UknightGameplayAbility_HeavyAttack::StartCharge()
 	else
 	{
 		PlayLoop();
+	}
+}
+
+void UknightGameplayAbility_HeavyAttack::StartChargeEffects()
+{
+	StopChargeEffects();
+	ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	USkeletalMeshComponent* const CharacterMesh = Character ? Character->GetMesh() : nullptr;
+	if (!Character || !CharacterMesh)
+	{
+		return;
+	}
+
+	UNiagaraSystem* AuraAsset = ChargeAuraEffect;
+	if (!AuraAsset)
+	{
+		AuraAsset = LoadObject<UNiagaraSystem>(nullptr, TEXT("/Game/Knight/Creatures/Shared/Effects/NS_Monster_WindStreak.NS_Monster_WindStreak"));
+	}
+	if (AuraAsset)
+	{
+		ActiveChargeAuraFX = UNiagaraFunctionLibrary::SpawnSystemAttached(
+			AuraAsset, CharacterMesh, NAME_None, FVector::ZeroVector, FRotator::ZeroRotator,
+			EAttachLocation::SnapToTarget, true, true);
+	}
+
+	UMeshComponent* WeaponMesh = nullptr;
+	TArray<UMeshComponent*> Meshes;
+	Character->GetComponents<UMeshComponent>(Meshes);
+	for (UMeshComponent* const Mesh : Meshes)
+	{
+		if (Mesh != CharacterMesh && Mesh->ComponentHasTag(TEXT("Weapon")))
+		{
+			WeaponMesh = Mesh;
+			break;
+		}
+	}
+
+	const UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();
+	const bool bTwoHanded = ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_Stance_TwoHanded);
+	UNiagaraSystem* SwordAsset = bTwoHanded ? TwoHandedChargeSwordEffect.Get() : OneHandedChargeSwordEffect.Get();
+	if (!SwordAsset)
+	{
+		SwordAsset = LoadObject<UNiagaraSystem>(nullptr, bTwoHanded
+			? TEXT("/Game/SlashTrail_SoftTofu/Niagara/Fire/NS_Sword_Fire.NS_Sword_Fire")
+			: TEXT("/Game/SlashTrail_SoftTofu/Niagara/Scifi/NS_Sword_Scifi.NS_Sword_Scifi"));
+	}
+	if (SwordAsset)
+	{
+		UMeshComponent* const AttachTarget = WeaponMesh ? WeaponMesh : CharacterMesh;
+		const FName AttachSocket = WeaponMesh ? NAME_None : FName(TEXT("weapon_r"));
+		ActiveChargeSwordFX = UNiagaraFunctionLibrary::SpawnSystemAttached(
+			SwordAsset, AttachTarget, AttachSocket, FVector::ZeroVector, FRotator::ZeroRotator,
+			EAttachLocation::SnapToTarget, true, true);
+	}
+
+	if (UWorld* const World = GetWorld())
+	{
+		if (MaxChargeTime > 0.f)
+		{
+			World->GetTimerManager().SetTimer(FullChargeTimer, this, &ThisClass::OnFullChargeReached, MaxChargeTime, false);
+		}
+	}
+}
+
+void UknightGameplayAbility_HeavyAttack::StopChargeEffects()
+{
+	if (UWorld* const World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(FullChargeTimer);
+	}
+	if (ActiveChargeAuraFX)
+	{
+		ActiveChargeAuraFX->Deactivate();
+		ActiveChargeAuraFX = nullptr;
+	}
+	if (ActiveChargeSwordFX)
+	{
+		ActiveChargeSwordFX->Deactivate();
+		ActiveChargeSwordFX = nullptr;
+	}
+}
+
+void UknightGameplayAbility_HeavyAttack::OnFullChargeReached()
+{
+	if (Phase != EPhase::Charging || !IsActive())
+	{
+		return;
+	}
+	ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	USkeletalMeshComponent* const CharacterMesh = Character ? Character->GetMesh() : nullptr;
+	if (!Character || !CharacterMesh)
+	{
+		return;
+	}
+
+	UMeshComponent* WeaponMesh = nullptr;
+	TArray<UMeshComponent*> Meshes;
+	Character->GetComponents<UMeshComponent>(Meshes);
+	for (UMeshComponent* const Mesh : Meshes)
+	{
+		if (Mesh != CharacterMesh && Mesh->ComponentHasTag(TEXT("Weapon")))
+		{
+			WeaponMesh = Mesh;
+			break;
+		}
+	}
+	UMeshComponent* const AttachTarget = WeaponMesh ? WeaponMesh : CharacterMesh;
+	const FName AttachSocket = WeaponMesh ? NAME_None : FName(TEXT("weapon_r"));
+
+	UNiagaraSystem* BurstAsset = FullChargeBurstEffect;
+	if (!BurstAsset)
+	{
+		BurstAsset = LoadObject<UNiagaraSystem>(nullptr, TEXT("/Game/Knight/Abilities/Cues/NS_Knight_ParrySpark.NS_Knight_ParrySpark"));
+	}
+	if (BurstAsset)
+	{
+		UNiagaraFunctionLibrary::SpawnSystemAttached(
+			BurstAsset, AttachTarget, AttachSocket, FVector::ZeroVector, FRotator::ZeroRotator,
+			EAttachLocation::SnapToTarget, true, true);
+	}
+
+	if (UNiagaraSystem* const DistortionAsset = LoadObject<UNiagaraSystem>(nullptr,
+		TEXT("/Game/SlashTrail_SoftTofu/Niagara/Distortion_Only/NS_Hit_Distortion_Once.NS_Hit_Distortion_Once")))
+	{
+		UNiagaraFunctionLibrary::SpawnSystemAttached(
+			DistortionAsset, AttachTarget, AttachSocket, FVector::ZeroVector, FRotator::ZeroRotator,
+			EAttachLocation::SnapToTarget, true, true);
+	}
+}
+
+void UknightGameplayAbility_HeavyAttack::SpawnReleaseGroundCrack()
+{
+	AActor* const Avatar = GetAvatarActorFromActorInfo();
+	UWorld* const World = GetWorld();
+	if (!IsActive() || !Avatar || !World)
+	{
+		return;
+	}
+
+	const ACharacter* const Character = Cast<ACharacter>(Avatar);
+	const float HalfHeight = Character && Character->GetCapsuleComponent()
+		? Character->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() : 90.f;
+	const FVector Forward = Avatar->GetActorForwardVector();
+	const FVector StrikeOrigin = Avatar->GetActorLocation() + Forward * 180.f;
+
+	FHitResult GroundHit;
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(knightHeavyGroundCrack), false, Avatar);
+	FVector ImpactLocation = StrikeOrigin - FVector(0.f, 0.f, HalfHeight);
+	if (World->LineTraceSingleByObjectType(GroundHit, StrikeOrigin + FVector(0.f, 0.f, 120.f),
+		StrikeOrigin - FVector(0.f, 0.f, 400.f), FCollisionObjectQueryParams(ECC_WorldStatic), QueryParams))
+	{
+		ImpactLocation = GroundHit.ImpactPoint;
+	}
+
+	const FRotator ImpactRotation = Avatar->GetActorRotation();
+	const UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();
+	const bool bTwoHanded = ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_Stance_TwoHanded);
+	const bool bHeavyImpact = bTwoHanded || LastReleaseChargeAlpha >= 0.85f;
+
+	UNiagaraSystem* CrackAsset = ReleaseGroundCrackEffect;
+	if (!CrackAsset)
+	{
+		CrackAsset = LoadObject<UNiagaraSystem>(nullptr, TEXT("/Game/SlashHitVFX/NS/NS_Hit_GroundCrack.NS_Hit_GroundCrack"));
+	}
+	if (CrackAsset)
+	{
+		const float CrackScale = FMath::Lerp(0.85f, bTwoHanded ? 1.45f : 1.2f, LastReleaseChargeAlpha);
+		UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, CrackAsset, ImpactLocation, ImpactRotation,
+			FVector(CrackScale), true, true, ENCPoolMethod::AutoRelease);
+	}
+
+	if (bHeavyImpact)
+	{
+		UNiagaraSystem* RiftAsset = ReleaseGroundRiftEffect;
+		if (!RiftAsset)
+		{
+			RiftAsset = LoadObject<UNiagaraSystem>(nullptr, TEXT("/Game/SlashHitVFX/NS/NS_Hit_GroundRift.NS_Hit_GroundRift"));
+		}
+		if (RiftAsset)
+		{
+			UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, RiftAsset, ImpactLocation, ImpactRotation,
+				FVector(bTwoHanded ? 1.15f : 0.95f), true, true, ENCPoolMethod::AutoRelease);
+		}
+	}
+
+	UNiagaraSystem* DustAsset = ReleaseGroundDustEffect;
+	if (!DustAsset)
+	{
+		DustAsset = LoadObject<UNiagaraSystem>(nullptr, TEXT("/Game/Knight/Creatures/Shared/Effects/NS_Monster_GroundDust.NS_Monster_GroundDust"));
+	}
+	if (DustAsset)
+	{
+		UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, DustAsset, ImpactLocation, ImpactRotation,
+			FVector(FMath::Lerp(0.85f, 1.35f, LastReleaseChargeAlpha)), true, true, ENCPoolMethod::AutoRelease);
 	}
 }
 
@@ -311,9 +523,11 @@ void UknightGameplayAbility_HeavyAttack::EndAbility(const FGameplayAbilitySpecHa
 			Feedback->EndPredictionForAttack(this);
 		}
 	}
+	StopChargeEffects();
 	if (UWorld* const World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(TapTimer);
+		World->GetTimerManager().ClearTimer(GroundCrackTimer);
 	}
 	if (bChargeStateApplied)
 	{

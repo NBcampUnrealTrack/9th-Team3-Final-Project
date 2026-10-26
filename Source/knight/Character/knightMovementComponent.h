@@ -7,6 +7,7 @@
 
 class UCameraShakeBase;
 class UCurveFloat;
+class UNiagaraSystem;
 class USoundBase;
 struct FGameplayAttribute;
 
@@ -155,6 +156,14 @@ protected:
 	/** 착지 경직 시간. LandingRecoveryMinSpeed에서 0, LandingShakeMaxSpeed에서 이 값이 된다. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Landing", meta=(ClampMin=0, Units="s"))
 	float LandingRecoveryMaxTime = 0.3f;
+
+	/** 강하게 착지할 때 발밑에서 메카 중량감이 느껴지는 흙먼지 이펙트를 피어오르게 할지 여부. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Landing")
+	bool bSpawnLandingDust = true;
+
+	/** 착지 흙먼지 이펙트 (비우면 NS_Monster_GroundDust). */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Landing", meta=(EditCondition="bSpawnLandingDust"))
+	TObjectPtr<UNiagaraSystem> LandingDustEffect;
 
 	virtual void OnMovementModeChanged(EMovementMode PreviousMovementMode, uint8 PreviousCustomMode) override;
 	virtual void OnMovementUpdated(float DeltaSeconds, const FVector& OldLocation, const FVector& OldVelocity) override;

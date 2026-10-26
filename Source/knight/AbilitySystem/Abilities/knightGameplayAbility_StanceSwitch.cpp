@@ -3,8 +3,13 @@
 #include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Engine/World.h"
 #include "GameFramework/Character.h"
+#include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
 #include "System/knightGameplayTags.h"
+#include "TimerManager.h"
 
 UknightGameplayAbility_StanceSwitch::UknightGameplayAbility_StanceSwitch(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -82,6 +87,11 @@ void UknightGameplayAbility_StanceSwitch::ActivateAbility(const FGameplayAbility
 	}
 
 	const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	if (bPlayStanceSwitchEffects && Character)
+	{
+		PlayStanceSwitchEffects(Character, bToTwoHanded);
+	}
+
 	const bool bStandingStill = Character && Character->GetVelocity().Size2D() <= MaxSpeedForMontage;
 	UAnimMontage* const Montage = bToTwoHanded ? ToTwoHandedMontage.Get() : ToOneHandedMontage.Get();
 	if (!Montage || !bStandingStill)
@@ -97,6 +107,92 @@ void UknightGameplayAbility_StanceSwitch::ActivateAbility(const FGameplayAbility
 	Task->OnInterrupted.AddDynamic(this, &ThisClass::OnMontageFinished);
 	Task->OnCancelled.AddDynamic(this, &ThisClass::OnMontageFinished);
 	Task->ReadyForActivation();
+}
+
+void UknightGameplayAbility_StanceSwitch::PlayStanceSwitchEffects(const ACharacter* Character, bool bToTwoHanded) const
+{
+	USkeletalMeshComponent* const CharacterMesh = Character ? Character->GetMesh() : nullptr;
+	if (!CharacterMesh)
+	{
+		return;
+	}
+
+	UMeshComponent* WeaponMesh = nullptr;
+	TArray<UMeshComponent*> Meshes;
+	Character->GetComponents<UMeshComponent>(Meshes);
+	for (UMeshComponent* const Mesh : Meshes)
+	{
+		if (Mesh != CharacterMesh && Mesh->ComponentHasTag(WeaponComponentTag))
+		{
+			WeaponMesh = Mesh;
+			break;
+		}
+	}
+
+	UMeshComponent* const AttachTarget = WeaponMesh ? WeaponMesh : CharacterMesh;
+	const FName AttachSocket = WeaponMesh ? NAME_None : WeaponHandSocket;
+
+	UNiagaraSystem* SparkAsset = WeaponSparkEffect;
+	if (!SparkAsset)
+	{
+		SparkAsset = LoadObject<UNiagaraSystem>(nullptr, TEXT("/Game/Knight/Abilities/Cues/NS_Knight_ParrySpark.NS_Knight_ParrySpark"));
+	}
+	if (SparkAsset)
+	{
+		UNiagaraFunctionLibrary::SpawnSystemAttached(SparkAsset, AttachTarget, AttachSocket,
+			FVector::ZeroVector, FRotator::ZeroRotator, EAttachLocation::SnapToTarget, true, true);
+	}
+
+	UNiagaraSystem* BurstAsset = bToTwoHanded ? ToTwoHandedBurstEffect.Get() : ToOneHandedBurstEffect.Get();
+	if (!BurstAsset)
+	{
+		BurstAsset = LoadObject<UNiagaraSystem>(nullptr, bToTwoHanded
+			? TEXT("/Game/SlashTrail_SoftTofu/Niagara/Fire/NS_Hit_Fire_Once.NS_Hit_Fire_Once")
+			: TEXT("/Game/SlashTrail_SoftTofu/Niagara/Scifi/NS_Hit_Scifi_Once.NS_Hit_Scifi_Once"));
+	}
+	if (BurstAsset)
+	{
+		UNiagaraFunctionLibrary::SpawnSystemAttached(BurstAsset, AttachTarget, AttachSocket,
+			FVector::ZeroVector, FRotator::ZeroRotator, EAttachLocation::SnapToTarget, true, true);
+	}
+
+	// 양손 스탠스로 전환할 때 등 뒤 부스터에서 짧게 불꽃이 뿜어져 나오는 메카닉 연출
+	if (bToTwoHanded)
+	{
+		UNiagaraSystem* ThrusterAsset = ThrusterBurstEffect;
+		if (!ThrusterAsset)
+		{
+			ThrusterAsset = LoadObject<UNiagaraSystem>(nullptr, TEXT("/Game/Knight/Abilities/Cues/NS_Knight_Thruster.NS_Knight_Thruster"));
+		}
+		if (ThrusterAsset)
+		{
+			TArray<TWeakObjectPtr<UNiagaraComponent>> SpawnedThrusters;
+			for (const FName& Socket : ThrusterSockets)
+			{
+				if (UNiagaraComponent* const ThrusterFX = UNiagaraFunctionLibrary::SpawnSystemAttached(
+					ThrusterAsset, CharacterMesh, Socket, FVector::ZeroVector, FRotator::ZeroRotator,
+					EAttachLocation::SnapToTarget, true, true))
+				{
+					SpawnedThrusters.Add(ThrusterFX);
+				}
+			}
+
+			if (!SpawnedThrusters.IsEmpty() && Character->GetWorld())
+			{
+				FTimerHandle TimerHandle;
+				Character->GetWorld()->GetTimerManager().SetTimer(TimerHandle, [SpawnedThrusters]()
+				{
+					for (const TWeakObjectPtr<UNiagaraComponent>& Comp : SpawnedThrusters)
+					{
+						if (UNiagaraComponent* const FX = Comp.Get())
+						{
+							FX->Deactivate();
+						}
+					}
+				}, FMath::Max(0.05f, ThrusterBurstDuration), false);
+			}
+		}
+	}
 }
 
 void UknightGameplayAbility_StanceSwitch::OnMontageFinished()
