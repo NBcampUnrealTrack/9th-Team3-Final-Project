@@ -9,6 +9,7 @@
 #include "Item/knightPartsComponent.h"
 #include "knightInventoryLibrary.h"
 #include "Quest/KnightQuestData.h"
+#include "Quest/KnightProgressionIds.h"
 #include "Progression/knightSaveGame.h"
 #include "Progression/knightSaveSubsystem.h"
 #include "Raid/knightRaidSubsystem.h"
@@ -27,6 +28,7 @@ namespace
 
 	bool RecordQuestCompletionInSave(UknightSaveGame& Save, FName QuestId)
 	{
+		QuestId = KnightProgressionIds::Quest(QuestId);
 		if (QuestId.IsNone() || Save.CompletedQuestIds.Contains(QuestId)) return false;
 		Save.CompletedQuestIds.Add(QuestId);
 		return true;
@@ -121,6 +123,7 @@ bool UknightProgressionSubsystem::RecordQuestCompleted(FName QuestId)
 
 bool UknightProgressionSubsystem::IsQuestCompleted(FName QuestId) const
 {
+	QuestId = KnightProgressionIds::Quest(QuestId);
 	const UknightSaveSubsystem* const SaveSubsystem = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
 	const UknightSaveGame* const Save = SaveSubsystem && SaveSubsystem->HasSelectedSlot() ? GetSave() : nullptr;
 	return Save && !QuestId.IsNone() && Save->CompletedQuestIds.Contains(QuestId);
@@ -266,8 +269,12 @@ bool UknightProgressionSubsystem::HasFirstDefeatedBoss(FName BossId) const
 	return Save && !BossId.IsNone() && Save->FirstDefeatedBossIds.Contains(BossId);
 }
 
-void UknightProgressionSubsystem::HandleRaidResult(const FknightRaidResult& Result)
+void UknightProgressionSubsystem::HandleRaidResult(const FknightRaidResult& IncomingResult)
 {
+	FknightRaidResult Result = IncomingResult;
+	Result.StageId = KnightProgressionIds::Stage(Result.StageId);
+	Result.QuestContext.StageId = KnightProgressionIds::Stage(Result.QuestContext.StageId);
+	Result.QuestContext.QuestId = KnightProgressionIds::Quest(Result.QuestContext.QuestId);
 	UknightSaveSubsystem* const Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
 	UknightSaveGame* const Save = Saves && Saves->HasSelectedSlot() ? Saves->GetSaveGame() : nullptr;
 	if (!Save || !Result.RunId.IsValid() || Save->AppliedRaidRuns.Contains(Result.RunId)) return;
@@ -282,7 +289,7 @@ void UknightProgressionSubsystem::HandleRaidResult(const FknightRaidResult& Resu
 		FText DataReason;
 		if (!Context.IsValid() || Context.RunId != Result.RunId || Context.StageId != Result.StageId
 			|| Context.SlotId != Saves->GetActiveSlotId() || !Quest || !Quest->bContentEnabled
-			|| !Quest->HasValidConfiguration(DataReason) || Quest->StageId != Context.StageId
+			|| !Quest->HasValidConfiguration(DataReason) || KnightProgressionIds::Stage(Quest->StageId) != Context.StageId
 			|| Quest->BossId != Context.BossId || Quest->Difficulty != Context.Difficulty)
 		{
 			UE_LOG(Logknight, Error, TEXT("Quest settlement rejected run=%s quest=%s slot=%s activeSlot=%s: %s"),
@@ -403,19 +410,23 @@ void UknightProgressionSubsystem::HandleRaidResult(const FknightRaidResult& Resu
 
 bool UknightProgressionSubsystem::IsStageUnlocked(FName StageId) const
 {
+	StageId = KnightProgressionIds::Stage(StageId);
 	const UknightSaveGame* const Save = GetSave();
 	const UKnightGameFlowSubsystem* const Flow = GetGameInstance()->GetSubsystem<UKnightGameFlowSubsystem>();
 	FKnightStageDefinition Stage;
 	if (!Save || !Flow || !Flow->FindStageDefinition(StageId, Stage)) return false;
-	if (Save->UnlockedStages.Contains(StageId)) return true;
 	if (Stage.RaidDefinition.IsNull()) return true; // Existing flow-test entries remain available.
 	const UknightRaidDefinition* const Definition = Stage.RaidDefinition.LoadSynchronous();
-	return Definition && (Definition->RequiredClearedStageId.IsNone()
-		|| IsStageCleared(Definition->RequiredClearedStageId));
+	if (!Definition || (!Definition->RequiredCompletedQuestId.IsNone()
+		&& !IsQuestCompleted(Definition->RequiredCompletedQuestId))) return false;
+	if (Save->UnlockedStages.Contains(StageId)) return true;
+	return Definition->RequiredClearedStageId.IsNone()
+		|| IsStageCleared(Definition->RequiredClearedStageId);
 }
 
 bool UknightProgressionSubsystem::UnlockStage(FName StageId)
 {
+	StageId = KnightProgressionIds::Stage(StageId);
 	UknightSaveGame* const Save = GetSave();
 	const UKnightGameFlowSubsystem* const Flow = GetGameInstance()->GetSubsystem<UKnightGameFlowSubsystem>();
 	FKnightStageDefinition Stage;
@@ -430,6 +441,7 @@ bool UknightProgressionSubsystem::UnlockStage(FName StageId)
 
 bool UknightProgressionSubsystem::IsStageCleared(FName StageId) const
 {
+	StageId = KnightProgressionIds::Stage(StageId);
 	const UknightSaveGame* const Save = GetSave();
 	const FknightStageRecord* const Record = Save ? Save->StageRecords.Find(StageId) : nullptr;
 	return Record && Record->ClearCount > 0;
@@ -437,6 +449,7 @@ bool UknightProgressionSubsystem::IsStageCleared(FName StageId) const
 
 float UknightProgressionSubsystem::GetBestClearTime(FName StageId) const
 {
+	StageId = KnightProgressionIds::Stage(StageId);
 	const UknightSaveGame* const Save = GetSave();
 	const FknightStageRecord* const Record = Save ? Save->StageRecords.Find(StageId) : nullptr;
 	return Record ? Record->BestClearTime : 0.f;

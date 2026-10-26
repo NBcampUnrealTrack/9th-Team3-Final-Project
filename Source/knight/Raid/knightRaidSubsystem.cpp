@@ -1,9 +1,12 @@
 #include "Raid/knightRaidSubsystem.h"
+#include "Quest/KnightProgressionIds.h"
 #include "knight.h"
 
 FGuid UknightRaidSubsystem::BeginRun(FName StageId, FName QuestId, FName BossId, EKnightQuestDifficulty Difficulty,
 	const FString& SlotId)
 {
+	StageId = KnightProgressionIds::Stage(StageId);
+	QuestId = KnightProgressionIds::Quest(QuestId);
 	CurrentRunId = FGuid::NewGuid();
 	SelectedStageId = StageId;
 	ActiveQuestContext = FKnightQuestRunContext();
@@ -44,8 +47,10 @@ bool UknightRaidSubsystem::GetActiveQuestRunContext(FKnightQuestRunContext& OutC
 	return ActiveQuestContext.IsValid() && ActiveQuestContext.RunId == CurrentRunId;
 }
 
-bool UknightRaidSubsystem::RecordResult(const FknightRaidResult& Result)
+bool UknightRaidSubsystem::RecordResult(const FknightRaidResult& IncomingResult)
 {
+	FknightRaidResult Result = IncomingResult;
+	Result.StageId = KnightProgressionIds::Stage(Result.StageId);
 	if (!Result.RunId.IsValid() || Result.RunId != CurrentRunId
 		|| (bHasResult && LastResult.RunId == Result.RunId))
 	{

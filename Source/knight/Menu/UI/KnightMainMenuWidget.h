@@ -152,6 +152,9 @@ protected:
 	virtual void NativeDestruct() override;
 
 private:
+	UFUNCTION() void HandleQuestProgressChanged();
+	UFUNCTION() void HandleQuestProfileChanged(const FString& SlotId);
+
 	UFUNCTION()
 	void HandleStageClicked();
 
