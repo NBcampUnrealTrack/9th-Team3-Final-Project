@@ -2,12 +2,32 @@
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
+#include "Engine/AssetManager.h"
 #include "Engine/GameInstance.h"
+#include "Engine/StreamableManager.h"
 #include "Foundation/knightUISettings.h"
 #include "knightAudioSubsystem.h"
 #include "LoadingScreenManager.h"
 #include "Raid/knightRaidGameState.h"
 #include "Sound/SoundBase.h"
+
+void UknightPilotVoice::Preload()
+{
+	const UknightUISettings* const Settings = GetDefault<UknightUISettings>();
+	TArray<FSoftObjectPath> Paths;
+	for (const TSoftObjectPtr<USoundBase>* const Voice : { &Settings->SystemActivatedVoice, &Settings->EnemyDetectedVoice,
+		&Settings->CombatModeVoice, &Settings->HealthWarningVoice })
+	{
+		if (!Voice->IsNull())
+		{
+			Paths.AddUnique(Voice->ToSoftObjectPath());
+		}
+	}
+	if (!Paths.IsEmpty())
+	{
+		PreloadHandle = UAssetManager::GetStreamableManager().RequestAsyncLoad(Paths);
+	}
+}
 
 void UknightPilotVoice::BindPawn(UAbilitySystemComponent* InASC)
 {

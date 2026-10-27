@@ -96,3 +96,11 @@ void UknightCameraModifier_Darkness::ModifyPostProcess(float DeltaTime, float& P
 		PostProcessBlendWeight = 1.f;
 	}
 }
+
+void UknightCameraModifier_Darkness::GatherPreloadAssets(TArray<FSoftObjectPath>& OutPaths) const
+{
+	if (!Material.IsNull())
+	{
+		OutPaths.AddUnique(Material.ToSoftObjectPath());
+	}
+}

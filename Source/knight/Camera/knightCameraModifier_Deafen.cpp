@@ -194,3 +194,22 @@ void UknightCameraModifier_Deafen::BeginDestroy()
 	}
 	Super::BeginDestroy();
 }
+
+void UknightCameraModifier_Deafen::GatherPreloadAssets(TArray<FSoftObjectPath>& OutPaths) const
+{
+	if (!Material.IsNull())
+	{
+		OutPaths.AddUnique(Material.ToSoftObjectPath());
+	}
+	if (!TinnitusSound.IsNull())
+	{
+		OutPaths.AddUnique(TinnitusSound.ToSoftObjectPath());
+	}
+	for (const TSoftObjectPtr<USoundClass>& ClassPtr : MutedClasses)
+	{
+		if (!ClassPtr.IsNull())
+		{
+			OutPaths.AddUnique(ClassPtr.ToSoftObjectPath());
+		}
+	}
+}

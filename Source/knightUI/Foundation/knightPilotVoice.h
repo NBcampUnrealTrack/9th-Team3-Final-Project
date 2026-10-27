@@ -10,6 +10,7 @@
 class AknightRaidGameState;
 class UAbilitySystemComponent;
 class USoundBase;
+struct FStreamableHandle;
 
 /**
  * The pilot's voice lines (UknightUISettings, "Pilot Voice"), played through the audio subsystem's voice queue so they
@@ -26,6 +27,9 @@ class KNIGHTUI_API UknightPilotVoice : public UObject
 	GENERATED_BODY()
 
 public:
+	/** Loads every voice line in the background and keeps it, so the first play does not stall the game thread. */
+	void Preload();
+
 	void BindPawn(UAbilitySystemComponent* InASC);
 	void BindRaid(AknightRaidGameState* InRaidState);
 	void Unbind();
@@ -44,6 +48,7 @@ private:
 
 	void Play(const TSoftObjectPtr<USoundBase>& Voice, bool bUrgent = false) const;
 
+	TSharedPtr<FStreamableHandle> PreloadHandle;
 	TWeakObjectPtr<UAbilitySystemComponent> BoundASC;
 	TWeakObjectPtr<AknightRaidGameState> BoundRaidState;
 	FGameplayTag BoundCombatTag;
