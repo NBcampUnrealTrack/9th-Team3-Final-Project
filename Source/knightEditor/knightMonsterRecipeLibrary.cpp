@@ -787,6 +787,7 @@ namespace knightRecipe
 		Definition->PartData = PartData;
 		Definition->EnrageEffect = Enrage;
 		Definition->ExhaustEffect = Exhaust;
+		Definition->RageFullDamageRatio = Recipe.RageFullDamageRatio;
 		Definition->ParriedPoiseDamageRatio = Recipe.ParriedPoiseDamageRatio;
 		Definition->ParriedPoiseBlockedTags = Recipe.ParriedPoiseBlockedTags;
 		Definition->TargetRadius = Recipe.TargetRadius;
@@ -1758,6 +1759,7 @@ UknightMonsterRecipe* UknightMonsterRecipeLibrary::CreateRecipeFromMonster(TSubc
 		}
 	}
 
+	Recipe->RageFullDamageRatio = Definition->RageFullDamageRatio;
 	Recipe->ParriedPoiseDamageRatio = Definition->ParriedPoiseDamageRatio;
 	Recipe->ParriedPoiseBlockedTags = Definition->ParriedPoiseBlockedTags;
 	Recipe->TargetRadius = Definition->TargetRadius;

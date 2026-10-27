@@ -13,6 +13,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "GameplayEffect.h"
 #include "Monster/knightGameplayEffect_ParriedPoiseDamage.h"
+#include "Monster/knightGameplayEffect_RageGain.h"
 #include "Monster/knightMonsterBodyBlockerComponent.h"
 #include "Monster/knightMonsterDefinition.h"
 #include "Monster/knightMonsterMovementComponent.h"
@@ -311,6 +312,8 @@ void AknightMonsterCharacterBase::HandleRageMaxed(AActor* EffectInstigator, AAct
 void AknightMonsterCharacterBase::HandleDamaged(AActor* DamageInstigator, AActor* DamageCauser, const FGameplayEffectSpec* EffectSpec,
 	float Magnitude, float OldValue, float NewValue)
 {
+	AddRageFromDamage(Magnitude, DamageInstigator);
+
 	const float Ratio = MonsterDefinition ? MonsterDefinition->Phase2HealthRatio : 0.f;
 	if (bInPhase2 || bPhase2Pending || IsDead() || Ratio <= 0.f
 		|| CoreAttributeSet->GetHealth() >= CoreAttributeSet->GetMaxHealth() * Ratio)
@@ -351,6 +354,28 @@ void AknightMonsterCharacterBase::EnterPhase2()
 	AbilitySystemComponent->AddLooseGameplayTag(knightGameplayTags::State_Monster_Phase2);
 	UE_LOG(LogknightAI, Log, TEXT("%s: phase 2 at health %.0f / %.0f."), *GetNameSafe(this),
 		CoreAttributeSet->GetHealth(), CoreAttributeSet->GetMaxHealth());
+}
+
+void AknightMonsterCharacterBase::AddRageFromDamage(float Damage, AActor* DamageInstigator)
+{
+	const float Ratio = MonsterDefinition ? MonsterDefinition->RageFullDamageRatio : 0.f;
+	const float FullDamage = CoreAttributeSet->GetMaxHealth() * Ratio;
+	// 분노 중에 쌓으면 분노가 끝나 Rage가 0이 된 직후 남은 값으로 다시 분노할 수 있다.
+	if (IsDead() || Damage <= 0.f || FullDamage <= 0.f
+		|| AbilitySystemComponent->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Enraged))
+	{
+		return;
+	}
+	FGameplayEffectContextHandle Context = AbilitySystemComponent->MakeEffectContext();
+	if (DamageInstigator)
+	{
+		Context.AddInstigator(DamageInstigator, DamageInstigator);
+	}
+	FGameplayEffectSpec Spec(GetDefault<UknightGameplayEffect_RageGain>(), Context, 1.f);
+	Spec.SetSetByCallerMagnitude(knightGameplayTags::SetByCaller_Rage, MonsterAttributeSet->GetMaxRage() * Damage / FullDamage);
+	AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(Spec);
+	UE_LOG(LogknightAI, Verbose, TEXT("%s: rage %.1f / %.1f after %.0f damage."), *GetNameSafe(this),
+		MonsterAttributeSet->GetRage(), MonsterAttributeSet->GetMaxRage(), Damage);
 }
 
 void AknightMonsterCharacterBase::HandleTargetChanged(AActor* OldTarget, AActor* NewTarget)
