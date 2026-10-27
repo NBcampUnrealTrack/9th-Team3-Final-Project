@@ -447,7 +447,10 @@ void UKnightMainMenuWidget::BuildMaintenanceFooterBack()
 	if (!Layers || !NormalBackContent || !ButtonWidget->WidgetTree) return;
 	if (const UCommonButtonStyle* const Style = Button_Back->GetStyle()) NormalBackStyle = Style->GetClass();
 	if (const UCanvasPanelSlot* const BackSlot = Cast<UCanvasPanelSlot>(Button_Back->Slot))
+	{
 		NormalBackPosition = BackSlot->GetPosition();
+		NormalBackAnchors = BackSlot->GetAnchors();
+	}
 
 	const TSubclassOf<UCommonTextStyle> CaptionStyle = LoadClass<UCommonTextStyle>(nullptr,
 		TEXT("/Game/Knight/UI/Style/TS_Knight_Caption.TS_Knight_Caption_C"));
@@ -475,6 +478,8 @@ void UKnightMainMenuWidget::BuildMaintenanceFooterBack()
 	UCommonTextBlock* const Return = ButtonWidget->WidgetTree->ConstructWidget<UCommonTextBlock>(UCommonTextBlock::StaticClass(), TEXT("MaintenanceBackReturn"));
 	Return->SetText(LOCTEXT("MaintenanceBackFooter", "돌아가기"));
 	if (CaptionStyle) Return->SetStyle(CaptionStyle);
+	Return->SetStyle(nullptr); // Keep the caption font without reapplying its old blue color.
+	Return->SetColorAndOpacity(FSlateColor(KnightMaintenancePresentation::Secondary));
 	UHorizontalBoxSlot* const ReturnSlot = MaintenanceBackContent->AddChildToHorizontalBox(Return);
 	ReturnSlot->SetVerticalAlignment(VAlign_Center);
 	ReturnSlot->SetPadding(FMargin(9.f, 0.f, 0.f, 0.f));
@@ -485,6 +490,16 @@ void UKnightMainMenuWidget::ApplyMaintenanceBackPresentation(bool bMaintenance)
 	if (!Button_Back || !MaintenanceBackContent || !NormalBackContent) return;
 	NormalBackContent->SetVisibility(bMaintenance ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
 	MaintenanceBackContent->SetVisibility(bMaintenance ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	const bool bCrafting = bMaintenance && MaintenanceWidget
+		&& MaintenanceWidget->GetDestination() == EKnightMaintenanceDestination::Crafting;
+	if (UUserWidget* BackWidget = Cast<UUserWidget>(Button_Back))
+	{
+		if (UWidget* Keycap = BackWidget->GetWidgetFromName(TEXT("MaintenanceBackKeycap")))
+			Keycap->SetVisibility(bMaintenance ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+		if (UWidget* Label = BackWidget->GetWidgetFromName(TEXT("MaintenanceBackReturn")))
+			if (UHorizontalBoxSlot* LabelSlot = Cast<UHorizontalBoxSlot>(Label->Slot))
+				LabelSlot->SetPadding(FMargin(bMaintenance ? 0.f : 9.f, 0.f, 0.f, 0.f));
+	}
 	if (bMaintenance)
 	{
 		const TSubclassOf<UCommonButtonStyle> FooterStyle = LoadClass<UCommonButtonStyle>(nullptr,
@@ -493,7 +508,14 @@ void UKnightMainMenuWidget::ApplyMaintenanceBackPresentation(bool bMaintenance)
 	}
 	else if (NormalBackStyle) Button_Back->SetStyle(NormalBackStyle);
 	if (UCanvasPanelSlot* const BackSlot = Cast<UCanvasPanelSlot>(Button_Back->Slot))
-		BackSlot->SetPosition(bMaintenance ? FVector2D(-48.f, -48.f) : NormalBackPosition);
+	{
+		const float PanelWidth = bCrafting ? .29f : bMaintenance && MaintenanceWidget
+			&& MaintenanceWidget->GetDestination() == EKnightMaintenanceDestination::Sockets ? .23f : .30f;
+		const float Shift = bMaintenance ? PanelWidth * KnightMaintenancePresentation::PanelArtworkInset : 0.f;
+		BackSlot->SetAnchors(FAnchors(NormalBackAnchors.Minimum.X + Shift, NormalBackAnchors.Minimum.Y,
+			NormalBackAnchors.Maximum.X + Shift, NormalBackAnchors.Maximum.Y));
+		BackSlot->SetPosition(bMaintenance ? FVector2D(bCrafting ? -56.f : -48.f, -40.f) : NormalBackPosition);
+	}
 }
 
 void UKnightMainMenuWidget::EnsureMaintenanceWidget()
@@ -608,6 +630,7 @@ void UKnightMainMenuWidget::OpenMaintenanceDestination(EKnightMaintenanceDestina
 	if (!ApplyPage(EKnightMainMenuPage::Maintenance, false)) return;
 	bMaterialsShortcutEntry = bStartInMaterials;
 	MaintenanceWidget->Open(Destination, bStartInMaterials);
+	ApplyMaintenanceBackPresentation(true);
 	MaintenanceSwitcher->SetActiveWidget(MaintenanceWidget);
 	if (MaintenanceCameraRig.IsValid()) MaintenanceCameraRig->FocusSlot(
 		Destination == EKnightMaintenanceDestination::Enhancement ? knightGameplayTags::Equipment_Slot_Weapon : FGameplayTag());

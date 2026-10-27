@@ -12,6 +12,7 @@
 #include "Components/Image.h"
 #include "Editor.h"
 #include "Widgets/knightButtonBase.h"
+#include "Menu/UI/KnightMaintenancePresentation.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -65,7 +66,9 @@ bool FknightButtonWidgetTest::RunTest(const FString& Parameters)
 	{
 		UImage* Bar = FocusBracket->WidgetTree ? Cast<UImage>(FocusBracket->WidgetTree->FindWidget(TEXT("Img_Bar"))) : nullptr;
 		TestNotNull(TEXT("Nested focus bracket image exists"), Bar);
-		if (Bar) TestTrue(TEXT("Maintenance keyboard focus is blue, not selected amber"), Bar->GetColorAndOpacity().B > Bar->GetColorAndOpacity().R);
+		if (Bar) TestTrue(TEXT("Maintenance focus uses the translucent orange outline palette"),
+			Bar->GetColorAndOpacity().Equals(KnightMaintenancePresentation::Focus)
+			&& Bar->GetColorAndOpacity().A < 1.f);
 	}
 	int32 ActionCalls = 0;
 	const FDelegateHandle ActionHandle = Button->OnClicked().AddLambda([&ActionCalls]() { ++ActionCalls; });

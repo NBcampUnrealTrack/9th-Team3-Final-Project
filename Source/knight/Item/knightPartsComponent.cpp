@@ -89,6 +89,17 @@ bool UknightPartsComponent::SyncLoadoutWithSave()
 		const UknightPartItemDefinition* const Wanted = GetLoadoutPartForSlot(Progression, Slot);
 		if (GetEquippedPart(Slot) == Wanted)
 		{
+			// A different profile can keep the same default weapon but have another
+			// saved upgrade level. Reconcile that level without respawning the mesh.
+			if (const UknightWeaponItemDefinition* Weapon = Cast<UknightWeaponItemDefinition>(Wanted))
+			{
+				const int32 Level = Progression ? Progression->GetUpgradeLevel(Weapon) : 0;
+				if (const FknightEquippedPart* Equipped = EquippedParts.Find(Slot); Equipped && Equipped->UpgradeLevel != Level)
+				{
+					RefreshWeaponUpgrade(Weapon, Level);
+					bChanged = true;
+				}
+			}
 			continue;
 		}
 		bChanged = true;

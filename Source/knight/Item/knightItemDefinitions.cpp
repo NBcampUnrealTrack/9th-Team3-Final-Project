@@ -2,6 +2,9 @@
 
 #include "AbilitySystem/knightAbilitySet.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
+#include "GameplayEffectComponents/TargetTagRequirementsGameplayEffectComponent.h"
+#include "GameplayEffectComponents/CustomCanApplyGameplayEffectComponent.h"
+#include "GameplayEffectComponents/ChanceToApplyGameplayEffectComponent.h"
 #include "Engine/SkeletalMesh.h"
 #include "Monster/knightMonsterDefinition.h"
 #include "System/knightGameplayTags.h"
@@ -96,6 +99,38 @@ float UknightWeaponItemDefinition::GetWeaponAttackAtLevel(int32 Level) const
 	for (const FknightPartStatModifier& Mod : StatModifiers)
 		if (Mod.Attribute == UknightCoreAttributeSet::GetAttackPowerAttribute()
 			&& Mod.ModifierOp == EGameplayModOp::AddBase) Attack += Mod.Value;
+	// Some legacy/default weapons express their fixed base attack in an AbilitySet.
+	// Include only an unconditional, constant additive contribution. Dynamic/conditional
+	// effects remain outside this weapon-only quote; never manufacture their exact value.
+	if (AbilitySet)
+		for (const FknightAbilitySet_GameplayEffect& Granted : AbilitySet->GetGrantedGameplayEffects())
+		{
+			const UGameplayEffect* Effect = Granted.GameplayEffect ? Granted.GameplayEffect->GetDefaultObject<UGameplayEffect>() : nullptr;
+			if (!Effect || Effect->DurationPolicy != EGameplayEffectDurationType::Infinite) continue;
+			// These components can suppress the GE even when individual modifiers have no tags.
+			if (Effect->FindComponent<UTargetTagRequirementsGameplayEffectComponent>()
+				|| Effect->FindComponent<UCustomCanApplyGameplayEffectComponent>()
+				|| Effect->FindComponent<UChanceToApplyGameplayEffectComponent>()) continue;
+			for (const FGameplayModifierInfo& Mod : Effect->Modifiers)
+			{
+				float Value = 0.f;
+				if (Mod.Attribute == UknightCoreAttributeSet::GetAttackPowerAttribute() && Mod.ModifierOp == EGameplayModOp::AddBase
+					&& Mod.SourceTags.IsEmpty() && Mod.TargetTags.IsEmpty()
+					&& Mod.ModifierMagnitude.GetStaticMagnitudeIfPossible(Granted.EffectLevel, Value))
+				{
+					// Level-dependent GEs are not the separate upgrade bonus. Only include
+					// contributions stable across every supported integer equipment level.
+					bool bFixed = true;
+					for (int32 Offset = 1; Offset <= GetMaxUpgradeLevel(); ++Offset)
+					{
+						float AtLevel = 0.f;
+						if (!Mod.ModifierMagnitude.GetStaticMagnitudeIfPossible(Granted.EffectLevel + Offset, AtLevel)
+							|| !FMath::IsNearlyEqual(AtLevel, Value)) { bFixed = false; break; }
+					}
+					if (bFixed) Attack += Value;
+				}
+			}
+		}
 	return Attack;
 }
 
