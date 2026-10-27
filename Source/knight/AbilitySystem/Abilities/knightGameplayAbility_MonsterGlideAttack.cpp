@@ -116,6 +116,7 @@ void UknightGameplayAbility_MonsterGlideAttack::HandleTick(int32 ActionNumber)
 		if (PhaseTime >= LandHoldTime)
 		{
 			Phase = EPhase::GetUp;
+			SetGettingUp(true);
 			if (!GetUpMontage)
 			{
 				HandleGetUpFinished();
@@ -241,6 +242,24 @@ void UknightGameplayAbility_MonsterGlideAttack::SetNoFlinch(bool bOn)
 	bNoFlinchApplied = bOn;
 }
 
+void UknightGameplayAbility_MonsterGlideAttack::SetGettingUp(bool bOn)
+{
+	UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();
+	if (!ASC || bOn == bGettingUpApplied)
+	{
+		return;
+	}
+	if (bOn)
+	{
+		ASC->AddLooseGameplayTag(knightGameplayTags::State_Monster_GettingUp);
+	}
+	else
+	{
+		ASC->RemoveLooseGameplayTag(knightGameplayTags::State_Monster_GettingUp);
+	}
+	bGettingUpApplied = bOn;
+}
+
 void UknightGameplayAbility_MonsterGlideAttack::SetCollapsed(bool bOn)
 {
 	UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();
@@ -310,6 +329,7 @@ void UknightGameplayAbility_MonsterGlideAttack::EndAbility(const FGameplayAbilit
 	SetNoFlinch(false);
 	SetDarkness(false);
 	SetCollapsed(false);
+	SetGettingUp(false);
 
 	const AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetAvatarActorFromActorInfo());
 	UknightMonsterAirTurnComponent* const AirTurn = Monster ? Monster->FindComponentByClass<UknightMonsterAirTurnComponent>() : nullptr;

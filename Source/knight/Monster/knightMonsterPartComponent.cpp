@@ -249,7 +249,11 @@ void UknightMonsterPartComponent::BreakPart(int32 PartIndex, AActor* BreakInstig
 		return;
 	}
 	PartStates[PartIndex].bBroken = true;
-	UE_LOG(LogknightCombat, Log, TEXT("%s: part %s broken by %s."), *GetNameSafe(GetOwner()), *Definition->PartTag.ToString(), *GetNameSafe(BreakInstigator));
+	// 남은 체력을 함께 남겨, 한 판 플레이 로그로 부위가 전투의 어느 시점에 부서지는지(BreakDamage 조정) 본다.
+	const UknightCoreAttributeSet* const CoreSet = BoundASC.IsValid() ? BoundASC->GetSet<UknightCoreAttributeSet>() : nullptr;
+	const float HealthRatio = CoreSet && CoreSet->GetMaxHealth() > 0.f ? CoreSet->GetHealth() / CoreSet->GetMaxHealth() : -1.f;
+	UE_LOG(LogknightCombat, Log, TEXT("%s: part %s broken by %s (damage %.0f, monster health %.0f%%)."), *GetNameSafe(GetOwner()),
+		*Definition->PartTag.ToString(), *GetNameSafe(BreakInstigator), PartStates[PartIndex].DamageTaken, HealthRatio * 100.f);
 
 	const ACharacter* const Character = Cast<ACharacter>(GetOwner());
 	USkinnedMeshComponent* const Mesh = Character ? Character->GetMesh() : nullptr;
