@@ -627,6 +627,7 @@ namespace knightRecipe
 			// 이륙·착지 중에는 맞아도 경직하지 않는다. 메시 높이는 공중 턴 컴포넌트가 같은 시간 동안 옮긴다.
 			if (UAnimMontage* const TakeOff = BuildRangeMontage(Context, FString::Printf(TEXT("AM_%s_TakeOff"), *Prefix), Recipe.TakeOff, Recipe.TakeOffStart, Recipe.TakeOffEnd))
 			{
+				TakeOff->BlendOut.SetBlendTime(Recipe.TakeOffBlendOut);
 				FReactionSettings Settings;
 				Settings.Name = TEXT("TakeOff");
 				Settings.StateTag = Tag(TEXT("State.SuperArmor"));
@@ -1900,6 +1901,10 @@ UknightMonsterRecipe* UknightMonsterRecipeLibrary::CreateRecipeFromMonster(TSubc
 					(bTakeOff ? Recipe->TakeOff : Recipe->Landing) = SegmentSequence(Hold, 0);
 					(bTakeOff ? Recipe->TakeOffStart : Recipe->LandingStart) = Segment ? Segment->AnimStartTime : 0.f;
 					(bTakeOff ? Recipe->TakeOffEnd : Recipe->LandingEnd) = Segment ? Segment->AnimEndTime : 0.f;
+					if (bTakeOff && Hold)
+					{
+						Recipe->TakeOffBlendOut = Hold->BlendOut.GetBlendTime();
+					}
 				}
 				else
 				{
