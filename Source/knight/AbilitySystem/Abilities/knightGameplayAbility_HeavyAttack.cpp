@@ -19,6 +19,7 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/Controller.h"
 #include "Input/knightInputBufferComponent.h"
+#include "MotionWarpingComponent.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
@@ -67,6 +68,7 @@ void UknightGameplayAbility_HeavyAttack::ActivateAbility(const FGameplayAbilityS
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
 	Phase = EPhase::Deciding;
 	bReleased = false;
+	ReleaseRateScale = 1.f;
 
 	UAbilityTask_WaitInputRelease* const Release = UAbilityTask_WaitInputRelease::WaitInputRelease(this, true);
 	Release->OnRelease.AddDynamic(this, &ThisClass::OnReleased);
@@ -134,19 +136,85 @@ void UknightGameplayAbility_HeavyAttack::OnReleased(float TimeHeld)
 			*GetName(), Held, MotionScale, ActiveHitParams.MotionValue, PoiseScale, ActiveHitParams.PoiseDamage, ChargeStaminaSpent, ReleaseStaminaCost);
 		if (ChargeReleaseMontage)
 		{
-			FaceScreenCenterForHeavyAttack(Cast<ACharacter>(GetAvatarActorFromActorInfo()), GetAbilitySystemComponentFromActorInfo());
+			AActor* const Avatar = GetAvatarActorFromActorInfo();
+			FaceScreenCenterForHeavyAttack(Cast<ACharacter>(Avatar), GetAbilitySystemComponentFromActorInfo());
+			// (2026-10-27 사용자 결정) 차지량에 따라 해방 모션이 빨라지고(풀차지 FullChargeReleaseRate배), 락온 중이면 돌진 거리도 는다.
+			ReleaseRateScale = FMath::Lerp(1.f, FullChargeReleaseRate, Alpha);
+			const UAbilitySystemComponent* const OwnerASC = GetAbilitySystemComponentFromActorInfo();
+			const bool bLockedOn = OwnerASC && OwnerASC->HasMatchingGameplayTag(knightGameplayTags::State_LockedOn);
+			const float WarpDistance = bLockedOn ? FMath::Lerp(MaxWarpDistance, FMath::Max(MaxWarpDistance, LockOnFullChargeWarpDistance), Alpha)
+				: MaxWarpDistance;
 			FVector WarpLocation;
 			FRotator WarpRotation;
 			float WarpTravel = 0.f;
-			const bool bWarp = UknightCombatLibrary::SetAttackWarpTarget(GetAvatarActorFromActorInfo(), WarpTargetName, MaxWarpDistance,
+			const bool bWarp = UknightCombatLibrary::SetAttackWarpTarget(Avatar, WarpTargetName, WarpDistance,
 				WarpStopDistance, bUseSoftTarget, SoftTargetRange, SoftTargetAngle)
-				&& UknightCombatLibrary::ComputeAttackWarp(GetAvatarActorFromActorInfo(), MaxWarpDistance, WarpStopDistance,
+				&& UknightCombatLibrary::ComputeAttackWarp(Avatar, WarpDistance, WarpStopDistance,
 					bUseSoftTarget, SoftTargetRange, SoftTargetAngle, WarpLocation, WarpRotation, WarpTravel);
 			PlayMontage(ChargeReleaseMontage, TEXT("ChargeRelease"), false);
-			if (bWarp)
+			if (bWarp && Avatar)
 			{
-				// 발사 몽타주와 같은 배속(행동 속도)을 넘겨야 돌진이 모션과 같이 끝난다. (2026-10-08)
-				UknightCombatLibrary::StartAttackLunge(this, ChargeReleaseMontage, GetAttackSpeed(), WarpLocation, WarpTravel, 0.25f);
+				// 발사 몽타주와 같은 배속(행동 속도 x 해방 배속)을 넘겨야 돌진이 모션과 같이 끝난다. (2026-10-08)
+				const float Rate = GetAttackSpeed() * ReleaseRateScale;
+				// (2026-10-27) 먼 돌진이 순간 이동처럼 보이지 않게 거리만큼 시간을 늘린다(최소 0.25초, 휘두르기 직전까지만).
+				const float LungeTime = FMath::Max(0.25f, WarpTravel / FMath::Max(ReleaseLungeSpeed, 1.f));
+				TFunction<bool(FVector&)> TrackTarget;
+				if (bTrackTargetDuringLunge)
+				{
+					// (2026-10-27 사용자 결정 '약간의 유도') 돌진하는 동안 대상의 지금 위치 앞으로 목표를 옮긴다.
+					// 돌진을 시작한 자리에서 WarpDistance 밖으로는 가지 않는다(UknightGameplayAbility_MeleeAttack::UpdateTrackedWarpTarget과 같은 규칙).
+					const FVector LungeStart = Avatar->GetActorLocation();
+					TrackTarget = [WeakThis = TWeakObjectPtr<ThisClass>(this), LungeStart, WarpDistance](FVector& OutLocation)
+					{
+						ThisClass* const Self = WeakThis.Get();
+						AActor* const Owner = Self ? Self->GetAvatarActorFromActorInfo() : nullptr;
+						FRotator Rotation;
+						float Travel = 0.f;
+						if (!Owner || !UknightCombatLibrary::ComputeAttackWarp(Owner, WarpDistance + 10000.f, Self->WarpStopDistance,
+							Self->bUseSoftTarget, Self->SoftTargetRange, Self->SoftTargetAngle, OutLocation, Rotation, Travel))
+						{
+							return false;
+						}
+						FVector FromStart = OutLocation - LungeStart;
+						FromStart.Z = 0.f;
+						if (FromStart.Size() > WarpDistance)
+						{
+							const FVector Clamped = LungeStart + FromStart.GetSafeNormal() * WarpDistance;
+							OutLocation = FVector(Clamped.X, Clamped.Y, OutLocation.Z);
+						}
+						// 몽타주의 워프 구간(몸 돌리기)도 같은 지점을 보게 한다.
+						if (UMotionWarpingComponent* const MotionWarping = Owner->FindComponentByClass<UMotionWarpingComponent>())
+						{
+							MotionWarping->AddOrUpdateWarpTargetFromLocationAndRotation(Self->WarpTargetName, OutLocation, Rotation);
+						}
+						return true;
+					};
+				}
+				UknightCombatLibrary::StartAttackLunge(this, ChargeReleaseMontage, Rate, WarpLocation, WarpTravel, LungeTime, 20.f, MoveTemp(TrackTarget));
+
+				// (2026-10-27 사용자 요청) 돌진 잔상: 실제로 움직이는 동안(돌진 시작 ~ 휘두르기 직전)만 남긴다. 그 전 준비 동작에는 남기지 않는다.
+				// 시작·길이는 StartAttackLunge와 같은 계산(워프 구간 끝에 도착하도록 LungeTime만큼).
+				const float WindowSeconds = UknightCombatLibrary::GetWarpWindowEnd(ChargeReleaseMontage) / FMath::Max(Rate, 0.01f);
+				if (bReleaseGhostTrail && World && WindowSeconds > 0.f)
+				{
+					const float LungeDuration = FMath::Clamp(WindowSeconds, 0.05f, LungeTime);
+					const float GhostDelay = WindowSeconds - LungeDuration;
+					const auto StartGhost = [WeakThis = TWeakObjectPtr<ThisClass>(this), LungeDuration, WarpLocation]()
+					{
+						if (ThisClass* const Self = WeakThis.Get(); Self && Self->IsActive())
+						{
+							AknightGhostTrailActor::StartGhostTrailForAbility(Self, Self->ReleaseGhostTrailSettings, LungeDuration, WarpLocation);
+						}
+					};
+					if (GhostDelay > KINDA_SMALL_NUMBER)
+					{
+						World->GetTimerManager().SetTimer(ReleaseGhostTimer, FTimerDelegate::CreateLambda(StartGhost), GhostDelay, false);
+					}
+					else
+					{
+						StartGhost();
+					}
+				}
 			}
 			if (bPlayChargeEffects && World)
 			{
@@ -540,7 +608,9 @@ void UknightGameplayAbility_HeavyAttack::PlayLoop()
 void UknightGameplayAbility_HeavyAttack::PlayMontage(UAnimMontage* Montage, FName TaskName, bool bLoopOnEnd)
 {
 	// 차지 시작·반복·발사 몽타주 모두 행동 속도 배속으로 재생한다. (2026-10-08)
-	UAbilityTask_PlayMontageAndWait* const Task = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, TaskName, Montage, GetAttackSpeed());
+	// (2026-10-27) 발사(해방)는 차지량에 따른 해방 배속(ReleaseRateScale)을 더 곱한다.
+	const float Rate = GetAttackSpeed() * (Phase == EPhase::Releasing ? ReleaseRateScale : 1.f);
+	UAbilityTask_PlayMontageAndWait* const Task = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, TaskName, Montage, Rate);
 	if (Phase == EPhase::Releasing)
 	{
 		Task->OnCompleted.AddDynamic(this, &ThisClass::OnReleaseFinished);
@@ -562,7 +632,7 @@ void UknightGameplayAbility_HeavyAttack::PlayMontage(UAnimMontage* Montage, FNam
 	if (Phase == EPhase::Releasing)
 	{
 		// (2026-10-20) 차지 발사에만 기계식 타이밍(차지 시작·반복은 그대로).
-		StartMechTiming(Montage, GetAttackSpeed());
+		StartMechTiming(Montage, Rate);
 	}
 	if (AActor* const Avatar = GetAvatarActorFromActorInfo())
 	{
@@ -682,6 +752,7 @@ void UknightGameplayAbility_HeavyAttack::EndAbility(const FGameplayAbilitySpecHa
 		World->GetTimerManager().ClearTimer(GroundCrackTimer);
 		World->GetTimerManager().ClearTimer(ChargeStaminaTimer);
 		World->GetTimerManager().ClearTimer(ReleaseMoveCancelTimer);
+		World->GetTimerManager().ClearTimer(ReleaseGhostTimer);
 	}
 	UAbilitySystemComponent* const OwnerASC = ActorInfo ? ActorInfo->AbilitySystemComponent.Get() : nullptr;
 	if (bAttackBlockApplied)

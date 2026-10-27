@@ -83,9 +83,10 @@ public:
 	 * 대검 공격 애니메이션은 거의 제자리(루트 모션 수 cm)라 Skew Warp가 거리를 만들지 못한다. 그래서 몽타주의
 	 * Motion Warping 구간이 끝날 때 Location에 도착하도록, 구간 끝 MaxLungeTime 동안 루트 모션 힘으로 이동시킨다.
 	 * 회전은 몽타주의 워프 구간이 맡는다. Travel이 MinTravel보다 짧으면 아무것도 하지 않는다.
+	 * (2026-10-27) TrackTarget을 주면 돌진하는 동안 매 프레임 불러 목표 지점을 대상의 지금 위치로 바꾼다(false면 이전 목표 유지).
 	 */
 	static void StartAttackLunge(UGameplayAbility* Ability, const UAnimMontage* Montage, float PlayRate, const FVector& Location,
-		float Travel, float MaxLungeTime = 0.35f, float MinTravel = 20.f);
+		float Travel, float MaxLungeTime = 0.35f, float MinTravel = 20.f, TFunction<bool(FVector&)> TrackTarget = nullptr);
 
 	/** 몽타주의 첫 Motion Warping 구간이 끝나는 시간(초). 없으면 -1. */
 	static float GetWarpWindowEnd(const UAnimMontage* Montage);
