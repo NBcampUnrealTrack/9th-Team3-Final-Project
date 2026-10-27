@@ -1,4 +1,5 @@
 #include "Menu/UI/KnightInventoryWidget.h"
+#include "Menu/UI/KnightMaintenancePresentation.h"
 
 #include "Blueprint/WidgetTree.h"
 #include "CommonTextBlock.h"
@@ -110,6 +111,15 @@ void UKnightInventoryEntryWidget::Configure(const UknightItemDefinition* InItem,
 
 void UKnightInventoryEntryWidget::ApplyConfiguration()
 {
+	if (bMaintenancePresentation)
+	{
+		for (UCommonTextBlock* Label : { CountText.Get(), EquippedText.Get() })
+		{
+			if (!Label) continue;
+			Label->SetStyle(nullptr);
+			Label->SetColorAndOpacity(FSlateColor(KnightMaintenancePresentation::Secondary));
+		}
+	}
 	if (NameText)
 	{
 		NameText->SetText(ItemName(Item));

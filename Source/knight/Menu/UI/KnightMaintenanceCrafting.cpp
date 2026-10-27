@@ -1,4 +1,6 @@
 #include "Menu/UI/KnightMaintenanceWidget.h"
+#include "Menu/UI/KnightMaintenancePresentation.h"
+#include "CommonTextBlock.h"
 #include "Menu/UI/KnightMaintenanceEntryWidget.h"
 #include "Blueprint/WidgetTree.h"
 #include "CommonButtonBase.h"
@@ -20,7 +22,8 @@ namespace
 		Brush.SetResourceObject(Texture);
 		Brush.DrawAs = Texture ? ESlateBrushDrawType::Box : ESlateBrushDrawType::NoDrawType;
 		Brush.ImageSize = FVector2D(512.f, 170.f);
-		Brush.Margin = FMargin(.008f, .025f, .008f, .025f);
+		Brush.Margin = KnightMaintenancePresentation::ControlSlice;
+		KnightMaintenancePresentation::SetControlUV(Brush);
 		Brush.TintColor = FSlateColor(Tint);
 		return Brush;
 	}
@@ -36,6 +39,22 @@ namespace
 void UKnightMaintenanceWidget::ApplyCraftingPresentation()
 {
 	if (!WidgetTree) return;
+	// Neutralize static legacy blue labels/dividers only in this widget tree.
+	// Dynamic item-rarity and stat-delta colors are assigned by their existing handlers.
+	WidgetTree->ForEachWidget([](UWidget* Widget)
+	{
+		if (UTextBlock* Text = Cast<UTextBlock>(Widget))
+		{
+			const FLinearColor Old = Text->GetColorAndOpacity().GetSpecifiedColor();
+			if (Old.B > Old.R * 1.08f)
+			{
+				if (UCommonTextBlock* Common = Cast<UCommonTextBlock>(Text)) Common->SetStyle(nullptr);
+				Text->SetColorAndOpacity(FSlateColor(KnightMaintenancePresentation::Secondary));
+			}
+		}
+		if (UImage* Line = Cast<UImage>(Widget))
+			if (Line->GetName().Contains(TEXT("Line"))) Line->SetColorAndOpacity(KnightMaintenancePresentation::Divider);
+	});
 	// Restyle only the Crafting-owned subtree. Enhancement, Socket, footer and shared
 	// button CDOs retain their existing presentation and interaction configuration.
 	for (const TCHAR* Name : { TEXT("Panel_Left"), TEXT("Panel_Right"), TEXT("VerticalBox_Confirm") })
@@ -51,7 +70,7 @@ void UKnightMaintenanceWidget::ApplyCraftingPresentation()
 			});
 	if (UBorder* Modal = Cast<UBorder>(WidgetTree->FindWidget(TEXT("Border_Confirm"))))
 	{
-		Modal->SetBrush(PaintedSurface(CraftingButtonTexture, FLinearColor(.58f, .60f, .62f, 1.f)));
+		Modal->SetBrush(PaintedSurface(CraftingButtonTexture, KnightMaintenancePresentation::ReadoutTint));
 		Modal->SetPadding(FMargin(36.f));
 	}
 	// No nested blue frame under the selected item's real artwork.
@@ -71,9 +90,9 @@ void UKnightMaintenanceWidget::ApplyCraftingPresentation()
 	{
 		FEditableTextBoxStyle Style = MaterialQuantityInput->GetWidgetStyle();
 		Style.BackgroundImageNormal = Style.BackgroundImageReadOnly =
-			PaintedSurface(CraftingButtonTexture, FLinearColor(.40f, .43f, .48f, 1.f));
+			PaintedSurface(CraftingButtonTexture, FLinearColor(.30f, .30f, .30f, 1.f));
 		Style.BackgroundImageHovered = Style.BackgroundImageFocused =
-			PaintedSurface(CraftingButtonTexture, FLinearColor(.62f, .76f, .90f, 1.f));
+			PaintedSurface(CraftingButtonTexture, FLinearColor(.70f, .70f, .70f, 1.f));
 		MaterialQuantityInput->SetWidgetStyle(Style);
 	}
 }

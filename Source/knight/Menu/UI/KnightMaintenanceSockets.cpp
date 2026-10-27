@@ -27,14 +27,14 @@
 
 namespace
 {
-const FLinearColor Primary(FColor(0xED, 0xF3, 0xFA));
-const FLinearColor Secondary(FColor(0xA0, 0xB8, 0xD0));
+const FLinearColor Primary = KnightMaintenancePresentation::Primary;
+const FLinearColor Secondary = KnightMaintenancePresentation::Secondary;
 
 UCommonTextBlock* Text(UWidgetTree* Tree, FName Name, const FText& Value, int32 Pixels = 24,
 	bool bCenter = false, FLinearColor Color = Primary)
 {
 	UCommonTextBlock* Label = Tree->ConstructWidget<UCommonTextBlock>(UCommonTextBlock::StaticClass(), Name);
-	Label->SetStyle(LoadClass<UCommonTextStyle>(nullptr, TEXT("/Game/Knight/UI/Style/TS_Knight_Body.TS_Knight_Body_C")));
+	Label->SetStyle(LoadClass<UCommonTextStyle>(nullptr, TEXT("/Game/Knight/UI/Menu/Maintenance/Hologram/TS_Holo_Body.TS_Holo_Body_C")));
 	Label->SetStyle(nullptr); // Retain project font while keeping per-label color/size on synchronization.
 	FSlateFontInfo Font = Label->GetFont(); Font.Size = FMath::RoundToInt(Pixels * .75f); Label->SetFont(Font);
 	Label->SetText(Value); Label->SetAutoWrapText(true);
@@ -56,7 +56,7 @@ UVerticalBoxSlot* Add(UVerticalBox* Box, UWidget* Child, float Bottom = 12.f)
 void Line(UWidgetTree* Tree, UVerticalBox* Box)
 {
 	USizeBox* Size = Tree->ConstructWidget<USizeBox>(); Size->SetHeightOverride(1.f);
-	UImage* Image = Tree->ConstructWidget<UImage>(); Image->SetColorAndOpacity(FLinearColor(.13f, .23f, .34f, 1.f));
+	UImage* Image = Tree->ConstructWidget<UImage>(); Image->SetColorAndOpacity(KnightMaintenancePresentation::Divider);
 	Image->SetVisibility(ESlateVisibility::HitTestInvisible); Size->AddChild(Image); Add(Box, Size, 14.f);
 }
 void Label(UCommonButtonBase* Button, const FText& Value)
@@ -98,26 +98,27 @@ void UKnightMaintenanceWidget::BuildSocketPresentation()
 	Backdrop->SetClipping(EWidgetClipping::ClipToBoundsAlways);
 	UImage* Art = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("SocketCarrierArt"));
 	Art->SetBrushFromTexture(SocketBackgroundTexture, true);
+	Art->SetColorAndOpacity(FLinearColor(.65f, .65f, .65f, 1.f));
 	Art->SetVisibility(ESlateVisibility::HitTestInvisible);
 	Backdrop->AddChild(Art);
 	UCanvasPanelSlot* ArtCell = Root->AddChildToCanvas(Backdrop);
 	ArtCell->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f)); ArtCell->SetOffsets(FMargin(0.f)); ArtCell->SetZOrder(-8);
 	Backdrop->SetVisibility(ESlateVisibility::Collapsed); SocketArtwork = Backdrop;
 
-	UHorizontalBox* Columns = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("SocketColumns"));
+	UCanvasPanel* Columns = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("SocketColumns"));
 	SocketColumns = Columns;
 	UCanvasPanelSlot* Layout = Root->AddChildToCanvas(Columns);
 	Layout->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f)); Layout->SetOffsets(FMargin(0.f)); Layout->SetZOrder(1);
-	auto Column = [this, Columns](const TCHAR* Name, float Ratio, FMargin ContentPadding)
+	auto Column = [this, Columns](const TCHAR* Name, const FAnchors& Anchors, FMargin ContentPadding)
 	{
 		UBorder* Border = Frame(WidgetTree, Name); Border->SetPadding(ContentPadding);
-		UHorizontalBoxSlot* Cell = Columns->AddChildToHorizontalBox(Border);
-		FSlateChildSize Size(ESlateSizeRule::Fill); Size.Value = Ratio; Cell->SetSize(Size);
+		UCanvasPanelSlot* Cell = Columns->AddChildToCanvas(Border);
+		Cell->SetAnchors(Anchors); Cell->SetOffsets(FMargin(0.f));
 		return Border;
 	};
-	UBorder* LeftFrame = Column(TEXT("SocketOwnedColumn"), .23f, FMargin(48.f, 174.f, 30.f, 42.f));
-	UBorder* CenterFrame = Column(TEXT("SocketAssignmentColumn"), .54f, FMargin(0.f));
-	UBorder* RightFrame = Column(TEXT("SocketEffectsColumn"), .23f, FMargin(30.f, 174.f, 48.f, 110.f));
+	UBorder* LeftFrame = Column(TEXT("SocketOwnedColumn"), KnightMaintenancePresentation::ShiftSideAnchors(FAnchors(0.f, 0.f, .23f, 1.f), false), FMargin(48.f, 174.f, 30.f, 42.f));
+	UBorder* CenterFrame = Column(TEXT("SocketAssignmentColumn"), FAnchors(.23f, 0.f, .77f, 1.f), FMargin(0.f));
+	UBorder* RightFrame = Column(TEXT("SocketEffectsColumn"), KnightMaintenancePresentation::ShiftSideAnchors(FAnchors(.77f, 0.f, 1.f, 1.f), true), FMargin(48.f, 174.f, 48.f, 110.f));
 	UVerticalBox* Left = WidgetTree->ConstructWidget<UVerticalBox>(); LeftFrame->SetContent(Left);
 	UCanvasPanel* Center = WidgetTree->ConstructWidget<UCanvasPanel>(); CenterFrame->SetContent(Center);
 	UVerticalBox* Right = WidgetTree->ConstructWidget<UVerticalBox>(); RightFrame->SetContent(Right);
@@ -143,8 +144,9 @@ void UKnightMaintenanceWidget::BuildSocketPresentation()
 
 	UBorder* Readout = Frame(WidgetTree, TEXT("SocketAssignmentReadout"));
 	FSlateBrush ReadoutBrush; ReadoutBrush.SetResourceObject(EnhancementButtonTexture);
-	ReadoutBrush.DrawAs = ESlateBrushDrawType::Box; ReadoutBrush.Margin = FMargin(.12f);
-	ReadoutBrush.TintColor = FSlateColor(FLinearColor(.40f, .42f, .45f, 1.f));
+	ReadoutBrush.DrawAs = ESlateBrushDrawType::Box; ReadoutBrush.Margin = KnightMaintenancePresentation::ControlSlice;
+	KnightMaintenancePresentation::SetControlUV(ReadoutBrush);
+	ReadoutBrush.TintColor = FSlateColor(KnightMaintenancePresentation::ReadoutTint);
 	Readout->SetBrush(ReadoutBrush); Readout->SetPadding(FMargin(28.f, 14.f));
 	UCanvasPanelSlot* ReadoutCell = Center->AddChildToCanvas(Readout);
 	ReadoutCell->SetAnchors(FAnchors(0.f, .72f, 1.f, 1.f)); ReadoutCell->SetOffsets(FMargin(36.f, 0.f, 36.f, 28.f));

@@ -42,11 +42,11 @@
 namespace
 {
 	// 스타일 가이드 색 (sRGB).
-	const FLinearColor Ember(FColor(0xFF, 0x7A, 0x1A));
-	const FLinearColor Frost(FColor(0xA8, 0xC8, 0xF0));
-	const FLinearColor Mist(FColor(0x8F, 0xA3, 0xBF));
-	const FLinearColor DimColor(FColor(0x4A, 0x5B, 0x75));
-	const FLinearColor White(FColor(0xF4, 0xF8, 0xFC));
+	const FLinearColor Ember = KnightMaintenancePresentation::Accent;
+	const FLinearColor Frost = KnightMaintenancePresentation::Secondary;
+	const FLinearColor Mist = KnightMaintenancePresentation::Secondary;
+	const FLinearColor DimColor = KnightMaintenancePresentation::Muted;
+	const FLinearColor White = KnightMaintenancePresentation::Primary;
 	const FLinearColor Increase(FColor(0x4B, 0xE8, 0x80));
 	const FLinearColor Alert(FColor(0xE5, 0x48, 0x4D));
 
@@ -316,7 +316,7 @@ namespace
 
 	TSubclassOf<UCommonTextStyle> BodyStyle()
 	{
-		return LoadClass<UCommonTextStyle>(nullptr, TEXT("/Game/Knight/UI/Style/TS_Knight_Body.TS_Knight_Body_C"));
+		return LoadClass<UCommonTextStyle>(nullptr, TEXT("/Game/Knight/UI/Menu/Maintenance/Hologram/TS_Holo_Body.TS_Holo_Body_C"));
 	}
 }
 
@@ -389,7 +389,7 @@ void UKnightMaintenanceWidget::NativeOnInitialized()
 		BackgroundSlot->SetOffsets(FMargin(24.f));
 		BackgroundSlot->SetZOrder(-10);
 		MaintenanceBackdrop = Background;
-		// Opaque side artwork is isolated to these two clipped surfaces. No full-screen
+		// Translucent projected glass is isolated to these two clipped surfaces. No full-screen
 		// tint, gradient or vignette is drawn over the live Crafting camera.
 		for (bool bRight : { false, true })
 		{
@@ -400,13 +400,13 @@ void UKnightMaintenanceWidget::NativeOnInitialized()
 			Surface->SetVisibility(ESlateVisibility::HitTestInvisible);
 			UImage* Art = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(),
 				bRight ? TEXT("CraftingArtRight") : TEXT("CraftingArtLeft"));
-			Art->SetBrushFromTexture(CraftingPanelTexture, true);
-			// Neutral background-only modulation keeps fine metal grain behind readable live text.
-			Art->SetColorAndOpacity(FLinearColor(.48f, .48f, .48f, 1.f));
+			Art->SetBrush(KnightMaintenancePresentation::MakeEdgePanelBrush(Art, CraftingPanelTexture, bRight));
+			Art->SetColorAndOpacity(KnightMaintenancePresentation::PanelTint);
 			Art->SetVisibility(ESlateVisibility::HitTestInvisible);
 			Surface->AddChild(Art);
 			UCanvasPanelSlot* SurfaceSlot = Root->AddChildToCanvas(Surface);
-			SurfaceSlot->SetAnchors(bRight ? FAnchors(.71f, 0.f, 1.f, 1.f) : FAnchors(0.f, 0.f, .29f, 1.f));
+			SurfaceSlot->SetAnchors(KnightMaintenancePresentation::ShiftSideAnchors(
+				bRight ? FAnchors(.71f, 0.f, 1.f, 1.f) : FAnchors(0.f, 0.f, .29f, 1.f), bRight));
 			SurfaceSlot->SetOffsets(FMargin(0.f));
 			SurfaceSlot->SetZOrder(-9);
 		}
@@ -497,7 +497,7 @@ void UKnightMaintenanceWidget::NativeOnInitialized()
 			KnightMaintenancePresentation::ConfigureButton(Button, false);
 			Button->OnClicked().AddWeakLambda(this, [Action = MoveTemp(Action)]() { Action(); });
 			USizeBox* const Frame = WidgetTree->ConstructWidget<USizeBox>();
-			Frame->SetWidthOverride(64.f);
+			Frame->SetWidthOverride(72.f);
 			Frame->AddChild(Button);
 			QuantityRow->AddChildToHorizontalBox(Frame)->SetPadding(FMargin(0.f, 0.f, 8.f, 0.f));
 		};
@@ -603,7 +603,7 @@ void UKnightMaintenanceWidget::ApplyDestinationLayout()
 	if (MaintenanceBackdrop)
 	{
 		MaintenanceBackdrop->SetVisibility(bCrafting ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
-		MaintenanceBackdrop->SetBrushColor(FLinearColor(.003f, .008f, .016f, 1.f));
+		MaintenanceBackdrop->SetBrushColor(FLinearColor(.006f, .006f, .007f, 1.f));
 		if (UCanvasPanelSlot* BackgroundSlot = Cast<UCanvasPanelSlot>(MaintenanceBackdrop->Slot))
 			BackgroundSlot->SetOffsets(FMargin(0.f));
 	}
@@ -624,18 +624,26 @@ void UKnightMaintenanceWidget::ApplyDestinationLayout()
 			Surface->SetVisibility(bCrafting ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
 			if (UCanvasPanelSlot* Cell = Cast<UCanvasPanelSlot>(Surface->Slot))
 			{
-				Cell->SetAnchors(bSockets
+				Cell->SetAnchors(KnightMaintenancePresentation::ShiftSideAnchors(bSockets
 					? (bRight ? FAnchors(.77f, 0.f, 1.f, 1.f) : FAnchors(0.f, 0.f, .23f, 1.f))
-					: (bRight ? FAnchors(.70f, 0.f, 1.f, 1.f) : FAnchors(0.f, 0.f, .26f, 1.f)));
+					: (bRight ? FAnchors(.70f, 0.f, 1.f, 1.f) : FAnchors(0.f, 0.f, .26f, 1.f)), bRight));
 				Cell->SetOffsets(FMargin(0.f));
 			}
 		}
 	if (UWidget* Header = WidgetTree->FindWidget(TEXT("VerticalBox_Header")))
 		if (UCanvasPanelSlot* HeaderSlot = Cast<UCanvasPanelSlot>(Header->Slot))
+		{
+			const float LeftWidth = bCrafting ? .29f : bSockets ? .23f : .26f;
+			HeaderSlot->SetAnchors(FAnchors(-LeftWidth * KnightMaintenancePresentation::PanelArtworkInset, 0.f));
 			HeaderSlot->SetPosition(bCrafting ? FVector2D(56.f, 40.f) : FVector2D(48.f, 40.f));
+		}
 	if (CurrencyText)
 		if (UCanvasPanelSlot* MoneySlot = Cast<UCanvasPanelSlot>(CurrencyText->Slot))
+		{
+			const float RightWidth = bCrafting ? .29f : bSockets ? .23f : .30f;
+			MoneySlot->SetAnchors(FAnchors(1.f + RightWidth * KnightMaintenancePresentation::PanelArtworkInset, 0.f));
 			MoneySlot->SetPosition(bCrafting ? FVector2D(-56.f, 48.f) : FVector2D(-48.f, 48.f));
+		}
 	for (bool bRight : { false, true })
 	{
 		UBorder* Frame = Cast<UBorder>(WidgetTree->FindWidget(bRight ? TEXT("Frame_Panel_Right") : TEXT("Frame_Panel_Left")));
@@ -644,9 +652,10 @@ void UKnightMaintenanceWidget::ApplyDestinationLayout()
 		Frame->SetVisibility(bCrafting ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
 		// These are content bounds, not additional panel fills. The raster surface
 		// continues independently behind the header and footer to all outer edges.
-		FrameSlot->SetAnchors(bRight ? FAnchors(.71f, 0.f, 1.f, 1.f) : FAnchors(0.f, 0.f, .29f, 1.f));
+		FrameSlot->SetAnchors(KnightMaintenancePresentation::ShiftSideAnchors(
+			bRight ? FAnchors(.71f, 0.f, 1.f, 1.f) : FAnchors(0.f, 0.f, .29f, 1.f), bRight));
 		FrameSlot->SetAlignment(FVector2D::ZeroVector);
-		FrameSlot->SetOffsets(bRight ? FMargin(30.f, 180.f, 48.f, 108.f) : FMargin(48.f, 168.f, 28.f, 32.f));
+		FrameSlot->SetOffsets(bRight ? FMargin(42.f, 180.f, 48.f, 108.f) : FMargin(48.f, 168.f, 28.f, 32.f));
 		FSlateBrush Brush; Brush.DrawAs = ESlateBrushDrawType::NoDrawType;
 		Frame->SetBrush(Brush);
 		Frame->SetPadding(FMargin(0.f));
@@ -1285,7 +1294,7 @@ void UKnightMaintenanceWidget::RebuildEnhancementTarget(bool bRestoreFocus)
 			if (UCommonTextBlock* StyledLevel = Cast<UCommonTextBlock>(Level)) StyledLevel->SetStyle(nullptr);
 			FSlateFontInfo Font = Level->GetFont(); Font.Size = 16; Level->SetFont(Font);
 			Level->SetText(FText::Format(LOCTEXT("OwnedUpgradeLevel", "+{0}"), Progression->GetUpgradeLevel(Item)));
-			Level->SetColorAndOpacity(FSlateColor(FLinearColor(FColor(0xF1, 0xBD, 0x5E))));
+			Level->SetColorAndOpacity(FSlateColor(KnightMaintenancePresentation::WarmHighlight));
 		}
 		if (UBorder* Badge = Cast<UBorder>(Row->GetWidgetFromName(TEXT("Border_Badge"))))
 		{

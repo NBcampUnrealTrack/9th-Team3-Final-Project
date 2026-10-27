@@ -9,6 +9,7 @@
 #include "Components/Image.h"
 #include "Components/ScaleBox.h"
 #include "Engine/Texture2D.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Progression/knightProgressionSubsystem.h"
 #include "Progression/knightSaveGame.h"
 #include "Progression/knightSaveSubsystem.h"
@@ -49,6 +50,22 @@ struct FMaintenanceLayoutCheck
 	{
 		Failures += Passed ? 0 : 1;
 		UE_LOG(LogTemp, Display, TEXT("MaintenanceLayout %s %s"), Passed ? TEXT("PASS") : TEXT("FAIL"), Label);
+	}
+	void CheckEdgePanel(const UImage* Art, bool bRight)
+	{
+		UMaterialInstanceDynamic* Material = Art ? Cast<UMaterialInstanceDynamic>(Art->GetBrush().GetResourceObject()) : nullptr;
+		UTexture* Texture = nullptr;
+		float Side = -1.f;
+		Check(Material && Material->GetTextureParameterValue(TEXT("PanelTexture"), Texture)
+			&& Texture && Texture->GetName() == TEXT("T_Holo_Panel")
+			&& Material->GetScalarParameterValue(TEXT("RightSide"), Side)
+			&& Side == (bRight ? 1.f : 0.f)
+			&& Material->GetBaseMaterial()->GetName() == TEXT("M_UI_HoloEdgePanel"),
+			TEXT("original translucent edge panel material samples assigned art"));
+		const UTexture2D* Source = Cast<UTexture2D>(Texture);
+		Check(Source && Source->GetSizeX() == 887 && Source->GetSizeY() == 1774 && Art
+			&& Art->GetBrush().ImageSize == FVector2D(Source->GetSizeX(), Source->GetSizeY()),
+			TEXT("single original panel retains raster dimensions without added backing"));
 	}
 	void Click(UUserWidget* Owner, const TCHAR* Name)
 	{
@@ -96,22 +113,25 @@ struct FMaintenanceLayoutCheck
 				{
 					const UScaleBox* Surface = Cast<UScaleBox>(Screen->GetWidgetFromName(bRight ? TEXT("CraftingSurfaceRight") : TEXT("CraftingSurfaceLeft")));
 					const UImage* Art = Cast<UImage>(Screen->GetWidgetFromName(bRight ? TEXT("CraftingArtRight") : TEXT("CraftingArtLeft")));
-					Check(Surface && Art && Surface->GetStretch() == EStretch::ScaleToFill
+					Check(Surface && Art && !Screen->GetWidgetFromName(bRight ? TEXT("CraftingBackingRight") : TEXT("CraftingBackingLeft"))
+						&& Surface->GetStretch() == EStretch::ScaleToFill
 						&& Surface->GetVisibility() == ESlateVisibility::HitTestInvisible
-						&& Surface->GetClipping() == EWidgetClipping::ClipToBoundsAlways,
-						TEXT("side art preserves aspect ratio and never takes input"));
+						&& Surface->GetClipping() == EWidgetClipping::ClipToBoundsAlways
+						&& Art->GetVisibility() == ESlateVisibility::HitTestInvisible,
+						TEXT("single Crafting panel never takes input"));
 					if (!Surface || !Art) continue;
 					const FGeometry G = Surface->GetCachedGeometry();
 					const FVector2D Top = Root.AbsoluteToLocal(G.LocalToAbsolute(FVector2D::ZeroVector));
 					const FVector2D Bottom = Root.AbsoluteToLocal(G.LocalToAbsolute(G.GetLocalSize()));
-					Check(FMath::IsNearlyEqual(Top.X, bRight ? Root.GetLocalSize().X * .71f : 0.f, 1.f)
+					const float Width = Root.GetLocalSize().X * .29f;
+					const float Shift = Width * 55.f / 887.f;
+					Check(FMath::IsNearlyEqual(Top.X, Root.GetLocalSize().X * (bRight ? .71f : 0.f) + (bRight ? Shift : -Shift), 1.f)
 						&& FMath::IsNearlyEqual(Top.Y, 0.f, 1.f)
-						&& FMath::IsNearlyEqual(Bottom.X, Root.GetLocalSize().X * (bRight ? 1.f : .29f), 1.f)
+						&& FMath::IsNearlyEqual(Bottom.X, Root.GetLocalSize().X * (bRight ? 1.f : .29f) + (bRight ? Shift : -Shift), 1.f)
+						&& FMath::IsNearlyEqual(Bottom.X - Top.X, Width, 1.f)
 						&& FMath::IsNearlyEqual(Bottom.Y, Root.GetLocalSize().Y, 1.f),
-						TEXT("side surfaces are 29 percent wide and flush to top bottom and outer viewport"));
-					const UTexture2D* Texture = Cast<UTexture2D>(Art->GetBrush().GetResourceObject());
-					Check(Texture && Texture->GetName() == TEXT("T_Crafting_IntegratedSide") && Texture->GetSizeY() >= 1080,
-						TEXT("full height raster retains native detail instead of 256px stretched grain"));
+						TEXT("Crafting panels translate by art inset with original width and height"));
+					CheckEdgePanel(Art, bRight);
 				}
 				for (const TCHAR* FrameName : { TEXT("Frame_Panel_Left"), TEXT("Frame_Panel_Right") })
 					Check(Cast<UBorder>(Screen->GetWidgetFromName(FrameName))->Background.DrawAs == ESlateBrushDrawType::NoDrawType,
@@ -175,18 +195,23 @@ struct FMaintenanceLayoutCheck
 				for (bool bRight : { false, true })
 				{
 					const UImage* Surface = Cast<UImage>(Screen->GetWidgetFromName(bRight ? TEXT("IndustrialSurfaceRight") : TEXT("IndustrialSurfaceLeft")));
-					Check(Surface && Surface->GetVisibility() == ESlateVisibility::HitTestInvisible, TEXT("industrial side art never intercepts input"));
+					Check(Surface && !Screen->GetWidgetFromName(bRight ? TEXT("IndustrialBackingRight") : TEXT("IndustrialBackingLeft"))
+						&& Surface->GetVisibility() == ESlateVisibility::HitTestInvisible,
+						TEXT("single industrial side panel never intercepts input"));
 					if (!Surface) continue;
 					const FGeometry G = Surface->GetCachedGeometry();
 					const FVector2D Top = Root.AbsoluteToLocal(G.LocalToAbsolute(FVector2D::ZeroVector));
 					const FVector2D Bottom = Root.AbsoluteToLocal(G.LocalToAbsolute(G.GetLocalSize()));
 					const float Start = bRight ? (bSocket ? .77f : .70f) : 0.f;
 					const float End = bRight ? 1.f : (bSocket ? .23f : .26f);
-					Check(FMath::IsNearlyEqual(Top.X, Root.GetLocalSize().X * Start, 1.f) && FMath::IsNearlyEqual(Top.Y, 0.f, 1.f)
-						&& FMath::IsNearlyEqual(Bottom.X, Root.GetLocalSize().X * End, 1.f) && FMath::IsNearlyEqual(Bottom.Y, Root.GetLocalSize().Y, 1.f),
-						TEXT("industrial surfaces flush to viewport edges with no exposed margins"));
-					const UTexture2D* Texture = Cast<UTexture2D>(Surface->GetBrush().GetResourceObject());
-					Check(Texture && Texture->GetSizeY() >= 1080, TEXT("full-height side artwork keeps native texture detail"));
+					const float Width = Root.GetLocalSize().X * (End - Start);
+					const float Shift = Width * 55.f / 887.f * (bRight ? 1.f : -1.f);
+					Check(FMath::IsNearlyEqual(Top.X, Root.GetLocalSize().X * Start + Shift, 1.f) && FMath::IsNearlyEqual(Top.Y, 0.f, 1.f)
+						&& FMath::IsNearlyEqual(Bottom.X, Root.GetLocalSize().X * End + Shift, 1.f)
+						&& FMath::IsNearlyEqual(Bottom.X - Top.X, Width, 1.f)
+						&& FMath::IsNearlyEqual(Bottom.Y, Root.GetLocalSize().Y, 1.f),
+						TEXT("industrial side panels translate outward without changing size"));
+					CheckEdgePanel(Surface, bRight);
 				}
 				Check(!Screen->GetWidgetFromName(bSocket ? TEXT("SocketInputHints") : TEXT("EnhancementInputHints")), TEXT("industrial bottom help strip not constructed"));
 				const UUserWidget* Back = Cast<UUserWidget>(Menu->GetWidgetFromName(TEXT("Button_Back")));

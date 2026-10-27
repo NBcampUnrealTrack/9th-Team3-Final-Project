@@ -26,18 +26,13 @@ void UKnightMaintenanceWidget::BuildIndustrialSideSurfaces()
 	{
 		UImage* Surface = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(),
 			bRight ? TEXT("IndustrialSurfaceRight") : TEXT("IndustrialSurfaceLeft"));
-		FSlateBrush Brush;
-		Brush.SetResourceObject(IndustrialSidePanelTexture);
-		Brush.DrawAs = ESlateBrushDrawType::Box;
-		// Preserve the slim painted vertical rails. The full-resolution interior is
-		// downsampled, not enlarged from the old 256px card; no heavy end caps.
-		Brush.Margin = FMargin(.025f, 0.f, .025f, 0.f);
-		Brush.TintColor = FSlateColor(FLinearColor(.30f, .30f, .30f, 1.f));
-		Surface->SetBrush(Brush);
+		Surface->SetBrush(KnightMaintenancePresentation::MakeEdgePanelBrush(Surface, IndustrialSidePanelTexture, bRight));
+		Surface->SetColorAndOpacity(KnightMaintenancePresentation::PanelTint);
 		Surface->SetVisibility(ESlateVisibility::Collapsed);
 		UCanvasPanelSlot* Cell = Root->AddChildToCanvas(Surface);
-		Cell->SetAnchors(bRight ? FAnchors(.70f, 0.f, 1.f, 1.f) : FAnchors(0.f, 0.f, .26f, 1.f));
-		Cell->SetOffsets(FMargin(0.f)); Cell->SetZOrder(-7);
+		Cell->SetAnchors(KnightMaintenancePresentation::ShiftSideAnchors(
+			bRight ? FAnchors(.70f, 0.f, 1.f, 1.f) : FAnchors(0.f, 0.f, .26f, 1.f), bRight));
+		Cell->SetOffsets(FMargin(0.f)); Cell->SetZOrder(-6);
 	}
 }
 
@@ -52,17 +47,18 @@ void UKnightMaintenanceWidget::BuildEnhancementPresentation()
 	Backdrop->SetClipping(EWidgetClipping::ClipToBounds);
 	UImage* Background = WidgetTree->ConstructWidget<UImage>();
 	Background->SetBrushFromTexture(EnhancementBackgroundTexture, true);
+	Background->SetColorAndOpacity(FLinearColor(.65f, .65f, .65f, 1.f));
 	Backdrop->AddChild(Background);
 	UCanvasPanelSlot* ArtSlot = Root->AddChildToCanvas(Backdrop);
 	ArtSlot->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f)); ArtSlot->SetOffsets(FMargin(0.f)); ArtSlot->SetZOrder(-8);
 	Backdrop->SetVisibility(ESlateVisibility::Collapsed);
 	EnhancementArtwork = Backdrop;
-	const FLinearColor Primary(FColor(0xED, 0xF3, 0xFA));
-	const FLinearColor Secondary(FColor(0xA0, 0xB8, 0xD0));
-	const FLinearColor Amber(FColor(0xF1, 0xBD, 0x5E));
+	const FLinearColor Primary = KnightMaintenancePresentation::Primary;
+	const FLinearColor Secondary = KnightMaintenancePresentation::Secondary;
+	const FLinearColor Amber = KnightMaintenancePresentation::WarmHighlight;
 	const FLinearColor Green(FColor(0xA4, 0xE7, 0x7D));
 	const TSubclassOf<UCommonTextStyle> TextStyle = LoadClass<UCommonTextStyle>(nullptr,
-		TEXT("/Game/Knight/UI/Style/TS_Knight_Body.TS_Knight_Body_C"));
+		TEXT("/Game/Knight/UI/Menu/Maintenance/Hologram/TS_Holo_Body.TS_Holo_Body_C"));
 	auto Text = [this, TextStyle](const TCHAR* Name, const FText& Value, int32 Size,
 		FLinearColor Color, ETextJustify::Type Justify = ETextJustify::Left)
 	{
@@ -82,12 +78,12 @@ void UKnightMaintenanceWidget::BuildEnhancementPresentation()
 	{
 		UBorder* Border = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), Name);
 		FSlateBrush Brush;
-		// Nine-slice a painted metal panel. No old flat fill/outline under the artwork.
+		// Raster projected-glass frame; no physical machinery or old flat frame.
 		Brush.SetResourceObject(EnhancementPanelTexture);
 		Brush.DrawAs = ESlateBrushDrawType::Box;
 		Brush.ImageSize = FVector2D(256.f, 256.f);
-		Brush.Margin = FMargin(.12f);
-		Brush.TintColor = FSlateColor(FLinearColor(.58f, .60f, .62f, 1.f));
+		Brush.Margin = FMargin(.04f);
+		Brush.TintColor = FSlateColor(KnightMaintenancePresentation::PanelTint);
 		Border->SetBrush(Brush); Border->SetPadding(FMargin(42.f));
 		Border->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 		return Border;
@@ -102,31 +98,31 @@ void UKnightMaintenanceWidget::BuildEnhancementPresentation()
 	{
 		USizeBox* Size = WidgetTree->ConstructWidget<USizeBox>(); Size->SetHeightOverride(1.f);
 		UImage* Image = WidgetTree->ConstructWidget<UImage>();
-		Image->SetColorAndOpacity(FLinearColor(0.13f, 0.23f, 0.34f, 1.f));
+		Image->SetColorAndOpacity(KnightMaintenancePresentation::Divider);
 		Image->SetVisibility(ESlateVisibility::HitTestInvisible); Size->AddChild(Image);
 		Add(Column, Size, 14.f);
 	};
-	UHorizontalBox* Columns = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("EnhancementColumns"));
+	UCanvasPanel* Columns = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("EnhancementColumns"));
 	EnhancementColumns = Columns;
 	UCanvasPanelSlot* ColumnsSlot = Root->AddChildToCanvas(Columns);
 	ColumnsSlot->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f));
 	ColumnsSlot->SetOffsets(FMargin(0.f));
 	ColumnsSlot->SetZOrder(1);
-	auto Column = [this, Columns, &Frame](const TCHAR* Name, float Ratio, FMargin ContentPadding)
+	auto Column = [this, Columns, &Frame](const TCHAR* Name, const FAnchors& Anchors, FMargin ContentPadding)
 	{
 		UBorder* Border = Frame(Name);
-		UHorizontalBoxSlot* Cell = Columns->AddChildToHorizontalBox(Border);
-		FSlateChildSize Size(ESlateSizeRule::Fill); Size.Value = Ratio; Cell->SetSize(Size);
+		UCanvasPanelSlot* Cell = Columns->AddChildToCanvas(Border);
+		Cell->SetAnchors(Anchors); Cell->SetOffsets(FMargin(0.f));
 		FSlateBrush Empty; Empty.DrawAs = ESlateBrushDrawType::NoDrawType;
 		Border->SetBrush(Empty); Border->SetPadding(ContentPadding);
 		UVerticalBox* Body = WidgetTree->ConstructWidget<UVerticalBox>(); Border->SetContent(Body);
 		return Body;
 	};
-	// Content remains comfortably inset; only the independent side surfaces reach
-	// viewport edges, behind the unchanged live header/money and the Back action.
-	UVerticalBox* Left = Column(TEXT("EnhancementOwnedColumn"), .26f, FMargin(48.f, 176.f, 32.f, 42.f));
-	UVerticalBox* Center = Column(TEXT("EnhancementTargetColumn"), .44f, FMargin(32.f, 178.f, 32.f, 80.f));
-	UVerticalBox* Right = Column(TEXT("EnhancementPreviewColumn"), .30f, FMargin(40.f, 176.f, 48.f, 110.f));
+	// Independent canvas anchors translate the whole side columns without changing
+	// their width, padding, or the central apparatus layout.
+	UVerticalBox* Left = Column(TEXT("EnhancementOwnedColumn"), KnightMaintenancePresentation::ShiftSideAnchors(FAnchors(0.f, 0.f, .26f, 1.f), false), FMargin(48.f, 176.f, 32.f, 42.f));
+	UVerticalBox* Center = Column(TEXT("EnhancementTargetColumn"), FAnchors(.26f, 0.f, .70f, 1.f), FMargin(32.f, 178.f, 32.f, 80.f));
+	UVerticalBox* Right = Column(TEXT("EnhancementPreviewColumn"), KnightMaintenancePresentation::ShiftSideAnchors(FAnchors(.70f, 0.f, 1.f, 1.f), true), FMargin(56.f, 176.f, 64.f, 110.f));
 	Add(Left, Text(TEXT("EnhancementOwnedTitle"), LOCTEXT("Owned", "보유 무기"), 28, Primary)); Line(Left);
 	EnhancementOwnedList = WidgetTree->ConstructWidget<UScrollBox>(UScrollBox::StaticClass(), TEXT("EnhancementOwnedWeapons"));
 	Add(Left, EnhancementOwnedList)->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
@@ -153,8 +149,9 @@ void UKnightMaintenanceWidget::BuildEnhancementPresentation()
 	// Keep live numbers away from the apparatus's luminous ring on a recessed raster surface.
 	UBorder* Readout = Frame(TEXT("EnhancementReadout"));
 	FSlateBrush ReadoutBrush; ReadoutBrush.SetResourceObject(EnhancementButtonTexture);
-	ReadoutBrush.DrawAs = ESlateBrushDrawType::Box; ReadoutBrush.Margin = FMargin(.12f);
-	ReadoutBrush.TintColor = FSlateColor(FLinearColor(.5f, .52f, .55f, 1.f));
+	ReadoutBrush.DrawAs = ESlateBrushDrawType::Box; ReadoutBrush.Margin = KnightMaintenancePresentation::ControlSlice;
+	KnightMaintenancePresentation::SetControlUV(ReadoutBrush);
+	ReadoutBrush.TintColor = FSlateColor(KnightMaintenancePresentation::ReadoutTint);
 	Readout->SetBrush(ReadoutBrush); Readout->SetPadding(FMargin(36.f, 14.f));
 	UVerticalBox* ReadoutContent = WidgetTree->ConstructWidget<UVerticalBox>(); Readout->SetContent(ReadoutContent);
 	Add(UpgradePanel, Readout, 4.f);
@@ -213,8 +210,9 @@ void UKnightMaintenanceWidget::BuildEnhancementPresentation()
 	EnhancementSuccessSummary = Text(TEXT("EnhancementSuccessSummary"), FText::GetEmpty(), 26, Green);
 	UBorder* SummaryFrame = Frame(TEXT("EnhancementSuccessFrame"));
 	FSlateBrush InsetBrush; InsetBrush.SetResourceObject(EnhancementButtonTexture);
-	InsetBrush.DrawAs = ESlateBrushDrawType::Box; InsetBrush.ImageSize = FVector2D(240.f, 80.f); InsetBrush.Margin = FMargin(.12f);
-	InsetBrush.TintColor = FSlateColor(FLinearColor(.55f, .55f, .5f, 1.f));
+	InsetBrush.DrawAs = ESlateBrushDrawType::Box; InsetBrush.ImageSize = FVector2D(240.f, 80.f); InsetBrush.Margin = KnightMaintenancePresentation::ControlSlice;
+	KnightMaintenancePresentation::SetControlUV(InsetBrush);
+	InsetBrush.TintColor = FSlateColor(KnightMaintenancePresentation::ReadoutTint);
 	SummaryFrame->SetBrush(InsetBrush); SummaryFrame->SetPadding(FMargin(36.f, 16.f));
 	SummaryFrame->SetContent(EnhancementSuccessSummary); Add(Preview, SummaryFrame, 32.f);
 	Add(Preview, Text(TEXT("EnhancementGuideTitle"), LOCTEXT("Guide", "강화 안내"), 28, Primary)); Line(Preview);
