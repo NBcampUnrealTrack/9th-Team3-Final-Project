@@ -147,7 +147,9 @@ void UknightGroggyFeedbackComponent::EndPlay(const EEndPlayReason::Type EndPlayR
 	if (UWorld* const World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(ReleaseDelayTimer);
+		World->GetTimerManager().ClearTimer(DeferredGroggyTimer);
 	}
+	DeferredGroggyVictim.Reset();
 	FinishRelease();
 	if (FeedbackTicker.IsValid())
 	{
@@ -315,8 +317,12 @@ bool UknightGroggyFeedbackComponent::TryStartPredictedKnockdown(UGameplayAbility
 	UAbilitySystemComponent* const TargetASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Boss);
 	const UknightCoreAttributeSet* const SourceCore = SourceASC ? SourceASC->GetSet<UknightCoreAttributeSet>() : nullptr;
 	const UknightCoreAttributeSet* const TargetCore = TargetASC ? TargetASC->GetSet<UknightCoreAttributeSet>() : nullptr;
+	// (2026-10-27) 패링으로 이미 그로기가 터져 연출을 기다리는 보스(DeferredGroggyVictim)면, 그로기가 이미 확정이다.
+	// Poise 0·다운 중이라도 반격에 예측 슬로를 건다. 예전에는 여기서 막혀 패링이 그로기를 터뜨린 판에서는
+	// 반격이 맞은 뒤의 짧은 슬로(0.2 + 0.3초)만 나왔다 → '가끔 끝부분만 잠깐 슬로'.
+	const bool bDeferredParryTarget = Boss && DeferredGroggyVictim.Get() == Boss;
 	if (!Boss || PredictedTargetsThisAttack.Contains(Boss) || Boss->IsDead() || IsInHitStop(Boss)
-		|| !SourceCore || !TargetCore || TargetCore->GetPoise() <= 0.f
+		|| !SourceCore || !TargetCore || (TargetCore->GetPoise() <= 0.f && !bDeferredParryTarget)
 		|| FGenericTeamId::GetAttitude(Player, Boss) != ETeamAttitude::Hostile
 		|| !ICombatInterface::Execute_CanReceiveHitBP(Boss, Player)
 		|| SourceASC->HasMatchingGameplayTag(knightGameplayTags::State_Dead)
@@ -325,8 +331,7 @@ bool UknightGroggyFeedbackComponent::TryStartPredictedKnockdown(UGameplayAbility
 		|| TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_Invulnerable)
 		|| TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_Guarding)
 		|| TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_Parrying)
-		|| TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_HitReact_Knockdown)
-		|| TargetASC->HasMatchingGameplayTag(knightGameplayTags::Window_MeleeTrace))
+		|| (TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_HitReact_Knockdown) && !bDeferredParryTarget))
 	{
 		return false;
 	}
@@ -352,7 +357,7 @@ bool UknightGroggyFeedbackComponent::TryStartPredictedKnockdown(UGameplayAbility
 			return false;
 		}
 		RemainingToHit = (NextHitTime - MontagePosition) / MontageRate;
-		if (RemainingToHit > FMath::Max(PredictionLeadTime, 0.1f) || RemainingToHit < 0.08f)
+		if (RemainingToHit > FMath::Max(PredictionLeadTime, 0.1f) || RemainingToHit < 0.025f)
 		{
 			return false;
 		}
@@ -389,13 +394,14 @@ bool UknightGroggyFeedbackComponent::TryStartPredictedKnockdown(UGameplayAbility
 
 	FVector ClosestBodyPoint = TargetPoint;
 	// (돌진 베기는 StopDistance가 더 길 수 있어 아래 표면 허용치에 더해 준다.)
-	const float LeadSlack = bLeadMode ? 100.f : 0.f;
+	const float LeadSlack = bLeadMode ? 120.f : 0.f;
 	const float PointDistance2D = FVector::Dist2D(PlayerLoc, TargetPoint);
 	const float SurfaceDistance2D = FindClosestMonsterBodyDistance2D(Boss, PlayerLoc, TargetPoint, &ClosestBodyPoint);
 	const bool bIsLungingOrHeavyAttack = HitParams.PoiseDamage >= 20.f;
-	const float WarpSlack = bUsingWarpTarget ? 150.f : 0.f;
-	const float MaxSurfaceRange = (bIsLungingOrHeavyAttack ? 140.f : 70.f) + WarpSlack + LeadSlack;
-	const float MaxPointRange = (bIsLungingOrHeavyAttack ? 440.f : 310.f) + LeadSlack;
+	const float WarpSlack = bUsingWarpTarget ? 160.f : 0.f;
+	// 대검의 실제 타격 사거리(칼끝 리치 약 250~320cm)에 맞춰 표면·포인트 허용 거리를 넉넉히 잡는다.
+	const float MaxSurfaceRange = (bIsLungingOrHeavyAttack ? 260.f : 185.f) + WarpSlack + LeadSlack;
+	const float MaxPointRange = (bIsLungingOrHeavyAttack ? 540.f : 420.f) + LeadSlack;
 	if (SurfaceDistance2D > MaxSurfaceRange || PointDistance2D > MaxPointRange)
 	{
 		return false;
@@ -419,7 +425,7 @@ bool UknightGroggyFeedbackComponent::TryStartPredictedKnockdown(UGameplayAbility
 	In.StaggerPower = SourceASC->GetNumericAttribute(UknightCoreAttributeSet::GetStaggerPowerAttribute());
 	In.PoiseDamageTakenMultiplier = TargetASC->GetNumericAttribute(UknightCoreAttributeSet::GetPoiseDamageTakenMultiplierAttribute());
 	const float ExpectedPoiseDamage = knightDamageMath::Compute(In).PoiseDamage;
-	if (ExpectedPoiseDamage + KINDA_SMALL_NUMBER < TargetCore->GetPoise())
+	if (!bDeferredParryTarget && ExpectedPoiseDamage + KINDA_SMALL_NUMBER < TargetCore->GetPoise())
 	{
 		return false;
 	}
@@ -510,6 +516,9 @@ void UknightGroggyFeedbackComponent::ResolvePredictedMeleeContact(AActor* HitTar
 
 void UknightGroggyFeedbackComponent::CompletePredictedMeleeHit(AActor* HitTarget, bool bNewKnockdown)
 {
+	// (2026-10-27) 패링으로 터진 그로기를 기다리던 보스를 반격이 맞혔다 → 지금 그로기 연출을 낸다.
+	PlayDeferredParryGroggy(HitTarget);
+
 	if (bPredictionHitPending && HitTarget == PredictedBoss.Get())
 	{
 		UE_LOG(LogknightCombat, Verbose, TEXT("Predicted hit on %s: new knockdown %s"),
@@ -671,6 +680,44 @@ void UknightGroggyFeedbackComponent::HandleAnyPoiseBroken(AActor* InVictim, AAct
 		return;
 	}
 	const bool bPredictedContact = bPredictionHitPending && PredictedBoss.Get() == InVictim;
+
+	// (2026-10-27) 패링(퍼펙트 가드)의 그로기 피해로 터진 그로기는 타격 지점이 없다.
+	const bool bParryBreak = !bPredictedContact && !Context.GetHitResult() && !bPlayingDeferredGroggy;
+	const double NowReal = FPlatformTime::Seconds();
+	// 같은 보스에 방금(1초 안) 그로기 연출을 냈으면 패링 붕괴 알림으로 두 번째 슬로를 걸지 않는다.
+	if (bParryBreak && LastPresentedGroggyVictim.Get() == InVictim && NowReal - LastPresentedGroggyTime < 1.0)
+	{
+		UE_LOG(LogknightCombat, Log, TEXT("%s: groggy feedback on %s skipped (already presented %.2fs ago, parry break)"),
+			*GetNameSafe(Owner), *GetNameSafe(InVictim), NowReal - LastPresentedGroggyTime);
+		return;
+	}
+	// 패링 순간에는 번개 큐만 내고, 멈춤·슬로·줌은 반격이 맞는 순간(PlayDeferredParryGroggy)으로 미룬다.
+	if (bParryBreak && bDeferParryGroggyToCounter && ParryGroggyCounterWait > 0.f)
+	{
+		DeferredGroggyVictim = InVictim;
+		DeferredGroggyContext = Context;
+		World->GetTimerManager().SetTimer(DeferredGroggyTimer, this, &ThisClass::OnDeferredParryGroggyTimeout, ParryGroggyCounterWait, false);
+		if (UAbilitySystemComponent* const DeferredVictimASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(InVictim);
+			DeferredVictimASC && GroggyCueTag.IsValid())
+		{
+			FGameplayCueParameters ParryCue;
+			ParryCue.Instigator = Owner;
+			ParryCue.EffectCauser = Owner;
+			float Radius = 0.f;
+			float HalfHeight = 0.f;
+			InVictim->GetSimpleCollisionCylinder(Radius, HalfHeight);
+			const FVector ToOwner = (Owner->GetActorLocation() - InVictim->GetActorLocation()).GetSafeNormal2D();
+			ParryCue.Location = InVictim->GetActorLocation() + ToOwner * Radius;
+			ParryCue.Normal = ToOwner;
+			DeferredVictimASC->ExecuteGameplayCue(GroggyCueTag, ParryCue);
+		}
+		UE_LOG(LogknightCombat, Log, TEXT("%s: groggy feedback on %s deferred to the counter attack (parry break, waits %.2fs)"),
+			*GetNameSafe(Owner), *GetNameSafe(InVictim), ParryGroggyCounterWait);
+		return;
+	}
+	LastPresentedGroggyVictim = InVictim;
+	LastPresentedGroggyTime = NowReal;
+
 	if (!bPredictedContact)
 	{
 		CancelKnockdownPresentation();
@@ -694,6 +741,31 @@ void UknightGroggyFeedbackComponent::HandleAnyPoiseBroken(AActor* InVictim, AAct
 		}
 	}
 
+	// 예측 슬로우 없이 터진 그로기(퍼펙트 가드 패링, 칼끝 사거리 타격 등)에서도 시네마틱 줌 + 포스트프로세스 연출이 빠지지 않게 건다.
+	if (!bPredictedContact)
+	{
+		if (AknightCharacter* const Player = Cast<AknightCharacter>(Owner))
+		{
+			if (APlayerController* const PC = Cast<APlayerController>(Player->GetController()))
+			{
+				if (PC->IsLocalController() && PC->GetViewTarget() == Player)
+				{
+					ZoomCameraManager = Cast<AknightPlayerCameraManager>(PC->PlayerCameraManager);
+					if (AknightPlayerCameraManager* const CameraManager = ZoomCameraManager.Get())
+					{
+						const double Now = FPlatformTime::Seconds();
+						CameraManager->StartKnockdownZoom(Player, PredictionZoomDegrees, 0.06f, Now);
+						CameraManager->PunchKnockdownZoom(ImpactZoomPunchDegrees, ImpactZoomPunchTime);
+						PredictedBoss = Cast<AknightMonsterCharacterBase>(InVictim);
+						bCameraBeatActive = true;
+						PresentationEndTime = Now + EffectiveFreezeTime + SlowReleaseTime + FMath::Max(PredictionZoomReturnTime, 0.f) + 0.2;
+						EnsureFeedbackTicker();
+					}
+				}
+			}
+		}
+	}
+
 	// 타격 큐 위치: 타격 지점이 있으면 거기(일반 공격·스킬), 없으면(패링 그로기) 상대 몸에서 나를 향한 표면 쪽.
 	CueParams = FGameplayCueParameters();
 	CueParams.Instigator = Owner;
@@ -713,7 +785,8 @@ void UknightGroggyFeedbackComponent::HandleAnyPoiseBroken(AActor* InVictim, AAct
 		CueParams.Normal = ToOwner;
 	}
 	UAbilitySystemComponent* const VictimASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(InVictim);
-	if (VictimASC && GroggyCueTag.IsValid())
+	// (2026-10-27) 미루어 둔 패링 그로기는 번개 큐를 패링 순간에 이미 냈다.
+	if (VictimASC && GroggyCueTag.IsValid() && !bPlayingDeferredGroggy)
 	{
 		VictimASC->ExecuteGameplayCue(GroggyCueTag, CueParams);
 	}
@@ -732,7 +805,41 @@ void UknightGroggyFeedbackComponent::HandleAnyPoiseBroken(AActor* InVictim, AAct
 	}
 
 	UE_LOG(LogknightCombat, Log, TEXT("%s: groggy feedback on %s (freeze %.2fs + slow release %.2fs from x%.2f, %s)."), *GetNameSafe(Owner), *GetNameSafe(InVictim),
-		EffectiveFreezeTime, bSkipGenericReleaseSlow ? 0.f : SlowReleaseTime, SlowReleaseStartSpeed, Context.GetHitResult() ? TEXT("hit point") : TEXT("no hit point (parry)"));
+		EffectiveFreezeTime, bSkipGenericReleaseSlow ? 0.f : SlowReleaseTime, SlowReleaseStartSpeed,
+		bPlayingDeferredGroggy ? (bPredictedContact ? TEXT("parry counter, predicted") : TEXT("parry counter"))
+			: (Context.GetHitResult() ? TEXT("hit point") : TEXT("no hit point (parry)")));
+}
+
+void UknightGroggyFeedbackComponent::PlayDeferredParryGroggy(AActor* const HitTarget)
+{
+	AActor* const Deferred = DeferredGroggyVictim.Get();
+	if (!Deferred || HitTarget != Deferred)
+	{
+		return;
+	}
+	if (UWorld* const World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(DeferredGroggyTimer);
+	}
+	const FGameplayEffectContextHandle DeferredContext = DeferredGroggyContext;
+	DeferredGroggyVictim.Reset();
+	DeferredGroggyContext = FGameplayEffectContextHandle();
+	if (const AknightMonsterCharacterBase* const Boss = Cast<AknightMonsterCharacterBase>(Deferred); Boss && Boss->IsDead())
+	{
+		return;
+	}
+	bPlayingDeferredGroggy = true;
+	HandleAnyPoiseBroken(Deferred, GetOwner(), DeferredContext);
+	bPlayingDeferredGroggy = false;
+}
+
+void UknightGroggyFeedbackComponent::OnDeferredParryGroggyTimeout()
+{
+	// 반격이 없었다: 늦게 슬로를 걸면 어색하므로 연출은 생략한다(번개 큐는 패링 순간에 이미 냈다).
+	UE_LOG(LogknightCombat, Log, TEXT("%s: deferred parry groggy on %s dropped (no counter hit)"),
+		*GetNameSafe(GetOwner()), *GetNameSafe(DeferredGroggyVictim.Get()));
+	DeferredGroggyVictim.Reset();
+	DeferredGroggyContext = FGameplayEffectContextHandle();
 }
 
 void UknightGroggyFeedbackComponent::StartRelease()
@@ -872,7 +979,7 @@ void UknightGroggyFeedbackComponent::TickWatchedAttack()
 			continue;
 		}
 		const float StartRemaining = (Event.GetTriggerTime() - Position) / BaseRate;
-		if (StartRemaining <= SwingLeadTime && StartRemaining > 0.08f
+		if (StartRemaining <= SwingLeadTime && StartRemaining > 0.025f
 			&& TryStartPredictedKnockdown(Attack, WatchedHitParams))
 		{
 			bWatchedPredictionAttempted = true;
@@ -904,7 +1011,6 @@ void UknightGroggyFeedbackComponent::TickPrediction()
 		|| TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_Guarding)
 		|| TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_Parrying)
 		|| TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_HitReact_Knockdown)
-		|| TargetASC->HasMatchingGameplayTag(knightGameplayTags::Window_MeleeTrace)
 		|| FPlatformTime::Seconds() - PredictionStartTime >= MaxPredictionDuration)
 	{
 		BeginPredictionReturn();

@@ -100,9 +100,9 @@ protected:
 	float RadialPullBlurStrength = 0.055f;
 	/** Radius in viewport heights; independent of output aspect ratio/screen percentage. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Radial Pull", meta=(ClampMin=0, ClampMax=1))
-	float RadialPullClearRadius = 0.18f;
+	float RadialPullClearRadius = 0.22f;
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Radial Pull", meta=(ClampMin=0, ClampMax=10, Units="deg"))
-	float RadialPullFOVDegrees = 3.f;
+	float RadialPullFOVDegrees = 1.5f;
 
 	/**
 	 * 거의 멈춰 있는 시간(초). 히트스탑 컴포넌트로 건다(같은 순간의 일반 타격·패링 히트스탑보다 길면 늘어남).
@@ -120,6 +120,19 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy", meta=(ClampMin=0.02, ClampMax=1))
 	float SlowReleaseStartSpeed = 0.2f;
 
+	/**
+	 * (2026-10-27 사용자 제보 '패링할 때 잠깐 슬로우되고 후속공격할 때 또 슬로우') 퍼펙트 가드(패링)의 그로기 피해로
+	 * 그로기가 터지면(타격 지점 없는 붕괴) 멈춤·슬로·줌을 패링 순간에 내지 않고, 나이트의 다음 타격(반격)이 그 보스를
+	 * 맞히는 순간에 한 번만 낸다. 번개 큐(GroggyCueTag)는 패링 순간 바로 내서 그로기가 끝났다는 것은 보인다.
+	 * ParryGroggyCounterWait초 안에 반격이 없으면 연출은 생략한다. 끄면 예전처럼 패링 순간에 낸다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Parry")
+	bool bDeferParryGroggyToCounter = true;
+
+	/** 패링 그로기 뒤 반격을 기다리는 시간(초). 반격 창(가드 ParryCounterWindow 0.8초) + 휘두르기 시간. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Parry", meta=(ClampMin=0, Units="s", EditCondition="bDeferParryGroggyToCounter"))
+	float ParryGroggyCounterWait = 1.6f;
+
 	/** 타격 순간 상대 쪽에서 실행할 큐(번개). 비우면 없음. 기본 GameplayCue.Hit.Groggy (GCN_Hit_Groggy). */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy", meta=(Categories="GameplayCue"))
 	FGameplayTag GroggyCueTag;
@@ -131,9 +144,10 @@ protected:
 	/**
 	 * 첫 판정 몇 초 전(정상 속도 기준)부터 예측 슬로를 시작할지. 슬로로 늘어난 실제 길이 ≈ 이 값 x 0.8 / PredictionSlowSpeed + 채찍.
 	 * (2026-10-20) 예전에는 코드가 이 값을 무시하고 1.2초로 시작해 슬로가 안전 제한(1.5초)에 걸려 맞기 전에 풀렸다. 0.5 → 0.35(실제 약 0.8초).
+	 * (2026-10-26) 기계식 타이밍(준비 동작 0.45배속 감속 → 타격 직전 1.55배속 버스트)에서도 창을 건너뛰지 않도록 0.55초로 확대.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0.1, Units="s"))
-	float PredictionLeadTime = 0.35f;
+	float PredictionLeadTime = 0.55f;
 
 	/** (2026-10-20) 락온 돌진 베기는 돌진까지 슬로에 넣으려고 더 일찍(맞기 이 초 전, 정상 속도 기준) 시작한다. bLungeSlowFromDashStart면 무시. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0.1, Units="s"))
@@ -185,7 +199,7 @@ protected:
 
 	/** (2026-10-20) 맞는 순간 줌을 한 번 더 당기는 각도(도)와 시간. 0이면 없음. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0, Units="deg"))
-	float ImpactZoomPunchDegrees = 6.f;
+	float ImpactZoomPunchDegrees = 3.5f;
 
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0, Units="s"))
 	float ImpactZoomPunchTime = 0.05f;
@@ -214,7 +228,7 @@ protected:
 	float PredictionVolumeScale = 0.7f;
 
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0, Units="deg"))
-	float PredictionZoomDegrees = 25.f;
+	float PredictionZoomDegrees = 9.5f;
 
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0, Units="s"))
 	float PredictionZoomEnterTime = 0.45f;
@@ -278,6 +292,17 @@ private:
 
 	FDelegateHandle PoiseBrokenHandle;
 	FTimerHandle ReleaseDelayTimer;
+
+	/** (2026-10-27) 패링으로 터진 그로기 연출을 반격 명중까지 미룬다(bDeferParryGroggyToCounter). */
+	void PlayDeferredParryGroggy(AActor* HitTarget);
+	void OnDeferredParryGroggyTimeout();
+	TWeakObjectPtr<AActor> DeferredGroggyVictim;
+	FGameplayEffectContextHandle DeferredGroggyContext;
+	FTimerHandle DeferredGroggyTimer;
+	bool bPlayingDeferredGroggy = false;
+	/** 같은 보스에 그로기 연출이 연달아 두 번 나오지 않게(반격 그로기 직후 패링 붕괴 알림 등) 마지막 연출 대상·시각. */
+	TWeakObjectPtr<AActor> LastPresentedGroggyVictim;
+	double LastPresentedGroggyTime = -1.0;
 	FTSTicker::FDelegateHandle FeedbackTicker;
 
 	TWeakObjectPtr<AActor> Victim;
