@@ -216,6 +216,7 @@ private:
 	UPROPERTY(Transient)
 	TSubclassOf<UCommonButtonStyle> NormalBackStyle;
 	FVector2D NormalBackPosition = FVector2D::ZeroVector;
+	FAnchors NormalBackAnchors;
 	UPROPERTY(Transient)
 	TObjectPtr<UWidgetSwitcher> MaintenanceSwitcher;
 	UPROPERTY(Transient)

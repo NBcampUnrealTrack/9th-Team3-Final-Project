@@ -636,7 +636,11 @@ namespace
 					Check(Saves->SelectSlot(TEXT("Phase7WidgetOther")), TEXT("profile switch succeeds"));
 					if (First) First->OnClicked().Broadcast();
 					Saves->OnSaveFinished.Broadcast(true);
-					Check(Name->GetText().ToString().Contains(TEXT("선택")) && List->GetChildrenCount() == 0
+					// Fresh profiles own their default-loadout weapon without a persisted grant.
+					const auto Defaults = knightEquipmentStats::ReadLoadout(nullptr, UknightEquipmentSettings::LoadCatalog());
+					const auto* Starter = Defaults.FindRef(knightGameplayTags::Equipment_Slot_Weapon);
+					Check(Name->GetText().ToString().Contains(TEXT("선택")) && List->GetChildrenCount() == 1
+						&& Starter && FindRow(Starter->GetPrimaryAssetId()) && !FindRow(Starter->GetPrimaryAssetId())->GetSelected()
 						&& Save->ItemUpgradeLevels.FindRef(WeaponId) == Level,
 						TEXT("profile change clears target and rejects stale row and save callbacks"));
 				}

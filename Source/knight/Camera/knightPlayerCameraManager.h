@@ -10,6 +10,7 @@ class UknightCameraModifier_Deafen;
 class UknightCameraModifier_RoarShockwave;
 class UPrimitiveComponent;
 class UknightGroggyFeedbackComponent;
+struct FStreamableHandle;
 
 /**
  * Global camera concerns only: pitch limits, combat shakes, and cinematic view targets (Sequencer camera
@@ -22,6 +23,7 @@ class KNIGHT_API AknightPlayerCameraManager : public APlayerCameraManager
 
 public:
 	AknightPlayerCameraManager();
+	virtual void BeginPlay() override;
 	virtual void UpdateCamera(float DeltaTime) override;
 
 	/** Applies the player's CameraShakeScale setting to every shake. */
@@ -110,6 +112,9 @@ protected:
 
 private:
 	void SetLockOnBlocked(bool bBlocked) const;
+
+	/** Keeps the preloaded screen effect assets in memory while this camera lives. */
+	TSharedPtr<FStreamableHandle> PreloadHandle;
 
 	TWeakObjectPtr<UknightGroggyFeedbackComponent> RadialPullSource;
 	TWeakObjectPtr<AActor> KnockdownViewTarget;

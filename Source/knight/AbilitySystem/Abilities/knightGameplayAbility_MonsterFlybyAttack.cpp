@@ -4,6 +4,7 @@
 #include "Abilities/Tasks/AbilityTask_ApplyRootMotionConstantForce.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_Repeat.h"
+#include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
 #include "Camera/knightPlayerCameraManager.h"
 #include "Components/AudioComponent.h"
@@ -102,6 +103,7 @@ void UknightGameplayAbility_MonsterFlybyAttack::ActivateAbility(const FGameplayA
 		return;
 	}
 	bPassing = false;
+	bRecovering = false;
 	PhaseTime = 0.f;
 	HitActors.Reset();
 	SetWarning(true);
@@ -163,12 +165,38 @@ void UknightGameplayAbility_MonsterFlybyAttack::HandleTick(int32 ActionNumber)
 		}
 		return;
 	}
+	if (bRecovering)
+	{
+		if (PhaseTime >= RecoverDuration)
+		{
+			EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, false);
+		}
+		return;
+	}
 	ApplyHits();
 	UpdateBeamEffects();
 	if (PhaseTime >= PassDuration)
 	{
-		EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, false);
+		StartRecover();
 	}
+}
+
+void UknightGameplayAbility_MonsterFlybyAttack::StartRecover()
+{
+	UAnimInstance* const AnimInstance = GetCurrentActorInfo() ? GetCurrentActorInfo()->GetAnimInstance() : nullptr;
+	UAnimMontage* const Montage = PlayingWarning.Get();
+	if (!Montage || !AnimInstance || !AnimInstance->Montage_IsPlaying(Montage))
+	{
+		EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, false);
+		return;
+	}
+	// 기둥은 바로 끄고, 회복 동작은 제 속도로 끝까지(블렌드 아웃 전까지) 재생한다.
+	StopEffects();
+	bRecovering = true;
+	PhaseTime = 0.f;
+	AnimInstance->Montage_SetPosition(Montage, PassPoseEndTime);
+	AnimInstance->Montage_SetPlayRate(Montage, 1.f);
+	RecoverDuration = FMath::Max(0.f, Montage->GetPlayLength() - PassPoseEndTime - Montage->GetDefaultBlendOutTime());
 }
 
 void UknightGameplayAbility_MonsterFlybyAttack::StartPass()
@@ -180,7 +208,7 @@ void UknightGameplayAbility_MonsterFlybyAttack::StartPass()
 	StopWarningEffects();
 	bPassing = true;
 	PhaseTime = 0.f;
-	if (PlayingWarning.IsValid())
+	if (PlayingWarning.IsValid() && PassPoseEndTime <= 0.f)
 	{
 		MontageStop(0.3f);
 		PlayingWarning.Reset();
@@ -200,6 +228,13 @@ void UknightGameplayAbility_MonsterFlybyAttack::StartPass()
 	UAbilityTask_ApplyRootMotionConstantForce* const PassTask = UAbilityTask_ApplyRootMotionConstantForce::ApplyRootMotionConstantForce(
 		this, TEXT("Flyby"), Direction, PassSpeed, PassDuration, false, nullptr, ERootMotionFinishVelocityMode::SetVelocity, FVector::ZeroVector, 0.f, false);
 	PassTask->ReadyForActivation();
+	// 쏘는 자세가 지나가기 끝까지 이어지도록 남은 자세 구간을 지나가는 시간에 맞춰 늘이거나 줄인다.
+	UAnimInstance* const AnimInstance = GetCurrentActorInfo() ? GetCurrentActorInfo()->GetAnimInstance() : nullptr;
+	if (PlayingWarning.IsValid() && AnimInstance && AnimInstance->Montage_IsPlaying(PlayingWarning.Get()))
+	{
+		const float Remaining = PassPoseEndTime - AnimInstance->Montage_GetPosition(PlayingWarning.Get());
+		AnimInstance->Montage_SetPlayRate(PlayingWarning.Get(), FMath::Clamp(Remaining / FMath::Max(PassDuration, 0.1f), 0.1f, 2.f));
+	}
 	UE_LOG(LogknightAI, Log, TEXT("%s: flyby passes %.0f cm in %.2f s."), *GetNameSafe(Monster), Travel, PassDuration);
 	StartBeamEffects();
 }

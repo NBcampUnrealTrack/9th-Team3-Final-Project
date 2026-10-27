@@ -74,6 +74,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Reaction|Presentation")
 	TObjectPtr<UAnimMontage> RecoverMontage;
 
+	/** 회복(RecoverMontage 또는 RecoverTime) 동안 붙이는 루즈 태그. 잔향 다운: State.Monster.GettingUp(일어나는 동안 가슴 약점 노출). */
+	UPROPERTY(EditDefaultsOnly, Category="Reaction", meta=(Categories="State"))
+	FGameplayTagContainer RecoverTags;
+
 	/**
 	 * 반응이 시작될 때 끊긴 공격 애니메이션을 이만큼(애니메이션 시간) 되감는다. 0이면 끈다. 유지 구간(HoldTime)은 되감기가
 	 * 끝난 뒤 시작하므로 반응 전체가 RewindTime / RewindRate만큼 길어진다.
@@ -132,5 +136,6 @@ private:
 	mutable float InitialMaxPoise = -1.f;
 
 	bool bStateTagApplied = false;
+	bool bRecoverTagsApplied = false;
 	bool bHoldStarted = false;
 };

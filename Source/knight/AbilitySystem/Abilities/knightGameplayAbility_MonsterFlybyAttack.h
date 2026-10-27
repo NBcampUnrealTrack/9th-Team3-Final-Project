@@ -162,6 +162,7 @@ struct FknightFlybyBeamEffects
  *   경고: WarningMontage를 재생하며 WarningTime 동안 타깃 쪽으로 돈다. 그동안 몬스터에 State.Monster.Warning이 붙는다.
  *   지나가기: 경고가 끝나는 순간의 타깃 쪽으로 방향을 고정하고, 타깃 너머 PassOvershoot까지 PassSpeed로 날아간다.
  *             지나가는 동안 BeamBone(가슴) 아래 바닥에서 반지름 HalfWidth 구체로 때린다(폭 HalfWidth*2 띠). 대상마다 한 번.
+ *   회복: PassPoseEndTime > 0이면 지나가는 동안 쏘는 자세를 유지하고, 지나간 뒤 WarningMontage의 남은 부분(회복 동작)을 재생하고 끝난다.
  *
  * 회피만 되게 하려면 HitParams.DamageEffect에 가드 범위 0인 피해 실행을 쓰고 bCanBeParried를 끈다.
  * 보이는 부분은 Effects(경고 빛, 가슴에서 바닥까지 이어진 기둥, 바닥·수면에 닿는 바람과 물결). 기둥 아래의 플레이어는 화면이 자글거린다.
@@ -192,6 +193,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Warning", meta=(ClampMin=0, Units="s"))
 	float WarningTime = 1.5f;
 
+	/**
+	 * WarningMontage에서 쏘는 자세를 유지하는 구간이 끝나는 시각(몽타주 초). 0보다 크면 지나가는 동안 몽타주를 멈추지 않고
+	 * 지나가기가 끝날 때 이 시각에 닿도록 재생 속도를 바꾼다. 지나간 뒤에는 이 시각부터 끝까지(회복 동작) 제 속도로 재생하고 끝난다.
+	 * 0이면 지나가기가 시작될 때 몽타주를 멈춘다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Warning", meta=(ClampMin=0, Units="s"))
+	float PassPoseEndTime = 0.f;
+
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Warning", meta=(ClampMin=0, Units="deg"))
 	float TurnRate = 240.f;
 
@@ -218,6 +227,7 @@ private:
 	void HandleTick(int32 ActionNumber);
 
 	void StartPass();
+	void StartRecover();
 	void ApplyHits();
 	void SetWarning(bool bOn);
 
@@ -276,6 +286,9 @@ private:
 	bool bTrailStarted = false;
 	bool bOverWater = false;
 	bool bPassing = false;
+	/** 지나간 뒤 회복 동작을 재생하는 중. */
+	bool bRecovering = false;
+	float RecoverDuration = 0.f;
 	bool bWarningApplied = false;
 	float PhaseTime = 0.f;
 	float PassDuration = 0.f;

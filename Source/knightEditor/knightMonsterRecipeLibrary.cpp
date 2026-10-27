@@ -508,6 +508,7 @@ namespace knightRecipe
 		float RecoverTime = 0.f;
 		UAnimMontage* HoldMontage = nullptr;
 		UAnimMontage* RecoverMontage = nullptr;
+		FGameplayTagContainer RecoverTags;
 		bool bRestorePoise = false;
 		float MaxPoiseGrowth = 0.25f;
 		bool bCancelOtherReactions = false;
@@ -533,6 +534,7 @@ namespace knightRecipe
 		SetValue<float>(CDO, TEXT("RecoverTime"), Settings.RecoverTime, Log);
 		SetObject(CDO, TEXT("HoldMontage"), Settings.HoldMontage, Log);
 		SetObject(CDO, TEXT("RecoverMontage"), Settings.RecoverMontage, Log);
+		SetValue(CDO, TEXT("RecoverTags"), Settings.RecoverTags, Log);
 		SetBool(CDO, TEXT("bRestorePoise"), Settings.bRestorePoise, Log);
 		SetValue<float>(CDO, TEXT("MaxPoiseGrowth"), Settings.MaxPoiseGrowth, Log);
 		SetBool(CDO, TEXT("bCancelOtherReactions"), Settings.bCancelOtherReactions, Log);
@@ -592,6 +594,8 @@ namespace knightRecipe
 			Down.HoldMontage = BuildMontage(Context, FString::Printf(TEXT("AM_%s_Down"), *Prefix), DownSequences, true, true);
 			Down.RecoverMontage = BuildMontage(Context, FString::Printf(TEXT("AM_%s_GetUp"), *Prefix), Reactions.GetUp);
 			Down.RecoverTime = Down.RecoverMontage ? Down.RecoverMontage->GetPlayLength() : 1.f;
+			// 일어나는 동안에만 노출되는 약점(잔향 가슴)의 ExposedTags가 읽는다.
+			Down.RecoverTags.AddTag(Tag(TEXT("State.Monster.GettingUp")));
 			Down.bRestorePoise = true;
 			Down.MaxPoiseGrowth = Reactions.MaxPoiseGrowth;
 			// 패링으로 Poise가 깨지면 패리 경직과 같은 프레임에 켜지므로 다운이 이어받는다.

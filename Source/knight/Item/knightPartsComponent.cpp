@@ -14,6 +14,9 @@
 #include "Item/knightItemDefinitions.h"
 #include "Item/knightEquipmentData.h"
 #include "MechBodyRegionSet.h"
+#include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
 #include "Progression/knightProgressionSubsystem.h"
 #include "System/knightAssetManager.h"
 #include "System/knightGameplayTags.h"
@@ -86,6 +89,17 @@ bool UknightPartsComponent::SyncLoadoutWithSave()
 		const UknightPartItemDefinition* const Wanted = GetLoadoutPartForSlot(Progression, Slot);
 		if (GetEquippedPart(Slot) == Wanted)
 		{
+			// A different profile can keep the same default weapon but have another
+			// saved upgrade level. Reconcile that level without respawning the mesh.
+			if (const UknightWeaponItemDefinition* Weapon = Cast<UknightWeaponItemDefinition>(Wanted))
+			{
+				const int32 Level = Progression ? Progression->GetUpgradeLevel(Weapon) : 0;
+				if (const FknightEquippedPart* Equipped = EquippedParts.Find(Slot); Equipped && Equipped->UpgradeLevel != Level)
+				{
+					RefreshWeaponUpgrade(Weapon, Level);
+					bChanged = true;
+				}
+			}
 			continue;
 		}
 		bChanged = true;
@@ -213,6 +227,14 @@ bool UknightPartsComponent::EquipPartUnchecked(const UknightPartItemDefinition* 
 	if (const UknightWeaponItemDefinition* Weapon = Cast<UknightWeaponItemDefinition>(Part))
 	{
 		ApplyWeaponUpgradeAttack(Equipped, Weapon);
+
+		// (2026-10-27) 무기 상시 이펙트: 무기 메시에 붙여서 뽑기·넣기(소켓 이동)를 따라가게 한다. 전용 서버는 그리지 않는다.
+		UNiagaraSystem* const Aura = UknightAssetManager::GetAsset(Weapon->WeaponAuraEffect);
+		if (Aura && PartMesh && Character->GetNetMode() != NM_DedicatedServer)
+		{
+			Equipped.AuraComponent = UNiagaraFunctionLibrary::SpawnSystemAttached(Aura, static_cast<USceneComponent*>(PartMesh), NAME_None,
+				FVector::ZeroVector, FRotator::ZeroRotator, FVector::OneVector, EAttachLocation::KeepRelativeOffset, false, ENCPoolMethod::None, true, true);
+		}
 	}
 
 	UpdateWeightAttribute();
@@ -375,6 +397,11 @@ void UknightPartsComponent::RemovePart(FknightEquippedPart& Part)
 		}
 		Part.UpgradeAttackEffect = nullptr;
 	}
+	if (UNiagaraComponent* const Aura = Part.AuraComponent.Get())
+	{
+		Aura->DestroyComponent();
+	}
+	Part.AuraComponent = nullptr;
 	if (UMeshComponent* const Mesh = Part.MeshComponent.Get())
 	{
 		if (AActor* const Owner = GetOwner())

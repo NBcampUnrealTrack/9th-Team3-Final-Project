@@ -5,8 +5,10 @@
 #include "Combat/knightCombatTypes.h"
 #include "knightGameplayAbility_MonsterGlideAttack.generated.h"
 
+class AknightMonsterCharacterBase;
 class UAbilityTask_Repeat;
 class UAnimMontage;
+class USoundBase;
 
 /**
  * 공중 턴의 날짐승이 포효한 뒤 낮게 활강하며 지나가면서 꼬리로 찌르는 공격(잔향 활강 꼬리 찌르기).
@@ -18,11 +20,16 @@ class UAnimMontage;
  *   연속: 분노 중이면 EnragedStrikeCount번. 중간 찌르기는 타깃 너머 RepassDistance까지 지나간 뒤 TurnTime 동안 멈춰 타깃 쪽으로 돈다.
  *   탈진 착지: 공중 턴을 끝내고 LandMontage를 LandHoldTime 동안, 이어서 GetUpMontage를 재생한다(공격 없는 딜 타임).
  *             그동안 State.Monster.Collapsed를 붙인다(날개로 플레이어를 밀어내지 않음).
+ *             일어나는 동안(GetUpMontage)은 State.Monster.GettingUp도 붙인다(잔향 가슴 약점 노출).
  *             끝나면 지상 턴이 처음부터 시작된다.
  *             공중 턴을 스스로 끝내므로 Selection.RequiredOwnerTags에 State.Monster.LastAirAttack을 넣어 마지막 공격으로만 쓴다.
  *
  * bDarkenView면 포효부터 착지까지 플레이어 시야를 어둠으로 덮고, 첫 찌르기는 어둠이 덮인 뒤 DarknessHoldTime이 지나야 시작한다.
  * 그리고 찌르기 SilhouetteLeadTime 전부터 찌르는 순간까지 몸 윤곽선만 보인다.
+ *   등 뒤로 돌기: BehindDistance > 0이면 CircleStartTime부터 첫 찌르기까지 타깃 둘레를 돌아 카메라 반대쪽(등 뒤)으로 간다.
+ *                 그동안 CircleFlapSound를 되풀이해 소리로 위치를 짐작하게 한다.
+ *   추격: 찌르는 동안 StabTime - HomingLockTime까지 HomingTurnRate로 타깃 쪽으로 방향을 꺾는다. 그 뒤로는 고정이라 구르면 피한다.
+ *   어둠이 없으면 두 동작 모두 하지 않는다(정면에서 일직선).
  *
  * 찌르는 동안 State.Monster.NoFlinch를 붙여 패링 경직이 활강을 끊지 않는다. 그로기 게이지가 다 차면 다운이 끊는다(격추).
  * 디버그: knight.Monster.DrawAttacks 1 이면 판정 구체를 그린다.
@@ -126,6 +133,32 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Darkness", meta=(EditCondition="bDarkenView", ClampMin=0, Units="s"))
 	float SilhouetteLeadTime = 0.5f;
 
+	/** 어둠 속 첫 찌르기를 시작할 위치: 타깃에서 카메라 반대쪽으로 이 거리. 벽이 있으면 벽 앞까지. 0이면 돌지 않는다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Darkness", meta=(EditCondition="bDarkenView", ClampMin=0, Units="cm"))
+	float BehindDistance = 2200.f;
+
+	/** 어둠이 덮이고 이 시간이 지나면 등 뒤로 돌기 시작한다(어둠이 다 덮이기 전에 움직이는 게 보이지 않게). */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Darkness", meta=(EditCondition="bDarkenView", ClampMin=0, Units="s"))
+	float CircleStartTime = 0.8f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Darkness", meta=(EditCondition="bDarkenView", ClampMin=0, Units="cm/s"))
+	float CircleMaxSpeed = 3000.f;
+
+	/** 등 뒤로 도는 동안 CircleFlapInterval마다 몸에 붙여 재생한다(위치 단서). */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Darkness", meta=(EditCondition="bDarkenView"))
+	TObjectPtr<USoundBase> CircleFlapSound;
+
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Darkness", meta=(EditCondition="bDarkenView", ClampMin=0.05, Units="s"))
+	float CircleFlapInterval = 0.5f;
+
+	/** 어둠 속 찌르기가 타깃 쪽으로 방향을 꺾는 최대 속도. 0이면 일직선. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Darkness", meta=(EditCondition="bDarkenView", ClampMin=0, Units="deg"))
+	float HomingTurnRate = 90.f;
+
+	/** 찌르는 순간(StabTime) 이 시간 전부터는 방향을 고정한다. 마지막 순간 구르기로 피할 틈. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Darkness", meta=(EditCondition="bDarkenView", ClampMin=0, Units="s"))
+	float HomingLockTime = 0.3f;
+
 private:
 	UFUNCTION()
 	void HandleTick(int32 ActionNumber);
@@ -140,6 +173,12 @@ private:
 	void SetDarkness(bool bOn);
 	void SetCollapsed(bool bOn);
 	void SetSilhouette(bool bOn);
+	void SetGettingUp(bool bOn);
+	void UpdateCircle(AknightMonsterCharacterBase& Monster, const AActor& Target);
+	FVector GetBehindLocation(const AknightMonsterCharacterBase& Monster, const AActor& Target) const;
+	void StartGlideForce(const FVector& Velocity, float Duration);
+	void SetGlideVelocity(const FVector& Velocity);
+	void StopGlideForce();
 
 	enum class EPhase : uint8 { Roar, Strike, Turn, Land, GetUp };
 
@@ -150,9 +189,16 @@ private:
 	int32 StrikesLeft = 0;
 	/** 이번 찌르기가 끝나는 시각(StrikeMontage 초). */
 	float StrikeEndTime = 0.f;
+	/** 지금 쓰는 이동 루트 모션 소스(등 뒤로 돌기, 활강). 0이면 없음. */
+	uint16 GlideForceID = 0;
+	FVector GlideDirection = FVector::ForwardVector;
+	float GlideSpeed = 0.f;
+	float CircleFlapTime = 0.f;
+	bool bCircling = false;
 	bool bNoFlinchApplied = false;
 	bool bLanded = false;
 	bool bDarknessOn = false;
 	bool bCollapsedApplied = false;
 	bool bSilhouetteOn = false;
+	bool bGettingUpApplied = false;
 };

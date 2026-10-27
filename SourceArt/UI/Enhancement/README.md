@@ -1,0 +1,15 @@
+# Enhancement industrial artwork
+
+- `IndustrialBackdrop.png`: user-supplied industrial apparatus artwork, used unchanged.
+- `MetalPanel.png`, `MetalButton.png`: matching blank raster surfaces made with the built-in image generation tool from that reference. No baked labels, values or gameplay icons.
+- Cooked textures and CommonUI styles: `/Game/Knight/UI/Menu/Maintenance/Enhancement`.
+- Import/update entry point: `Tools/Editor/import_enhancement_industrial.py` (UE PythonScriptCommandlet, after building the C++ presentation fields). Only run intentionally; this also initializes the previously empty Danjeol upgrade table from the current Janyeol weapon rules.
+- Runtime references are on `WBP_KnightMaintenance` Class Defaults → Knight / Maintenance / Enhancement Presentation. Source PNGs are not read from disk at runtime.
+
+Generation prompt set (built-in mode): use the supplied dark worn industrial metal/amber machinery reference to make a blank recessed gunmetal panel with sculpted, restrained edge depth, flat unobtrusive center, and corners suitable for nine-slice UI resizing; then a matching single wide blank textured metal button. No text, numbers, icons, symbols, gameplay content or bright central lighting. The original apparatus remains the background.
+
+The panel and button use 12% nine-slice margins and a 256px maximum cooked texture dimension. Slate calculates Box corner widths from the actual texture resource, not the brush's logical image size; the compact resources prevent oversized corners from swallowing the live content. The full-screen apparatus retains its original resolution. CommonUI owns normal/hover/pressed/selected/disabled states. Text, icons, currency, probabilities and materials are live widgets. Enhancement alone uses this shell; Crafting and Sockets retain their own presentation.
+
+Danjeol keeps its existing Item identity, meshes, attachment and AbilitySet (fixed base attack 100). Its previously empty upgrade table adopts the current Janyeol weapon's 15-step costs, probabilities, 5 percentage point failure compensation and +1 attack per step, including reinforced-bone and essence gates. It therefore contributes 100 at +0 and 115 at +15, without changing the template weapon. Its unassigned icon remains empty. The default-loadout weapon is queried as an already-owned copy; opening the screen grants nothing and writes no save.
+
+Verification: Development Editor build, fresh commandlet asset reload / WBP compilation, `Knight.Maintenance.Queries`, the existing `knight.MaintenanceTest UpgradeCases` modes, and opt-in isolated `knight.StarterWeaponCheck Run` then `Reload`. The starter check instantiates and possesses the real BP_Knight in the lobby test world (no combat), verifies ASC attack and save restoration, and requires `-KnightSaveTestNamespace=StarterWeapon...`. `-KnightStarterWeaponAutoExit` closes that test process. Genuine `-RenderOffscreen` captures of the real UMG screen were inspected at 1920×1080 and 1280×720; no desktop input automation was used.

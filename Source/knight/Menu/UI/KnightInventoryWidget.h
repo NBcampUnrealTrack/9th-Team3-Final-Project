@@ -7,6 +7,7 @@
 #include "KnightInventoryWidget.generated.h"
 
 class UButton;
+class UCommonButtonStyle;
 class UCommonTextBlock;
 class UEditableTextBox;
 class UknightItemDefinition;
@@ -25,7 +26,7 @@ public:
 	FKnightInventoryItemSelected OnSelected;
 	void Configure(const UknightItemDefinition* InItem, int32 Count, bool bEquipped, const FLinearColor& NameColor);
 	void SetSelected(bool bInSelected);
-	void UseMaintenancePresentation();
+	void UseMaintenancePresentation(TSubclassOf<UCommonButtonStyle> InRowStyle = nullptr);
 	const UknightItemDefinition* GetItem() const { return Item; }
 	UButton* GetButton() const { return Button; }
 protected:
@@ -39,6 +40,7 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> NameText;
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> CountText;
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> EquippedText;
+	UPROPERTY(Transient) TSubclassOf<UCommonButtonStyle> MaintenanceRowStyle;
 	int32 DisplayCount = 0;
 	bool bDisplayEquipped = false;
 	bool bSelected = false;

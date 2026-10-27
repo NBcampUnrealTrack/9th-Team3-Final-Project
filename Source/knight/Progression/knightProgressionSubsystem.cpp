@@ -26,6 +26,16 @@ namespace
 		return Defaults.FindRef(Slot);
 	}
 
+	// The default weapon already belongs to a fresh profile. Resolve it without granting
+	// an item or saving merely because a screen/quote is opened. Replacement materializes
+	// this same copy in ItemCounts before overriding the default-loadout slot.
+	const UknightWeaponItemDefinition* GetImplicitOwnedWeapon(const UknightSaveGame* Save)
+	{
+		const FGameplayTag Slot = knightGameplayTags::Equipment_Slot_Weapon;
+		if (!Save || Save->EquippedItems.Contains(Slot) || Save->ExplicitlyEmptySlots.Contains(Slot)) return nullptr;
+		return Cast<UknightWeaponItemDefinition>(GetImplicitStarterPart(Slot));
+	}
+
 	bool RecordQuestCompletionInSave(UknightSaveGame& Save, FName QuestId)
 	{
 		QuestId = KnightProgressionIds::Quest(QuestId);
@@ -51,6 +61,9 @@ namespace
 			}
 			OutItems.Emplace(Item, Entry.Value);
 		}
+		if (const UknightWeaponItemDefinition* Starter = GetImplicitOwnedWeapon(Save))
+			if (Starter->GetPrimaryAssetId().IsValid() && Save->ItemCounts.FindRef(Starter->GetPrimaryAssetId()) <= 0)
+				OutItems.Emplace(Starter, 1);
 		return bComplete;
 	}
 
@@ -459,7 +472,8 @@ int32 UknightProgressionSubsystem::GetItemCount(const UknightItemDefinition* Ite
 {
 	const UknightSaveGame* const Save = GetSave();
 	const int32* const Count = Save && Item ? Save->ItemCounts.Find(Item->GetPrimaryAssetId()) : nullptr;
-	return Count ? *Count : 0;
+	const bool bImplicitWeapon = Item && Item->IsA<UknightWeaponItemDefinition>() && Item == GetImplicitOwnedWeapon(Save);
+	return FMath::Max(Count ? *Count : 0, bImplicitWeapon ? 1 : 0);
 }
 
 void UknightProgressionSubsystem::AddItem(const UknightItemDefinition* Item, int32 Count)
@@ -683,7 +697,7 @@ void UknightProgressionSubsystem::GetWeaponUpgradeQuote(const UknightWeaponItemD
 		|| Weapon->SlotTag != knightGameplayTags::Equipment_Slot_Weapon
 		|| !Weapon->GetPrimaryAssetId().IsValid()) return;
 	OutQuote.WeaponId = Weapon->GetPrimaryAssetId();
-	if (Save->ItemCounts.FindRef(OutQuote.WeaponId) <= 0)
+	if (GetItemCount(Weapon) <= 0)
 	{ OutQuote.Availability = EKnightWeaponUpgradeAvailability::NotOwned; return; }
 	const int32 Level = Save->ItemUpgradeLevels.FindRef(OutQuote.WeaponId);
 	if (Level < 0 || Level > 15 || Weapon->UpgradeSteps.Num() != 15) return;
@@ -902,7 +916,10 @@ bool UknightProgressionSubsystem::SetEquippedPart(const UknightPartItemDefinitio
 	{
 		const UknightPartItemDefinition* Starter = GetImplicitStarterPart(Part->SlotTag);
 		if (Starter)
-			++Save->ItemCounts.FindOrAdd(Starter->GetPrimaryAssetId());
+		{
+			int32& Count = Save->ItemCounts.FindOrAdd(Starter->GetPrimaryAssetId());
+			Count = FMath::Max(Count, 1);
+		}
 	}
 	Save->EquippedItems.Add(Part->SlotTag, Part->GetPrimaryAssetId());
 	Save->ExplicitlyEmptySlots.Remove(Part->SlotTag);
@@ -922,7 +939,10 @@ void UknightProgressionSubsystem::ClearEquippedSlot(FGameplayTag SlotTag)
 		{
 			const UknightPartItemDefinition* Starter = GetImplicitStarterPart(SlotTag);
 			if (Starter)
-				++Save->ItemCounts.FindOrAdd(Starter->GetPrimaryAssetId());
+			{
+				int32& Count = Save->ItemCounts.FindOrAdd(Starter->GetPrimaryAssetId());
+				Count = FMath::Max(Count, 1);
+			}
 		}
 		Save->ExplicitlyEmptySlots.Add(SlotTag);
 		CommitChange();

@@ -45,6 +45,7 @@ void UknightUISubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	BossStatusVM = NewObject<UknightVM_BossStatus>(this);
 	RaidVM = NewObject<UknightVM_Raid>(this);
 	PilotVoice = NewObject<UknightPilotVoice>(this);
+	PilotVoice->Preload();
 	RegisterViewModels();
 }
 

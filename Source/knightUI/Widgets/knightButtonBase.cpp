@@ -1,4 +1,5 @@
 #include "Widgets/knightButtonBase.h"
+#include "Menu/UI/KnightMaintenancePresentation.h"
 
 #include "CommonButtonBase.h"
 #include "CommonTextBlock.h"
@@ -24,7 +25,7 @@ void UknightButtonBase::ConfigureMaintenanceButton(bool bInSelectable, bool bMai
 	if (const TSubclassOf<UCommonButtonStyle> StyleClass = LoadClass<UCommonButtonStyle>(nullptr, Path)) SetStyle(StyleClass);
 	const auto TintFocusImage = [](UWidget* Widget)
 	{
-		if (UImage* Image = Cast<UImage>(Widget)) Image->SetColorAndOpacity(FLinearColor(0.32f, 0.57f, 0.76f, 0.65f));
+		if (UImage* Image = Cast<UImage>(Widget)) Image->SetColorAndOpacity(KnightMaintenancePresentation::Focus);
 	};
 	for (UWidget* Bracket : { Bracket_L.Get(), Bracket_R.Get() })
 	{
@@ -211,7 +212,13 @@ void UknightButtonBase::ApplyLabelStyle()
 	{
 		return;
 	}
-	if (GetLocked() && LockedTextStyle)
+	if (bMaintenancePresentation && GetLocked())
+	{
+		if (const TSubclassOf<UCommonTextStyle> StyleClass = GetCurrentTextStyleClass()) Txt_Label->SetStyle(StyleClass);
+		Txt_Label->SetStyle(nullptr); // Keep this font, not a legacy blue locked-text style.
+		Txt_Label->SetColorAndOpacity(FSlateColor(KnightMaintenancePresentation::Muted));
+	}
+	else if (GetLocked() && LockedTextStyle)
 	{
 		Txt_Label->SetStyle(LockedTextStyle);
 	}

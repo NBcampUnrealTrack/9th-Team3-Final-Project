@@ -16,6 +16,7 @@ class UAnimMontage;
  *   돌진: LoopSection을 반복하며 DiveSpeed로 직선 이동하고, 그동안 메시가 공중 높이에서 바닥 높이로 내려온다.
  *         머리(HitSocket) 앞 구체에 닿은 대상을 한 번씩 때린다.
  *   결과: 맞히거나 막혔으면 StuckMontage(땅에 박혔다 빠짐), 피했으면 FallMontage(쓰러졌다 일어남, 딜 기회).
+ *         FallGetUpMontage가 있으면 FallMontage 뒤에 블렌드로 이어 재생한다(일어나기).
  *         퍼펙트 가드당하면 돌진이 끝나기를 기다리지 않고 그 순간 FallMontage로 넘어간다(튕겨 나는 반동부터).
  *   끝나면 공중 턴이 이어지는 동안 다시 공중 높이로 오른다.
  *
@@ -64,6 +65,13 @@ protected:
 	/** FallMontage를 이 시각(초)부터 재생한다. 앞부분이 급강하 자세를 붙잡고 있으면 건너뛴다. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack", meta=(ClampMin=0, Units="s"))
 	float FallStartTime = 0.f;
+
+	/**
+	 * 선택 사항. FallMontage가 블렌드 아웃을 시작하면 이어서 재생해 쓰러진 자세에서 블렌드로 일어난다.
+	 * 한 몽타주 안에서 애니를 이어 붙이면 이음매에서 자세가 끊겨 튀므로 일어나기는 따로 둔다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack")
+	TObjectPtr<UAnimMontage> FallGetUpMontage;
 
 	/** 퍼펙트 가드당하면 그 자리에서 돌진을 끊고 FallMontage로 넘어간다. 아직 공중이면 이 시간 동안 바닥 높이로 내린다. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack", meta=(ClampMin=0, Units="s"))
@@ -116,6 +124,9 @@ private:
 	UFUNCTION()
 	void HandleOutcomeFinished();
 
+	UFUNCTION()
+	void HandleFallBlendOut();
+
 	void StartDive();
 	void FinishDive();
 	void ApplyHits();
@@ -132,4 +143,5 @@ private:
 	bool bConnected = false;
 	bool bParried = false;
 	bool bNoFlinchApplied = false;
+	bool bFallGetUpStarted = false;
 };

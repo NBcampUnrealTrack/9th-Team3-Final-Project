@@ -8,6 +8,8 @@
 #include "KnightMaintenanceWidget.generated.h"
 
 class UCommonButtonBase;
+class UCommonButtonStyle;
+class UTexture2D;
 class UCommonTextBlock;
 class UImage;
 class UBorder;
@@ -67,14 +69,37 @@ protected:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeDestruct() override;
 
-	/** Width of the untouched robot view, as a fraction of the viewport. */
-	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Crafting Presentation", meta=(ClampMin="0.05", ClampMax="0.80", UIMin="0.15", UIMax="0.40"))
-	float CraftingClearBandWidth = 0.23f;
-	/** Width of each smooth edge transition, as a fraction of the viewport. */
-	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Crafting Presentation", meta=(ClampMin="0.01", ClampMax="0.45", UIMin="0.10", UIMax="0.30"))
-	float CraftingTransitionWidth = 0.20f;
-	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Crafting Presentation", meta=(ClampMin="0.0", ClampMax="1.0"))
-	float CraftingSideOpacity = 0.90f;
+	/** Cooked artwork references, used only by the Enhancement destination. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Enhancement Presentation")
+	TObjectPtr<UTexture2D> EnhancementBackgroundTexture;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Enhancement Presentation")
+	TObjectPtr<UTexture2D> EnhancementPanelTexture;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Enhancement Presentation")
+	TObjectPtr<UTexture2D> EnhancementButtonTexture;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Enhancement Presentation")
+	TSubclassOf<UCommonButtonStyle> EnhancementActionStyle;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Enhancement Presentation")
+	TSubclassOf<UCommonButtonStyle> EnhancementRowStyle;
+
+	/** Full-height raster surfaces shared by Enhancement and Sockets only. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Industrial Presentation")
+	TObjectPtr<UTexture2D> IndustrialSidePanelTexture;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Socket Presentation")
+	TObjectPtr<UTexture2D> SocketBackgroundTexture;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Socket Presentation")
+	TSubclassOf<UCommonButtonStyle> SocketSlotStyle;
+
+	/** High-resolution Crafting side artwork, displayed at its original aspect ratio. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Crafting Presentation")
+	TObjectPtr<UTexture2D> CraftingPanelTexture;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Crafting Presentation")
+	TObjectPtr<UTexture2D> CraftingButtonTexture;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Crafting Presentation")
+	TSubclassOf<UCommonButtonStyle> CraftingControlStyle;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Crafting Presentation")
+	TSubclassOf<UCommonButtonStyle> CraftingMainTabStyle;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Crafting Presentation")
+	TSubclassOf<UCommonButtonStyle> CraftingRowStyle;
 
 	UPROPERTY(meta=(BindWidget)) TObjectPtr<UCommonButtonBase> Btn_Craft;
 	UPROPERTY(meta=(BindWidget)) TObjectPtr<UCommonButtonBase> Btn_Weapon;
@@ -111,9 +136,10 @@ protected:
 	UPROPERTY(meta=(BindWidget)) TObjectPtr<UCommonButtonBase> Btn_ConfirmCancel;
 
 private:
+	void ApplyCraftingPresentation();
+	void StyleCraftingEntry(UKnightMaintenanceEntryWidget* Entry);
 	void ApplyDestinationLayout();
 	UPROPERTY(Transient) TObjectPtr<UBorder> MaintenanceBackdrop;
-	UPROPERTY(Transient) TObjectPtr<UImage> CraftingEdgeShade;
 	void ShowConfirm(bool bShow);
 	UFUNCTION() void HandleProgressionChanged();
 	UFUNCTION() void HandleActiveSlotChanged(const FString& SlotId);
@@ -129,6 +155,7 @@ private:
 	void RefreshWeaponUpgradePanel();
 	void RebuildEnhancementTarget(bool bRestoreFocus = true);
 	void BuildEnhancementPresentation();
+	void BuildIndustrialSideSurfaces();
 	void SelectEnhancementWeapon(FPrimaryAssetId WeaponId);
 	void RefreshEnhancementDetails();
 	const UknightWeaponItemDefinition* GetEnhancementTarget(bool& bComplete) const;
@@ -191,7 +218,7 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UCommonButtonBase> EnhancementTargetButton;
 	UPROPERTY(Transient) TArray<TObjectPtr<UKnightMaintenanceEntryWidget>> EnhancementWeaponRows;
 	UPROPERTY(Transient) TObjectPtr<UWidget> EnhancementColumns;
-	UPROPERTY(Transient) TObjectPtr<UWidget> EnhancementInputHints;
+	UPROPERTY(Transient) TObjectPtr<UWidget> EnhancementArtwork;
 	UPROPERTY(Transient) TObjectPtr<UScrollBox> EnhancementOwnedList;
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> EnhancementListStatus;
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> EnhancementLevels;
@@ -241,7 +268,7 @@ private:
 	bool bEquipmentPickerOpen = false;
 	UPROPERTY(Transient) TArray<TObjectPtr<UCommonButtonBase>> SocketListButtons;
 	UPROPERTY(Transient) TObjectPtr<UWidget> SocketColumns;
-	UPROPERTY(Transient) TObjectPtr<UWidget> SocketInputHints;
+	UPROPERTY(Transient) TObjectPtr<UWidget> SocketArtwork;
 	UPROPERTY(Transient) TObjectPtr<UScrollBox> SocketOwnedList;
 	UPROPERTY(Transient) TObjectPtr<UHorizontalBox> SocketSlotHost;
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> SocketListStatus;

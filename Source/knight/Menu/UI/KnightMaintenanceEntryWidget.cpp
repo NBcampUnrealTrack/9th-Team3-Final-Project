@@ -1,4 +1,6 @@
 #include "Menu/UI/KnightMaintenanceEntryWidget.h"
+#include "Menu/UI/KnightMaintenancePresentation.h"
+#include "CommonTextBlock.h"
 #include "Components/Border.h"
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
@@ -38,30 +40,33 @@ void UKnightMaintenanceEntryWidget::SetEntry(const UknightPartItemDefinition* In
 	if (!Part) return;
 	if (Txt_Name) Txt_Name->SetText(Part->DisplayName.IsEmpty() ? FText::FromString(Part->GetName()) : Part->DisplayName);
 
-	// 장착 중 주황, 가능 하늘색, 불가 흐림 (스타일 가이드).
+	// 장착 상태는 강조색, 보유/제작 안내는 중립색으로 표시한다.
 	FText Label;
 	FLinearColor Color;
 	switch (State)
 	{
 	case EKnightMaintenanceEntryState::Equipped:
 		Label = LOCTEXT("Equipped", "장착 중");
-		Color = FLinearColor(FColor(0xFF, 0x7A, 0x1A));
+		Color = KnightMaintenancePresentation::Accent;
 		break;
 	case EKnightMaintenanceEntryState::Craftable:
 		Label = LOCTEXT("Craftable", "제작 가능");
-		Color = FLinearColor(FColor(0xA8, 0xC8, 0xF0));
+		Color = KnightMaintenancePresentation::Secondary;
 		break;
 	case EKnightMaintenanceEntryState::MissingMaterials:
 		Label = LOCTEXT("MissingMaterials", "재료 부족");
-		Color = FLinearColor(FColor(0x4A, 0x5B, 0x75));
+		Color = KnightMaintenancePresentation::Muted;
 		break;
 	default:
 		Label = FText::Format(LOCTEXT("Owned", "보유 {0}"), FText::AsNumber(OwnedCount));
-		Color = FLinearColor(FColor(0x8F, 0xA3, 0xBF));
+		Color = KnightMaintenancePresentation::Secondary;
 		break;
 	}
 	if (Txt_State)
 	{
+		// Preserve the font but prevent the legacy blue caption style from
+		// overriding the maintenance palette during SynchronizeProperties.
+		if (UCommonTextBlock* Styled = Cast<UCommonTextBlock>(Txt_State)) Styled->SetStyle(nullptr);
 		Txt_State->SetText(Label);
 		Txt_State->SetColorAndOpacity(FSlateColor(Color));
 	}
