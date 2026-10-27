@@ -317,6 +317,11 @@ void UknightGameplayAbility_MonsterFlybyAttack::StartBeamEffects()
 	}
 	StreakComponent = knightMonsterFlyby::SpawnEffect(knightMonsterFlyby::Pick(bEnraged, Effects.PillarStreaks, Effects.EnragedPillarStreaks), Root, NAME_None, Facing);
 	GroundComponent = knightMonsterFlyby::SpawnEffect(knightMonsterFlyby::Pick(bEnraged, Effects.Ground, Effects.EnragedGround), Root, NAME_None, Facing);
+	const ACharacter* const Character = Cast<ACharacter>(Monster);
+	if (Effects.BeamSound && Character)
+	{
+		BeamAudio = UGameplayStatics::SpawnSoundAttached(Effects.BeamSound, Character->GetMesh(), BeamBone);
+	}
 	bOverWater = false;
 	bTrailStarted = false;
 	UpdateBeamEffects();
@@ -463,6 +468,11 @@ void UknightGameplayAbility_MonsterFlybyAttack::StopEffects()
 	knightMonsterFlyby::Release(StreakComponent, false);
 	knightMonsterFlyby::Release(GroundComponent, false);
 	knightMonsterFlyby::Release(SprayComponent, false);
+	if (BeamAudio)
+	{
+		BeamAudio->FadeOut(Effects.BeamSoundFadeOut, 0.f);
+	}
+	BeamAudio = nullptr;
 	if (PillarComponent)
 	{
 		PillarComponent->DestroyComponent();

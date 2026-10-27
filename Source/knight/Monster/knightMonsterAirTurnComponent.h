@@ -6,8 +6,10 @@
 #include "knightMonsterAirTurnComponent.generated.h"
 
 class UAbilitySystemComponent;
+class UAudioComponent;
 class UGameplayAbility;
 class UknightMonsterHoverComponent;
+class USoundBase;
 struct FAbilityEndedData;
 
 /**
@@ -88,6 +90,23 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(ClampMin=0, Units="s", EditCondition="GroundTurnTime > 0"))
 	float FallBlendTime = 0.4f;
 
+	/**
+	 * 공중 턴에 제자리에서 떠 있는 동안(공격·반응 중이 아닐 때) HoverSoundInterval마다 겹쳐 재생하는 날갯짓 소리.
+	 * 끝이 잦아드는 한 번짜리 소리도 겹쳐 이어지도록 반복(Looping) 대신 다시 재생한다. 비우면 소리 없음.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn|Sound", meta=(EditCondition="GroundTurnTime > 0"))
+	TObjectPtr<USoundBase> HoverSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn|Sound", meta=(ClampMin=0.1, Units="s", EditCondition="GroundTurnTime > 0"))
+	float HoverSoundInterval = 1.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn|Sound", meta=(EditCondition="GroundTurnTime > 0"))
+	FName HoverSoundBone = TEXT("spine_02");
+
+	/** 떠 있기가 끝나면(공격·착지·격추) 울리던 날갯짓을 이 시간 동안 줄인다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn|Sound", meta=(ClampMin=0, Units="s", EditCondition="GroundTurnTime > 0"))
+	float HoverSoundFadeOut = 0.4f;
+
 private:
 	void HandleAbilityEnded(const FAbilityEndedData& Data);
 	void HandleKnockdownChanged(const FGameplayTag Tag, int32 NewCount);
@@ -101,6 +120,12 @@ private:
 	void SendEvent(const FGameplayTag& EventTag) const;
 	/** 타깃이 AirKeepDistance보다 가까우면 뒤로 물러난다. */
 	void UpdateRetreat(float DeltaTime);
+	/** bHovering이면 HoverSoundInterval마다 날갯짓 소리를 내고, 아니면 울리던 소리를 줄인다. */
+	void UpdateHoverSound(bool bHovering, float DeltaTime);
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UAudioComponent>> HoverAudios;
+	float HoverSoundTime = 0.f;
 
 	TWeakObjectPtr<UAbilitySystemComponent> ASC;
 	TWeakObjectPtr<UknightMonsterHoverComponent> Hover;

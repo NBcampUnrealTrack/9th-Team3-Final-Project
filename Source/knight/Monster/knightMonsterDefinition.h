@@ -39,6 +39,13 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="States")
 	TSubclassOf<UGameplayEffect> EnrageEffect;
 
+	/**
+	 * 최대 체력의 이 비율만큼 피해를 받으면 Rage가 가득 차 EnrageEffect가 걸린다(0.2 = 체력 20%마다). 0이면 피해로 Rage가 오르지 않는다.
+	 * State.Monster.Enraged 동안 받은 피해는 쌓지 않는다. 분노가 끝나며 Rage가 0이 된 뒤부터 다시 쌓인다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="States", meta=(ClampMin=0, ClampMax=1))
+	float RageFullDamageRatio = 0.f;
+
 	/** Applied when Stamina runs out: grants State.Monster.Exhausted for a duration and restores Stamina. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="States")
 	TSubclassOf<UGameplayEffect> ExhaustEffect;

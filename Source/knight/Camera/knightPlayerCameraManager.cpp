@@ -62,14 +62,40 @@ void AknightPlayerCameraManager::UpdateViewTarget(FTViewTarget& OutVT, float Del
 			return;
 		}
 		// OutVT contains this frame's camera mode and user FOV; never subtract from last frame's zoomed FOV.
+		const float ZoomWeight = GetKnockdownZoomWeight(Now);
+		const float ClampedWeight = FMath::Clamp(ZoomWeight, 0.f, 1.f);
 		const float BaseFOV = OutVT.POV.FOV;
-		OutVT.POV.FOV = FMath::Clamp(BaseFOV - GetKnockdownZoomDegrees(Now) * GetKnockdownZoomWeight(Now), FMath::Min(BaseFOV, 45.f), 115.f);
+		OutVT.POV.FOV = FMath::Clamp(BaseFOV - GetKnockdownZoomDegrees(Now) * ZoomWeight, FMath::Min(BaseFOV, 64.f), 115.f);
+
+		// 시네마틱 로우-와이드 구도 보정: FOV를 좁혀 집중감을 주되, 카메라를 살짝 뒤로 물리고 낮춰
+		// 캐릭터의 머리만 보이지 않고 전신 실루엣과 대검 궤적·보스가 한 프레임에 묵직하게 담기도록 한다.
+		if (ClampedWeight > KINDA_SMALL_NUMBER && (KnockdownFramingPullBack > 0.f || !FMath::IsNearlyZero(KnockdownFramingHeightOffset)))
+		{
+			const FRotationMatrix ViewAxes(OutVT.POV.Rotation);
+			FVector DesiredLoc = OutVT.POV.Location
+				- ViewAxes.GetUnitAxis(EAxis::X) * (KnockdownFramingPullBack * ClampedWeight)
+				+ FVector(0.f, 0.f, KnockdownFramingHeightOffset * ClampedWeight);
+
+			if (UWorld* const World = GetWorld())
+			{
+				FCollisionQueryParams TraceParams(SCENE_QUERY_STAT(KnightGroggyFraming), false, OutVT.Target);
+				FHitResult Hit;
+				if (World->SweepSingleByChannel(Hit, OutVT.POV.Location, DesiredLoc, FQuat::Identity, ECC_Camera,
+					FCollisionShape::MakeSphere(12.f), TraceParams))
+				{
+					DesiredLoc = Hit.Location;
+				}
+			}
+			OutVT.POV.Location = DesiredLoc;
+			OutVT.POV.Rotation.Pitch = FMath::ClampAngle(
+				OutVT.POV.Rotation.Pitch + KnockdownFramingPitchOffset * ClampedWeight, ViewPitchMin, ViewPitchMax);
+		}
 	}
 	if (UknightGroggyFeedbackComponent* const Pull = RadialPullSource.Get())
 	{
 		// Compose on this frame's underlying view (user FOV, lock-on and existing zoom).
 		const float BaseFOV = OutVT.POV.FOV;
-		OutVT.POV.FOV = FMath::Max(FMath::Min(BaseFOV, 45.f), BaseFOV - Pull->GetRadialPullFOVOffset());
+		OutVT.POV.FOV = FMath::Max(FMath::Min(BaseFOV, 62.f), BaseFOV - Pull->GetRadialPullFOVOffset());
 	}
 }
 

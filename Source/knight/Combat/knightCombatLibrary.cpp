@@ -28,6 +28,19 @@
 #include "knight.h"
 #include "knightCharacter.h"
 #include "Monster/knightMonsterCharacterBase.h"
+#include "HAL/IConsoleManager.h"
+
+namespace knightParryRules
+{
+	// (2026-10-27 팀 투표: 퍼펙트 패링의 그로기 피해 삭제) 0 = 패링은 그로기를 깎지 않는다, 1 = 예전 규칙.
+	static TAutoConsoleVariable<int32> CVarParryBuildsPoise(TEXT("knight.Combat.ParryBuildsPoise"), 0,
+		TEXT("1 = a perfect guard (parry) damages the attacker's poise (knight guard + monster ParriedPoiseDamageRatio), 0 = no poise damage from parries (default, team decision 2026-10-27)."));
+}
+
+bool UknightCombatLibrary::DoesParryBuildPoise()
+{
+	return knightParryRules::CVarParryBuildsPoise.GetValueOnGameThread() != 0;
+}
 
 namespace
 {
@@ -174,7 +187,8 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 		Payload.EventTag = knightGameplayTags::Event_Parried;
 		Payload.Instigator = Target;
 		Payload.Target = Attacker;
-		if (!Params.bParryBuildsPoise)
+		// (2026-10-27) 팀 결정으로 패링은 그로기를 깎지 않는다(DoesParryBuildPoise) → 몬스터의 자기 감소도 막는다.
+		if (!Params.bParryBuildsPoise || !DoesParryBuildPoise())
 		{
 			Payload.InstigatorTags.AddTag(knightGameplayTags::Event_Parried_NoPoise);
 		}

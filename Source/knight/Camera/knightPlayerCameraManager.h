@@ -93,6 +93,21 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Camera")
 	TSubclassOf<UknightCameraModifier_Deafen> DeafenClass;
 
+	/**
+	 * 그로기 예측 슬로우 중 캐릭터 전신과 검 궤적이 한눈에 들어오도록 카메라를 뒤로 살짝 물리는 거리(cm).
+	 * 밀착된 기본 카메라(ArmLength 340~380)에서 FOV가 줄어들 때 머리만 확대되는 현상을 막고 역동적인 구도를 만든다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Camera|Groggy Framing", meta=(ClampMin=0, Units="cm"))
+	float KnockdownFramingPullBack = 50.f;
+
+	/** 그로기 슬로우 중 카메라 높이를 살짝 낮춰(음수) 로우 앵글로 캐릭터 상·하체와 보스를 동시에 담는 오프셋(cm). */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Camera|Groggy Framing", meta=(Units="cm"))
+	float KnockdownFramingHeightOffset = -18.f;
+
+	/** 그로기 슬로우 로우 앵글에 맞춰 시선을 살짝 위로 들어 올리는 피치 보정(도). */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Camera|Groggy Framing", meta=(Units="deg"))
+	float KnockdownFramingPitchOffset = 2.2f;
+
 private:
 	void SetLockOnBlocked(bool bBlocked) const;
 

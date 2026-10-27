@@ -11,7 +11,11 @@ class UAnimSequence;
 class UBlendSpace;
 class UPhysicsAsset;
 class USkeletalMesh;
+class USoundAttenuation;
 class USoundBase;
+class USoundClass;
+class USoundCue;
+class USoundWave;
 class UknightMonsterRecipe;
 
 /**
@@ -89,6 +93,13 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
 	static int32 SetMontageSoundTime(UAnimMontage* Montage, const USoundBase* Sound, float Time);
+
+	/**
+	 * Waves를 번갈아(이미 나온 것은 빼고 무작위로) 재생하는 SoundCue를 PackagePath(/Game/...)에 만든다. 같은 소리가 연달아 나지 않는다.
+	 * 이미 있으면 노드를 새로 짠다. 저장은 호출한 쪽.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
+	static USoundCue* CreateRandomSoundCue(const FString& PackagePath, const TArray<USoundWave*>& Waves, USoundClass* SoundClass, USoundAttenuation* Attenuation);
 
 	/**
 	 * 몽타주의 Start~End(몽타주 시간)에 재생 속도(Knight Play Rate) 노티파이를 넣는다. 같은 구간에 이미 있으면 속도만 바꾼다.

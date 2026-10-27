@@ -5,6 +5,7 @@
 #include "Combat/knightCombatTypes.h"
 #include "knightGameplayAbility_MonsterDiveAttack.generated.h"
 
+class UAbilityTask_ApplyRootMotionConstantForce;
 class UAbilityTask_Repeat;
 class UAnimMontage;
 
@@ -14,7 +15,8 @@ class UAnimMontage;
  *   접기: Montage의 FoldSection을 재생하며 FoldTime 동안 타깃 쪽으로 몸을 돌린다. 끝나는 순간 타깃 위치로 방향·거리를 고정한다.
  *   돌진: LoopSection을 반복하며 DiveSpeed로 직선 이동하고, 그동안 메시가 공중 높이에서 바닥 높이로 내려온다.
  *         머리(HitSocket) 앞 구체에 닿은 대상을 한 번씩 때린다.
- *   결과: 맞히거나 막혔으면 StuckMontage(땅에 박혔다 빠짐), 피했거나 퍼펙트 가드당했으면 FallMontage(쓰러졌다 일어남, 딜 기회).
+ *   결과: 맞히거나 막혔으면 StuckMontage(땅에 박혔다 빠짐), 피했으면 FallMontage(쓰러졌다 일어남, 딜 기회).
+ *         퍼펙트 가드당하면 돌진이 끝나기를 기다리지 않고 그 순간 FallMontage로 넘어간다(튕겨 나는 반동부터).
  *   끝나면 공중 턴이 이어지는 동안 다시 공중 높이로 오른다.
  *
  * 다이브 중에는 State.Monster.NoFlinch를 붙여 패링·부위 파괴 경직이 다이브를 끊지 않게 한다(패링 결과는 이 어빌리티가 고른다).
@@ -58,6 +60,14 @@ protected:
 	/** 피했거나 퍼펙트 가드당했을 때: 쓰러졌다 일어난다. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack")
 	TObjectPtr<UAnimMontage> FallMontage;
+
+	/** FallMontage를 이 시각(초)부터 재생한다. 앞부분이 급강하 자세를 붙잡고 있으면 건너뛴다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack", meta=(ClampMin=0, Units="s"))
+	float FallStartTime = 0.f;
+
+	/** 퍼펙트 가드당하면 그 자리에서 돌진을 끊고 FallMontage로 넘어간다. 아직 공중이면 이 시간 동안 바닥 높이로 내린다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack", meta=(ClampMin=0, Units="s"))
+	float ParriedDropTime = 0.3f;
 
 	UPROPERTY(EditDefaultsOnly, Category="Attack")
 	FknightMeleeHitParams HitParams;
@@ -113,6 +123,7 @@ private:
 	enum class EPhase : uint8 { Fold, Dive, Outcome };
 
 	TWeakObjectPtr<UAbilityTask_Repeat> TickTask;
+	TWeakObjectPtr<UAbilityTask_ApplyRootMotionConstantForce> DiveTask;
 	TSet<TWeakObjectPtr<AActor>> HitActors;
 	EPhase Phase = EPhase::Fold;
 	float PhaseTime = 0.f;

@@ -90,17 +90,27 @@ protected:
 	void HandleStaminaDepleted(AActor* EffectInstigator, AActor* EffectCauser, const FGameplayEffectSpec* EffectSpec,
 		float Magnitude, float OldValue, float NewValue);
 
-	/** 체력이 MonsterDefinition의 Phase2HealthRatio 밑으로 내려가면 2페이즈로 넘어간다. */
+	/** 받은 피해로 Rage를 올리고(RageFullDamageRatio), 체력이 Phase2HealthRatio 밑으로 내려가면 2페이즈로 넘어간다. */
 	void HandleDamaged(AActor* DamageInstigator, AActor* DamageCauser, const FGameplayEffectSpec* EffectSpec,
 		float Magnitude, float OldValue, float NewValue);
 	void HandleReactingChanged(const FGameplayTag Tag, int32 NewCount);
 	void EnterPhase2();
+	void AddRageFromDamage(float Damage, AActor* DamageInstigator);
 
 	/** 퍼펙트 가드를 당하면(Event.Parried) MonsterDefinition의 ParriedPoiseDamageRatio만큼 경직도를 깎는다. */
 	void HandleParried(const FGameplayEventData* Payload);
 
 	/** ParriedPoiseBlockedTags가 붙으면 경직도를 가득 채운다. */
 	void HandleParriedPoiseBlockedChanged(const FGameplayTag Tag, int32 NewCount);
+
+	void HandleEnragedChanged(const FGameplayTag Tag, int32 NewCount);
+
+	/**
+	 * State.Monster.Enraged가 붙거나 떨어질 때 부른다(분노 시작·끝). 분노 외형(잔향 공명 날개 색 등)을 Blueprint에서 바꾼다.
+	 * 분노 중에 죽어도 끝(false)은 부르지 않는다.
+	 */
+	UFUNCTION(BlueprintImplementableEvent, Category="Knight|Monster")
+	void OnEnragedChanged(bool bEnraged);
 
 	/** The first target of this life sends Event.Monster.Engaged (an encounter roar ability triggers on it). */
 	UFUNCTION()

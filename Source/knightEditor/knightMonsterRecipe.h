@@ -401,6 +401,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stats", meta=(ClampMin=0, Units="s"))
 	float EnrageDuration = 30.f;
 
+	/** 최대 체력의 이 비율만큼 피해를 받으면 Rage가 가득 차 분노한다. 0이면 피해로 Rage가 오르지 않는다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stats", meta=(ClampMin=0, ClampMax=1))
+	float RageFullDamageRatio = 0.f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stats", meta=(ClampMin=0, Units="s"))
 	float ExhaustDuration = 8.f;
 
