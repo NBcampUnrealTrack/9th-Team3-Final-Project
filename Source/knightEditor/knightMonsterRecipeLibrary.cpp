@@ -54,6 +54,10 @@
 #include "Monster/knightMonsterPartData.h"
 #include "Monster/knightMonsterPushOutComponent.h"
 #include "PhysicsAssetUtils.h"
+#include "Sound/SoundCue.h"
+#include "Sound/SoundNodeRandom.h"
+#include "Sound/SoundNodeWavePlayer.h"
+#include "Sound/SoundWave.h"
 #include "PhysicsEngine/PhysicsAsset.h"
 #include "PhysicsEngine/SkeletalBodySetup.h"
 #include "StateTree.h"
@@ -2054,6 +2058,42 @@ int32 UknightMonsterRecipeLibrary::SetMontageSoundTime(UAnimMontage* Montage, co
 		Montage->MarkPackageDirty();
 	}
 	return Moved;
+}
+
+USoundCue* UknightMonsterRecipeLibrary::CreateRandomSoundCue(const FString& PackagePath, const TArray<USoundWave*>& Waves, USoundClass* SoundClass,
+	USoundAttenuation* Attenuation)
+{
+	if (Waves.Num() == 0 || Waves.Contains(nullptr) || !FPackageName::IsValidLongPackageName(PackagePath))
+	{
+		UE_LOG(LogTemp, Error, TEXT("CreateRandomSoundCue %s: 경로가 잘못됐거나 소리가 비어 있습니다."), *PackagePath);
+		return nullptr;
+	}
+	USoundCue* Cue = LoadObject<USoundCue>(nullptr, *(PackagePath + TEXT(".") + FPackageName::GetShortName(PackagePath)), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	if (!Cue)
+	{
+		UPackage* const Package = CreatePackage(*PackagePath);
+		Cue = NewObject<USoundCue>(Package, *FPackageName::GetShortName(PackagePath), RF_Public | RF_Standalone | RF_Transactional);
+		FAssetRegistryModule::AssetCreated(Cue);
+	}
+	Cue->Modify();
+	// 노드를 처음부터 다시 짠다(SoundCueFactoryNew와 같은 순서: 노드 생성 → FirstNode → 그래프 연결).
+	Cue->ResetGraph();
+	USoundNodeRandom* const Random = Cue->ConstructSoundNode<USoundNodeRandom>();
+	Random->bRandomizeWithoutReplacement = true;
+	for (int32 Index = 0; Index < Waves.Num(); ++Index)
+	{
+		USoundNodeWavePlayer* const Player = Cue->ConstructSoundNode<USoundNodeWavePlayer>();
+		Player->SetSoundWave(Waves[Index]);
+		Random->InsertChildNode(Index);
+		Random->ChildNodes[Index] = Player;
+	}
+	Cue->FirstNode = Random;
+	Cue->LinkGraphNodesFromSoundNodes();
+	Cue->SoundClassObject = SoundClass;
+	Cue->AttenuationSettings = Attenuation;
+	Cue->PostEditChange();
+	Cue->MarkPackageDirty();
+	return Cue;
 }
 
 bool UknightMonsterRecipeLibrary::SetMontagePlayRateWindow(UAnimMontage* Montage, float Start, float End, float PlayRate)

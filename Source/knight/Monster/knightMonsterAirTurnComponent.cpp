@@ -2,8 +2,11 @@
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystem/Abilities/knightGameplayAbility_MonsterAttack.h"
+#include "Components/AudioComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Engine/World.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/RootMotionSource.h"
 #include "Monster/knightMonsterMovementComponent.h"
@@ -61,11 +64,14 @@ void UknightMonsterAirTurnComponent::TickComponent(float DeltaTime, ELevelTick T
 		{
 			EndAirTurn(FallBlendTime, false);
 		}
+		UpdateHoverSound(false, DeltaTime);
 		SetComponentTickEnabled(false);
 		return;
 	}
 
 	const bool bReacting = ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Reacting);
+	// 이륙·착지 애니메이션과 공중 공격은 자기 날갯짓 소리가 있다.
+	UpdateHoverSound(bAirborne && !bReacting && !IsAttacking(), DeltaTime);
 	if (!bAirborne)
 	{
 		const UknightMonsterTargetingComponent* const Targeting = Monster->GetTargetingComponent();
@@ -126,6 +132,33 @@ void UknightMonsterAirTurnComponent::UpdateRetreat(float DeltaTime)
 	Force->FinishVelocityParams.SetVelocity = FVector::ZeroVector;
 	Movement->ApplyRootMotionSource(Force);
 	RetreatEndTime = Now + Duration;
+}
+
+void UknightMonsterAirTurnComponent::UpdateHoverSound(bool bHovering, float DeltaTime)
+{
+	HoverAudios.RemoveAll([](const UAudioComponent* Audio) { return !IsValid(Audio) || !Audio->IsPlaying(); });
+	if (!bHovering)
+	{
+		for (UAudioComponent* const Audio : HoverAudios)
+		{
+			Audio->FadeOut(HoverSoundFadeOut, 0.f);
+		}
+		HoverAudios.Reset();
+		// 다시 떠 있기 시작하면 바로 소리를 낸다.
+		HoverSoundTime = 0.f;
+		return;
+	}
+	HoverSoundTime -= DeltaTime;
+	const ACharacter* const Character = Cast<ACharacter>(GetOwner());
+	if (HoverSoundTime > 0.f || !HoverSound || !Character)
+	{
+		return;
+	}
+	HoverSoundTime = HoverSoundInterval;
+	if (UAudioComponent* const Audio = UGameplayStatics::SpawnSoundAttached(HoverSound, Character->GetMesh(), HoverSoundBone))
+	{
+		HoverAudios.Add(Audio);
+	}
 }
 
 void UknightMonsterAirTurnComponent::TakeOff()

@@ -9,8 +9,10 @@
 #include "Engine/SkinnedAsset.h"
 #include "Engine/World.h"
 #include "GameplayEffect.h"
+#include "Kismet/GameplayStatics.h"
 #include "Monster/knightMonsterBreakPiece.h"
 #include "Monster/knightMonsterPartData.h"
+#include "Sound/SoundBase.h"
 #include "System/knightGameplayTags.h"
 #include "knight.h"
 #include "knightPerfCounters.h"
@@ -281,6 +283,10 @@ void UknightMonsterPartComponent::BreakPart(int32 PartIndex, AActor* BreakInstig
 			SpawnBreakPiece(*Definition, Mesh);
 			Mesh->HideBoneByName(Definition->HideBoneOnBreak, PBO_Term);
 		}
+	}
+	if (Definition->BreakSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, Definition->BreakSound, BreakLocation);
 	}
 
 	if (UAbilitySystemComponent* const ASC = BoundASC.Get())
