@@ -138,6 +138,7 @@ void UknightMonsterAirTurnComponent::TakeOff()
 	AirTime = 0.f;
 	AirAttacksUsed = 0;
 	ASC->AddLooseGameplayTag(knightGameplayTags::State_Monster_Airborne);
+	UpdateLastAttackTag();
 	Hover->SetAirborne(true, TakeOffBlendTime);
 	SetPawnBlocking(false);
 	SendEvent(knightGameplayTags::Event_Monster_TakeOff);
@@ -163,6 +164,7 @@ void UknightMonsterAirTurnComponent::EndAirTurn(float BlendTime, bool bSendLandE
 	{
 		ASC->RemoveLooseGameplayTag(knightGameplayTags::State_Monster_Airborne);
 	}
+	UpdateLastAttackTag();
 	if (Hover.IsValid())
 	{
 		Hover->SetAirborne(false, BlendTime);
@@ -179,6 +181,7 @@ void UknightMonsterAirTurnComponent::HandleAbilityEnded(const FAbilityEndedData&
 	if (bAirborne && Cast<UknightGameplayAbility_MonsterAttack>(Data.AbilityThatEnded))
 	{
 		++AirAttacksUsed;
+		UpdateLastAttackTag();
 	}
 }
 
@@ -208,6 +211,15 @@ void UknightMonsterAirTurnComponent::SetPawnBlocking(bool bBlock)
 	else
 	{
 		Capsule->SetCollisionResponseToChannel(ECC_Pawn, SavedPawnResponse);
+	}
+}
+
+void UknightMonsterAirTurnComponent::UpdateLastAttackTag()
+{
+	if (ASC.IsValid())
+	{
+		const bool bLast = bAirborne && AirAttacksUsed == AirAttacksPerTurn - 1;
+		ASC->SetLooseGameplayTagCount(knightGameplayTags::State_Monster_LastAirAttack, bLast ? 1 : 0);
 	}
 }
 
