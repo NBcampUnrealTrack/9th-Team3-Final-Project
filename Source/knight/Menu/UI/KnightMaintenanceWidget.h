@@ -81,6 +81,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Enhancement Presentation")
 	TSubclassOf<UCommonButtonStyle> EnhancementRowStyle;
 
+	/** Full-height raster surfaces shared by Enhancement and Sockets only. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Industrial Presentation")
+	TObjectPtr<UTexture2D> IndustrialSidePanelTexture;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Socket Presentation")
+	TObjectPtr<UTexture2D> SocketBackgroundTexture;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Socket Presentation")
+	TSubclassOf<UCommonButtonStyle> SocketSlotStyle;
+
 	/** High-resolution Crafting side artwork, displayed at its original aspect ratio. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Crafting Presentation")
 	TObjectPtr<UTexture2D> CraftingPanelTexture;
@@ -147,6 +155,7 @@ private:
 	void RefreshWeaponUpgradePanel();
 	void RebuildEnhancementTarget(bool bRestoreFocus = true);
 	void BuildEnhancementPresentation();
+	void BuildIndustrialSideSurfaces();
 	void SelectEnhancementWeapon(FPrimaryAssetId WeaponId);
 	void RefreshEnhancementDetails();
 	const UknightWeaponItemDefinition* GetEnhancementTarget(bool& bComplete) const;
@@ -210,7 +219,6 @@ private:
 	UPROPERTY(Transient) TArray<TObjectPtr<UKnightMaintenanceEntryWidget>> EnhancementWeaponRows;
 	UPROPERTY(Transient) TObjectPtr<UWidget> EnhancementColumns;
 	UPROPERTY(Transient) TObjectPtr<UWidget> EnhancementArtwork;
-	UPROPERTY(Transient) TObjectPtr<UWidget> EnhancementInputHints;
 	UPROPERTY(Transient) TObjectPtr<UScrollBox> EnhancementOwnedList;
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> EnhancementListStatus;
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> EnhancementLevels;
@@ -260,7 +268,7 @@ private:
 	bool bEquipmentPickerOpen = false;
 	UPROPERTY(Transient) TArray<TObjectPtr<UCommonButtonBase>> SocketListButtons;
 	UPROPERTY(Transient) TObjectPtr<UWidget> SocketColumns;
-	UPROPERTY(Transient) TObjectPtr<UWidget> SocketInputHints;
+	UPROPERTY(Transient) TObjectPtr<UWidget> SocketArtwork;
 	UPROPERTY(Transient) TObjectPtr<UScrollBox> SocketOwnedList;
 	UPROPERTY(Transient) TObjectPtr<UHorizontalBox> SocketSlotHost;
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> SocketListStatus;

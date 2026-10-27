@@ -18,10 +18,34 @@
 
 #define LOCTEXT_NAMESPACE "KnightEnhancementPresentation"
 
+void UKnightMaintenanceWidget::BuildIndustrialSideSurfaces()
+{
+	UCanvasPanel* Root = WidgetTree ? Cast<UCanvasPanel>(WidgetTree->RootWidget) : nullptr;
+	if (!Root || WidgetTree->FindWidget(TEXT("IndustrialSurfaceLeft"))) return;
+	for (bool bRight : { false, true })
+	{
+		UImage* Surface = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(),
+			bRight ? TEXT("IndustrialSurfaceRight") : TEXT("IndustrialSurfaceLeft"));
+		FSlateBrush Brush;
+		Brush.SetResourceObject(IndustrialSidePanelTexture);
+		Brush.DrawAs = ESlateBrushDrawType::Box;
+		// Preserve the slim painted vertical rails. The full-resolution interior is
+		// downsampled, not enlarged from the old 256px card; no heavy end caps.
+		Brush.Margin = FMargin(.025f, 0.f, .025f, 0.f);
+		Brush.TintColor = FSlateColor(FLinearColor(.30f, .30f, .30f, 1.f));
+		Surface->SetBrush(Brush);
+		Surface->SetVisibility(ESlateVisibility::Collapsed);
+		UCanvasPanelSlot* Cell = Root->AddChildToCanvas(Surface);
+		Cell->SetAnchors(bRight ? FAnchors(.70f, 0.f, 1.f, 1.f) : FAnchors(0.f, 0.f, .26f, 1.f));
+		Cell->SetOffsets(FMargin(0.f)); Cell->SetZOrder(-7);
+	}
+}
+
 void UKnightMaintenanceWidget::BuildEnhancementPresentation()
 {
 	UCanvasPanel* Root = WidgetTree ? Cast<UCanvasPanel>(WidgetTree->RootWidget) : nullptr;
 	if (!Root || EnhancementColumns) return;
+	BuildIndustrialSideSurfaces();
 	// One opaque scene replacement; decorative artwork never participates in hit testing.
 	UScaleBox* Backdrop = WidgetTree->ConstructWidget<UScaleBox>(UScaleBox::StaticClass(), TEXT("EnhancementArtwork"));
 	Backdrop->SetStretch(EStretch::ScaleToFill);
@@ -86,27 +110,23 @@ void UKnightMaintenanceWidget::BuildEnhancementPresentation()
 	EnhancementColumns = Columns;
 	UCanvasPanelSlot* ColumnsSlot = Root->AddChildToCanvas(Columns);
 	ColumnsSlot->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f));
-	ColumnsSlot->SetOffsets(FMargin(48.f, 152.f, 48.f, 100.f));
+	ColumnsSlot->SetOffsets(FMargin(0.f));
 	ColumnsSlot->SetZOrder(1);
-	auto Column = [this, Columns, &Frame](const TCHAR* Name, float Ratio, float LeftGap, float RightGap)
+	auto Column = [this, Columns, &Frame](const TCHAR* Name, float Ratio, FMargin ContentPadding)
 	{
 		UBorder* Border = Frame(Name);
 		UHorizontalBoxSlot* Cell = Columns->AddChildToHorizontalBox(Border);
 		FSlateChildSize Size(ESlateSizeRule::Fill); Size.Value = Ratio; Cell->SetSize(Size);
-		Cell->SetPadding(FMargin(LeftGap, 0.f, RightGap, 0.f));
+		FSlateBrush Empty; Empty.DrawAs = ESlateBrushDrawType::NoDrawType;
+		Border->SetBrush(Empty); Border->SetPadding(ContentPadding);
 		UVerticalBox* Body = WidgetTree->ConstructWidget<UVerticalBox>(); Border->SetContent(Body);
 		return Body;
 	};
-	UVerticalBox* Left = Column(TEXT("EnhancementOwnedColumn"), .25f, 0.f, 6.f);
-	UVerticalBox* Center = Column(TEXT("EnhancementTargetColumn"), .45f, 6.f, 6.f);
-	UVerticalBox* Right = Column(TEXT("EnhancementPreviewColumn"), .30f, 6.f, 0.f);
-	// The central aperture belongs to the supplied backdrop; do not hide it behind
-	// another rectangular panel or invent procedural machinery.
-	if (UBorder* CenterFrame = Cast<UBorder>(Center->GetParent()))
-	{
-		FSlateBrush Empty; Empty.DrawAs = ESlateBrushDrawType::NoDrawType;
-		CenterFrame->SetBrush(Empty); CenterFrame->SetPadding(FMargin(22.f, 26.f));
-	}
+	// Content remains comfortably inset; only the independent side surfaces reach
+	// viewport edges, behind the unchanged live header/money and the Back action.
+	UVerticalBox* Left = Column(TEXT("EnhancementOwnedColumn"), .26f, FMargin(48.f, 176.f, 32.f, 42.f));
+	UVerticalBox* Center = Column(TEXT("EnhancementTargetColumn"), .44f, FMargin(32.f, 178.f, 32.f, 80.f));
+	UVerticalBox* Right = Column(TEXT("EnhancementPreviewColumn"), .30f, FMargin(40.f, 176.f, 48.f, 110.f));
 	Add(Left, Text(TEXT("EnhancementOwnedTitle"), LOCTEXT("Owned", "보유 무기"), 28, Primary)); Line(Left);
 	EnhancementOwnedList = WidgetTree->ConstructWidget<UScrollBox>(UScrollBox::StaticClass(), TEXT("EnhancementOwnedWeapons"));
 	Add(Left, EnhancementOwnedList)->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
@@ -200,24 +220,6 @@ void UKnightMaintenanceWidget::BuildEnhancementPresentation()
 	Add(Preview, Text(TEXT("EnhancementGuideTitle"), LOCTEXT("Guide", "강화 안내"), 28, Primary)); Line(Preview);
 	EnhancementGuidance = Text(TEXT("EnhancementGuidance"), FText::GetEmpty(), 22, Secondary);
 	Add(Preview, EnhancementGuidance, 0.f);
-	UHorizontalBox* Hint = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("EnhancementInputHints"));
-	EnhancementInputHints = Hint;
-	UBorder* Key = Frame(TEXT("EnhancementEnterKey"));
-	FSlateBrush KeyBrush; KeyBrush.DrawAs = ESlateBrushDrawType::RoundedBox; KeyBrush.TintColor = FLinearColor::Transparent;
-	KeyBrush.OutlineSettings = FSlateBrushOutlineSettings(FVector4(0.f), FSlateColor(Secondary), 1.f);
-	Key->SetBrush(KeyBrush);
-	Key->SetPadding(FMargin(6.f, 2.f));
-	UCommonTextBlock* KeyLabel = Text(TEXT("EnhancementEnterLabel"), INVTEXT("Enter"), 20, Secondary);
-	KeyLabel->SetAutoWrapText(false); Key->SetContent(KeyLabel);
-	Hint->AddChildToHorizontalBox(Key);
-	UCommonTextBlock* HintLabel = Text(TEXT("EnhancementActionHint"), LOCTEXT("Input", "선택 / 강화"), 20, Secondary);
-	HintLabel->SetAutoWrapText(false);
-	UHorizontalBoxSlot* HintTextSlot = Hint->AddChildToHorizontalBox(HintLabel);
-	HintTextSlot->SetPadding(FMargin(12.f, 0.f, 0.f, 0.f)); HintTextSlot->SetVerticalAlignment(VAlign_Center);
-	UCanvasPanelSlot* HintSlot = Root->AddChildToCanvas(Hint);
-	HintSlot->SetAnchors(FAnchors(0.f, 1.f)); HintSlot->SetAlignment(FVector2D(0.f, 1.f));
-	HintSlot->SetOffsets(FMargin(48.f, -60.f, 0.f, 0.f)); HintSlot->SetAutoSize(true);
-	Hint->SetVisibility(ESlateVisibility::Collapsed);
 	Columns->SetVisibility(ESlateVisibility::Collapsed);
 }
 

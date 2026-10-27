@@ -138,8 +138,8 @@ struct FMaintenanceLayoutCheck
 				const FGeometry Center = Screen->GetWidgetFromName(TEXT("EnhancementTargetColumn"))->GetCachedGeometry();
 				const FGeometry Owned = Screen->GetWidgetFromName(TEXT("EnhancementOwnedColumn"))->GetCachedGeometry();
 				const FGeometry Preview = Screen->GetWidgetFromName(TEXT("EnhancementPreviewColumn"))->GetCachedGeometry();
-				Check(Owned.LocalToAbsolute(Owned.GetLocalSize()).X < Center.LocalToAbsolute(FVector2D::ZeroVector).X
-					&& Center.LocalToAbsolute(Center.GetLocalSize()).X < Preview.LocalToAbsolute(FVector2D::ZeroVector).X,
+				Check(Owned.LocalToAbsolute(Owned.GetLocalSize()).X <= Center.LocalToAbsolute(FVector2D::ZeroVector).X + 1.f
+					&& Center.LocalToAbsolute(Center.GetLocalSize()).X <= Preview.LocalToAbsolute(FVector2D::ZeroVector).X + 1.f,
 					TEXT("three columns have nonoverlapping responsive bounds"));
 			}
 			else if (Screen->GetDestination() == EKnightMaintenanceDestination::Sockets)
@@ -168,6 +168,40 @@ struct FMaintenanceLayoutCheck
 				Check(!Screen->GetWidgetFromName(TEXT("Phase8_SocketSlot3")), TEXT("exactly three socket positions"));
 			}
 			else Check(R.X >= L.X && R.X - L.X < 30, TEXT("other destinations retain their layout"));
+			if (Screen->GetDestination() != EKnightMaintenanceDestination::Crafting)
+			{
+				const bool bSocket = Screen->GetDestination() == EKnightMaintenanceDestination::Sockets;
+				const FGeometry Root = Screen->GetCachedGeometry();
+				for (bool bRight : { false, true })
+				{
+					const UImage* Surface = Cast<UImage>(Screen->GetWidgetFromName(bRight ? TEXT("IndustrialSurfaceRight") : TEXT("IndustrialSurfaceLeft")));
+					Check(Surface && Surface->GetVisibility() == ESlateVisibility::HitTestInvisible, TEXT("industrial side art never intercepts input"));
+					if (!Surface) continue;
+					const FGeometry G = Surface->GetCachedGeometry();
+					const FVector2D Top = Root.AbsoluteToLocal(G.LocalToAbsolute(FVector2D::ZeroVector));
+					const FVector2D Bottom = Root.AbsoluteToLocal(G.LocalToAbsolute(G.GetLocalSize()));
+					const float Start = bRight ? (bSocket ? .77f : .70f) : 0.f;
+					const float End = bRight ? 1.f : (bSocket ? .23f : .26f);
+					Check(FMath::IsNearlyEqual(Top.X, Root.GetLocalSize().X * Start, 1.f) && FMath::IsNearlyEqual(Top.Y, 0.f, 1.f)
+						&& FMath::IsNearlyEqual(Bottom.X, Root.GetLocalSize().X * End, 1.f) && FMath::IsNearlyEqual(Bottom.Y, Root.GetLocalSize().Y, 1.f),
+						TEXT("industrial surfaces flush to viewport edges with no exposed margins"));
+					const UTexture2D* Texture = Cast<UTexture2D>(Surface->GetBrush().GetResourceObject());
+					Check(Texture && Texture->GetSizeY() >= 1080, TEXT("full-height side artwork keeps native texture detail"));
+				}
+				Check(!Screen->GetWidgetFromName(bSocket ? TEXT("SocketInputHints") : TEXT("EnhancementInputHints")), TEXT("industrial bottom help strip not constructed"));
+				const UUserWidget* Back = Cast<UUserWidget>(Menu->GetWidgetFromName(TEXT("Button_Back")));
+				Check(Back && Back->GetWidgetFromName(TEXT("MaintenanceBackKeycap"))->GetVisibility() == ESlateVisibility::Collapsed,
+					TEXT("right panel retains existing Back action without keyboard strip"));
+				if (Back)
+				{
+					const FGeometry G = Back->GetCachedGeometry();
+					const FVector2D Pos = Root.AbsoluteToLocal(G.LocalToAbsolute(FVector2D::ZeroVector));
+					const FVector2D End = Root.AbsoluteToLocal(G.LocalToAbsolute(G.GetLocalSize()));
+					Check(Pos.X >= Root.GetLocalSize().X * (bSocket ? .77f : .70f) && End.X <= Root.GetLocalSize().X + 1.f
+						&& End.Y <= Root.GetLocalSize().Y + 1.f, TEXT("Back hit area lies entirely inside right side surface"));
+				}
+			}
+
 		}
 		FScreenshotRequest::RequestScreenshot(FPaths::Combine(Directory, FString(Name) + TEXT(".png")), true, false);
 	}

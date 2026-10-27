@@ -609,16 +609,27 @@ void UKnightMaintenanceWidget::ApplyDestinationLayout()
 	}
 	const bool bSockets = Destination == EKnightMaintenanceDestination::Sockets;
 	if (SocketColumns) SocketColumns->SetVisibility(bSockets ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
-	if (SocketInputHints) SocketInputHints->SetVisibility(bSockets ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	if (SocketArtwork) SocketArtwork->SetVisibility(bSockets ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 	if (EnhancementColumns) EnhancementColumns->SetVisibility(bEnhancement ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
 	if (EnhancementArtwork) EnhancementArtwork->SetVisibility(bEnhancement ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
-	if (EnhancementInputHints) EnhancementInputHints->SetVisibility(bEnhancement ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 	if (UWidget* Hints = WidgetTree ? WidgetTree->FindWidget(TEXT("Panel_Hints")) : nullptr)
 		Hints->SetVisibility(ESlateVisibility::Collapsed);
 	if (!WidgetTree) return;
 	for (const TCHAR* Name : { TEXT("CraftingSurfaceLeft"), TEXT("CraftingSurfaceRight") })
 		if (UWidget* Surface = WidgetTree->FindWidget(Name))
 			Surface->SetVisibility(bCrafting ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	for (bool bRight : { false, true })
+		if (UWidget* Surface = WidgetTree->FindWidget(bRight ? TEXT("IndustrialSurfaceRight") : TEXT("IndustrialSurfaceLeft")))
+		{
+			Surface->SetVisibility(bCrafting ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+			if (UCanvasPanelSlot* Cell = Cast<UCanvasPanelSlot>(Surface->Slot))
+			{
+				Cell->SetAnchors(bSockets
+					? (bRight ? FAnchors(.77f, 0.f, 1.f, 1.f) : FAnchors(0.f, 0.f, .23f, 1.f))
+					: (bRight ? FAnchors(.70f, 0.f, 1.f, 1.f) : FAnchors(0.f, 0.f, .26f, 1.f)));
+				Cell->SetOffsets(FMargin(0.f));
+			}
+		}
 	if (UWidget* Header = WidgetTree->FindWidget(TEXT("VerticalBox_Header")))
 		if (UCanvasPanelSlot* HeaderSlot = Cast<UCanvasPanelSlot>(Header->Slot))
 			HeaderSlot->SetPosition(bCrafting ? FVector2D(56.f, 40.f) : FVector2D(48.f, 40.f));
@@ -1802,7 +1813,7 @@ void UKnightMaintenanceWidget::RefreshSocketDetails()
 			: FText::Format(LOCTEXT("SocketChosenPosition", "소켓 {0} · {1}"), SelectedSocketSlot + 1,
 				Equipped ? Equipped->DisplayName : bUnresolved ? LOCTEXT("SocketUnknownTitle", "장착 소켓 확인 불가") : LOCTEXT("SocketEmptyTitle", "빈 소켓 칸"));
 		SocketCandidateText->SetText(Candidate
-			? FText::Format(LOCTEXT("SocketPendingCandidate", "{0}\n\n장착 후보: {1}\n{2}"), Position, Candidate->DisplayName, SocketItemEffectText(Candidate))
+			? FText::Format(LOCTEXT("SocketPendingCandidate", "{0}\n장착 후보: {1}\n{2}"), Position, Candidate->DisplayName, SocketItemEffectText(Candidate))
 			: FText::Format(LOCTEXT("SocketChooseCandidate", "{0}\n\n왼쪽 목록에서 장착할 소켓을 선택하세요."), Position));
 	}
 	FText Notice = SocketFeedback;

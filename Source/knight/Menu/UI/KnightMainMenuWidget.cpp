@@ -490,10 +490,10 @@ void UKnightMainMenuWidget::ApplyMaintenanceBackPresentation(bool bMaintenance)
 	if (UUserWidget* BackWidget = Cast<UUserWidget>(Button_Back))
 	{
 		if (UWidget* Keycap = BackWidget->GetWidgetFromName(TEXT("MaintenanceBackKeycap")))
-			Keycap->SetVisibility(bCrafting ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+			Keycap->SetVisibility(bMaintenance ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
 		if (UWidget* Label = BackWidget->GetWidgetFromName(TEXT("MaintenanceBackReturn")))
 			if (UHorizontalBoxSlot* LabelSlot = Cast<UHorizontalBoxSlot>(Label->Slot))
-				LabelSlot->SetPadding(FMargin(bCrafting ? 0.f : 9.f, 0.f, 0.f, 0.f));
+				LabelSlot->SetPadding(FMargin(bMaintenance ? 0.f : 9.f, 0.f, 0.f, 0.f));
 	}
 	if (bMaintenance)
 	{
@@ -503,7 +503,7 @@ void UKnightMainMenuWidget::ApplyMaintenanceBackPresentation(bool bMaintenance)
 	}
 	else if (NormalBackStyle) Button_Back->SetStyle(NormalBackStyle);
 	if (UCanvasPanelSlot* const BackSlot = Cast<UCanvasPanelSlot>(Button_Back->Slot))
-		BackSlot->SetPosition(bMaintenance ? FVector2D(bCrafting ? -56.f : -48.f, -40.f - (bCrafting ? 0.f : 8.f)) : NormalBackPosition);
+		BackSlot->SetPosition(bMaintenance ? FVector2D(bCrafting ? -56.f : -48.f, -40.f) : NormalBackPosition);
 }
 
 void UKnightMainMenuWidget::EnsureMaintenanceWidget()

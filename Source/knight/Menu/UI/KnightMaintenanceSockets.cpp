@@ -18,6 +18,7 @@
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Engine/GameInstance.h"
+#include "Engine/Texture2D.h"
 #include "Item/knightItemDefinitions.h"
 #include "Progression/knightProgressionSubsystem.h"
 #include "Progression/knightSaveSubsystem.h"
@@ -44,11 +45,8 @@ UCommonTextBlock* Text(UWidgetTree* Tree, FName Name, const FText& Value, int32 
 UBorder* Frame(UWidgetTree* Tree, FName Name)
 {
 	UBorder* Result = Tree->ConstructWidget<UBorder>(UBorder::StaticClass(), Name);
-	FSlateBrush Brush; Brush.DrawAs = ESlateBrushDrawType::RoundedBox;
-	Brush.TintColor = FSlateColor(FLinearColor(.007f, .013f, .022f, 1.f));
-	Brush.OutlineSettings = FSlateBrushOutlineSettings(FVector4(0.f), FSlateColor(FLinearColor(.10f, .19f, .29f, 1.f)), 1.f);
-	Brush.OutlineSettings.RoundingType = ESlateBrushRoundingType::FixedRadius;
-	Result->SetBrush(Brush); Result->SetPadding(FMargin(18.f));
+	FSlateBrush Brush; Brush.DrawAs = ESlateBrushDrawType::NoDrawType;
+	Result->SetBrush(Brush); Result->SetPadding(FMargin(0.f));
 	Result->SetVisibility(ESlateVisibility::SelfHitTestInvisible); return Result;
 }
 UVerticalBoxSlot* Add(UVerticalBox* Box, UWidget* Child, float Bottom = 12.f)
@@ -94,40 +92,71 @@ void UKnightMaintenanceWidget::BuildSocketPresentation()
 {
 	UCanvasPanel* Root = WidgetTree ? Cast<UCanvasPanel>(WidgetTree->RootWidget) : nullptr;
 	if (!Root || SocketColumns) return;
+	BuildIndustrialSideSurfaces();
+	UScaleBox* Backdrop = WidgetTree->ConstructWidget<UScaleBox>(UScaleBox::StaticClass(), TEXT("SocketArtwork"));
+	Backdrop->SetStretch(EStretch::ScaleToFill);
+	Backdrop->SetClipping(EWidgetClipping::ClipToBoundsAlways);
+	UImage* Art = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("SocketCarrierArt"));
+	Art->SetBrushFromTexture(SocketBackgroundTexture, true);
+	Art->SetVisibility(ESlateVisibility::HitTestInvisible);
+	Backdrop->AddChild(Art);
+	UCanvasPanelSlot* ArtCell = Root->AddChildToCanvas(Backdrop);
+	ArtCell->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f)); ArtCell->SetOffsets(FMargin(0.f)); ArtCell->SetZOrder(-8);
+	Backdrop->SetVisibility(ESlateVisibility::Collapsed); SocketArtwork = Backdrop;
+
 	UHorizontalBox* Columns = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("SocketColumns"));
 	SocketColumns = Columns;
 	UCanvasPanelSlot* Layout = Root->AddChildToCanvas(Columns);
-	Layout->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f)); Layout->SetOffsets(FMargin(48.f, 152.f, 48.f, 100.f)); Layout->SetZOrder(1);
-	auto Column = [this, Columns](const TCHAR* Name, float Ratio, float Left, float Right)
+	Layout->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f)); Layout->SetOffsets(FMargin(0.f)); Layout->SetZOrder(1);
+	auto Column = [this, Columns](const TCHAR* Name, float Ratio, FMargin ContentPadding)
 	{
-		UBorder* Border = Frame(WidgetTree, Name);
+		UBorder* Border = Frame(WidgetTree, Name); Border->SetPadding(ContentPadding);
 		UHorizontalBoxSlot* Cell = Columns->AddChildToHorizontalBox(Border);
-		FSlateChildSize Size(ESlateSizeRule::Fill); Size.Value = Ratio; Cell->SetSize(Size); Cell->SetPadding(FMargin(Left, 0.f, Right, 0.f));
-		UVerticalBox* Box = WidgetTree->ConstructWidget<UVerticalBox>(); Border->SetContent(Box); return Box;
+		FSlateChildSize Size(ESlateSizeRule::Fill); Size.Value = Ratio; Cell->SetSize(Size);
+		return Border;
 	};
-	UVerticalBox* Left = Column(TEXT("SocketOwnedColumn"), .25f, 0.f, 6.f);
-	UVerticalBox* Center = Column(TEXT("SocketAssignmentColumn"), .45f, 6.f, 6.f);
-	UVerticalBox* Right = Column(TEXT("SocketEffectsColumn"), .30f, 6.f, 0.f);
+	UBorder* LeftFrame = Column(TEXT("SocketOwnedColumn"), .23f, FMargin(48.f, 174.f, 30.f, 42.f));
+	UBorder* CenterFrame = Column(TEXT("SocketAssignmentColumn"), .54f, FMargin(0.f));
+	UBorder* RightFrame = Column(TEXT("SocketEffectsColumn"), .23f, FMargin(30.f, 174.f, 48.f, 110.f));
+	UVerticalBox* Left = WidgetTree->ConstructWidget<UVerticalBox>(); LeftFrame->SetContent(Left);
+	UCanvasPanel* Center = WidgetTree->ConstructWidget<UCanvasPanel>(); CenterFrame->SetContent(Center);
+	UVerticalBox* Right = WidgetTree->ConstructWidget<UVerticalBox>(); RightFrame->SetContent(Right);
 	Add(Left, Text(WidgetTree, TEXT("SocketOwnedTitle"), LOCTEXT("Owned", "보유 소켓"), 28)); Line(WidgetTree, Left);
 	SocketOwnedList = WidgetTree->ConstructWidget<UScrollBox>(UScrollBox::StaticClass(), TEXT("SocketOwnedList"));
 	Add(Left, SocketOwnedList)->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 	SocketListStatus = Text(WidgetTree, TEXT("SocketListStatus"), FText::GetEmpty(), 22, false, Secondary); Add(Left, SocketListStatus, 0.f);
-	Add(Center, Text(WidgetTree, TEXT("SocketAssignmentTitle"), LOCTEXT("Assignments", "소켓 장착"), 28)); Line(WidgetTree, Center);
-	UScrollBox* CenterScroll = WidgetTree->ConstructWidget<UScrollBox>(UScrollBox::StaticClass(), TEXT("SocketAssignmentScroll"));
-	Add(Center, CenterScroll)->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-	UVerticalBox* Body = WidgetTree->ConstructWidget<UVerticalBox>(); CenterScroll->AddChild(Body);
-	UScaleBox* Fit = WidgetTree->ConstructWidget<UScaleBox>(); Fit->SetStretch(EStretch::ScaleToFit); Fit->SetStretchDirection(EStretchDirection::DownOnly);
-	USizeBox* RowSize = WidgetTree->ConstructWidget<USizeBox>(); RowSize->SetWidthOverride(720.f); RowSize->SetHeightOverride(288.f);
+	UVerticalBox* Heading = WidgetTree->ConstructWidget<UVerticalBox>();
+	Add(Heading, Text(WidgetTree, TEXT("SocketAssignmentTitle"), LOCTEXT("Assignments", "소켓 장착"), 28)); Line(WidgetTree, Heading);
+	UCanvasPanelSlot* HeadingCell = Center->AddChildToCanvas(Heading);
+	HeadingCell->SetAnchors(FAnchors(0.f, 0.f, 1.f, 0.f)); HeadingCell->SetOffsets(FMargin(40.f, 56.f, 40.f, 66.f));
+
+	// The carrier is raster artwork, the three positions are real CommonUI controls.
+	// Normalize the row to the apparatus aperture; scale it uniformly so every
+	// position stays square in one row, including the project's 720p DPI scale.
+	UScaleBox* Fit = WidgetTree->ConstructWidget<UScaleBox>(UScaleBox::StaticClass(), TEXT("SocketCarrierPositions"));
+	Fit->SetStretch(EStretch::ScaleToFit); Fit->SetStretchDirection(EStretchDirection::DownOnly);
+	USizeBox* RowSize = WidgetTree->ConstructWidget<USizeBox>(); RowSize->SetWidthOverride(720.f); RowSize->SetHeightOverride(268.f);
 	SocketSlotHost = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("SocketSlotRow"));
 	RowSize->AddChild(SocketSlotHost); Fit->AddChild(RowSize);
-	// One uniformly scaled row retains three equal squares without a WrapBox or per-frame resizing.
-	Add(Body, Fit, 28.f)->SetPadding(FMargin(0.f, 32.f, 0.f, 28.f));
-	Line(WidgetTree, Body);
+	UCanvasPanelSlot* RowCell = Center->AddChildToCanvas(Fit);
+	RowCell->SetAnchors(FAnchors(.15f, .325f, .85f, .57f)); RowCell->SetOffsets(FMargin(0.f));
+
+	UBorder* Readout = Frame(WidgetTree, TEXT("SocketAssignmentReadout"));
+	FSlateBrush ReadoutBrush; ReadoutBrush.SetResourceObject(EnhancementButtonTexture);
+	ReadoutBrush.DrawAs = ESlateBrushDrawType::Box; ReadoutBrush.Margin = FMargin(.12f);
+	ReadoutBrush.TintColor = FSlateColor(FLinearColor(.40f, .42f, .45f, 1.f));
+	Readout->SetBrush(ReadoutBrush); Readout->SetPadding(FMargin(28.f, 14.f));
+	UCanvasPanelSlot* ReadoutCell = Center->AddChildToCanvas(Readout);
+	ReadoutCell->SetAnchors(FAnchors(0.f, .72f, 1.f, 1.f)); ReadoutCell->SetOffsets(FMargin(36.f, 0.f, 36.f, 28.f));
+	UVerticalBox* ReadoutBody = WidgetTree->ConstructWidget<UVerticalBox>(); Readout->SetContent(ReadoutBody);
 	SocketAssignmentSummary = Text(WidgetTree, TEXT("SocketAssignmentSummary"), FText::GetEmpty(), 26, true, Secondary);
-	Add(Body, SocketAssignmentSummary, 20.f); Line(WidgetTree, Body);
-	SocketCandidateText = Text(WidgetTree, TEXT("SocketCandidateText"), FText::GetEmpty(), 24, true);
-	Add(Body, SocketCandidateText, 20.f);
-	SocketFeedbackText = Text(WidgetTree, TEXT("SocketFeedback"), FText::GetEmpty(), 22, false, Secondary);
+	Add(ReadoutBody, SocketAssignmentSummary, 8.f);
+	UScrollBox* CenterScroll = WidgetTree->ConstructWidget<UScrollBox>(UScrollBox::StaticClass(), TEXT("SocketAssignmentScroll"));
+	Add(ReadoutBody, CenterScroll, 8.f)->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+	UVerticalBox* Body = WidgetTree->ConstructWidget<UVerticalBox>(); CenterScroll->AddChild(Body);
+	SocketCandidateText = Text(WidgetTree, TEXT("SocketCandidateText"), FText::GetEmpty(), 22, true);
+	Add(Body, SocketCandidateText, 8.f);
+	SocketFeedbackText = Text(WidgetTree, TEXT("SocketFeedback"), FText::GetEmpty(), 20, false, Secondary);
 	Add(Body, SocketFeedbackText, 0.f);
 	const TSubclassOf<UCommonButtonBase> ButtonClass = LoadClass<UCommonButtonBase>(nullptr, TEXT("/Game/Knight/UI/Common/WBP_KnightButton.WBP_KnightButton_C"));
 	UHorizontalBox* Actions = WidgetTree->ConstructWidget<UHorizontalBox>();
@@ -136,6 +165,7 @@ void UKnightMaintenanceWidget::BuildSocketPresentation()
 		UCommonButtonBase* Button = ButtonClass ? CreateWidget<UCommonButtonBase>(GetOwningPlayer(), ButtonClass, Name) : nullptr;
 		if (!Button) return Button;
 		Label(Button, Caption); KnightMaintenancePresentation::ConfigureButton(Button, false);
+		if (EnhancementActionStyle) Button->SetStyle(EnhancementActionStyle);
 		Button->OnClicked().AddWeakLambda(this, [this, bEquip]() { if (bEquip) RequestSocketEquip(); else RequestSocketUnequip(); });
 		USizeBox* Size = WidgetTree->ConstructWidget<USizeBox>(); Size->SetMinDesiredHeight(62.f); Size->AddChild(Button);
 		UHorizontalBoxSlot* Cell = Actions->AddChildToHorizontalBox(Size); Cell->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
@@ -143,7 +173,7 @@ void UKnightMaintenanceWidget::BuildSocketPresentation()
 	};
 	SocketEquipButton = Action(TEXT("SocketEquipAction"), LOCTEXT("Equip", "장착"), true);
 	SocketUnequipButton = Action(TEXT("SocketUnequipAction"), LOCTEXT("Unequip", "해제"), false);
-	Add(Center, Actions, 0.f);
+	Add(ReadoutBody, Actions, 0.f);
 	SocketDetailTitle = Text(WidgetTree, TEXT("SocketDetailTitle"), FText::GetEmpty(), 28);
 	Add(Right, SocketDetailTitle); Line(WidgetTree, Right);
 	UScrollBox* Details = WidgetTree->ConstructWidget<UScrollBox>(UScrollBox::StaticClass(), TEXT("SocketEffectsScroll"));
@@ -154,15 +184,7 @@ void UKnightMaintenanceWidget::BuildSocketPresentation()
 	SocketEffectsText = Text(WidgetTree, TEXT("SocketEffectsText"), FText::GetEmpty(), 26, false, Secondary); Add(DetailBody, SocketEffectsText);
 	Add(Right, Text(WidgetTree, TEXT("SocketGuideTitle"), LOCTEXT("Guide", "소켓 안내"), 28)); Line(WidgetTree, Right);
 	Add(Right, Text(WidgetTree, TEXT("SocketGuide"), LOCTEXT("GuideBody", "소켓 칸을 선택하면 현재 장착 정보를 확인합니다.\n\n같은 칸을 다시 누르면 전체 효과로 돌아갑니다.\n\n장착과 해제는 아이템 수량을 바꾸지 않습니다."), 22, false, Secondary), 0.f);
-	UHorizontalBox* Hint = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("SocketInputHints")); SocketInputHints = Hint;
-	UBorder* Key = Frame(WidgetTree, TEXT("SocketEnterKey")); Key->SetPadding(FMargin(6.f, 2.f));
-	UCommonTextBlock* KeyText = Text(WidgetTree, NAME_None, INVTEXT("Enter"), 20, false, Secondary); KeyText->SetAutoWrapText(false); Key->SetContent(KeyText);
-	Hint->AddChildToHorizontalBox(Key);
-	UCommonTextBlock* HintText = Text(WidgetTree, NAME_None, LOCTEXT("Input", "선택 / 실행"), 20, false, Secondary); HintText->SetAutoWrapText(false);
-	UHorizontalBoxSlot* HintCell = Hint->AddChildToHorizontalBox(HintText); HintCell->SetPadding(FMargin(12.f, 0.f, 0.f, 0.f)); HintCell->SetVerticalAlignment(VAlign_Center);
-	UCanvasPanelSlot* HintSlot = Root->AddChildToCanvas(Hint); HintSlot->SetAnchors(FAnchors(0.f, 1.f)); HintSlot->SetAlignment(FVector2D(0.f, 1.f));
-	HintSlot->SetOffsets(FMargin(48.f, -60.f, 0.f, 0.f)); HintSlot->SetAutoSize(true);
-	Hint->SetVisibility(ESlateVisibility::Collapsed); Columns->SetVisibility(ESlateVisibility::Collapsed);
+	Columns->SetVisibility(ESlateVisibility::Collapsed);
 }
 
 void UKnightMaintenanceWidget::RebuildSocketList()
@@ -191,10 +213,11 @@ void UKnightMaintenanceWidget::RebuildSocketList()
 	if (SelectedSocketSlot >= FMath::Min(Unlocked, 3) || SelectedSocketSlot < INDEX_NONE) SelectedSocketSlot = INDEX_NONE;
 	const auto ButtonClass = LoadClass<UCommonButtonBase>(nullptr, TEXT("/Game/Knight/UI/Common/WBP_KnightButton.WBP_KnightButton_C"));
 	if (!ButtonClass || !GetOwningPlayer()) return;
-	auto Button = [this, ButtonClass](FName Name, bool bSelected)
+	auto Button = [this, ButtonClass](FName Name, bool bSelected, TSubclassOf<UCommonButtonStyle> Style)
 	{
 		auto* Result = CreateWidget<UCommonButtonBase>(GetOwningPlayer(), ButtonClass, Name);
 		KnightMaintenancePresentation::ConfigureButton(Result, true);
+		if (Style) Result->SetStyle(Style);
 		if (bSelected) Result->SetIsSelected(true, false); else Result->ClearSelection();
 		SocketListButtons.Add(Result); return Result;
 	};
@@ -205,7 +228,7 @@ void UKnightMaintenanceWidget::RebuildSocketList()
 		const auto* Item = Assignment ? Assignment->Item.Get() : nullptr;
 		const FText State = !bUnlocked ? LOCTEXT("Locked", "잠김") : Item ? Item->DisplayName
 			: Assignment && Assignment->ItemId.IsValid() ? LOCTEXT("Unknown", "장착 정보 확인 불가") : LOCTEXT("Empty", "빈 슬롯");
-		UCommonButtonBase* SlotButton = Button(FName(*FString::Printf(TEXT("Phase8_SocketSlot%d"), Index)), SelectedSocketSlot == Index);
+		UCommonButtonBase* SlotButton = Button(FName(*FString::Printf(TEXT("Phase8_SocketSlot%d"), Index)), SelectedSocketSlot == Index, SocketSlotStyle);
 		SlotButton->SetIsLocked(!bUnlocked);
 		SlotButton->OnClicked().AddWeakLambda(this, [this, Index, Profile]()
 		{
@@ -231,7 +254,7 @@ void UKnightMaintenanceWidget::RebuildSocketList()
 		if (!Item || Stack.Count <= 0) continue;
 		const FPrimaryAssetId Id = Item->GetPrimaryAssetId();
 		if (Id == SelectedSocketCandidateId) SelectedSocketItem = Item;
-		UCommonButtonBase* Row = Button(FName(*FString::Printf(TEXT("Phase8_SocketCandidate%d"), SocketCandidateButtons.Num())), Id == SelectedSocketCandidateId);
+		UCommonButtonBase* Row = Button(FName(*FString::Printf(TEXT("Phase8_SocketCandidate%d"), SocketCandidateButtons.Num())), Id == SelectedSocketCandidateId, EnhancementRowStyle);
 		Row->OnClicked().AddWeakLambda(this, [this, Item, Profile]()
 		{
 			const auto* Current = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
