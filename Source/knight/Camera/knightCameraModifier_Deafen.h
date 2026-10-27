@@ -39,6 +39,9 @@ public:
 	/** 초음파 브레스 기둥 아래에 있다. 부르는 동안과 그 뒤 JitterTime 동안 화면이 빠르게 떨리고 일그러진다(소리는 그대로). */
 	void HoldJitter();
 
+	/** 처음 켤 때 읽는 에셋(머티리얼, 이명, 줄일 사운드 클래스). 카메라 매니저가 미리 불러 첫 먹먹함이 끊기지 않게 한다. */
+	void GatherPreloadAssets(TArray<FSoftObjectPath>& OutPaths) const;
+
 	virtual bool ModifyCamera(float DeltaTime, FMinimalViewInfo& InOutPOV) override;
 	virtual void ModifyPostProcess(float DeltaTime, float& PostProcessBlendWeight, FPostProcessSettings& PostProcessSettings) override;
 	virtual void BeginDestroy() override;

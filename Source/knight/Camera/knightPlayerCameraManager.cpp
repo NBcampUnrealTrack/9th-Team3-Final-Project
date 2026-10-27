@@ -4,7 +4,9 @@
 #include "AbilitySystemGlobals.h"
 #include "Camera/CameraModifier_CameraShake.h"
 #include "Camera/CameraShakeBase.h"
+#include "Engine/AssetManager.h"
 #include "Engine/Scene.h"
+#include "Engine/StreamableManager.h"
 #include "HAL/PlatformTime.h"
 #include "Camera/knightCameraModifier_Darkness.h"
 #include "Camera/knightCameraModifier_Deafen.h"
@@ -25,6 +27,30 @@ AknightPlayerCameraManager::AknightPlayerCameraManager()
 	RoarShockwaveClass = UknightCameraModifier_RoarShockwave::StaticClass();
 	DarknessClass = UknightCameraModifier_Darkness::StaticClass();
 	DeafenClass = UknightCameraModifier_Deafen::StaticClass();
+}
+
+void AknightPlayerCameraManager::BeginPlay()
+{
+	Super::BeginPlay();
+	// The modifiers load their materials and sounds on first use, which stalls on the game thread (and waits for every
+	// async load in flight). Load them now, during the raid loading hold.
+	TArray<FSoftObjectPath> Paths;
+	if (RoarShockwaveClass)
+	{
+		RoarShockwaveClass.GetDefaultObject()->GatherPreloadAssets(Paths);
+	}
+	if (DarknessClass)
+	{
+		DarknessClass.GetDefaultObject()->GatherPreloadAssets(Paths);
+	}
+	if (DeafenClass)
+	{
+		DeafenClass.GetDefaultObject()->GatherPreloadAssets(Paths);
+	}
+	if (!Paths.IsEmpty())
+	{
+		PreloadHandle = UAssetManager::GetStreamableManager().RequestAsyncLoad(Paths, FStreamableDelegate(), FStreamableManager::AsyncLoadHighPriority);
+	}
 }
 
 void AknightPlayerCameraManager::SetRadialPullSource(UknightGroggyFeedbackComponent* Source)

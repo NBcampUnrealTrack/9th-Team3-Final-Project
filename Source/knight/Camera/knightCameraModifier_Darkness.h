@@ -33,6 +33,9 @@ public:
 	/** Source의 윤곽선을 어둠 속에 보이거나 숨긴다. */
 	void SetSilhouette(const UPrimitiveComponent* Source, bool bVisible);
 
+	/** 처음 켤 때 읽는 에셋. 카메라 매니저가 미리 불러 첫 어둠이 끊기지 않게 한다. */
+	void GatherPreloadAssets(TArray<FSoftObjectPath>& OutPaths) const;
+
 	virtual bool ModifyCamera(float DeltaTime, FMinimalViewInfo& InOutPOV) override;
 	virtual void ModifyPostProcess(float DeltaTime, float& PostProcessBlendWeight, FPostProcessSettings& PostProcessSettings) override;
 

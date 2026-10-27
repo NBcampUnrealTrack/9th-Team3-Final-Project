@@ -3,6 +3,8 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "ContentStreaming.h"
+#include "Engine/AssetManager.h"
+#include "Engine/StreamableManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "PipelineStateCache.h"
 #include "ShaderPipelineCache.h"
@@ -90,6 +92,19 @@ void AknightRaidGameMode::StartPlay()
 			Audio->SetMusicState(RaidDefinition->MusicStates.Explore);
 			Audio->PlayMusic(UknightAssetManager::GetAsset(RaidDefinition->Music));
 		}
+		// Combat music starts mid-raid; loading it then would stall the game thread.
+		TArray<FSoftObjectPath> MusicPaths;
+		for (const TSoftObjectPtr<USoundBase>* const Track : { &RaidDefinition->CombatMusic, &RaidDefinition->CombatMusicLowHealth })
+		{
+			if (!Track->IsNull())
+			{
+				MusicPaths.Add(Track->ToSoftObjectPath());
+			}
+		}
+		if (!MusicPaths.IsEmpty())
+		{
+			CombatMusicHandle = UAssetManager::GetStreamableManager().RequestAsyncLoad(MusicPaths);
+		}
 	}
 
 	// (2026-10-19) 월드가 안정될 때까지 로딩 화면(단계 None)과 일시정지를 유지한 뒤 출격한다.
@@ -120,8 +135,11 @@ bool AknightRaidGameMode::TickLoadingHold(float DeltaTime)
 #if WITH_EDITOR
 	ShaderJobs = GShaderCompilingManager ? GShaderCompilingManager->GetNumRemainingJobs() : 0;
 #endif
+	// Any load still in flight (preloaded cues, camera screen effects, combat music) would be waited for by the first
+	// synchronous load after the raid starts, so it stalls a frame the player sees.
+	const int32 AsyncPackages = GetNumAsyncPackages();
 	const bool bReady = Elapsed >= MinLoadingHoldTime && StreamingResources <= MaxStreamingResources
-		&& ShaderJobs == 0 && BundledPSOs == 0 && PrecacheRequests == 0 && ActivePSOTasks == 0;
+		&& ShaderJobs == 0 && BundledPSOs == 0 && PrecacheRequests == 0 && ActivePSOTasks == 0 && AsyncPackages == 0;
 	if (!bReady)
 	{
 		if (AknightRaidGameState* const RaidState = GetRaidGameState())
@@ -130,8 +148,8 @@ bool AknightRaidGameMode::TickLoadingHold(float DeltaTime)
 			const FText PSOStatus = (BundledPSOs > 0 || PrecacheRequests > 0 || ActivePSOTasks > 0)
 				? NSLOCTEXT("knight", "RaidLoadingPSOActive", "일반 PSO 준비 중")
 				: NSLOCTEXT("knight", "RaidLoadingPSOReady", "일반 PSO 준비 완료");
-			RaidState->SetLoadingStatus(FText::Format(NSLOCTEXT("knight", "RaidLoadingProgress", "레이드 준비 중 · 스트리밍 {0} · 셰이더 {1} · {2}"),
-				FText::AsNumber(StreamingResources), FText::AsNumber(ShaderJobs), PSOStatus));
+			RaidState->SetLoadingStatus(FText::Format(NSLOCTEXT("knight", "RaidLoadingProgress", "레이드 준비 중 · 스트리밍 {0} · 셰이더 {1} · {2} · 에셋 {3}"),
+				FText::AsNumber(StreamingResources), FText::AsNumber(ShaderJobs), PSOStatus, FText::AsNumber(AsyncPackages)));
 		}
 		if (Elapsed < FMath::Max<double>(MaxLoadingHoldTime, MinLoadingHoldTime))
 		{
@@ -140,13 +158,13 @@ bool AknightRaidGameMode::TickLoadingHold(float DeltaTime)
 	}
 	if (bReady)
 	{
-		UE_LOG(Logknight, Log, TEXT("%s: raid loading hold %.2fs (tracked tasks ready, streaming %d, shader jobs %d, bundled PSOs %u, precache requests %u, active PSO tasks %d; RTPSOs untracked)."),
-			*GetNameSafe(this), Elapsed, StreamingResources, ShaderJobs, BundledPSOs, PrecacheRequests, ActivePSOTasks);
+		UE_LOG(Logknight, Log, TEXT("%s: raid loading hold %.2fs (tracked tasks ready, streaming %d, shader jobs %d, bundled PSOs %u, precache requests %u, active PSO tasks %d, async packages %d; RTPSOs untracked)."),
+			*GetNameSafe(this), Elapsed, StreamingResources, ShaderJobs, BundledPSOs, PrecacheRequests, ActivePSOTasks, AsyncPackages);
 	}
 	else
 	{
-		UE_LOG(Logknight, Error, TEXT("%s: raid loading hold %.2fs (tracked preparation timed out, streaming %d, shader jobs %d, bundled PSOs %u, precache requests %u, active PSO tasks %d; RTPSOs untracked)."),
-			*GetNameSafe(this), Elapsed, StreamingResources, ShaderJobs, BundledPSOs, PrecacheRequests, ActivePSOTasks);
+		UE_LOG(Logknight, Error, TEXT("%s: raid loading hold %.2fs (tracked preparation timed out, streaming %d, shader jobs %d, bundled PSOs %u, precache requests %u, active PSO tasks %d, async packages %d; RTPSOs untracked)."),
+			*GetNameSafe(this), Elapsed, StreamingResources, ShaderJobs, BundledPSOs, PrecacheRequests, ActivePSOTasks, AsyncPackages);
 	}
 	LoadingHoldTicker.Reset();
 	if (bPausedForLoading)

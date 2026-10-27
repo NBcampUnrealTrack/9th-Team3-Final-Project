@@ -181,3 +181,11 @@ void UknightCameraModifier_RoarShockwave::ModifyPostProcess(float DeltaTime, flo
 		PostProcessBlendWeight = 1.f;
 	}
 }
+
+void UknightCameraModifier_RoarShockwave::GatherPreloadAssets(TArray<FSoftObjectPath>& OutPaths) const
+{
+	if (!Material.IsNull())
+	{
+		OutPaths.AddUnique(Material.ToSoftObjectPath());
+	}
+}

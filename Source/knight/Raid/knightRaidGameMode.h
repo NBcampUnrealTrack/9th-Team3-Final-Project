@@ -12,6 +12,7 @@ class AknightMonsterCharacterBase;
 class AknightRaidGameState;
 class UknightRaidDefinition;
 class USoundBase;
+struct FStreamableHandle;
 
 /**
  * GameMode for raid maps: Deploy -> Explore <-> Combat -> Success / Failed -> Returning.
@@ -76,7 +77,7 @@ protected:
 	 * (2026-10-19) 레이드에 들어갈 때 월드가 안정될 때까지 로딩 화면(레이드 단계 None)을 유지하고 게임을 일시정지해 둔다.
 	 * 전에는 맵이 올라온 프레임에 바로 출격해서, 텍스처·셰이더가 덜 준비된 채 로딩 화면이 걷히고 몬스터가 먼저 움직였다
 	 * ('로딩이 끝나기 전에 시작'). 끝 = MinLoadingHoldTime이 지나고, 스트리밍을 기다리는 텍스처가 MaxStreamingResources 이하이고,
-	 * (에디터만) 셰이더 컴파일과 추적 가능한 PSO 준비가 끝났을 때. 시간 초과 시 미완성 레이드를 시작하지 않고 로비로 돌아간다.
+	 * (에디터만) 셰이더 컴파일과 추적 가능한 PSO 준비가 끝나고, 진행 중인 비동기 로드(미리 불러오는 큐·화면 효과·전투 음악)가 없을 때. 시간 초과 시 미완성 레이드를 시작하지 않고 로비로 돌아간다.
 	 * Path Tracing RTPSO 같은 독립적인 배경 컴파일은 이 카운터로 추적되지 않는다.
 	 * 확인: 출력 로그 Logknight의 "raid loading hold" 줄.
 	 */
@@ -105,6 +106,9 @@ private:
 	FTSTicker::FDelegateHandle LoadingHoldTicker;
 	double LoadingHoldStartTime = 0.0;
 	bool bPausedForLoading = false;
+
+	/** Keeps CombatMusic and CombatMusicLowHealth loaded so the first fight does not load them on the game thread. */
+	TSharedPtr<FStreamableHandle> CombatMusicHandle;
 
 	void ResolveRaidDefinition();
 	void BindPlacedTargetMonsters();
