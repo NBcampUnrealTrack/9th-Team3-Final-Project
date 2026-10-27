@@ -10,6 +10,9 @@
 //                                                슬롯: Head Torso Arms Legs Booster Generator Exterior Weapon
 //   knight.Player.PartsWatch [1|0]                (2026-10-13) 장착 이벤트(OnEquipmentChanged)를 순서대로 로그로 남긴다.
 //                                                켤 때 슬롯별 현재 장착을 한 번 조회한다. 인자가 없으면 켜기/끄기를 바꾼다.
+//   knight.Player.Weapon [이름]                    (2026-10-27) 무기만 바로 바꾼다 (예: knight.Player.Weapon Janhyang).
+//                                                이름은 무기 에셋 이름의 일부(Janyeol, Janhyang, Heukgwan...). 인자가 없으면 무기 목록을 찍는다.
+//                                                검을 등에 메고 있었으면 등에, 들고 있었으면 손에 그대로 붙인다.
 //   knight.Player.PartsCompare                    (2026-10-13) 정비 화면 계산(knightEquipmentStats::Calculate)과 실제 적용된 스탯,
 //                                                저장된 로드아웃과 실제 장착을 나란히 찍고 다른 곳을 표시한다. 로비(폰 없음)에서는 계산만 찍는다.
 //
@@ -23,6 +26,8 @@
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
 #include "AssetRegistry/IAssetRegistry.h"
 #include "Character/knightMovementComponent.h"
+#include "Components/MeshComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
@@ -34,6 +39,7 @@
 #include "Item/knightItemDefinitions.h"
 #include "Item/knightPartsComponent.h"
 #include "Progression/knightProgressionSubsystem.h"
+#include "System/knightGameplayTags.h"
 #include "knightDev.h"
 #include "knightPartsWatchComponent.h"
 
@@ -254,6 +260,96 @@ namespace knightPartsCheats
 		LogPartStats(Parts, CommandName);
 	}
 
+	// 몸 메시에 붙은 "Weapon" 태그 메시(장착한 무기). 없으면 null.
+	static USceneComponent* FindWeaponMesh(const AActor* Owner)
+	{
+		TArray<UMeshComponent*> Meshes;
+		if (const UknightPartsComponent* const Parts = Owner ? Owner->FindComponentByClass<UknightPartsComponent>() : nullptr)
+		{
+			Parts->GetPartMeshes(Meshes);
+		}
+		for (UMeshComponent* const Mesh : Meshes)
+		{
+			if (Mesh && Mesh->ComponentHasTag(TEXT("Weapon")))
+			{
+				return Mesh;
+			}
+		}
+		return nullptr;
+	}
+
+	// knight.Player.Weapon [이름] (2026-10-27). 무기 정의만 대상으로 이름 일부를 찾아 바로 장착한다.
+	// 바꾸기 전 무기가 붙어 있던 소켓(등 weapon_back / 손 weapon_r)에 새 무기를 그대로 붙여 검 상태가 꼬이지 않게 한다.
+	static void WeaponCommand(const TArray<FString>& Args, UWorld* World)
+	{
+		const TCHAR* const CommandName = TEXT("knight.Player.Weapon");
+		UknightPartsComponent* const Parts = GetPlayerParts(World, CommandName);
+		if (!Parts)
+		{
+			return;
+		}
+
+		TArray<UknightPartItemDefinition*> AllParts;
+		GetAllParts(AllParts);
+		TArray<UknightWeaponItemDefinition*> Weapons;
+		for (UknightPartItemDefinition* const Part : AllParts)
+		{
+			if (UknightWeaponItemDefinition* const Weapon = Cast<UknightWeaponItemDefinition>(Part))
+			{
+				Weapons.Add(Weapon);
+			}
+		}
+
+		if (Args.IsEmpty())
+		{
+			const UknightPartItemDefinition* const Current = Parts->GetEquippedPart(knightGameplayTags::Equipment_Slot_Weapon);
+			UE_LOG(LogknightDev, Log, TEXT("%s <Name>: weapons (current %s):"), CommandName, *PartNameOrDash(Current));
+			for (const UknightWeaponItemDefinition* const Weapon : Weapons)
+			{
+				UE_LOG(LogknightDev, Log, TEXT("%s:   %s"), CommandName, *Weapon->GetName());
+			}
+			return;
+		}
+
+		TArray<UknightWeaponItemDefinition*> Matches;
+		for (UknightWeaponItemDefinition* const Weapon : Weapons)
+		{
+			if (Weapon->GetName().Equals(Args[0], ESearchCase::IgnoreCase))
+			{
+				Matches = { Weapon };
+				break;
+			}
+			if (Weapon->GetName().Contains(Args[0], ESearchCase::IgnoreCase))
+			{
+				Matches.Add(Weapon);
+			}
+		}
+		if (Matches.Num() != 1)
+		{
+			UE_LOG(LogknightDev, Warning, TEXT("%s: '%s' matches %d weapons. Run knight.Player.Weapon with no argument to list them."),
+				CommandName, *Args[0], Matches.Num());
+			return;
+		}
+
+		ACharacter* const Character = Cast<ACharacter>(Parts->GetOwner());
+		const USceneComponent* const OldWeapon = FindWeaponMesh(Character);
+		const FName OldSocket = OldWeapon ? OldWeapon->GetAttachSocketName() : NAME_None;
+
+		// 강화 0으로 장착한다. 적재 한도를 넘으면 EquipPart가 거부하니 그때는 알려 준다.
+		if (!Parts->EquipPart(Matches[0], 0))
+		{
+			UE_LOG(LogknightDev, Warning, TEXT("%s: refused %s (over load capacity?). Try knight.Player.EquipPart for details."), CommandName, *Matches[0]->GetName());
+			return;
+		}
+		UMeshComponent* const NewWeapon = Cast<UMeshComponent>(FindWeaponMesh(Character));
+		if (NewWeapon && Character && !OldSocket.IsNone())
+		{
+			UknightPartsComponent::AttachWeaponToSocket(NewWeapon, Character->GetMesh(), OldSocket);
+		}
+		UE_LOG(LogknightDev, Log, TEXT("%s: equipped %s (socket %s). Does not change the save."), CommandName, *Matches[0]->GetName(),
+			OldSocket.IsNone() ? TEXT("default") : *OldSocket.ToString());
+	}
+
 	// knight.Player.PartsWatch [1|0] (2026-10-13). 플레이어 폰에 UknightPartsWatchComponent를 붙이거나 뗀다.
 	// 인자가 없으면 지금 상태를 뒤집는다. 다시 켜면 이벤트 번호를 1부터 다시 센다.
 	static void PartsWatchCommand(const TArray<FString>& Args, UWorld* World)
@@ -385,6 +481,12 @@ namespace knightPartsCheats
 		TEXT("knight.Player.UnequipPart"),
 		TEXT("knight.Player.UnequipPart <Slot>. Empties a slot: Head Torso Arms Legs Booster Generator Exterior Weapon. Does not change the save."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&UnequipPartCommand),
+		ECVF_Cheat);
+
+	static FAutoConsoleCommandWithWorldAndArgs WeaponCmd(
+		TEXT("knight.Player.Weapon"),
+		TEXT("knight.Player.Weapon [Name]. Swaps only the weapon (e.g. Janhyang, Janyeol, Heukgwan), keeping it on the back or in the hand. No argument lists weapons. Does not change the save."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&WeaponCommand),
 		ECVF_Cheat);
 
 	static FAutoConsoleCommandWithWorldAndArgs PartsWatchCmd(

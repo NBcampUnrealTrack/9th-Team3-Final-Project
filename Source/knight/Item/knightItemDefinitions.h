@@ -8,6 +8,7 @@
 #include "knightItemDefinition.h"
 #include "knightItemDefinitions.generated.h"
 
+class UNiagaraSystem;
 class USkeletalMesh;
 class UStaticMesh;
 class UknightAbilitySet;
@@ -219,6 +220,13 @@ public:
 	UknightWeaponItemDefinition();
 	float GetUpgradeAttackBonus(int32 Level) const;
 	float GetWeaponAttackAtLevel(int32 Level) const;
+
+	/**
+	 * (2026-10-27) 무기에 항상 붙는 이펙트(불티·연기 등). 장착하면 무기 메시에 붙여 띄우고, 뽑기·넣기로 메시가 옮겨져도 따라간다.
+	 * 해제하면 같이 지워진다. 비우면 없음. 이펙트는 메시 로컬 좌표(칼날 방향 = 메시 축) 기준으로 만든다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Effects")
+	TSoftObjectPtr<UNiagaraSystem> WeaponAuraEffect;
 };
 
 /**

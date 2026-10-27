@@ -9,6 +9,7 @@
 class UGameplayEffect;
 class UMechBodyRegionSet;
 class UMeshComponent;
+class UNiagaraComponent;
 class USkeletalMeshComponent;
 class UknightPartItemDefinition;
 class UknightWeaponItemDefinition;
@@ -53,6 +54,10 @@ struct FknightEquippedPart
 	FActiveGameplayEffectHandle UpgradeAttackEffectHandle;
 	UPROPERTY(Transient)
 	TObjectPtr<UGameplayEffect> UpgradeAttackEffect;
+
+	/** (2026-10-27) 무기 상시 이펙트(UknightWeaponItemDefinition::WeaponAuraEffect). 무기 메시에 붙어 있고 해제할 때 지운다. */
+	UPROPERTY(Transient)
+	TObjectPtr<UNiagaraComponent> AuraComponent;
 };
 
 /**
