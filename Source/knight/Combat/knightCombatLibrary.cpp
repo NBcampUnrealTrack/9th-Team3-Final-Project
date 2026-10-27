@@ -476,7 +476,7 @@ float UknightCombatLibrary::GetWarpWindowEnd(const UAnimMontage* Montage)
 }
 
 void UknightCombatLibrary::StartAttackLunge(UGameplayAbility* Ability, const UAnimMontage* Montage, float PlayRate, const FVector& Location,
-	float Travel, float MaxLungeTime, float MinTravel)
+	float Travel, float MaxLungeTime, float MinTravel, TFunction<bool(FVector&)> TrackTarget)
 {
 	UWorld* const World = Ability ? Ability->GetWorld() : nullptr;
 	const float WindowEnd = GetWarpWindowEnd(Montage);
@@ -504,6 +504,10 @@ void UknightCombatLibrary::StartAttackLunge(UGameplayAbility* Ability, const UAn
 		float LungeDuration = 0.f;
 		double StartTime = -1.0;
 		FTimerHandle Timer;
+		// (2026-10-27) 대상 따라가기(TrackTarget이 있을 때만): 처음 돌진 방향과 지난 프레임까지 간 비율.
+		TFunction<bool(FVector&)> TrackTarget;
+		FVector Direction = FVector::ZeroVector;
+		float PrevEased = 0.f;
 	};
 	TSharedRef<FLunge> Lunge = MakeShared<FLunge>();
 	Lunge->WeakAbility = Ability;
@@ -511,6 +515,7 @@ void UknightCombatLibrary::StartAttackLunge(UGameplayAbility* Ability, const UAn
 	Lunge->LungeMontage = Montage;
 	Lunge->TargetLocation = Location;
 	Lunge->LungeDuration = Duration;
+	Lunge->TrackTarget = MoveTemp(TrackTarget);
 	const double BeginTime = World->GetTimeSeconds() + FMath::Max(0.f, Delay);
 
 	World->GetTimerManager().SetTimer(Lunge->Timer, FTimerDelegate::CreateLambda([Lunge, BeginTime]()
@@ -536,13 +541,36 @@ void UknightCombatLibrary::StartAttackLunge(UGameplayAbility* Ability, const UAn
 		{
 			Lunge->StartTime = Now;
 			Lunge->StartLocation = C->GetActorLocation();
+			Lunge->Direction = (Lunge->TargetLocation - Lunge->StartLocation).GetSafeNormal2D();
 		}
 		const float Alpha = FMath::Clamp(static_cast<float>((Now - Lunge->StartTime) / Lunge->LungeDuration), 0.f, 1.f);
 		// 빠르게 출발해서 타격 직전에 감속한다.
 		const float Eased = 1.f - FMath::Square(1.f - Alpha);
-		FVector Desired = FMath::Lerp(Lunge->StartLocation, Lunge->TargetLocation, Eased);
-		FVector Delta = Desired - C->GetActorLocation();
-		Delta.Z = 0.f;
+		FVector Delta;
+		if (Lunge->TrackTarget)
+		{
+			// (2026-10-27) 대상 따라가기: 목표를 대상의 지금 위치로 바꾸고, 남은 거리 중 이번 프레임 몫만큼 간다.
+			// 시작점 보간을 그대로 쓰면 대상이 다가올 때 목표가 당겨져 뒤로 끌리므로, 처음 돌진 방향의 반대로는 가지 않는다.
+			FVector Tracked;
+			if (Lunge->TrackTarget(Tracked))
+			{
+				Lunge->TargetLocation = Tracked;
+			}
+			const float Step = Lunge->PrevEased >= 1.f ? 1.f : (Eased - Lunge->PrevEased) / (1.f - Lunge->PrevEased);
+			Delta = (Lunge->TargetLocation - C->GetActorLocation()) * Step;
+			Delta.Z = 0.f;
+			if ((Delta | Lunge->Direction) < 0.f)
+			{
+				Delta = FVector::ZeroVector;
+			}
+			Lunge->PrevEased = Eased;
+		}
+		else
+		{
+			const FVector Desired = FMath::Lerp(Lunge->StartLocation, Lunge->TargetLocation, Eased);
+			Delta = Desired - C->GetActorLocation();
+			Delta.Z = 0.f;
+		}
 		if (!Delta.IsNearlyZero())
 		{
 			FHitResult Hit;
