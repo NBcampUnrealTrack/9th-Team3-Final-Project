@@ -98,6 +98,13 @@ struct FknightFlybyBeamEffects
 	UPROPERTY(EditDefaultsOnly, Category="Effects|Pillar", meta=(ClampMin=1, Units="cm"))
 	float PillarStreakLength = 1000.f;
 
+	/** 지나가는 동안 BeamBone에서 나는 소리(브레스). 지나가기가 끝나거나 공격이 끊기면 BeamSoundFadeOut만에 줄인다. 비우면 소리 없음. */
+	UPROPERTY(EditDefaultsOnly, Category="Effects|Pillar")
+	TObjectPtr<USoundBase> BeamSound;
+
+	UPROPERTY(EditDefaultsOnly, Category="Effects|Pillar", meta=(ClampMin=0, Units="s"))
+	float BeamSoundFadeOut = 0.4f;
+
 	/** 기둥이 바닥(또는 수면)에 닿는 자리. 바닥을 따라 바깥으로 퍼지는 바람. */
 	UPROPERTY(EditDefaultsOnly, Category="Effects|Ground")
 	TObjectPtr<UNiagaraSystem> Ground;
@@ -238,6 +245,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UAudioComponent> WarningAudio;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAudioComponent> BeamAudio;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMeshComponent> PillarComponent;

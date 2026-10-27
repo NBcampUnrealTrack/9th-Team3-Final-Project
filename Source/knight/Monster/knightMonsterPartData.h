@@ -7,6 +7,7 @@
 
 class AknightMonsterBreakPiece;
 class UGameplayEffect;
+class USoundBase;
 class UStaticMesh;
 
 /** One hittable region of a monster (head, foreleg, tail) and its hitzone and break rules. */
@@ -101,6 +102,10 @@ struct KNIGHT_API FknightMonsterPartDefinition
 	/** 조각을 만드는 액터. 남는 시간, 튕겨 나가는 속도, 절단면이 식는 시간은 이 클래스(또는 Blueprint 자식)에서 조정한다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Break", meta=(EditCondition="bBreakable"))
 	TSubclassOf<AknightMonsterBreakPiece> BreakPieceClass;
+
+	/** 부서지는 순간 부위 자리에서 한 번 재생한다(잔향 가슴 약점). 비우면 소리 없음. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Break", meta=(EditCondition="bBreakable"))
+	TObjectPtr<USoundBase> BreakSound;
 };
 
 /** 여러 부위가 모두 부서졌을 때만 붙는 태그(두 앞발이 다 부서져야 봉인되는 공격 등). */

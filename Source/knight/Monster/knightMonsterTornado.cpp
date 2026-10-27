@@ -8,6 +8,9 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "Camera/PlayerCameraManager.h"
+#include "Components/AudioComponent.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 #include "GameFramework/PlayerController.h"
 #include "Environment/knightWaterRippleSettings.h"
 #include "Environment/knightWaterRippleSubsystem.h"
@@ -89,6 +92,10 @@ void AknightMonsterTornado::Launch(AActor* InAttacker, AActor* InTarget, const F
 	ChurnTime = Params.WaterChurnInterval;
 	UpdateWater(knightMonsterTornado::StartScale, false, 0.f);
 	FormComponent = SpawnAtBase(Params.FormEffect, true);
+	if (Params.SpawnSound)
+	{
+		UGameplayStatics::SpawnSoundAttached(Params.SpawnSound, Root, NAME_None, FVector(0.f, 0.f, BaseOffset), EAttachLocation::KeepRelativeOffset);
+	}
 	// 깔때기가 있으면 기둥이 차오를 때 입자를 켠다. 없으면 처음부터 작은 크기로 켠다.
 	if (!bFunnel && Params.Effect)
 	{
@@ -191,6 +198,14 @@ void AknightMonsterTornado::Burst()
 		FormComponent = nullptr;
 	}
 	SpawnAtBase(Params.BurstEffect, false);
+	if (Params.LoopSound)
+	{
+		LoopAudio = UGameplayStatics::SpawnSoundAttached(Params.LoopSound, Root, NAME_None, FVector(0.f, 0.f, BaseOffset), EAttachLocation::KeepRelativeOffset);
+		if (LoopAudio)
+		{
+			LoopAudio->FadeIn(Params.LoopFadeIn);
+		}
+	}
 	UWorld* const World = GetWorld();
 	const FVector Base = GetActorLocation() + FVector(0.f, 0.f, BaseOffset);
 	UknightWaterRippleSubsystem* const Ripples = World ? World->GetSubsystem<UknightWaterRippleSubsystem>() : nullptr;
@@ -228,6 +243,11 @@ void AknightMonsterTornado::StartCollapse()
 	}
 	// 새 입자만 멈추고 남은 물보라·물안개는 수명대로 흩어진다.
 	EffectComponent->Deactivate();
+	if (LoopAudio)
+	{
+		LoopAudio->FadeOut(Params.FadeTime, 0.f);
+		LoopAudio = nullptr;
+	}
 	if (bFunnel)
 	{
 		SpawnAtBase(Params.CollapseEffect, false);

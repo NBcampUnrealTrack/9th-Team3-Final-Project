@@ -9,6 +9,7 @@
 class UAbilityTask_Repeat;
 class UAnimMontage;
 class UNiagaraSystem;
+class USoundBase;
 
 /**
  * 몬스터가 MuzzleSocket에서 타깃 쪽으로 직선 투사체(AknightMonsterSonicProjectile)를 쏘는 원거리 공격(잔향 초음파 발사).
@@ -73,6 +74,10 @@ protected:
 	/** 선택 사항. State.Monster.Enraged일 때 쏘는 투사체의 외형(잔향 공명해방). 없으면 ProjectileEffect를 쓴다. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Projectile")
 	TObjectPtr<UNiagaraSystem> EnragedProjectileEffect;
+
+	/** 쏠 때마다 MuzzleSocket에서 재생한다(연발이면 발마다). 비우면 소리 없음. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Projectile")
+	TObjectPtr<USoundBase> FireSound;
 
 	/** 투사체가 맞거나 막히거나 벽·물에 닿았을 때 남기는 이펙트. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Projectile")

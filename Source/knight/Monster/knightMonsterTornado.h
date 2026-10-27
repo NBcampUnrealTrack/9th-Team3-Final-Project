@@ -5,11 +5,13 @@
 #include "GameFramework/Actor.h"
 #include "knightMonsterTornado.generated.h"
 
+class UAudioComponent;
 class UCameraShakeBase;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class UNiagaraComponent;
 class UNiagaraSystem;
+class USoundBase;
 class UStaticMesh;
 class UStaticMeshComponent;
 
@@ -140,6 +142,17 @@ struct KNIGHT_API FknightMonsterTornadoParams
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Tornado|Water", meta=(ClampMin=0))
 	float WaterSplashScale = 0.6f;
+
+	/** 생기는 순간 밑동에서 한 번 재생한다(소용돌이가 일어 기둥이 차오르는 소리). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Tornado|Sound")
+	TObjectPtr<USoundBase> SpawnSound;
+
+	/** 다 만들어져 쫓기 시작할 때부터 회오리를 따라 반복 재생하고, 사라지는 동안(FadeTime) 줄인다. 반복(Looping) 소리여야 한다. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Tornado|Sound")
+	TObjectPtr<USoundBase> LoopSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Tornado|Sound", meta=(ClampMin=0, Units="s"))
+	float LoopFadeIn = 0.3f;
 };
 
 /**
@@ -204,6 +217,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UNiagaraComponent> FormComponent;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAudioComponent> LoopAudio;
 
 	TWeakObjectPtr<AActor> Attacker;
 	TWeakObjectPtr<AActor> Target;
