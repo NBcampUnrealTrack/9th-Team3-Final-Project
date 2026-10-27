@@ -6,10 +6,12 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
+#include "Kismet/GameplayStatics.h"
 #include "Monster/knightMonsterCharacterBase.h"
 #include "Monster/knightMonsterMovementComponent.h"
 #include "Monster/knightMonsterSonicProjectile.h"
 #include "Monster/knightMonsterTargetingComponent.h"
+#include "Sound/SoundBase.h"
 #include "System/knightGameplayTags.h"
 #include "knight.h"
 
@@ -93,7 +95,7 @@ void UknightGameplayAbility_MonsterProjectileAttack::Fire()
 	{
 		return;
 	}
-	const USkeletalMeshComponent* const Mesh = Monster->GetMesh();
+	USkeletalMeshComponent* const Mesh = Monster->GetMesh();
 	const FVector Anchor = Mesh && Mesh->DoesSocketExist(MuzzleSocket) ? Mesh->GetSocketLocation(MuzzleSocket) : Monster->GetActorLocation();
 	const FVector Muzzle = Anchor + Monster->GetActorQuat().RotateVector(MuzzleOffset);
 
@@ -112,6 +114,10 @@ void UknightGameplayAbility_MonsterProjectileAttack::Fire()
 		Projectile->SetDeafenTime(DeafenTime);
 		Projectile->SetImpactEffects(ImpactEffects);
 		Projectile->Launch(Monster, HitParams, Aim - Muzzle, ProjectileSpeed, ProjectileRadius, MaxDistance, ShotEffect);
+	}
+	if (FireSound && Mesh)
+	{
+		UGameplayStatics::SpawnSoundAttached(FireSound, Mesh, MuzzleSocket);
 	}
 	UE_LOG(LogknightAI, Log, TEXT("%s: %s fires (%.0f cm to target)."), *GetNameSafe(Monster), *GetName(), FVector::Dist(Muzzle, Aim));
 }
