@@ -58,6 +58,7 @@ void UknightGameplayAbility_MonsterDiveAttack::ActivateAbility(const FGameplayAb
 	PhaseTime = 0.f;
 	bConnected = false;
 	bParried = false;
+	bFallGetUpStarted = false;
 	if (UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo())
 	{
 		ASC->AddLooseGameplayTag(knightGameplayTags::State_Monster_NoFlinch);
@@ -183,11 +184,35 @@ void UknightGameplayAbility_MonsterDiveAttack::FinishDive()
 	}
 	UAbilityTask_PlayMontageAndWait* const OutcomeTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, Outcome,
 		1.f, NAME_None, true, 1.f, bConnected ? StuckStartTime : FallStartTime);
-	OutcomeTask->OnCompleted.AddDynamic(this, &ThisClass::HandleOutcomeFinished);
-	OutcomeTask->OnBlendOut.AddDynamic(this, &ThisClass::HandleOutcomeFinished);
+	if (!bConnected && FallGetUpMontage)
+	{
+		OutcomeTask->OnCompleted.AddDynamic(this, &ThisClass::HandleFallBlendOut);
+		OutcomeTask->OnBlendOut.AddDynamic(this, &ThisClass::HandleFallBlendOut);
+	}
+	else
+	{
+		OutcomeTask->OnCompleted.AddDynamic(this, &ThisClass::HandleOutcomeFinished);
+		OutcomeTask->OnBlendOut.AddDynamic(this, &ThisClass::HandleOutcomeFinished);
+	}
 	OutcomeTask->OnInterrupted.AddDynamic(this, &ThisClass::HandleOutcomeFinished);
 	OutcomeTask->OnCancelled.AddDynamic(this, &ThisClass::HandleOutcomeFinished);
 	OutcomeTask->ReadyForActivation();
+}
+
+void UknightGameplayAbility_MonsterDiveAttack::HandleFallBlendOut()
+{
+	if (!IsActive() || bFallGetUpStarted)
+	{
+		return;
+	}
+	// 쓰러진 몽타주가 빠지는 동안 일어나기가 그 자세에서 블렌드 인한다.
+	bFallGetUpStarted = true;
+	UAbilityTask_PlayMontageAndWait* const GetUpTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, FallGetUpMontage);
+	GetUpTask->OnCompleted.AddDynamic(this, &ThisClass::HandleOutcomeFinished);
+	GetUpTask->OnBlendOut.AddDynamic(this, &ThisClass::HandleOutcomeFinished);
+	GetUpTask->OnInterrupted.AddDynamic(this, &ThisClass::HandleOutcomeFinished);
+	GetUpTask->OnCancelled.AddDynamic(this, &ThisClass::HandleOutcomeFinished);
+	GetUpTask->ReadyForActivation();
 }
 
 void UknightGameplayAbility_MonsterDiveAttack::HandleOutcomeFinished()
