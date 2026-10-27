@@ -20,6 +20,7 @@ class UAnimMontage;
  *   탈진 착지: 지침이 끝나면 공중 턴을 끝내고 LandMontage를 LandHoldTime 동안, 이어서 GetUpMontage를 재생한다(공격 없는 딜 타임).
  *             공중이 아니면 착지 없이 끝난다. 일어난 뒤부터 지상 턴이 처음부터 시작된다.
  *             착지부터 끝날 때까지 State.Monster.Collapsed를 붙인다(엎드린 몸·날개로 플레이어를 밀어내지 않음).
+ *             일어나는 동안(GetUpMontage)은 State.Monster.GettingUp도 붙인다(잔향 가슴 약점 노출).
  *
  * 공중 턴을 스스로 끝내므로 Selection.RequiredOwnerTags에 State.Monster.LastAirAttack을 넣어 공중 턴의 마지막 공격으로만 쓴다.
  *
@@ -116,6 +117,7 @@ private:
 	void StartLand();
 	/** 메시 애니메이션 속도 배율(지침). */
 	void SetAnimRate(float Rate);
+	void SetGettingUp(bool bOn);
 
 	enum class EPhase : uint8 { Summon, Tired, Land, GetUp };
 
@@ -125,4 +127,5 @@ private:
 	int32 SpawnCount = 0;
 	int32 Spawned = 0;
 	bool bLanded = false;
+	bool bGettingUpApplied = false;
 };

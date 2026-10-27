@@ -32,6 +32,9 @@ public:
 	/** Closes the window opened by Source. Rings already sent finish on their own. */
 	void StopRoar(const USceneComponent* Source);
 
+	/** Assets loaded on first use. The camera manager loads them ahead so the first roar does not hitch. */
+	void GatherPreloadAssets(TArray<FSoftObjectPath>& OutPaths) const;
+
 	virtual bool ModifyCamera(float DeltaTime, FMinimalViewInfo& InOutPOV) override;
 	virtual void ModifyPostProcess(float DeltaTime, float& PostProcessBlendWeight, FPostProcessSettings& PostProcessSettings) override;
 
