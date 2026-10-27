@@ -90,6 +90,7 @@ namespace knightGameplayTags
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(SetByCaller_Damage, "SetByCaller.Damage", "Base damage magnitude.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(SetByCaller_PoiseDamage, "SetByCaller.PoiseDamage", "Base poise damage magnitude.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(SetByCaller_Rage, "SetByCaller.Rage", "Rage added to a monster from damage it took.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(SetByCaller_MotionValue, "SetByCaller.MotionValue", "Per-attack motion value multiplier.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(SetByCaller_BoostCost, "SetByCaller.BoostCost", "Boost gauge cost.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(SetByCaller_Healing, "SetByCaller.Healing", "Health restored (repair kit).");

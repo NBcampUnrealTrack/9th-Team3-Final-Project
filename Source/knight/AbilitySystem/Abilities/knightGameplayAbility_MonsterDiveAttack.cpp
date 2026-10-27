@@ -10,6 +10,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/RootMotionSource.h"
 #include "Monster/knightMonsterAirTurnComponent.h"
 #include "Monster/knightMonsterCharacterBase.h"
@@ -74,19 +75,22 @@ void UknightGameplayAbility_MonsterDiveAttack::ActivateAbility(const FGameplayAb
 
 void UknightGameplayAbility_MonsterDiveAttack::HandleTick(int32 ActionNumber)
 {
-	PhaseTime += knightMonsterDive::TickInterval;
 	const AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetAvatarActorFromActorInfo());
 	if (!Monster)
 	{
 		return;
 	}
+	// 몬스터 시간으로 센다. 패링 히트스톱으로 몸(이동·몽타주)이 멈추는 동안 시계만 흐르면, 돌진이 덜 끝난 채 결과
+	// 몽타주가 나오고 남은 돌진 이동에 쓰러지는 몸이 미끄러진다.
+	const float DeltaTime = knightMonsterDive::TickInterval * FMath::Max(Monster->CustomTimeDilation, 0.f);
+	PhaseTime += DeltaTime;
 	if (Phase == EPhase::Fold)
 	{
 		const UknightMonsterTargetingComponent* const Targeting = Monster->GetTargetingComponent();
 		const AActor* const Target = Targeting ? Targeting->GetCurrentTarget() : nullptr;
 		if (UknightMonsterMovementComponent* const Movement = Monster->GetMonsterMovementComponent(); Movement && Target)
 		{
-			Movement->TurnTowards(Target->GetActorLocation(), knightMonsterDive::TickInterval, FoldTurnRate, 2.f);
+			Movement->TurnTowards(Target->GetActorLocation(), DeltaTime, FoldTurnRate, 2.f);
 		}
 		if (PhaseTime >= FoldTime)
 		{
@@ -97,7 +101,7 @@ void UknightGameplayAbility_MonsterDiveAttack::HandleTick(int32 ActionNumber)
 	if (Phase == EPhase::Dive)
 	{
 		ApplyHits();
-		if (PhaseTime >= DiveDuration)
+		if (bParried || PhaseTime >= DiveDuration)
 		{
 			FinishDive();
 		}
@@ -129,10 +133,11 @@ void UknightGameplayAbility_MonsterDiveAttack::StartDive()
 	{
 		Anim->Montage_JumpToSection(LoopSection, Montage);
 	}
-	UAbilityTask_ApplyRootMotionConstantForce* const DiveTask = UAbilityTask_ApplyRootMotionConstantForce::ApplyRootMotionConstantForce(
+	UAbilityTask_ApplyRootMotionConstantForce* const Task = UAbilityTask_ApplyRootMotionConstantForce::ApplyRootMotionConstantForce(
 		this, TEXT("Dive"), Direction, Distance / DiveDuration, DiveDuration, false, nullptr,
 		ERootMotionFinishVelocityMode::SetVelocity, FVector::ZeroVector, 0.f, false);
-	DiveTask->ReadyForActivation();
+	DiveTask = Task;
+	Task->ReadyForActivation();
 	// 같은 시간 동안 공중 높이에서 바닥 높이로 내려온다.
 	if (UknightMonsterHoverComponent* const Hover = Monster->FindComponentByClass<UknightMonsterHoverComponent>())
 	{
@@ -151,6 +156,23 @@ void UknightGameplayAbility_MonsterDiveAttack::FinishDive()
 {
 	Phase = EPhase::Outcome;
 	ApplyHits();
+	// 결과 몽타주는 제자리에서 재생한다. 남은 돌진 이동이 있으면 여기서 끊는다(끊으면 마무리 속도 0이 적용되지 않아 직접 멈춘다).
+	if (DiveTask.IsValid() && DiveTask->IsActive())
+	{
+		DiveTask->EndTask();
+		if (ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
+		{
+			Character->GetCharacterMovement()->StopMovementImmediately();
+		}
+	}
+	DiveTask.Reset();
+	if (bParried && !bConnected)
+	{
+		if (UknightMonsterHoverComponent* const Hover = GetAvatarActorFromActorInfo()->FindComponentByClass<UknightMonsterHoverComponent>())
+		{
+			Hover->SetAirborne(false, ParriedDropTime);
+		}
+	}
 	UAnimMontage* const Outcome = bConnected ? StuckMontage.Get() : FallMontage.Get();
 	UE_LOG(LogknightAI, Log, TEXT("%s: dive %s."), *GetNameSafe(GetAvatarActorFromActorInfo()),
 		bConnected ? TEXT("connected (stuck)") : bParried ? TEXT("parried (fall)") : TEXT("missed (fall)"));
@@ -160,7 +182,7 @@ void UknightGameplayAbility_MonsterDiveAttack::FinishDive()
 		return;
 	}
 	UAbilityTask_PlayMontageAndWait* const OutcomeTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, Outcome,
-		1.f, NAME_None, true, 1.f, bConnected ? StuckStartTime : 0.f);
+		1.f, NAME_None, true, 1.f, bConnected ? StuckStartTime : FallStartTime);
 	OutcomeTask->OnCompleted.AddDynamic(this, &ThisClass::HandleOutcomeFinished);
 	OutcomeTask->OnBlendOut.AddDynamic(this, &ThisClass::HandleOutcomeFinished);
 	OutcomeTask->OnInterrupted.AddDynamic(this, &ThisClass::HandleOutcomeFinished);
