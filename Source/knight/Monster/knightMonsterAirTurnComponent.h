@@ -18,6 +18,8 @@ struct FAbilityEndedData;
  *   지상 턴: 타깃을 잡은 뒤 GroundTurnTime 동안 지상 공격 → 공격이 끝나면 이륙(Event.Monster.TakeOff)
  *   공중 턴: State.Monster.Airborne이 붙는다. 공중 공격을 AirAttacksPerTurn번 쓰거나 AirTurnMaxTime이 지나면,
  *            공격이 끝난 뒤 착지(Event.Monster.Land)
+ *            다음 공격이 이 턴의 마지막이면 State.Monster.LastAirAttack을 붙인다. 공중 턴을 스스로 끝내는 공격(잔향 회오리)은
+ *            이 태그를 필요 태그로 가져 마지막 순서에만 나온다.
  *   격추: 공중 턴에 다운(State.HitReact.Knockdown)되면 곧바로 떨어지고 지상 턴이 처음부터 시작된다.
  *   거리 벌리기: 공중 턴에 공격·반응 중이 아니고 타깃이 AirKeepDistance보다 가까우면 타깃을 본 채 뒤로 물러난다(다이브 거리 확보).
  *
@@ -111,6 +113,8 @@ private:
 	/** 공중 턴을 끝낸다. bSendLandEvent가 false면 착지 애니메이션 없이 BlendTime 동안 떨어진다. */
 	void EndAirTurn(float BlendTime, bool bSendLandEvent);
 	void SetPawnBlocking(bool bBlock);
+	/** 공중 턴이고 남은 공중 공격이 하나면 State.Monster.LastAirAttack을 붙이고, 아니면 뗀다. */
+	void UpdateLastAttackTag();
 	bool IsAttacking() const;
 	bool CanChangeTurn() const;
 	void SendEvent(const FGameplayTag& EventTag) const;

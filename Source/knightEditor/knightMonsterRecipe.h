@@ -297,6 +297,13 @@ public:
 	UPROPERTY(EditAnywhere, Category="Air Turn", meta=(ClampMin=0, Units="s", EditCondition="AirGroundTurnTime > 0"))
 	float TakeOffEnd = 0.f;
 
+	/**
+	 * 이륙 몽타주가 공중 날갯짓으로 넘어가는 블렌드 시간. 이륙 애니메이션이 스스로 몸을 들어 올려 날갯짓보다 몸이 높으면
+	 * 짧을수록 그 높이 차이가 한 번에 빠져 몸이 튄다(잔향 0.6).
+	 */
+	UPROPERTY(EditAnywhere, Category="Air Turn", meta=(ClampMin=0, Units="s", EditCondition="AirGroundTurnTime > 0"))
+	float TakeOffBlendOut = 0.25f;
+
 	/** 착지 애니메이션과 쓸 구간(초). 구간 길이 동안 메시가 지상 높이로 내려온다. */
 	UPROPERTY(EditAnywhere, Category="Air Turn", meta=(EditCondition="AirGroundTurnTime > 0"))
 	TObjectPtr<UAnimSequence> Landing;

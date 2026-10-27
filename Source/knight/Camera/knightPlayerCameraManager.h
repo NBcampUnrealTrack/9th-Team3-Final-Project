@@ -42,7 +42,10 @@ public:
 	/** Stops sending new ripple rings for Source. */
 	void StopRoarShockwave(const USceneComponent* Source);
 
-	/** Source(몬스터 메시)가 플레이어 둘레만 보이게 시야를 덮는다. See UknightCameraModifier_Darkness. */
+	/**
+	 * Source(몬스터 메시)가 플레이어 둘레만 보이게 시야를 덮는다. See UknightCameraModifier_Darkness.
+	 * 덮는 동안 보고 있는 폰에 State.LockOn.Blocked를 붙여 락온을 풀고 막는다. 끄기 시작하면 바로 뗀다.
+	 */
 	void StartDarkness(UPrimitiveComponent* Source);
 	void StopDarkness(const UPrimitiveComponent* Source);
 	/** 어둠 속에서 Source의 윤곽선을 보이거나 숨긴다. */
@@ -106,6 +109,8 @@ protected:
 	float KnockdownFramingPitchOffset = 2.2f;
 
 private:
+	void SetLockOnBlocked(bool bBlocked) const;
+
 	TWeakObjectPtr<UknightGroggyFeedbackComponent> RadialPullSource;
 	TWeakObjectPtr<AActor> KnockdownViewTarget;
 	double KnockdownZoomStartTime = 0.0;
