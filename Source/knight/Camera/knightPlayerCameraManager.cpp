@@ -1,5 +1,7 @@
 #include "Camera/knightPlayerCameraManager.h"
 
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemGlobals.h"
 #include "Camera/CameraModifier_CameraShake.h"
 #include "Camera/CameraShakeBase.h"
 #include "Engine/Scene.h"
@@ -9,9 +11,11 @@
 #include "Camera/knightCameraModifier_RoarShockwave.h"
 #include "Engine/World.h"
 #include "Engine/LocalPlayer.h"
+#include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Settings/knightSettingsSubsystem.h"
 #include "Settings/knightSharedSettings.h"
+#include "System/knightGameplayTags.h"
 #include "Combat/knightGroggyFeedbackComponent.h"
 
 AknightPlayerCameraManager::AknightPlayerCameraManager()
@@ -280,6 +284,7 @@ void AknightPlayerCameraManager::StartDarkness(UPrimitiveComponent* Source)
 	{
 		Modifier->StartDarkness(Source);
 	}
+	SetLockOnBlocked(true);
 }
 
 void AknightPlayerCameraManager::StopDarkness(const UPrimitiveComponent* Source)
@@ -287,6 +292,16 @@ void AknightPlayerCameraManager::StopDarkness(const UPrimitiveComponent* Source)
 	if (UknightCameraModifier_Darkness* const Modifier = DarknessClass ? Cast<UknightCameraModifier_Darkness>(FindCameraModifierByClass(DarknessClass)) : nullptr)
 	{
 		Modifier->StopDarkness(Source);
+	}
+	SetLockOnBlocked(false);
+}
+
+void AknightPlayerCameraManager::SetLockOnBlocked(bool bBlocked) const
+{
+	const APawn* const Pawn = PCOwner ? PCOwner->GetPawn() : nullptr;
+	if (UAbilitySystemComponent* const ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Pawn))
+	{
+		ASC->SetLooseGameplayTagCount(knightGameplayTags::State_LockOn_Blocked, bBlocked ? 1 : 0);
 	}
 }
 
