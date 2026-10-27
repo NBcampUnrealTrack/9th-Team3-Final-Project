@@ -103,6 +103,15 @@ protected:
 	/** ParriedPoiseBlockedTags가 붙으면 경직도를 가득 채운다. */
 	void HandleParriedPoiseBlockedChanged(const FGameplayTag Tag, int32 NewCount);
 
+	void HandleEnragedChanged(const FGameplayTag Tag, int32 NewCount);
+
+	/**
+	 * State.Monster.Enraged가 붙거나 떨어질 때 부른다(분노 시작·끝). 분노 외형(잔향 공명 날개 색 등)을 Blueprint에서 바꾼다.
+	 * 분노 중에 죽어도 끝(false)은 부르지 않는다.
+	 */
+	UFUNCTION(BlueprintImplementableEvent, Category="Knight|Monster")
+	void OnEnragedChanged(bool bEnraged);
+
 	/** The first target of this life sends Event.Monster.Engaged (an encounter roar ability triggers on it). */
 	UFUNCTION()
 	void HandleTargetChanged(AActor* OldTarget, AActor* NewTarget);

@@ -90,6 +90,8 @@ void AknightMonsterCharacterBase::BeginPlay()
 	MonsterAttributeSet->OnStaminaDepleted.AddUObject(this, &ThisClass::HandleStaminaDepleted);
 	TargetingComponent->OnTargetChanged.AddUniqueDynamic(this, &ThisClass::HandleTargetChanged);
 	AbilitySystemComponent->GenericGameplayEventCallbacks.FindOrAdd(knightGameplayTags::Event_Parried).AddUObject(this, &ThisClass::HandleParried);
+	AbilitySystemComponent->RegisterGameplayTagEvent(knightGameplayTags::State_Monster_Enraged, EGameplayTagEventType::NewOrRemoved)
+		.AddUObject(this, &ThisClass::HandleEnragedChanged);
 	if (MonsterDefinition)
 	{
 		for (const FGameplayTag& BlockedTag : MonsterDefinition->ParriedPoiseBlockedTags)
@@ -435,6 +437,16 @@ void AknightMonsterCharacterBase::HandleParriedPoiseBlockedChanged(const FGamepl
 	const float MaxPoise = AbilitySystemComponent->GetNumericAttributeBase(UknightCoreAttributeSet::GetMaxPoiseAttribute());
 	AbilitySystemComponent->SetNumericAttributeBase(UknightCoreAttributeSet::GetPoiseAttribute(), MaxPoise);
 	UE_LOG(LogknightAI, Log, TEXT("%s: %s added, poise reset to %.0f."), *GetNameSafe(this), *Tag.ToString(), MaxPoise);
+}
+
+void AknightMonsterCharacterBase::HandleEnragedChanged(const FGameplayTag Tag, int32 NewCount)
+{
+	// 죽으면서 효과가 지워져 떨어질 때는 시체의 외형을 바꾸지 않는다.
+	if (NewCount <= 0 && IsDead())
+	{
+		return;
+	}
+	OnEnragedChanged(NewCount > 0);
 }
 
 void AknightMonsterCharacterBase::HandleStaminaDepleted(AActor* EffectInstigator, AActor* EffectCauser, const FGameplayEffectSpec* EffectSpec,
