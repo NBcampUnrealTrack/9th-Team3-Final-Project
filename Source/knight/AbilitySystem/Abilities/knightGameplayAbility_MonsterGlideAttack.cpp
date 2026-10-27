@@ -1,7 +1,6 @@
 #include "AbilitySystem/Abilities/knightGameplayAbility_MonsterGlideAttack.h"
 
 #include "AbilitySystemComponent.h"
-#include "Abilities/Tasks/AbilityTask_ApplyRootMotionConstantForce.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_Repeat.h"
 #include "Animation/AnimInstance.h"
@@ -10,7 +9,9 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
+#include "GameFramework/Pawn.h"
 #include "GameFramework/RootMotionSource.h"
+#include "Kismet/GameplayStatics.h"
 #include "Monster/knightMonsterAirTurnComponent.h"
 #include "Monster/knightMonsterCharacterBase.h"
 #include "Monster/knightMonsterDebug.h"
@@ -55,6 +56,7 @@ void UknightGameplayAbility_MonsterGlideAttack::ActivateAbility(const FGameplayA
 	Phase = EPhase::Roar;
 	PhaseTime = 0.f;
 	bLanded = false;
+	bCircling = false;
 	SetDarkness(bDarkenView);
 	if (RoarMontage)
 	{
@@ -70,7 +72,7 @@ void UknightGameplayAbility_MonsterGlideAttack::ActivateAbility(const FGameplayA
 void UknightGameplayAbility_MonsterGlideAttack::HandleTick(int32 ActionNumber)
 {
 	PhaseTime += knightMonsterGlide::TickInterval;
-	const AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetAvatarActorFromActorInfo());
+	AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetAvatarActorFromActorInfo());
 	if (!Monster)
 	{
 		return;
@@ -87,6 +89,10 @@ void UknightGameplayAbility_MonsterGlideAttack::HandleTick(int32 ActionNumber)
 		{
 			Movement->TurnTowards(Target->GetActorLocation(), knightMonsterGlide::TickInterval, TurnRate, 2.f);
 		}
+		if (Phase == EPhase::Roar && Target && bDarkenView && BehindDistance > 0.f && PhaseTime >= CircleStartTime)
+		{
+			UpdateCircle(*Monster, *Target);
+		}
 		if (PhaseTime >= (Phase == EPhase::Roar ? (bDarkenView ? FMath::Max(RoarTime, DarknessHoldTime) : RoarTime) : TurnTime))
 		{
 			StartStrike();
@@ -94,6 +100,15 @@ void UknightGameplayAbility_MonsterGlideAttack::HandleTick(int32 ActionNumber)
 		break;
 	case EPhase::Strike:
 		SetSilhouette(SilhouetteLeadTime > 0.f && PhaseTime >= StabTime - SilhouetteLeadTime && PhaseTime < StabTime);
+		if (Target && bDarkenView && HomingTurnRate > 0.f && PhaseTime < StabTime - HomingLockTime)
+		{
+			// 찌르기 직전까지 타깃 쪽으로 꺾는다. 속도는 시작할 때 정한 그대로다.
+			const FVector ToTarget = (Target->GetActorLocation() - Monster->GetActorLocation()).GetSafeNormal2D(UE_SMALL_NUMBER, GlideDirection);
+			const FRotator Heading = FMath::RInterpConstantTo(GlideDirection.Rotation(), ToTarget.Rotation(), knightMonsterGlide::TickInterval, HomingTurnRate);
+			GlideDirection = Heading.Vector();
+			Monster->SetActorRotation(Heading);
+			SetGlideVelocity(GlideDirection * GlideSpeed);
+		}
 		if (PhaseTime >= HitStartTime && PhaseTime <= HitEndTime)
 		{
 			ApplyHits();
@@ -145,6 +160,8 @@ void UknightGameplayAbility_MonsterGlideAttack::StartStrike()
 	SetNoFlinch(true);
 
 	// 시작하는 순간의 타깃 위치로 고정한다. 꼬리 끝이 StabTime에 그곳에 오는 속도로 날고, 지나간 뒤에도 같은 속도를 유지한다.
+	// 어둠 속에서는 속도만 고정하고 방향은 HandleTick이 찌르기 직전까지 꺾는다.
+	bCircling = false;
 	FVector Direction = Monster->GetActorForwardVector().GetSafeNormal2D();
 	float Travel = 0.f;
 	if (Target)
@@ -164,10 +181,9 @@ void UknightGameplayAbility_MonsterGlideAttack::StartStrike()
 	// 마지막이 아니면 타깃 너머 RepassDistance까지 지나간다(찌르는 순간 몸은 타깃 TailReach 앞).
 	const float AfterStab = StrikesLeft > 1 ? (TailReach + RepassDistance) / Speed : PassTime;
 	StrikeEndTime = StabTime + AfterStab;
-	const float GlideTime = StrikeEndTime - StartPosition;
-	UAbilityTask_ApplyRootMotionConstantForce* const GlideTask = UAbilityTask_ApplyRootMotionConstantForce::ApplyRootMotionConstantForce(
-		this, TEXT("Glide"), Direction, Speed, GlideTime, false, nullptr, ERootMotionFinishVelocityMode::SetVelocity, FVector::ZeroVector, 0.f, false);
-	GlideTask->ReadyForActivation();
+	GlideDirection = Direction;
+	GlideSpeed = Speed;
+	StartGlideForce(Direction * Speed, StrikeEndTime - StartPosition);
 	// 꼬리가 바닥 가까이의 타깃에 닿도록 찌르는 순간까지 낮게 내려온다.
 	if (UknightMonsterHoverComponent* const Hover = Monster->FindComponentByClass<UknightMonsterHoverComponent>())
 	{
@@ -278,6 +294,120 @@ void UknightGameplayAbility_MonsterGlideAttack::SetCollapsed(bool bOn)
 	bCollapsedApplied = bOn;
 }
 
+void UknightGameplayAbility_MonsterGlideAttack::UpdateCircle(AknightMonsterCharacterBase& Monster, const AActor& Target)
+{
+	const float Remaining = FMath::Max(RoarTime, DarknessHoldTime) - PhaseTime;
+	if (Remaining <= 0.f)
+	{
+		return;
+	}
+	// 타깃 둘레를 각도·반지름을 함께 좁혀 가며 돌아, 남은 시간 안에 등 뒤 지점에 닿는다. 타깃과 카메라가 움직이면 매번 다시 잡는다.
+	const FVector Center = Target.GetActorLocation();
+	const FVector From = Monster.GetActorLocation() - Center;
+	const FVector To = GetBehindLocation(Monster, Target) - Center;
+	const float Step = FMath::Min(1.f, knightMonsterGlide::TickInterval / Remaining);
+	const float FromAngle = FMath::Atan2(From.Y, From.X);
+	const float Angle = FromAngle + FMath::FindDeltaAngleRadians(FromAngle, FMath::Atan2(To.Y, To.X)) * Step;
+	const float Radius = FMath::Lerp(static_cast<float>(From.Size2D()), static_cast<float>(To.Size2D()), Step);
+	const FVector Next = Center + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.f) * Radius;
+	FVector Velocity = (Next - Monster.GetActorLocation()) / knightMonsterGlide::TickInterval;
+	Velocity.Z = 0.f;
+	Velocity = Velocity.GetClampedToMaxSize(CircleMaxSpeed);
+	if (!bCircling)
+	{
+		bCircling = true;
+		CircleFlapTime = 0.f;
+		StartGlideForce(Velocity, Remaining + 0.5f);
+		UE_LOG(LogknightAI, Log, TEXT("%s: glide circles behind the target in the dark (%.2f s)."), *Monster.GetName(), Remaining);
+	}
+	else
+	{
+		SetGlideVelocity(Velocity);
+	}
+	CircleFlapTime -= knightMonsterGlide::TickInterval;
+	if (CircleFlapSound && CircleFlapTime <= 0.f)
+	{
+		CircleFlapTime = CircleFlapInterval;
+		UGameplayStatics::SpawnSoundAttached(CircleFlapSound, Monster.GetMesh());
+	}
+#if ENABLE_DRAW_DEBUG
+	if (knightMonsterDebug::ShouldDrawAttacks())
+	{
+		DrawDebugSphere(GetWorld(), Center + To, 100.f, 12, FColor::Yellow, false, knightMonsterGlide::TickInterval, 0, 3.f);
+	}
+#endif
+}
+
+FVector UknightGameplayAbility_MonsterGlideAttack::GetBehindLocation(const AknightMonsterCharacterBase& Monster, const AActor& Target) const
+{
+	// 등 뒤 = 카메라가 보는 방향의 반대. 조종하는 컨트롤러가 없으면 타깃이 보는 방향의 반대.
+	const APawn* const Pawn = Cast<APawn>(&Target);
+	const FVector View = Pawn && Pawn->GetController() ? Pawn->GetControlRotation().Vector() : Target.GetActorForwardVector();
+	const FVector Back = -View.GetSafeNormal2D(UE_SMALL_NUMBER, Target.GetActorForwardVector());
+	FVector Start = Target.GetActorLocation();
+	Start.Z = Monster.GetActorLocation().Z;
+	FVector Goal = Start + Back * BehindDistance;
+	// 벽 너머로 가지 않게 벽 앞(몸 반지름만큼)에서 멈춘다.
+	FHitResult Hit;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(GlideBehind), false, &Monster);
+	Params.AddIgnoredActor(&Target);
+	if (GetWorld()->LineTraceSingleByChannel(Hit, Start, Goal, ECC_WorldStatic, Params))
+	{
+		Goal = Hit.Location - Back * Monster.GetSimpleCollisionRadius();
+	}
+	return Goal;
+}
+
+void UknightGameplayAbility_MonsterGlideAttack::StartGlideForce(const FVector& Velocity, float Duration)
+{
+	StopGlideForce();
+	const AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetAvatarActorFromActorInfo());
+	UCharacterMovementComponent* const Movement = Monster ? Monster->GetCharacterMovement() : nullptr;
+	if (!Movement)
+	{
+		return;
+	}
+	// 방향을 매 틱 바꿔야 해서 루트 모션 태스크 대신 소스를 직접 들고 Force를 고친다.
+	const TSharedPtr<FRootMotionSource_ConstantForce> Force = MakeShared<FRootMotionSource_ConstantForce>();
+	Force->InstanceName = TEXT("Glide");
+	Force->AccumulateMode = ERootMotionAccumulateMode::Override;
+	Force->Priority = 5;
+	Force->Force = Velocity;
+	Force->Duration = Duration;
+	Force->FinishVelocityParams.Mode = ERootMotionFinishVelocityMode::SetVelocity;
+	Force->FinishVelocityParams.SetVelocity = FVector::ZeroVector;
+	GlideForceID = Movement->ApplyRootMotionSource(Force);
+}
+
+void UknightGameplayAbility_MonsterGlideAttack::SetGlideVelocity(const FVector& Velocity)
+{
+	const AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetAvatarActorFromActorInfo());
+	UCharacterMovementComponent* const Movement = Monster ? Monster->GetCharacterMovement() : nullptr;
+	const TSharedPtr<FRootMotionSource> Source = Movement && GlideForceID != 0 ? Movement->GetRootMotionSourceByID(GlideForceID) : nullptr;
+	if (Source.IsValid())
+	{
+		static_cast<FRootMotionSource_ConstantForce*>(Source.Get())->Force = Velocity;
+	}
+}
+
+void UknightGameplayAbility_MonsterGlideAttack::StopGlideForce()
+{
+	if (GlideForceID == 0)
+	{
+		return;
+	}
+	const AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetAvatarActorFromActorInfo());
+	if (UCharacterMovementComponent* const Movement = Monster ? Monster->GetCharacterMovement() : nullptr)
+	{
+		if (Movement->GetRootMotionSourceByID(GlideForceID).IsValid())
+		{
+			Movement->RemoveRootMotionSourceByID(GlideForceID);
+			Movement->Velocity = FVector::ZeroVector;
+		}
+	}
+	GlideForceID = 0;
+}
+
 void UknightGameplayAbility_MonsterGlideAttack::SetDarkness(bool bOn)
 {
 	if (bOn == bDarknessOn)
@@ -326,6 +456,7 @@ void UknightGameplayAbility_MonsterGlideAttack::EndAbility(const FGameplayAbilit
 		TickTask->EndTask();
 	}
 	TickTask.Reset();
+	StopGlideForce();
 	SetNoFlinch(false);
 	SetDarkness(false);
 	SetCollapsed(false);
