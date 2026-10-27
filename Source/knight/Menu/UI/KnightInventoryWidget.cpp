@@ -121,7 +121,7 @@ void UKnightInventoryEntryWidget::ApplyConfiguration()
 	{
 		Button->SetBackgroundColor(bSelected ? InventorySelectedColor : RowColor);
 		if (bMaintenancePresentation)
-			if (const TSubclassOf<UCommonButtonStyle> StyleClass = LoadClass<UCommonButtonStyle>(nullptr,
+			if (const TSubclassOf<UCommonButtonStyle> StyleClass = MaintenanceRowStyle ? MaintenanceRowStyle.Get() : LoadClass<UCommonButtonStyle>(nullptr,
 				TEXT("/Game/Knight/UI/Style/BS_Knight_CraftingRow.BS_Knight_CraftingRow_C")))
 			{
 				const UCommonButtonStyle* Style = StyleClass.GetDefaultObject();
@@ -132,13 +132,17 @@ void UKnightInventoryEntryWidget::ApplyConfiguration()
 				RowStyle.Disabled = Style->Disabled;
 				Button->SetStyle(RowStyle);
 				Button->SetBackgroundColor(FLinearColor::White);
+				if (MaintenanceRowStyle)
+					if (UButtonSlot* ContentSlot = Cast<UButtonSlot>(Button->GetContent()->Slot))
+						ContentSlot->SetPadding(Style->ButtonPadding);
 			}
 	}
 }
 
-void UKnightInventoryEntryWidget::UseMaintenancePresentation()
+void UKnightInventoryEntryWidget::UseMaintenancePresentation(TSubclassOf<UCommonButtonStyle> InRowStyle)
 {
 	bMaintenancePresentation = true;
+	MaintenanceRowStyle = InRowStyle;
 	ApplyConfiguration();
 }
 

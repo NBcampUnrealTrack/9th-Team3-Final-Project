@@ -7,6 +7,8 @@
 #include "Components/Button.h"
 #include "Components/Border.h"
 #include "Components/Image.h"
+#include "Components/ScaleBox.h"
+#include "Engine/Texture2D.h"
 #include "Progression/knightProgressionSubsystem.h"
 #include "Progression/knightSaveGame.h"
 #include "Progression/knightSaveSubsystem.h"
@@ -17,6 +19,7 @@
 #include "Components/PanelWidget.h"
 #include "Components/ScrollBox.h"
 #include "Components/WidgetSwitcher.h"
+#include "Item/knightEquipmentData.h"
 #include "Containers/Ticker.h"
 #include "Engine/GameInstance.h"
 #include "Engine/GameViewportClient.h"
@@ -40,6 +43,7 @@ struct FMaintenanceLayoutCheck
 	int32 Step = 0, Failures = 0;
 	bool bEnhancementOnly = false;
 	bool bSocketOnly = false;
+	bool bCraftingOnly = false;
 	FVector HomeCamera;
 	void Check(bool Passed, const TCHAR* Label)
 	{
@@ -78,26 +82,47 @@ struct FMaintenanceLayoutCheck
 			const FVector2D R = Right.LocalToAbsolute(FVector2D::ZeroVector);
 			if (Screen->GetDestination() == EKnightMaintenanceDestination::Crafting)
 			{
-				Check(Left.GetLocalSize().X > 500 && Right.GetLocalSize().X > 500, TEXT("readable responsive Crafting side panels"));
+				Check(Left.GetLocalSize().X > 460 && Right.GetLocalSize().X > 460, TEXT("readable responsive Crafting side panels"));
 				Check(R.X - L.X > Pixels.X * .35f, TEXT("Crafting leaves live robot center open"));
 				Check(Screen->GetWidgetFromName(TEXT("MaintenanceBackdrop"))->GetVisibility() == ESlateVisibility::Collapsed,
 					TEXT("uniform backdrop is absent from Crafting"));
-				const UImage* const Shade = Cast<UImage>(Screen->GetWidgetFromName(TEXT("CraftingEdgeShade")));
-				Check(Shade && Shade->GetVisibility() == ESlateVisibility::HitTestInvisible
-					&& Shade->GetCachedGeometry().GetLocalSize().Equals(Screen->GetCachedGeometry().GetLocalSize(), 1.f),
-					TEXT("single gradient covers the entire Maintenance viewport without taking input"));
+				Check(!Screen->GetWidgetFromName(TEXT("CraftingEdgeShade")), TEXT("old blue gradient is not constructed"));
+				Check(Screen->GetWidgetFromName(TEXT("Panel_Hints"))->GetVisibility() == ESlateVisibility::Collapsed,
+					TEXT("bottom keyboard-help strip removed"));
 				Check(Screen->GetWidgetFromName(TEXT("Panel_Confirm"))->GetVisibility() == ESlateVisibility::Collapsed,
-					TEXT("inactive dialog dim does not overlap the gradient"));
-				const UBorder* const LeftFrame = Cast<UBorder>(Screen->GetWidgetFromName(TEXT("Frame_Panel_Left")));
-				const UBorder* const RightFrame = Cast<UBorder>(Screen->GetWidgetFromName(TEXT("Frame_Panel_Right")));
-				Check(LeftFrame && RightFrame && LeftFrame->Background.DrawAs == ESlateBrushDrawType::NoDrawType
-					&& RightFrame->Background.DrawAs == ESlateBrushDrawType::NoDrawType,
-					TEXT("Crafting layout containers draw no rectangular frames"));
+					TEXT("inactive dialog dim does not cover live scene"));
+				const FGeometry Root = Screen->GetCachedGeometry();
+				for (bool bRight : { false, true })
+				{
+					const UScaleBox* Surface = Cast<UScaleBox>(Screen->GetWidgetFromName(bRight ? TEXT("CraftingSurfaceRight") : TEXT("CraftingSurfaceLeft")));
+					const UImage* Art = Cast<UImage>(Screen->GetWidgetFromName(bRight ? TEXT("CraftingArtRight") : TEXT("CraftingArtLeft")));
+					Check(Surface && Art && Surface->GetStretch() == EStretch::ScaleToFill
+						&& Surface->GetVisibility() == ESlateVisibility::HitTestInvisible
+						&& Surface->GetClipping() == EWidgetClipping::ClipToBoundsAlways,
+						TEXT("side art preserves aspect ratio and never takes input"));
+					if (!Surface || !Art) continue;
+					const FGeometry G = Surface->GetCachedGeometry();
+					const FVector2D Top = Root.AbsoluteToLocal(G.LocalToAbsolute(FVector2D::ZeroVector));
+					const FVector2D Bottom = Root.AbsoluteToLocal(G.LocalToAbsolute(G.GetLocalSize()));
+					Check(FMath::IsNearlyEqual(Top.X, bRight ? Root.GetLocalSize().X * .71f : 0.f, 1.f)
+						&& FMath::IsNearlyEqual(Top.Y, 0.f, 1.f)
+						&& FMath::IsNearlyEqual(Bottom.X, Root.GetLocalSize().X * (bRight ? 1.f : .29f), 1.f)
+						&& FMath::IsNearlyEqual(Bottom.Y, Root.GetLocalSize().Y, 1.f),
+						TEXT("side surfaces are 29 percent wide and flush to top bottom and outer viewport"));
+					const UTexture2D* Texture = Cast<UTexture2D>(Art->GetBrush().GetResourceObject());
+					Check(Texture && Texture->GetName() == TEXT("T_Crafting_IntegratedSide") && Texture->GetSizeY() >= 1080,
+						TEXT("full height raster retains native detail instead of 256px stretched grain"));
+				}
+				for (const TCHAR* FrameName : { TEXT("Frame_Panel_Left"), TEXT("Frame_Panel_Right") })
+					Check(Cast<UBorder>(Screen->GetWidgetFromName(FrameName))->Background.DrawAs == ESlateBrushDrawType::NoDrawType,
+						TEXT("content containers introduce no additional rectangular fills"));
 				const UUserWidget* const Back = Cast<UUserWidget>(Menu->GetWidgetFromName(TEXT("Button_Back")));
 				const UWidget* const Footer = Back ? Back->GetWidgetFromName(TEXT("MaintenanceBackFooter")) : nullptr;
 				const UWidget* const OldLabel = Back ? Back->GetWidgetFromName(TEXT("Txt_Label")) : nullptr;
 				Check(Footer && Footer->IsVisible() && OldLabel && OldLabel->GetVisibility() == ESlateVisibility::Collapsed,
 					TEXT("Maintenance Back uses compact footer content on existing bound button"));
+				Check(Back && Back->GetWidgetFromName(TEXT("MaintenanceBackKeycap"))->GetVisibility() == ESlateVisibility::Collapsed,
+					TEXT("Crafting Back label omits old keycap but retains bound action"));
 			}
 			else if (Screen->GetDestination() == EKnightMaintenanceDestination::Enhancement)
 			{
@@ -107,8 +132,9 @@ struct FMaintenanceLayoutCheck
 					TEXT("Enhancement background opaque across complete viewport"));
 				Check(Screen->GetWidgetFromName(TEXT("Frame_Panel_Left"))->GetVisibility() == ESlateVisibility::Collapsed
 					&& Screen->GetWidgetFromName(TEXT("Frame_Panel_Right"))->GetVisibility() == ESlateVisibility::Collapsed
-					&& Screen->GetWidgetFromName(TEXT("CraftingEdgeShade"))->GetVisibility() == ESlateVisibility::Collapsed,
-					TEXT("Enhancement replaces old two panels and Crafting gradient"));
+					&& Screen->GetWidgetFromName(TEXT("CraftingSurfaceLeft"))->GetVisibility() == ESlateVisibility::Collapsed
+					&& Screen->GetWidgetFromName(TEXT("CraftingSurfaceRight"))->GetVisibility() == ESlateVisibility::Collapsed,
+					TEXT("Enhancement keeps Crafting surfaces hidden"));
 				const FGeometry Center = Screen->GetWidgetFromName(TEXT("EnhancementTargetColumn"))->GetCachedGeometry();
 				const FGeometry Owned = Screen->GetWidgetFromName(TEXT("EnhancementOwnedColumn"))->GetCachedGeometry();
 				const FGeometry Preview = Screen->GetWidgetFromName(TEXT("EnhancementPreviewColumn"))->GetCachedGeometry();
@@ -124,7 +150,8 @@ struct FMaintenanceLayoutCheck
 					TEXT("Socket background opaque across complete viewport"));
 				Check(Screen->GetWidgetFromName(TEXT("Frame_Panel_Left"))->GetVisibility() == ESlateVisibility::Collapsed
 					&& Screen->GetWidgetFromName(TEXT("Frame_Panel_Right"))->GetVisibility() == ESlateVisibility::Collapsed
-					&& Screen->GetWidgetFromName(TEXT("CraftingEdgeShade"))->GetVisibility() == ESlateVisibility::Collapsed,
+					&& Screen->GetWidgetFromName(TEXT("CraftingSurfaceLeft"))->GetVisibility() == ESlateVisibility::Collapsed
+					&& Screen->GetWidgetFromName(TEXT("CraftingSurfaceRight"))->GetVisibility() == ESlateVisibility::Collapsed,
 					TEXT("Socket replaces old presentation without Crafting overlay"));
 				float PreviousRight = -1.f, FirstY = 0.f, FirstSide = 0.f;
 				for (int32 Index = 0; Index < 3; ++Index)
@@ -157,7 +184,7 @@ struct FMaintenanceLayoutCheck
 		if (!PC) return true;
 		// Changing test profiles is correctly rejected during a periodic async save.
 		// Wait across frames instead of misreporting a fixture setup failure.
-		if (Step >= 24 || (bEnhancementOnly && Step >= 10) || bSocketOnly)
+		if (Step >= 24 || (bEnhancementOnly && Step >= 10) || bSocketOnly || bCraftingOnly)
 			if (UknightSaveSubsystem* Saves = World->GetGameInstance()->GetSubsystem<UknightSaveSubsystem>())
 				if (Saves->IsSaveInFlight()) return true;
 		if (Step == 0)
@@ -185,10 +212,75 @@ struct FMaintenanceLayoutCheck
 			if (bEnhancementOnly)
 				if (const auto* Weapon = LoadObject<UknightWeaponItemDefinition>(nullptr, TEXT("/Game/Knight/Data/Equipment/Janyeol/DA_Equipment_Janyeol_Weapon")))
 					Save->ItemUpgradeLevels.Add(Weapon->GetPrimaryAssetId(), 9);
+			if (bCraftingOnly)
+				if (const UknightMaintenanceCatalog* Catalog = UknightEquipmentSettings::LoadCatalog())
+					for (const UknightCraftRecipeDefinition* Recipe : Catalog->Recipes)
+						if (Recipe)
+							for (const FknightItemCost& Cost : Recipe->Costs)
+								if (Cost.Item) Save->ItemCounts.Add(Cost.Item->GetPrimaryAssetId(), 20);
 			// Transient fixture only; production saves and content defaults are never modified.
 			FRotator Rotation; PC->GetPlayerViewPoint(HomeCamera, Rotation);
 			Menu->ShowPage(EKnightMainMenuPage::Maintenance);
 			PC->ConsoleCommand(TEXT("r.SetRes 1920x1080w"), false);
+		}
+		else if (bCraftingOnly)
+		{
+			auto SelectRecipe = [this](int32 Index)
+			{
+				UScrollBox* List = Cast<UScrollBox>(Screen->GetWidgetFromName(TEXT("List_Items")));
+				UCommonButtonBase* Row = List ? Cast<UCommonButtonBase>(List->GetChildAt(Index)) : nullptr;
+				Check(Row != nullptr, TEXT("actual recipe row available"));
+				if (Row) Row->OnClicked().Broadcast();
+				Check(Cast<UWidgetSwitcher>(Screen->GetWidgetFromName(TEXT("Switcher_Info")))->GetActiveWidgetIndex() == 2,
+					TEXT("recipe selection defaults to Materials"));
+			};
+			auto SelectMaterial = [this]()
+			{
+				UScrollBox* List = Cast<UScrollBox>(Screen->GetWidgetFromName(TEXT("List_Items")));
+				if (UKnightInventoryEntryWidget* Row = List ? Cast<UKnightInventoryEntryWidget>(List->GetChildAt(0)) : nullptr)
+					if (Row->GetButton()) Row->GetButton()->OnClicked.Broadcast();
+			};
+			switch (Step)
+			{
+			case 1: Open(TEXT("MaintenanceChoiceCrafting")); break;
+			case 2: Capture(TEXT("crafting_empty_1920")); break;
+			case 3: SelectRecipe(1); break;
+			case 4: Capture(TEXT("crafting_materials_1920")); break;
+			case 5: Click(Screen.Get(), TEXT("Btn_InfoSpec")); break;
+			case 6: Capture(TEXT("crafting_specs_1920")); break;
+			case 7: SelectRecipe(2); Click(Screen.Get(), TEXT("Btn_Weapon")); break;
+			case 8: Capture(TEXT("equipment_1920")); break;
+			case 9: Click(Screen.Get(), TEXT("Btn_Armor")); SelectMaterial(); break;
+			case 10: Capture(TEXT("materials_1920")); break;
+			case 11: PC->ConsoleCommand(TEXT("r.SetRes 1280x720w"), false); break;
+			case 12: Capture(TEXT("materials_720")); break;
+			case 13: Cast<UScrollBox>(Screen->GetWidgetFromName(TEXT("List_Items")))->ScrollToEnd(); break;
+			case 14: Capture(TEXT("materials_scroll_720")); break;
+			case 15: Click(Screen.Get(), TEXT("Btn_Weapon")); break;
+			case 16: Capture(TEXT("equipment_720")); break;
+			case 17: Click(Screen.Get(), TEXT("Btn_Craft")); Click(Screen.Get(), TEXT("Btn_SlotWeapon")); SelectRecipe(2); break;
+			case 18: Capture(TEXT("crafting_materials_720")); break;
+			case 19: Click(Screen.Get(), TEXT("Btn_InfoSpec")); break;
+			case 20: Capture(TEXT("crafting_specs_720")); break;
+			case 21:
+			{
+				UScrollBox* Scroll = Cast<UScrollBox>(Screen->GetWidgetFromName(TEXT("Scroll_Stats")));
+				Check(Scroll != nullptr, TEXT("actual Specs scroll area available"));
+				if (Scroll) Scroll->ScrollToEnd();
+				break;
+			}
+			case 22: Capture(TEXT("crafting_specs_scroll_720")); break;
+			case 23: Menu->RequestBack(); Open(TEXT("MaintenanceChoiceEnhancement")); break;
+			case 24: Capture(TEXT("enhancement_preserved_720")); break;
+			case 25: Menu->RequestBack(); PC->ConsoleCommand(TEXT("knight.MaintenanceTest IntegrationCases Navigation"), false); break;
+			case 26: PC->ConsoleCommand(TEXT("knight.MaintenanceTest MaterialWidgetCases"), false); break;
+			case 27: PC->ConsoleCommand(TEXT("knight.MaintenanceTest IntegrationCases EquipmentEquip"), false); break;
+			case 28: PC->ConsoleCommand(TEXT("knight.MaintenanceTest IntegrationCases Craft"), false); break;
+			case 29: PC->ConsoleCommand(TEXT("knight.MaintenanceTest UpgradeCases Widget"), false); break;
+			default:
+				UE_LOG(LogTemp, Display, TEXT("MaintenanceLayout COMPLETE failures=%d; noninteractive Crafting render/delegate checks"), Failures);
+				FPlatformMisc::RequestExit(false); return false;
+			}
 		}
 		else if (bSocketOnly)
 		{
@@ -369,6 +461,7 @@ void StartMaintenanceLayoutCheck(const TArray<FString>& Args, UWorld* World)
 	}
 	TSharedRef<FMaintenanceLayoutCheck> Run = MakeShared<FMaintenanceLayoutCheck>();
 	Run->bSocketOnly = FParse::Param(FCommandLine::Get(), TEXT("KnightSocketLayoutOnly"));
+	Run->bCraftingOnly = FParse::Param(FCommandLine::Get(), TEXT("KnightCraftingLayoutOnly"));
 	Run->bEnhancementOnly = FParse::Param(FCommandLine::Get(), TEXT("KnightEnhancementLayoutOnly"));
 	Run->World = World; Run->Directory = FPaths::ConvertRelativePathToFull(Args[0]);
 	Run->Deadline = FPlatformTime::Seconds() + 180.;

@@ -485,6 +485,16 @@ void UKnightMainMenuWidget::ApplyMaintenanceBackPresentation(bool bMaintenance)
 	if (!Button_Back || !MaintenanceBackContent || !NormalBackContent) return;
 	NormalBackContent->SetVisibility(bMaintenance ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
 	MaintenanceBackContent->SetVisibility(bMaintenance ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	const bool bCrafting = bMaintenance && MaintenanceWidget
+		&& MaintenanceWidget->GetDestination() == EKnightMaintenanceDestination::Crafting;
+	if (UUserWidget* BackWidget = Cast<UUserWidget>(Button_Back))
+	{
+		if (UWidget* Keycap = BackWidget->GetWidgetFromName(TEXT("MaintenanceBackKeycap")))
+			Keycap->SetVisibility(bCrafting ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+		if (UWidget* Label = BackWidget->GetWidgetFromName(TEXT("MaintenanceBackReturn")))
+			if (UHorizontalBoxSlot* LabelSlot = Cast<UHorizontalBoxSlot>(Label->Slot))
+				LabelSlot->SetPadding(FMargin(bCrafting ? 0.f : 9.f, 0.f, 0.f, 0.f));
+	}
 	if (bMaintenance)
 	{
 		const TSubclassOf<UCommonButtonStyle> FooterStyle = LoadClass<UCommonButtonStyle>(nullptr,
@@ -493,7 +503,7 @@ void UKnightMainMenuWidget::ApplyMaintenanceBackPresentation(bool bMaintenance)
 	}
 	else if (NormalBackStyle) Button_Back->SetStyle(NormalBackStyle);
 	if (UCanvasPanelSlot* const BackSlot = Cast<UCanvasPanelSlot>(Button_Back->Slot))
-		BackSlot->SetPosition(bMaintenance ? FVector2D(-48.f, -48.f) : NormalBackPosition);
+		BackSlot->SetPosition(bMaintenance ? FVector2D(bCrafting ? -56.f : -48.f, -40.f - (bCrafting ? 0.f : 8.f)) : NormalBackPosition);
 }
 
 void UKnightMainMenuWidget::EnsureMaintenanceWidget()
@@ -608,6 +618,7 @@ void UKnightMainMenuWidget::OpenMaintenanceDestination(EKnightMaintenanceDestina
 	if (!ApplyPage(EKnightMainMenuPage::Maintenance, false)) return;
 	bMaterialsShortcutEntry = bStartInMaterials;
 	MaintenanceWidget->Open(Destination, bStartInMaterials);
+	ApplyMaintenanceBackPresentation(true);
 	MaintenanceSwitcher->SetActiveWidget(MaintenanceWidget);
 	if (MaintenanceCameraRig.IsValid()) MaintenanceCameraRig->FocusSlot(
 		Destination == EKnightMaintenanceDestination::Enhancement ? knightGameplayTags::Equipment_Slot_Weapon : FGameplayTag());

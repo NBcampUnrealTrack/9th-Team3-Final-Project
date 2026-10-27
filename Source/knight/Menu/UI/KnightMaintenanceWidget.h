@@ -81,14 +81,17 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Enhancement Presentation")
 	TSubclassOf<UCommonButtonStyle> EnhancementRowStyle;
 
-	/** Width of the untouched robot view, as a fraction of the viewport. */
-	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Crafting Presentation", meta=(ClampMin="0.05", ClampMax="0.80", UIMin="0.15", UIMax="0.40"))
-	float CraftingClearBandWidth = 0.23f;
-	/** Width of each smooth edge transition, as a fraction of the viewport. */
-	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Crafting Presentation", meta=(ClampMin="0.01", ClampMax="0.45", UIMin="0.10", UIMax="0.30"))
-	float CraftingTransitionWidth = 0.20f;
-	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Crafting Presentation", meta=(ClampMin="0.0", ClampMax="1.0"))
-	float CraftingSideOpacity = 0.90f;
+	/** High-resolution Crafting side artwork, displayed at its original aspect ratio. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Crafting Presentation")
+	TObjectPtr<UTexture2D> CraftingPanelTexture;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Crafting Presentation")
+	TObjectPtr<UTexture2D> CraftingButtonTexture;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Crafting Presentation")
+	TSubclassOf<UCommonButtonStyle> CraftingControlStyle;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Crafting Presentation")
+	TSubclassOf<UCommonButtonStyle> CraftingMainTabStyle;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Crafting Presentation")
+	TSubclassOf<UCommonButtonStyle> CraftingRowStyle;
 
 	UPROPERTY(meta=(BindWidget)) TObjectPtr<UCommonButtonBase> Btn_Craft;
 	UPROPERTY(meta=(BindWidget)) TObjectPtr<UCommonButtonBase> Btn_Weapon;
@@ -125,9 +128,10 @@ protected:
 	UPROPERTY(meta=(BindWidget)) TObjectPtr<UCommonButtonBase> Btn_ConfirmCancel;
 
 private:
+	void ApplyCraftingPresentation();
+	void StyleCraftingEntry(UKnightMaintenanceEntryWidget* Entry);
 	void ApplyDestinationLayout();
 	UPROPERTY(Transient) TObjectPtr<UBorder> MaintenanceBackdrop;
-	UPROPERTY(Transient) TObjectPtr<UImage> CraftingEdgeShade;
 	void ShowConfirm(bool bShow);
 	UFUNCTION() void HandleProgressionChanged();
 	UFUNCTION() void HandleActiveSlotChanged(const FString& SlotId);

@@ -1,7 +1,5 @@
 #include "Menu/UI/KnightMaintenanceWidget.h"
 #include "Menu/UI/KnightMaintenancePresentation.h"
-#include "Materials/MaterialInterface.h"
-#include "Materials/MaterialInstanceDynamic.h"
 
 #include "AbilitySystem/Attributes/knightAttributeSet.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
@@ -391,26 +389,27 @@ void UKnightMaintenanceWidget::NativeOnInitialized()
 		BackgroundSlot->SetOffsets(FMargin(24.f));
 		BackgroundSlot->SetZOrder(-10);
 		MaintenanceBackdrop = Background;
-		CraftingEdgeShade = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("CraftingEdgeShade"));
-		CraftingEdgeShade->SetVisibility(ESlateVisibility::HitTestInvisible);
-		if (UMaterialInterface* Material = LoadObject<UMaterialInterface>(nullptr,
-			TEXT("/Game/Knight/UI/Menu/Maintenance/M_UI_CraftingEdges.M_UI_CraftingEdges")))
+		// Opaque side artwork is isolated to these two clipped surfaces. No full-screen
+		// tint, gradient or vignette is drawn over the live Crafting camera.
+		for (bool bRight : { false, true })
 		{
-			CraftingEdgeShade->SetBrushFromMaterial(Material);
-			if (UMaterialInstanceDynamic* DynamicMaterial = CraftingEdgeShade->GetDynamicMaterial())
-			{
-				const float ClearWidth = FMath::Clamp(CraftingClearBandWidth, 0.05f, 0.80f);
-				DynamicMaterial->SetScalarParameterValue(TEXT("ClearBandWidth"), ClearWidth);
-				DynamicMaterial->SetScalarParameterValue(TEXT("TransitionWidth"),
-					FMath::Clamp(CraftingTransitionWidth, 0.01f, (1.f - ClearWidth) * 0.5f));
-				DynamicMaterial->SetScalarParameterValue(TEXT("SideOpacity"), FMath::Clamp(CraftingSideOpacity, 0.f, 1.f));
-			}
+			UScaleBox* Surface = WidgetTree->ConstructWidget<UScaleBox>(UScaleBox::StaticClass(),
+				bRight ? TEXT("CraftingSurfaceRight") : TEXT("CraftingSurfaceLeft"));
+			Surface->SetStretch(EStretch::ScaleToFill);
+			Surface->SetClipping(EWidgetClipping::ClipToBoundsAlways);
+			Surface->SetVisibility(ESlateVisibility::HitTestInvisible);
+			UImage* Art = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(),
+				bRight ? TEXT("CraftingArtRight") : TEXT("CraftingArtLeft"));
+			Art->SetBrushFromTexture(CraftingPanelTexture, true);
+			// Neutral background-only modulation keeps fine metal grain behind readable live text.
+			Art->SetColorAndOpacity(FLinearColor(.48f, .48f, .48f, 1.f));
+			Art->SetVisibility(ESlateVisibility::HitTestInvisible);
+			Surface->AddChild(Art);
+			UCanvasPanelSlot* SurfaceSlot = Root->AddChildToCanvas(Surface);
+			SurfaceSlot->SetAnchors(bRight ? FAnchors(.71f, 0.f, 1.f, 1.f) : FAnchors(0.f, 0.f, .29f, 1.f));
+			SurfaceSlot->SetOffsets(FMargin(0.f));
+			SurfaceSlot->SetZOrder(-9);
 		}
-		else CraftingEdgeShade->SetColorAndOpacity(FLinearColor::Transparent);
-		UCanvasPanelSlot* const ShadeSlot = Root->AddChildToCanvas(CraftingEdgeShade);
-		ShadeSlot->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f));
-		ShadeSlot->SetOffsets(FMargin(0.f));
-		ShadeSlot->SetZOrder(-9);
 		CurrencyText = NewRowText(WidgetTree, BodyStyle(), ETextJustify::Right);
 		UCanvasPanelSlot* const CurrencySlot = Root->AddChildToCanvas(CurrencyText);
 		CurrencySlot->SetAnchors(FAnchors(1.f, 0.f));
@@ -442,20 +441,20 @@ void UKnightMaintenanceWidget::NativeOnInitialized()
 			if (InfoPreviousButton && InfoNextButton)
 			{
 				InfoRow->ClearChildren();
-				SetButtonLabel(InfoPreviousButton, LOCTEXT("InfoPrevious", "←"));
-				SetButtonLabel(InfoNextButton, LOCTEXT("InfoNext", "→"));
+				SetButtonLabel(InfoPreviousButton, LOCTEXT("InfoPrevious", "Q"));
+				SetButtonLabel(InfoNextButton, LOCTEXT("InfoNext", "E"));
 				for (UCommonButtonBase* Action : { InfoPreviousButton.Get(), InfoNextButton.Get() })
 					KnightMaintenancePresentation::ConfigureButton(Action, false);
 				InfoPreviousButton->OnClicked().AddWeakLambda(this, [this]() { CycleInfoTab(-1); });
 				InfoNextButton->OnClicked().AddWeakLambda(this, [this]() { CycleInfoTab(1); });
-				auto AddArrow = [this, InfoRow](UCommonButtonBase* Button)
+				auto AddPageKey = [this, InfoRow](UCommonButtonBase* Button)
 				{
 					USizeBox* const Frame = WidgetTree->ConstructWidget<USizeBox>();
 					Frame->SetWidthOverride(56.f);
 					Frame->AddChild(Button);
 					InfoRow->AddChildToHorizontalBox(Frame)->SetPadding(FMargin(3.f, 0.f));
 				};
-				AddArrow(InfoPreviousButton);
+				AddPageKey(InfoPreviousButton);
 				for (UCommonButtonBase* Button : { Btn_InfoMaterial.Get(), Btn_InfoSpec.Get(), Btn_InfoSet.Get() })
 				{
 					UHorizontalBoxSlot* const ButtonSlot = InfoRow->AddChildToHorizontalBox(Button);
@@ -463,7 +462,7 @@ void UKnightMaintenanceWidget::NativeOnInitialized()
 					ButtonSlot->SetVerticalAlignment(VAlign_Center);
 					ButtonSlot->SetPadding(FMargin(3.f, 0.f));
 				}
-				AddArrow(InfoNextButton);
+				AddPageKey(InfoNextButton);
 			}
 		}
 	}
@@ -568,6 +567,7 @@ void UKnightMaintenanceWidget::NativeOnInitialized()
 		else ShowConfirm(false);
 	});
 	ShowConfirm(false);
+	ApplyCraftingPresentation();
 	if (UknightProgressionSubsystem* Progression = GetProgression())
 		Progression->OnProgressionChanged.AddUniqueDynamic(this, &ThisClass::HandleProgressionChanged);
 	if (UGameInstance* const GI = GetGameInstance())
@@ -614,30 +614,31 @@ void UKnightMaintenanceWidget::ApplyDestinationLayout()
 	if (EnhancementArtwork) EnhancementArtwork->SetVisibility(bEnhancement ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 	if (EnhancementInputHints) EnhancementInputHints->SetVisibility(bEnhancement ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 	if (UWidget* Hints = WidgetTree ? WidgetTree->FindWidget(TEXT("Panel_Hints")) : nullptr)
-		Hints->SetVisibility(!bCrafting ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
-	if (CraftingEdgeShade) CraftingEdgeShade->SetVisibility(bCrafting ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+		Hints->SetVisibility(ESlateVisibility::Collapsed);
 	if (!WidgetTree) return;
+	for (const TCHAR* Name : { TEXT("CraftingSurfaceLeft"), TEXT("CraftingSurfaceRight") })
+		if (UWidget* Surface = WidgetTree->FindWidget(Name))
+			Surface->SetVisibility(bCrafting ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	if (UWidget* Header = WidgetTree->FindWidget(TEXT("VerticalBox_Header")))
+		if (UCanvasPanelSlot* HeaderSlot = Cast<UCanvasPanelSlot>(Header->Slot))
+			HeaderSlot->SetPosition(bCrafting ? FVector2D(56.f, 40.f) : FVector2D(48.f, 40.f));
+	if (CurrencyText)
+		if (UCanvasPanelSlot* MoneySlot = Cast<UCanvasPanelSlot>(CurrencyText->Slot))
+			MoneySlot->SetPosition(bCrafting ? FVector2D(-56.f, 48.f) : FVector2D(-48.f, 48.f));
 	for (bool bRight : { false, true })
 	{
 		UBorder* Frame = Cast<UBorder>(WidgetTree->FindWidget(bRight ? TEXT("Frame_Panel_Right") : TEXT("Frame_Panel_Left")));
 		UCanvasPanelSlot* FrameSlot = Frame ? Cast<UCanvasPanelSlot>(Frame->Slot) : nullptr;
 		if (!FrameSlot) continue;
-		Frame->SetVisibility(!bCrafting ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
-		// Crafting preserves the live camera view between side panels. Other destinations keep their layout.
-		FrameSlot->SetAnchors(bRight ? FAnchors(bCrafting ? 0.69f : 0.5f, 0.f, 1.f, 1.f)
-			: FAnchors(0.f, 0.f, bCrafting ? 0.31f : 0.5f, 1.f));
+		Frame->SetVisibility(bCrafting ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
+		// These are content bounds, not additional panel fills. The raster surface
+		// continues independently behind the header and footer to all outer edges.
+		FrameSlot->SetAnchors(bRight ? FAnchors(.71f, 0.f, 1.f, 1.f) : FAnchors(0.f, 0.f, .29f, 1.f));
 		FrameSlot->SetAlignment(FVector2D::ZeroVector);
-		FrameSlot->SetOffsets(bRight ? FMargin(12.f, 152.f, 48.f, 100.f) : FMargin(48.f, 152.f, 12.f, 100.f));
-		FSlateBrush Brush = Frame->Background;
-		// The full-viewport edge material is Crafting's only panel background. Drawing this
-		// border as well makes two hard-edged rectangles over the continuous fade.
-		Brush.DrawAs = bCrafting ? ESlateBrushDrawType::NoDrawType : ESlateBrushDrawType::RoundedBox;
-		FLinearColor Tint = Brush.TintColor.GetSpecifiedColor();
-		Tint.A = 0.72f;
-		Brush.TintColor = FSlateColor(Tint);
+		FrameSlot->SetOffsets(bRight ? FMargin(30.f, 180.f, 48.f, 108.f) : FMargin(48.f, 168.f, 28.f, 32.f));
+		FSlateBrush Brush; Brush.DrawAs = ESlateBrushDrawType::NoDrawType;
 		Frame->SetBrush(Brush);
-		// Crafting only: reclaim vertical whitespace without reducing text or button sizes.
-		Frame->SetPadding(bCrafting ? FMargin(22.f, 16.f, 22.f, 16.f) : FMargin(22.f, 22.f, 22.f, 20.f));
+		Frame->SetPadding(FMargin(0.f));
 	}
 	struct FVerticalSpacing { const TCHAR* Name; float CraftingTop; float OtherTop; };
 	for (const FVerticalSpacing& Spacing : {
@@ -871,7 +872,7 @@ void UKnightMaintenanceWidget::RefreshMaterialContainer()
 		UKnightInventoryEntryWidget* const Row = CreateWidget<UKnightInventoryEntryWidget>(
 			GetOwningPlayer(), UKnightInventoryEntryWidget::StaticClass());
 		if (!Row) continue;
-		Row->UseMaintenancePresentation();
+		Row->UseMaintenancePresentation(CraftingRowStyle);
 		const FLinearColor NameColor = Material->bHardModeExclusive ? FLinearColor(FColor(225, 93, 93))
 			: Material->Rarity > 1 ? FLinearColor(FColor(97, 166, 239)) : White;
 		Row->Configure(Material, Stack.Count, false, NameColor);
@@ -988,7 +989,7 @@ void UKnightMaintenanceWidget::RefreshMaterialDetails()
 	if (Img_Selected)
 	{
 		UTexture2D* const Icon = Material ? Material->Icon.LoadSynchronous() : nullptr;
-		if (Icon) Img_Selected->SetBrushFromTexture(Icon);
+		if (Icon) Img_Selected->SetBrushFromTexture(Icon, true);
 		Img_Selected->SetVisibility(Icon ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 		if (UWidget* Thumbnail = WidgetTree ? WidgetTree->FindWidget(TEXT("SelectedImageFrame")) : nullptr)
 			Thumbnail->SetVisibility(Icon ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
@@ -1164,6 +1165,7 @@ void UKnightMaintenanceWidget::RebuildList(bool bRestoreFocus)
 			: Progression && Progression->CanCraftPart(Recipe) ? EKnightMaintenanceEntryState::Craftable : EKnightMaintenanceEntryState::MissingMaterials;
 		else if (EffectiveLoadout.FindRef(Part->SlotTag) == Part) State = EKnightMaintenanceEntryState::Equipped;
 		Entry->SetEntry(Part, Recipe, State, Owned);
+		StyleCraftingEntry(Entry);
 		Entry->OnClicked().AddUObject(this, &ThisClass::HandleEntryClicked, Entry);
 		Entry->OnEntryFocused.BindUObject(this, &ThisClass::HandleEntryFocused);
 		// 오른쪽 여백: 스크롤바 자리.
@@ -1357,10 +1359,11 @@ void UKnightMaintenanceWidget::RebuildEquipmentSlots(bool bRestoreFocus)
 		if (!Button) continue;
 		SetButtonLabel(Button, FText::Format(LOCTEXT("EquipmentSlotRow", "{0}  ·  {1}"), MainEquipmentSlotLabel(Tag), PartLabel));
 		KnightMaintenancePresentation::ConfigureButton(Button, true);
+		if (CraftingRowStyle) Button->SetStyle(CraftingRowStyle);
 		Button->OnClicked().AddWeakLambda(this, [this, Tag]() { SelectEquipmentSlot(Tag); });
 		SetSelected(Button, SelectedEquipmentSlot == Tag);
 		if (UScrollBoxSlot* const Row = Cast<UScrollBoxSlot>(List_Items->AddChild(Button)))
-			Row->SetPadding(FMargin(24.f, 6.f, 24.f, 6.f));
+			Row->SetPadding(FMargin(0.f, 0.f, 10.f, 8.f));
 		EquipmentSlotButtons.Add(Button);
 	}
 	if (Txt_Status && !bComplete) Txt_Status->SetText(LOCTEXT("EquipmentLoadIncomplete", "일부 장비 데이터를 확인할 수 없습니다. 저장 슬롯과 에셋을 확인하세요."));
@@ -1445,6 +1448,7 @@ void UKnightMaintenanceWidget::RebuildEquipmentPicker()
 			SetButtonLabel(Button, FText::Format(LOCTEXT("EquipmentPickerRow", "{0}  ·  보유 {1}"),
 				PartName(Part), GetProgression() ? GetProgression()->GetItemCount(Part) : 0));
 			KnightMaintenancePresentation::ConfigureButton(Button, true);
+			if (CraftingRowStyle) Button->SetStyle(CraftingRowStyle);
 			TWeakObjectPtr<const UknightPartItemDefinition> WeakPart(Part);
 			Button->OnClicked().AddWeakLambda(this, [this, WeakPart]()
 			{
@@ -2249,7 +2253,7 @@ void UKnightMaintenanceWidget::RefreshDetails()
 	if (Img_Selected)
 	{
 		UTexture2D* Icon = Shown ? Shown->Icon.LoadSynchronous() : nullptr;
-		if (Icon) Img_Selected->SetBrushFromTexture(Icon);
+		if (Icon) Img_Selected->SetBrushFromTexture(Icon, true);
 		Img_Selected->SetVisibility(Icon ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 		if (UWidget* Thumbnail = WidgetTree ? WidgetTree->FindWidget(TEXT("SelectedImageFrame")) : nullptr)
 			Thumbnail->SetVisibility(Icon ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
@@ -2385,7 +2389,7 @@ void UKnightMaintenanceWidget::RefreshEquipmentDetails()
 	if (Img_Selected)
 	{
 		UTexture2D* const Icon = Part ? Part->Icon.LoadSynchronous() : nullptr;
-		if (Icon) Img_Selected->SetBrushFromTexture(Icon);
+		if (Icon) Img_Selected->SetBrushFromTexture(Icon, true);
 		Img_Selected->SetVisibility(Icon ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 		if (UWidget* Thumbnail = WidgetTree ? WidgetTree->FindWidget(TEXT("SelectedImageFrame")) : nullptr)
 			Thumbnail->SetVisibility(Icon ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
