@@ -198,6 +198,12 @@ void UknightGameplayAbility_MonsterReaction::StartHold()
 
 void UknightGameplayAbility_MonsterReaction::HandleHoldFinished()
 {
+	UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();
+	if (ASC && !RecoverTags.IsEmpty() && !bRecoverTagsApplied)
+	{
+		ASC->AddLooseGameplayTags(RecoverTags);
+		bRecoverTagsApplied = true;
+	}
 	if (RecoverMontage)
 	{
 		UAbilityTask_PlayMontageAndWait* const RecoverTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, TEXT("Recover"), RecoverMontage);
@@ -232,6 +238,11 @@ void UknightGameplayAbility_MonsterReaction::EndAbility(const FGameplayAbilitySp
 		ASC->RemoveLooseGameplayTag(StateTag);
 	}
 	bStateTagApplied = false;
+	if (ASC && bRecoverTagsApplied)
+	{
+		ASC->RemoveLooseGameplayTags(RecoverTags);
+	}
+	bRecoverTagsApplied = false;
 
 	// 사망하면 반응이 취소되며, 시체는 깨진 Poise를 그대로 둔다.
 	if (!bWasCancelled && bRestorePoise)

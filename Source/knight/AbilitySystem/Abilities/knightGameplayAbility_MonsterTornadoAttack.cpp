@@ -116,6 +116,7 @@ void UknightGameplayAbility_MonsterTornadoAttack::HandleTick(int32 ActionNumber)
 		if (PhaseTime >= LandHoldTime)
 		{
 			Phase = EPhase::GetUp;
+			SetGettingUp(true);
 			if (!GetUpMontage)
 			{
 				HandleGetUpFinished();
@@ -204,6 +205,24 @@ void UknightGameplayAbility_MonsterTornadoAttack::StartLand()
 	UE_LOG(LogknightAI, Log, TEXT("%s: tornado summoned, exhausted landing."), *GetNameSafe(Monster));
 }
 
+void UknightGameplayAbility_MonsterTornadoAttack::SetGettingUp(bool bOn)
+{
+	UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();
+	if (!ASC || bOn == bGettingUpApplied)
+	{
+		return;
+	}
+	if (bOn)
+	{
+		ASC->AddLooseGameplayTag(knightGameplayTags::State_Monster_GettingUp);
+	}
+	else
+	{
+		ASC->RemoveLooseGameplayTag(knightGameplayTags::State_Monster_GettingUp);
+	}
+	bGettingUpApplied = bOn;
+}
+
 void UknightGameplayAbility_MonsterTornadoAttack::HandleGetUpFinished()
 {
 	if (IsActive())
@@ -241,5 +260,6 @@ void UknightGameplayAbility_MonsterTornadoAttack::EndAbility(const FGameplayAbil
 	{
 		ASC->RemoveLooseGameplayTag(knightGameplayTags::State_Monster_Collapsed);
 	}
+	SetGettingUp(false);
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }

@@ -18,6 +18,7 @@ class UAnimMontage;
  *   연속: 분노 중이면 EnragedStrikeCount번. 중간 찌르기는 타깃 너머 RepassDistance까지 지나간 뒤 TurnTime 동안 멈춰 타깃 쪽으로 돈다.
  *   탈진 착지: 공중 턴을 끝내고 LandMontage를 LandHoldTime 동안, 이어서 GetUpMontage를 재생한다(공격 없는 딜 타임).
  *             그동안 State.Monster.Collapsed를 붙인다(날개로 플레이어를 밀어내지 않음).
+ *             일어나는 동안(GetUpMontage)은 State.Monster.GettingUp도 붙인다(잔향 가슴 약점 노출).
  *             끝나면 지상 턴이 처음부터 시작된다.
  *             공중 턴을 스스로 끝내므로 Selection.RequiredOwnerTags에 State.Monster.LastAirAttack을 넣어 마지막 공격으로만 쓴다.
  *
@@ -140,6 +141,7 @@ private:
 	void SetDarkness(bool bOn);
 	void SetCollapsed(bool bOn);
 	void SetSilhouette(bool bOn);
+	void SetGettingUp(bool bOn);
 
 	enum class EPhase : uint8 { Roar, Strike, Turn, Land, GetUp };
 
@@ -155,4 +157,5 @@ private:
 	bool bDarknessOn = false;
 	bool bCollapsedApplied = false;
 	bool bSilhouetteOn = false;
+	bool bGettingUpApplied = false;
 };
