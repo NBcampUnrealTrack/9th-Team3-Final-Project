@@ -14,6 +14,7 @@
 #include "Components/SizeBox.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
+#include "Engine/Texture2D.h"
 
 #define LOCTEXT_NAMESPACE "KnightEnhancementPresentation"
 
@@ -21,6 +22,17 @@ void UKnightMaintenanceWidget::BuildEnhancementPresentation()
 {
 	UCanvasPanel* Root = WidgetTree ? Cast<UCanvasPanel>(WidgetTree->RootWidget) : nullptr;
 	if (!Root || EnhancementColumns) return;
+	// One opaque scene replacement; decorative artwork never participates in hit testing.
+	UScaleBox* Backdrop = WidgetTree->ConstructWidget<UScaleBox>(UScaleBox::StaticClass(), TEXT("EnhancementArtwork"));
+	Backdrop->SetStretch(EStretch::ScaleToFill);
+	Backdrop->SetClipping(EWidgetClipping::ClipToBounds);
+	UImage* Background = WidgetTree->ConstructWidget<UImage>();
+	Background->SetBrushFromTexture(EnhancementBackgroundTexture, true);
+	Backdrop->AddChild(Background);
+	UCanvasPanelSlot* ArtSlot = Root->AddChildToCanvas(Backdrop);
+	ArtSlot->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f)); ArtSlot->SetOffsets(FMargin(0.f)); ArtSlot->SetZOrder(-8);
+	Backdrop->SetVisibility(ESlateVisibility::Collapsed);
+	EnhancementArtwork = Backdrop;
 	const FLinearColor Primary(FColor(0xED, 0xF3, 0xFA));
 	const FLinearColor Secondary(FColor(0xA0, 0xB8, 0xD0));
 	const FLinearColor Amber(FColor(0xF1, 0xBD, 0x5E));
@@ -42,15 +54,17 @@ void UKnightMaintenanceWidget::BuildEnhancementPresentation()
 		Label->SetVisibility(ESlateVisibility::HitTestInvisible);
 		return Label;
 	};
-	auto Frame = [this](const TCHAR* Name, FLinearColor Fill, FLinearColor Edge)
+	auto Frame = [this](const TCHAR* Name)
 	{
 		UBorder* Border = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), Name);
 		FSlateBrush Brush;
-		Brush.DrawAs = ESlateBrushDrawType::RoundedBox;
-		Brush.TintColor = FSlateColor(Fill);
-		Brush.OutlineSettings = FSlateBrushOutlineSettings(FVector4(0.f), FSlateColor(Edge), 1.f);
-		Brush.OutlineSettings.RoundingType = ESlateBrushRoundingType::FixedRadius;
-		Border->SetBrush(Brush); Border->SetPadding(FMargin(18.f));
+		// Nine-slice a painted metal panel. No old flat fill/outline under the artwork.
+		Brush.SetResourceObject(EnhancementPanelTexture);
+		Brush.DrawAs = ESlateBrushDrawType::Box;
+		Brush.ImageSize = FVector2D(256.f, 256.f);
+		Brush.Margin = FMargin(.12f);
+		Brush.TintColor = FSlateColor(FLinearColor(.58f, .60f, .62f, 1.f));
+		Border->SetBrush(Brush); Border->SetPadding(FMargin(42.f));
 		Border->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 		return Border;
 	};
@@ -76,7 +90,7 @@ void UKnightMaintenanceWidget::BuildEnhancementPresentation()
 	ColumnsSlot->SetZOrder(1);
 	auto Column = [this, Columns, &Frame](const TCHAR* Name, float Ratio, float LeftGap, float RightGap)
 	{
-		UBorder* Border = Frame(Name, FLinearColor(.007f, .013f, .022f, 1.f), FLinearColor(.10f, .19f, .29f, 1.f));
+		UBorder* Border = Frame(Name);
 		UHorizontalBoxSlot* Cell = Columns->AddChildToHorizontalBox(Border);
 		FSlateChildSize Size(ESlateSizeRule::Fill); Size.Value = Ratio; Cell->SetSize(Size);
 		Cell->SetPadding(FMargin(LeftGap, 0.f, RightGap, 0.f));
@@ -86,6 +100,13 @@ void UKnightMaintenanceWidget::BuildEnhancementPresentation()
 	UVerticalBox* Left = Column(TEXT("EnhancementOwnedColumn"), .25f, 0.f, 6.f);
 	UVerticalBox* Center = Column(TEXT("EnhancementTargetColumn"), .45f, 6.f, 6.f);
 	UVerticalBox* Right = Column(TEXT("EnhancementPreviewColumn"), .30f, 6.f, 0.f);
+	// The central aperture belongs to the supplied backdrop; do not hide it behind
+	// another rectangular panel or invent procedural machinery.
+	if (UBorder* CenterFrame = Cast<UBorder>(Center->GetParent()))
+	{
+		FSlateBrush Empty; Empty.DrawAs = ESlateBrushDrawType::NoDrawType;
+		CenterFrame->SetBrush(Empty); CenterFrame->SetPadding(FMargin(22.f, 26.f));
+	}
 	Add(Left, Text(TEXT("EnhancementOwnedTitle"), LOCTEXT("Owned", "보유 무기"), 28, Primary)); Line(Left);
 	EnhancementOwnedList = WidgetTree->ConstructWidget<UScrollBox>(UScrollBox::StaticClass(), TEXT("EnhancementOwnedWeapons"));
 	Add(Left, EnhancementOwnedList)->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
@@ -99,8 +120,9 @@ void UKnightMaintenanceWidget::BuildEnhancementPresentation()
 	Add(UpgradePanel, UpgradeHeading, 8.f);
 	EnhancementLevels = Text(TEXT("EnhancementLevels"), FText::GetEmpty(), 28, Amber, ETextJustify::Center);
 	Add(UpgradePanel, EnhancementLevels, 12.f);
-	UBorder* IconFrame = Frame(TEXT("EnhancementIconFrame"), FLinearColor(.009f, .019f, .033f, 1.f), FLinearColor(.12f, .26f, .39f, 1.f));
-	IconFrame->SetPadding(FMargin(12.f));
+	UBorder* IconFrame = Frame(TEXT("EnhancementIconFrame"));
+	FSlateBrush NoFrame; NoFrame.DrawAs = ESlateBrushDrawType::NoDrawType;
+	IconFrame->SetBrush(NoFrame); IconFrame->SetPadding(FMargin(8.f));
 	USizeBox* IconSize = WidgetTree->ConstructWidget<USizeBox>();
 	IconSize->SetWidthOverride(320.f); IconSize->SetHeightOverride(180.f);
 	UScaleBox* IconScale = WidgetTree->ConstructWidget<UScaleBox>(); IconScale->SetStretch(EStretch::ScaleToFit);
@@ -108,10 +130,18 @@ void UKnightMaintenanceWidget::BuildEnhancementPresentation()
 	EnhancementWeaponImage->SetVisibility(ESlateVisibility::HitTestInvisible);
 	IconScale->AddChild(EnhancementWeaponImage); IconSize->AddChild(IconScale); IconFrame->SetContent(IconSize);
 	Add(UpgradePanel, IconFrame, 12.f)->SetHorizontalAlignment(HAlign_Center);
-	Add(UpgradePanel, Text(TEXT("EnhancementChanceLabel"), LOCTEXT("Probability", "이번 시도 성공률"), 22, Secondary, ETextJustify::Center), 4.f);
+	// Keep live numbers away from the apparatus's luminous ring on a recessed raster surface.
+	UBorder* Readout = Frame(TEXT("EnhancementReadout"));
+	FSlateBrush ReadoutBrush; ReadoutBrush.SetResourceObject(EnhancementButtonTexture);
+	ReadoutBrush.DrawAs = ESlateBrushDrawType::Box; ReadoutBrush.Margin = FMargin(.12f);
+	ReadoutBrush.TintColor = FSlateColor(FLinearColor(.5f, .52f, .55f, 1.f));
+	Readout->SetBrush(ReadoutBrush); Readout->SetPadding(FMargin(36.f, 14.f));
+	UVerticalBox* ReadoutContent = WidgetTree->ConstructWidget<UVerticalBox>(); Readout->SetContent(ReadoutContent);
+	Add(UpgradePanel, Readout, 4.f);
+	Add(ReadoutContent, Text(TEXT("EnhancementChanceLabel"), LOCTEXT("Probability", "이번 시도 성공률"), 22, Secondary, ETextJustify::Center), 4.f);
 	UpgradeChance = Text(TEXT("EnhancementChance"), FText::GetEmpty(), 36, Secondary, ETextJustify::Center);
-	Add(UpgradePanel, UpgradeChance, 16.f); Line(UpgradePanel);
-	Add(UpgradePanel, Text(TEXT("EnhancementMaterialTitle"), LOCTEXT("Materials", "필요 재료"), 24, Secondary), 8.f);
+	Add(ReadoutContent, UpgradeChance, 12.f);
+	Add(ReadoutContent, Text(TEXT("EnhancementMaterialTitle"), LOCTEXT("Materials", "필요 재료"), 24, Secondary), 8.f);
 	UHorizontalBox* MaterialRow = WidgetTree->ConstructWidget<UHorizontalBox>();
 	USizeBox* MaterialSize = WidgetTree->ConstructWidget<USizeBox>(); MaterialSize->SetWidthOverride(56.f); MaterialSize->SetHeightOverride(56.f);
 	UScaleBox* MaterialScale = WidgetTree->ConstructWidget<UScaleBox>(); MaterialScale->SetStretch(EStretch::ScaleToFit);
@@ -121,7 +151,7 @@ void UKnightMaintenanceWidget::BuildEnhancementPresentation()
 	UpgradeGate = Text(TEXT("EnhancementMaterialRequirement"), FText::GetEmpty(), 24, Primary);
 	UHorizontalBoxSlot* GateSlot = MaterialRow->AddChildToHorizontalBox(UpgradeGate);
 	GateSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill)); GateSlot->SetVerticalAlignment(VAlign_Center);
-	Add(UpgradePanel, MaterialRow, 10.f);
+	Add(ReadoutContent, MaterialRow, 0.f);
 	UpgradeMoney = Text(TEXT("EnhancementMoneyCost"), FText::GetEmpty(), 24, Primary);
 	// Keep the quote and eligibility visible above the action even when materials need scrolling.
 	Add(Center, UpgradeMoney, 6.f);
@@ -137,6 +167,7 @@ void UKnightMaintenanceWidget::BuildEnhancementPresentation()
 			struct { FText InText; } Params{ LOCTEXT("Upgrade", "강화") }; UpgradeButton->ProcessEvent(Function, &Params);
 		}
 		KnightMaintenancePresentation::ConfigureButton(UpgradeButton, false);
+		if (EnhancementActionStyle) UpgradeButton->SetStyle(EnhancementActionStyle);
 		UpgradeButton->OnClicked().AddWeakLambda(this, [this]() { RequestWeaponUpgrade(); });
 		USizeBox* ButtonSize = WidgetTree->ConstructWidget<USizeBox>(); ButtonSize->SetMinDesiredHeight(62.f); ButtonSize->AddChild(UpgradeButton);
 		Add(Center, ButtonSize, 0.f);
@@ -160,14 +191,21 @@ void UKnightMaintenanceWidget::BuildEnhancementPresentation()
 	EnhancementStatsText = Text(TEXT("EnhancementOwnStats"), FText::GetEmpty(), 22, Secondary);
 	Add(Preview, EnhancementStatsText, 20.f);
 	EnhancementSuccessSummary = Text(TEXT("EnhancementSuccessSummary"), FText::GetEmpty(), 26, Green);
-	UBorder* SummaryFrame = Frame(TEXT("EnhancementSuccessFrame"), FLinearColor(.025f, .027f, .016f, 1.f), FLinearColor(.31f, .25f, .09f, 1.f));
+	UBorder* SummaryFrame = Frame(TEXT("EnhancementSuccessFrame"));
+	FSlateBrush InsetBrush; InsetBrush.SetResourceObject(EnhancementButtonTexture);
+	InsetBrush.DrawAs = ESlateBrushDrawType::Box; InsetBrush.ImageSize = FVector2D(240.f, 80.f); InsetBrush.Margin = FMargin(.12f);
+	InsetBrush.TintColor = FSlateColor(FLinearColor(.55f, .55f, .5f, 1.f));
+	SummaryFrame->SetBrush(InsetBrush); SummaryFrame->SetPadding(FMargin(36.f, 16.f));
 	SummaryFrame->SetContent(EnhancementSuccessSummary); Add(Preview, SummaryFrame, 32.f);
 	Add(Preview, Text(TEXT("EnhancementGuideTitle"), LOCTEXT("Guide", "강화 안내"), 28, Primary)); Line(Preview);
 	EnhancementGuidance = Text(TEXT("EnhancementGuidance"), FText::GetEmpty(), 22, Secondary);
 	Add(Preview, EnhancementGuidance, 0.f);
 	UHorizontalBox* Hint = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("EnhancementInputHints"));
 	EnhancementInputHints = Hint;
-	UBorder* Key = Frame(TEXT("EnhancementEnterKey"), FLinearColor::Transparent, FLinearColor(.22f, .38f, .52f, 1.f));
+	UBorder* Key = Frame(TEXT("EnhancementEnterKey"));
+	FSlateBrush KeyBrush; KeyBrush.DrawAs = ESlateBrushDrawType::RoundedBox; KeyBrush.TintColor = FLinearColor::Transparent;
+	KeyBrush.OutlineSettings = FSlateBrushOutlineSettings(FVector4(0.f), FSlateColor(Secondary), 1.f);
+	Key->SetBrush(KeyBrush);
 	Key->SetPadding(FMargin(6.f, 2.f));
 	UCommonTextBlock* KeyLabel = Text(TEXT("EnhancementEnterLabel"), INVTEXT("Enter"), 20, Secondary);
 	KeyLabel->SetAutoWrapText(false); Key->SetContent(KeyLabel);

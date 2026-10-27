@@ -611,6 +611,7 @@ void UKnightMaintenanceWidget::ApplyDestinationLayout()
 	if (SocketColumns) SocketColumns->SetVisibility(bSockets ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
 	if (SocketInputHints) SocketInputHints->SetVisibility(bSockets ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 	if (EnhancementColumns) EnhancementColumns->SetVisibility(bEnhancement ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
+	if (EnhancementArtwork) EnhancementArtwork->SetVisibility(bEnhancement ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 	if (EnhancementInputHints) EnhancementInputHints->SetVisibility(bEnhancement ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 	if (UWidget* Hints = WidgetTree ? WidgetTree->FindWidget(TEXT("Panel_Hints")) : nullptr)
 		Hints->SetVisibility(!bCrafting ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
@@ -1259,6 +1260,7 @@ void UKnightMaintenanceWidget::RebuildEnhancementTarget(bool bRestoreFocus)
 		UKnightMaintenanceEntryWidget* Row = CreateWidget<UKnightMaintenanceEntryWidget>(GetOwningPlayer(), RowClass);
 		if (!Row) continue;
 		Row->SetEntry(Item, nullptr, EKnightMaintenanceEntryState::Owned, Stack.Count);
+		if (EnhancementRowStyle) Row->SetStyle(EnhancementRowStyle);
 		const FPrimaryAssetId Id = Item->GetPrimaryAssetId();
 		Row->OnClicked().AddWeakLambda(this, [this, Id, Profile]()
 		{

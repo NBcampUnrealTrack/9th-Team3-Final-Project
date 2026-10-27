@@ -8,6 +8,8 @@
 #include "KnightMaintenanceWidget.generated.h"
 
 class UCommonButtonBase;
+class UCommonButtonStyle;
+class UTexture2D;
 class UCommonTextBlock;
 class UImage;
 class UBorder;
@@ -66,6 +68,18 @@ public:
 protected:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeDestruct() override;
+
+	/** Cooked artwork references, used only by the Enhancement destination. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Enhancement Presentation")
+	TObjectPtr<UTexture2D> EnhancementBackgroundTexture;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Enhancement Presentation")
+	TObjectPtr<UTexture2D> EnhancementPanelTexture;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Enhancement Presentation")
+	TObjectPtr<UTexture2D> EnhancementButtonTexture;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Enhancement Presentation")
+	TSubclassOf<UCommonButtonStyle> EnhancementActionStyle;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Enhancement Presentation")
+	TSubclassOf<UCommonButtonStyle> EnhancementRowStyle;
 
 	/** Width of the untouched robot view, as a fraction of the viewport. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Crafting Presentation", meta=(ClampMin="0.05", ClampMax="0.80", UIMin="0.15", UIMax="0.40"))
@@ -191,6 +205,7 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UCommonButtonBase> EnhancementTargetButton;
 	UPROPERTY(Transient) TArray<TObjectPtr<UKnightMaintenanceEntryWidget>> EnhancementWeaponRows;
 	UPROPERTY(Transient) TObjectPtr<UWidget> EnhancementColumns;
+	UPROPERTY(Transient) TObjectPtr<UWidget> EnhancementArtwork;
 	UPROPERTY(Transient) TObjectPtr<UWidget> EnhancementInputHints;
 	UPROPERTY(Transient) TObjectPtr<UScrollBox> EnhancementOwnedList;
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> EnhancementListStatus;
