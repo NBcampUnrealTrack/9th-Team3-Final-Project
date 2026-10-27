@@ -120,6 +120,19 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy", meta=(ClampMin=0.02, ClampMax=1))
 	float SlowReleaseStartSpeed = 0.2f;
 
+	/**
+	 * (2026-10-27 사용자 제보 '패링할 때 잠깐 슬로우되고 후속공격할 때 또 슬로우') 퍼펙트 가드(패링)의 그로기 피해로
+	 * 그로기가 터지면(타격 지점 없는 붕괴) 멈춤·슬로·줌을 패링 순간에 내지 않고, 나이트의 다음 타격(반격)이 그 보스를
+	 * 맞히는 순간에 한 번만 낸다. 번개 큐(GroggyCueTag)는 패링 순간 바로 내서 그로기가 끝났다는 것은 보인다.
+	 * ParryGroggyCounterWait초 안에 반격이 없으면 연출은 생략한다. 끄면 예전처럼 패링 순간에 낸다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Parry")
+	bool bDeferParryGroggyToCounter = true;
+
+	/** 패링 그로기 뒤 반격을 기다리는 시간(초). 반격 창(가드 ParryCounterWindow 0.8초) + 휘두르기 시간. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Parry", meta=(ClampMin=0, Units="s", EditCondition="bDeferParryGroggyToCounter"))
+	float ParryGroggyCounterWait = 1.6f;
+
 	/** 타격 순간 상대 쪽에서 실행할 큐(번개). 비우면 없음. 기본 GameplayCue.Hit.Groggy (GCN_Hit_Groggy). */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy", meta=(Categories="GameplayCue"))
 	FGameplayTag GroggyCueTag;
@@ -279,6 +292,17 @@ private:
 
 	FDelegateHandle PoiseBrokenHandle;
 	FTimerHandle ReleaseDelayTimer;
+
+	/** (2026-10-27) 패링으로 터진 그로기 연출을 반격 명중까지 미룬다(bDeferParryGroggyToCounter). */
+	void PlayDeferredParryGroggy(AActor* HitTarget);
+	void OnDeferredParryGroggyTimeout();
+	TWeakObjectPtr<AActor> DeferredGroggyVictim;
+	FGameplayEffectContextHandle DeferredGroggyContext;
+	FTimerHandle DeferredGroggyTimer;
+	bool bPlayingDeferredGroggy = false;
+	/** 같은 보스에 그로기 연출이 연달아 두 번 나오지 않게(반격 그로기 직후 패링 붕괴 알림 등) 마지막 연출 대상·시각. */
+	TWeakObjectPtr<AActor> LastPresentedGroggyVictim;
+	double LastPresentedGroggyTime = -1.0;
 	FTSTicker::FDelegateHandle FeedbackTicker;
 
 	TWeakObjectPtr<AActor> Victim;

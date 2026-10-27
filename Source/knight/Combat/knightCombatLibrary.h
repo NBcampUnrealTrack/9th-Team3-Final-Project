@@ -90,6 +90,14 @@ public:
 	/** 몽타주의 첫 Motion Warping 구간이 끝나는 시간(초). 없으면 -1. */
 	static float GetWarpWindowEnd(const UAnimMontage* Montage);
 
+	/**
+	 * (2026-10-27 팀 결정) 퍼펙트 가드(패링)가 공격한 쪽에 그로기 피해를 주는지. 기본 끔(0).
+	 * 끄면 나이트 가드의 그로기 피해(PerfectGuardPoise*)와 몬스터의 패링 자기 감소(ParriedPoiseDamageRatio)가 모두 빠진다.
+	 * 그로기는 패링 뒤 후속 공격으로만 터져서, 그로기 슬로가 항상 반격의 예측 슬로로 같게 나온다.
+	 * (패링 순간 그로기가 터지면 반격 슬로가 가끔 끝부분만 짧게 나왔다.) 예전 규칙으로 시험: PIE 콘솔 knight.Combat.ParryBuildsPoise 1
+	 */
+	static bool DoesParryBuildPoise();
+
 private:
 	static void ApplyHitStopPair(AActor* Attacker, AActor* Target, float Duration);
 };

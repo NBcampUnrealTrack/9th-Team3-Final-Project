@@ -11,6 +11,7 @@
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "Abilities/Tasks/AbilityTask_WaitInputRelease.h"
 #include "Character/knightMovementComponent.h"
+#include "Combat/knightCombatLibrary.h"
 #include "Combat/knightTargetLockComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
@@ -178,7 +179,11 @@ void UknightGameplayAbility_Guard::ApplyPerfectGuardPoiseDamage(const AActor* At
 void UknightGameplayAbility_Guard::OnParrySucceeded(FGameplayEventData Payload)
 {
 	// 퍼펙트 가드: 공격한 적에게 그로기 피해. ApplyMeleeHit이 Instigator에 공격자를 담아 보낸다. (2026-10-08)
-	ApplyPerfectGuardPoiseDamage(Payload.Instigator.Get());
+	// (2026-10-27 팀 결정) 패링은 그로기를 깎지 않는다. 예전 규칙은 knight.Combat.ParryBuildsPoise 1.
+	if (UknightCombatLibrary::DoesParryBuildPoise())
+	{
+		ApplyPerfectGuardPoiseDamage(Payload.Instigator.Get());
+	}
 
 	if (UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo())
 	{
