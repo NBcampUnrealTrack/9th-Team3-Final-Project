@@ -424,8 +424,13 @@ void UknightGameplayAbility_HeavyAttack::OnFullChargeReached()
 			EAttachLocation::SnapToTarget, true, true);
 	}
 
-	if (UNiagaraSystem* const DistortionAsset = LoadObject<UNiagaraSystem>(nullptr,
-		TEXT("/Game/SlashTrail_SoftTofu/Niagara/Distortion_Only/NS_Hit_Distortion_Once.NS_Hit_Distortion_Once")))
+	UNiagaraSystem* DistortionAsset = FullChargeDistortionEffect;
+	if (!DistortionAsset)
+	{
+		DistortionAsset = LoadObject<UNiagaraSystem>(nullptr,
+			TEXT("/Game/SlashTrail_SoftTofu/Niagara/Distortion_Only/NS_Hit_Distortion_Once.NS_Hit_Distortion_Once"));
+	}
+	if (DistortionAsset)
 	{
 		UNiagaraFunctionLibrary::SpawnSystemAttached(
 			DistortionAsset, AttachTarget, AttachSocket, FVector::ZeroVector, FRotator::ZeroRotator,

@@ -150,6 +150,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Charge|Effects", meta=(EditCondition="bPlayChargeEffects"))
 	TObjectPtr<UNiagaraSystem> FullChargeBurstEffect;
 
+	/**
+	 * (2026-10-27) 최대 차지 순간 검 주변이 일렁이는 굴절 이펙트 (비우면 NS_Hit_Distortion_Once).
+	 * 전에는 칸 없이 코드에서 경로로 불렀다. 칸에 넣어 두면 맵과 함께 미리 읽히고 패키징에도 들어간다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Charge|Effects", meta=(EditCondition="bPlayChargeEffects"))
+	TObjectPtr<UNiagaraSystem> FullChargeDistortionEffect;
+
 	/** 차지 해방 타격이 지면을 때릴 때 생성되는 바닥 균열 이펙트 (비우면 NS_Hit_GroundCrack). */
 	UPROPERTY(EditDefaultsOnly, Category="Charge|Effects", meta=(EditCondition="bPlayChargeEffects"))
 	TObjectPtr<UNiagaraSystem> ReleaseGroundCrackEffect;

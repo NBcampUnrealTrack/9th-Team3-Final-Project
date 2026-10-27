@@ -291,6 +291,8 @@ private:
 	void UpdateControlRotation(float DeltaTime) const;
 	/** Mirrors the lock onto the owner's ASC as State.LockedOn, which selects the lock-on camera mode. */
 	void SetLockedOnTag(bool bLocked) const;
+	/** State.LockOn.Blocked(몬스터 어둠 등)가 붙어 있으면 새로 잡지 못하고, 잡고 있던 것도 다음 틱에 풀린다. */
+	bool IsLockOnBlocked() const;
 	/** State.LockOn.Far를 켜거나 끈다(바뀔 때만). */
 	void SetFarTag(bool bFar);
 	bool bFarTagged = false;

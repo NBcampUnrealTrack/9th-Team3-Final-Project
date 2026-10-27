@@ -19,6 +19,7 @@ class UAnimMontage;
  *   탈진 착지: 공중 턴을 끝내고 LandMontage를 LandHoldTime 동안, 이어서 GetUpMontage를 재생한다(공격 없는 딜 타임).
  *             그동안 State.Monster.Collapsed를 붙인다(날개로 플레이어를 밀어내지 않음).
  *             끝나면 지상 턴이 처음부터 시작된다.
+ *             공중 턴을 스스로 끝내므로 Selection.RequiredOwnerTags에 State.Monster.LastAirAttack을 넣어 마지막 공격으로만 쓴다.
  *
  * bDarkenView면 포효부터 착지까지 플레이어 시야를 어둠으로 덮고, 첫 찌르기는 어둠이 덮인 뒤 DarknessHoldTime이 지나야 시작한다.
  * 그리고 찌르기 SilhouetteLeadTime 전부터 찌르는 순간까지 몸 윤곽선만 보인다.

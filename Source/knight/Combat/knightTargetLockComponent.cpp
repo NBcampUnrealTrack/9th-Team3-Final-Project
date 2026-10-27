@@ -101,6 +101,10 @@ bool UknightTargetLockComponent::PressLockOn()
 
 bool UknightTargetLockComponent::TryLockOn()
 {
+	if (IsLockOnBlocked())
+	{
+		return false;
+	}
 	FVector ViewLocation;
 	FRotator ViewRotation;
 	if (!GetViewPoint(ViewLocation, ViewRotation))
@@ -658,7 +662,7 @@ void UknightTargetLockComponent::TickComponent(float DeltaTime, ELevelTick TickT
 
 	AActor* const Target = LockedActor.Get();
 	FVector TargetLocation;
-	if (!Target || !Target->GetClass()->ImplementsInterface(UTargetableInterface::StaticClass())
+	if (!Target || IsLockOnBlocked() || !Target->GetClass()->ImplementsInterface(UTargetableInterface::StaticClass())
 		|| !ITargetableInterface::Execute_CanBeTargeted(Target) || !GetLockedTargetLocation(TargetLocation))
 	{
 		ClearLockOn();
@@ -952,6 +956,12 @@ void UknightTargetLockComponent::SetFarTag(bool bFar)
 		ASC->SetLooseGameplayTagCount(TAG_State_LockOn_Far, bFar ? 1 : 0);
 		bFarTagged = bFar;
 	}
+}
+
+bool UknightTargetLockComponent::IsLockOnBlocked() const
+{
+	const UAbilitySystemComponent* const ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner());
+	return ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_LockOn_Blocked);
 }
 
 void UknightTargetLockComponent::SetLockedOnTag(bool bLocked) const
