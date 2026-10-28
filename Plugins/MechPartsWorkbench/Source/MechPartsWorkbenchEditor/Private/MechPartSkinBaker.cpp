@@ -1012,6 +1012,21 @@ namespace MechPartSkinBaker
 		}
 		if (Result)
 		{
+			// (2026-10-27) 기존 에셋의 LOD 원본 데이터 객체(소스 모델의 MeshDescriptionBulkData)가 에디터 메모리에서 비어 있으면
+			// 덮어쓰기(CopyMeshToSkeletalMesh)가 엔진 ensure를 내고 "Failed to generate the mesh data"로 실패한다(10-27 잔열 몸통 A).
+			// 엔진은 디스크에서 불러올 때만 이 상태를 복구하므로(USkeletalMesh::BeginPostLoadInternal), 여기서 미리 멈추고 에디터 재시작을 안내한다.
+			for (int32 LodIndex = 0; LodIndex < Result->GetNumSourceModels(); ++LodIndex)
+			{
+				if (!Result->GetSourceModel(LodIndex).IsInitialized())
+				{
+					UE_LOG(LogMechPartSkinBaker, Warning, TEXT("%s: LOD%d source model has no mesh description bulk data in memory; skip overwrite."),
+						*Result->GetPathName(), LodIndex);
+					OutError = FText::Format(LOCTEXT("BakeSourceModelLost",
+						"기존 스켈레탈 메시의 LOD{0} 원본 데이터가 에디터 메모리에서 비어 있어 덮어쓸 수 없습니다: {1}\n에디터를 저장하고 다시 켠 뒤 다시 구워 주세요(다시 불러오면 엔진이 복구합니다)."),
+						FText::AsNumber(LodIndex), FText::FromString(PackagePath));
+					return nullptr;
+				}
+			}
 			// 모양이 바뀌면 예전 천은 맞지 않으므로 먼저 지운다 (천을 켜면 아래에서 새로 만든다).
 			RemoveAllClothing(Result);
 			FGeometryScriptCopyMeshToAssetOptions CopyOptions;
