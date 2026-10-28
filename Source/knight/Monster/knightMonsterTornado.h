@@ -56,6 +56,10 @@ struct KNIGHT_API FknightMonsterTornadoParams
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Tornado|Visual", meta=(Units="deg"))
 	float EffectSpinRate = 200.f;
 
+	/** 이 회오리가 내는 나이아가라 이펙트(Effect·Form·Burst·Collapse) 전체의 크기 배율. Radius·Height를 키운 회오리에 맞춰 함께 키운다. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Tornado|Visual", meta=(ClampMin=0.1))
+	float EffectScale = 1.f;
+
 	/** 깔때기 메시. 피벗이 아래 가운데이고 +Z로 100cm, 반지름 100cm가 판정 반지름이 되게 만든다(Radius·Height에 맞춰 늘린다). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Tornado|Visual")
 	TObjectPtr<UStaticMesh> FunnelMesh;
