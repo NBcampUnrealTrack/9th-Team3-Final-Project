@@ -155,7 +155,11 @@ public:
 	UFUNCTION(BlueprintPure, Category="Knight|Progression|Socket")
 	float GetSocketEffectTotal(EKnightSocketEffect Effect) const;
 
-	/** (2026-10-22) 이 효과를 가진 소켓을 몇 칸에 끼웠는지. 충전 보조(퍼펙트 가드 필요 횟수 -1)처럼 값 대신 개수로 쓰는 효과용. */
+	/**
+	 * (2026-10-22) 이 효과를 가진 소켓을 몇 칸에 끼웠는지. 충전 보조처럼 값 대신 개수로 쓰는 효과용.
+	 * (2026-10-28) 충전 보조는 이제 에너지 → 수리 키트 전환 비용을 개수만큼 줄인다(AknightCharacter::GetEnergyConvertCost).
+	 * 예전 GetSocketGaugeGuardsPerKit(퍼펙트 가드 필요 횟수 -1)은 쓰는 곳이 없어져 지웠다.
+	 */
 	UFUNCTION(BlueprintPure, Category="Knight|Progression|Socket")
 	int32 GetSocketEffectCount(EKnightSocketEffect Effect) const;
 
@@ -262,10 +266,6 @@ public:
 	const UknightPartItemDefinition* GetEquippedPart(FGameplayTag SlotTag) const;
 
 	bool IsSlotExplicitlyEmpty(FGameplayTag SlotTag) const;
-
-	/** Current combat behavior: each charge socket removes one required perfect guard, minimum one. */
-	UFUNCTION(BlueprintPure, Category="Knight|Progression|Socket")
-	int32 GetSocketGaugeGuardsPerKit(int32 BaseGuardsPerKit) const;
 
 	/** Equips an owned part into its slot. Returns false if it is not owned. */
 	UFUNCTION(BlueprintCallable, Category="Knight|Progression")

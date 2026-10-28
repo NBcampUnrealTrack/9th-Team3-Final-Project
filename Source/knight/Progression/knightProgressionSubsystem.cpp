@@ -255,12 +255,6 @@ int32 UknightProgressionSubsystem::GetSocketEffectCount(EKnightSocketEffect Effe
 	return Total;
 }
 
-int32 UknightProgressionSubsystem::GetSocketGaugeGuardsPerKit(int32 BaseGuardsPerKit) const
-{
-	return FMath::Max(1, FMath::Max(1, BaseGuardsPerKit)
-		- GetSocketEffectCount(EKnightSocketEffect::SocketGaugeCharge));
-}
-
 int32 UknightProgressionSubsystem::GetRepairKitCapacityBonus() const
 {
 	return FMath::Max(0, FMath::RoundToInt(GetSocketEffectTotal(EKnightSocketEffect::RepairKitCapacity)));
