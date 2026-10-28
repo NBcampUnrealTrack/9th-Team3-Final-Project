@@ -7,6 +7,7 @@
 
 class UMaterialInterface;
 class UNiagaraSystem;
+class USoundBase;
 class UStaticMesh;
 class UStaticMeshComponent;
 
@@ -40,6 +41,10 @@ struct FknightSpikeImpact
 	/** 착탄점에서 위로 이 높이까지(낙하 경로)에 있는 대상이 맞는다. */
 	float PathHeight = 400.f;
 	TArray<TObjectPtr<UNiagaraSystem>> Effects;
+	/** 떨어지기 시작할 때 가시에 붙여 재생하는 소리(바람 가르는 소리). 비우면 소리 없음. */
+	TObjectPtr<USoundBase> FallSound;
+	/** 착탄점에서 재생하는 소리. 비우면 소리 없음. */
+	TObjectPtr<USoundBase> ImpactSound;
 	/** 착탄 뒤 땅에 꽂혀 있는 시간. */
 	float StuckTime = 1.5f;
 };
