@@ -170,7 +170,10 @@ private:
 	UPROPERTY(BlueprintReadOnly, Category="Knight|Mech|Speed", meta=(AllowPrivateAccess=true))
 	FGameplayAttributeData DodgeSpeed;
 
-	/** 퀵스텝을 다시 쓰기까지 기다리는 시간(초, 소수점 가능). 대시 이동이 끝난 시점부터 센다. 기본 0.5초(임시). */
+	/**
+	 * 퀵스텝을 다시 쓰기까지 기다리는 시간(초, 소수점 가능). 대시 이동이 끝난 시점부터 센다.
+	 * (2026-10-28 사용자 결정) 기본 0.5 → 0: 스테미너가 허용하는 한 연속으로 쓴다(경직 캔슬·선입력). 파츠로 다시 늘릴 수 있게 스탯은 남긴다.
+	 */
 	UPROPERTY(BlueprintReadOnly, Category="Knight|Mech|Speed", meta=(AllowPrivateAccess=true))
 	FGameplayAttributeData DodgeCooldown;
 
