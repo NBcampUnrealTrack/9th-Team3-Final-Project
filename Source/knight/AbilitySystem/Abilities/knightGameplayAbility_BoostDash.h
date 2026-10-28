@@ -39,6 +39,9 @@ class USoundBase;
  *
  * 입력 (2026-10-08): 퀵스텝 키(기본 LeftControl, IA_Boost → InputTag.Boost)를 한 번 누르면 대시. 달리기는 LeftShift(InputTag.Run)로 분리했다.
  * (전에는 Shift를 누르고 있으면 달리기, 두 번 탭하면 knightGameplayAbility_Sprint가 태그로 대시를 발동했다)
+ *
+ * 퀵스텝 공격 (2026-10-28): 대시하는 동안과 끝난 뒤 FollowUpGraceTime초 동안 FollowUpTags(State.QuickstepFollowUp)를 붙인다.
+ * 그동안 공격 키는 1타 대신 GA_Knight_QuickstepAttack(일반 근접 공격 BP)이 나간다.
  */
 UCLASS()
 class KNIGHT_API UknightGameplayAbility_BoostDash : public UknightGameplayAbility
@@ -133,6 +136,18 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category="Dash|Effects", meta=(ClampMin=0))
 	float DashSoundVolume = 1.f;
+
+	/**
+	 * (2026-10-28 사용자 요청 '퀵스텝 공격') 퀵스텝하는 동안과 끝난 뒤 FollowUpGraceTime초 동안 붙이는 태그. 기본 State.QuickstepFollowUp.
+	 * 퀵스텝 공격(GA_Knight_QuickstepAttack)이 이 태그를 필요로 하고, 1타·대쉬공격은 이 태그에 막혀서 그동안 공격 키는 퀵스텝 공격이 된다.
+	 * 퀵스텝 중에 미리 누른 공격은 입력 버퍼에 있다가 경직(캔슬 창)이 시작될 때 나간다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Dash|Follow Up")
+	FGameplayTagContainer FollowUpTags;
+
+	/** (2026-10-28) 퀵스텝이 끝난 뒤에도 FollowUpTags를 남기는 시간(초). 이 안에 누른 공격도 퀵스텝 공격이 된다. 바뀔 수 있는 값. */
+	UPROPERTY(EditDefaultsOnly, Category="Dash|Follow Up", meta=(ClampMin=0, Units="s"))
+	float FollowUpGraceTime = 0.2f;
 
 	/**
 	 * 등 부스터 (2026-10-12). 대시 이동 동안 등에서 대시 반대 방향으로 뿜는다. 이펙트는 로컬 -Z로 뿜는 시스템(NS_Knight_Thruster).
@@ -242,7 +257,11 @@ private:
 	FTimerHandle BackThrusterStopTimer;
 	FTimerHandle GhostTrailTimer;
 
+	/** (2026-10-28) 이번 대시가 붙인 FollowUpTags를 FollowUpGraceTime 뒤에 뗀다(붙이지 않았으면 아무것도 안 함). EndAbility에서 부른다. */
+	void ReleaseFollowUpTags();
+
 	bool bInvulnerableApplied = false;
+	bool bFollowUpApplied = false;
 	bool bCancelWindowApplied = false;
 	bool bMoveLockApplied = false;
 	bool bInRecovery = false;

@@ -100,6 +100,8 @@ namespace knightGameplayTags
 	// (2026-10-15) 무기 스탠스. 이 태그가 없으면 한손, 있으면 양손. 검을 넣으면 빠진다(뽑으면 항상 한손).
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Stance_TwoHanded);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Stance_Switching);
+	// (2026-10-28) 퀵스텝 중과 끝난 직후. 이 동안 공격 키는 1타 대신 퀵스텝 공격(GA_Knight_QuickstepAttack)이 나간다.
+	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_QuickstepFollowUp);
 
 	// 콤보 단계 (아래 단계 태그 Combo.Greatsword.1 등은 Config/DefaultGameplayTags.ini에 있다)
 	// (2026-10-28) 스탠스 전환이 콤보를 이어 줄 때 이 계열 태그를 남긴다(UknightGameplayAbility_StanceSwitch::ComboTagsToKeep).

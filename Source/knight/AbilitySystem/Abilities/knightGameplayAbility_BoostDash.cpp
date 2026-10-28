@@ -35,6 +35,7 @@ UknightGameplayAbility_BoostDash::UknightGameplayAbility_BoostDash(const FObject
 	ActivationBlockedTags.AddTag(knightGameplayTags::State_HitReact);
 	ActivationBlockedTags.AddTag(knightGameplayTags::State_Overheated);
 	DashCueTag = knightGameplayTags::GameplayCue_Boost_Dash;
+	FollowUpTags.AddTag(knightGameplayTags::State_QuickstepFollowUp);
 
 	// 경직 중 대시 캔슬: 실행 중에 다시 발동되면 지금 대시를 끝내고 새로 시작한다. 언제 허용할지는 CanActivateAbility가 정한다.
 	bRetriggerInstancedAbility = true;
@@ -128,6 +129,16 @@ void UknightGameplayAbility_BoostDash::StartDash(ACharacter& Character)
 		Character.SetActorRotation(FRotator(0.f, Direction.Rotation().Yaw, 0.f));
 	}
 	UAnimMontage* const Montage = SelectDashMontage(Character, Direction);
+
+	// (2026-10-28) 퀵스텝 공격: 대시하는 동안과 끝난 뒤 잠깐 공격 키가 퀵스텝 공격이 되게 한다(EndAbility에서 뗀다).
+	if (!FollowUpTags.IsEmpty() && !bFollowUpApplied)
+	{
+		if (UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo())
+		{
+			ASC->AddLooseGameplayTags(FollowUpTags);
+			bFollowUpApplied = true;
+		}
+	}
 
 	if (InvulnerableDuration > 0.f)
 	{
@@ -297,6 +308,33 @@ void UknightGameplayAbility_BoostDash::ReleaseRecoveryState()
 	}
 }
 
+void UknightGameplayAbility_BoostDash::ReleaseFollowUpTags()
+{
+	if (!bFollowUpApplied)
+	{
+		return;
+	}
+	bFollowUpApplied = false;
+	UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();
+	UWorld* const World = GetWorld();
+	if (!ASC)
+	{
+		return;
+	}
+	const FGameplayTagContainer Tags = FollowUpTags;
+	if (!World || FollowUpGraceTime <= 0.f)
+	{
+		ASC->RemoveLooseGameplayTags(Tags);
+		return;
+	}
+	// 대시마다 따로 센다(루즈 태그 수): 경직 중 다시 대시하면 새 대시가 하나 더 붙이므로, 앞 대시 몫이 빠져도 태그는 남는다.
+	FTimerHandle GraceTimer;
+	World->GetTimerManager().SetTimer(GraceTimer, FTimerDelegate::CreateWeakLambda(ASC, [ASC, Tags]()
+	{
+		ASC->RemoveLooseGameplayTags(Tags);
+	}), FollowUpGraceTime, false);
+}
+
 void UknightGameplayAbility_BoostDash::StartCooldown()
 {
 	if (!bCooldownPending)
@@ -443,6 +481,7 @@ void UknightGameplayAbility_BoostDash::EndAbility(const FGameplayAbilitySpecHand
 {
 	RemoveInvulnerability();
 	ReleaseRecoveryState();
+	ReleaseFollowUpTags();
 	StopBackThrusters();
 	StopGhostTrail();
 

@@ -74,6 +74,7 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_PartBroken_Legs, "State.PartBroken.Legs", "Legs broken: lower walk and run speed.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Stance_TwoHanded, "State.Stance.TwoHanded", "(2026-10-15) Two-handed weapon stance. Without it the Knight is one-handed. Removed when the sword is sheathed.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Stance_Switching, "State.Stance.Switching", "(2026-10-15) Stance switch montage is playing (keeps the combat stance awake).");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_QuickstepFollowUp, "State.QuickstepFollowUp", "(2026-10-28) During a quickstep and briefly after it. The primary attack becomes the quickstep attack instead of combo step 1.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Combo_Greatsword, "Combo.Greatsword", "Parent of the greatsword combo step tags (steps are in Config/DefaultGameplayTags.ini).");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Window_Combo, "Window.Combo", "Buffered attack input may chain into the next attack.");
