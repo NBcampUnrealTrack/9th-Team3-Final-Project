@@ -173,6 +173,7 @@ void UKnightMaintenanceWidget::BuildEnhancementPresentation()
 	// Keep the quote and eligibility visible above the action even when materials need scrolling.
 	Add(Center, UpgradeMoney, 6.f);
 	UpgradeResult = Text(TEXT("EnhancementResult"), FText::GetEmpty(), 22, Secondary);
+	UpgradeResult->SetVisibility(ESlateVisibility::Collapsed);
 	Add(Center, UpgradeResult, 8.f);
 	const TSubclassOf<UCommonButtonBase> ButtonClass = LoadClass<UCommonButtonBase>(nullptr,
 		TEXT("/Game/Knight/UI/Common/WBP_KnightButton.WBP_KnightButton_C"));
@@ -189,7 +190,6 @@ void UKnightMaintenanceWidget::BuildEnhancementPresentation()
 		USizeBox* ButtonSize = WidgetTree->ConstructWidget<USizeBox>(); ButtonSize->SetMinDesiredHeight(62.f); ButtonSize->AddChild(UpgradeButton);
 		Add(Center, ButtonSize, 0.f);
 	}
-	Add(Right, Text(TEXT("EnhancementPreviewTitle"), LOCTEXT("Preview", "강화 미리보기"), 28, Primary)); Line(Right);
 	UScrollBox* PreviewScroll = WidgetTree->ConstructWidget<UScrollBox>();
 	Add(Right, PreviewScroll, 0.f)->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 	UVerticalBox* Preview = WidgetTree->ConstructWidget<UVerticalBox>(); PreviewScroll->AddChild(Preview);
@@ -206,7 +206,8 @@ void UKnightMaintenanceWidget::BuildEnhancementPresentation()
 	AttackRow->AddChildToHorizontalBox(EnhancementIncrease);
 	Add(Preview, AttackRow, 20.f); Line(Preview);
 	EnhancementStatsText = Text(TEXT("EnhancementOwnStats"), FText::GetEmpty(), 22, Secondary);
-	Add(Preview, EnhancementStatsText, 20.f);
+	EnhancementStatsText->SetVisibility(ESlateVisibility::Collapsed);
+	Add(Preview, EnhancementStatsText, 0.f);
 	EnhancementSuccessSummary = Text(TEXT("EnhancementSuccessSummary"), FText::GetEmpty(), 26, Green);
 	UBorder* SummaryFrame = Frame(TEXT("EnhancementSuccessFrame"));
 	FSlateBrush InsetBrush; InsetBrush.SetResourceObject(EnhancementButtonTexture);
@@ -214,10 +215,7 @@ void UKnightMaintenanceWidget::BuildEnhancementPresentation()
 	KnightMaintenancePresentation::SetControlUV(InsetBrush);
 	InsetBrush.TintColor = FSlateColor(KnightMaintenancePresentation::ReadoutTint);
 	SummaryFrame->SetBrush(InsetBrush); SummaryFrame->SetPadding(FMargin(36.f, 16.f));
-	SummaryFrame->SetContent(EnhancementSuccessSummary); Add(Preview, SummaryFrame, 32.f);
-	Add(Preview, Text(TEXT("EnhancementGuideTitle"), LOCTEXT("Guide", "강화 안내"), 28, Primary)); Line(Preview);
-	EnhancementGuidance = Text(TEXT("EnhancementGuidance"), FText::GetEmpty(), 22, Secondary);
-	Add(Preview, EnhancementGuidance, 0.f);
+	SummaryFrame->SetContent(EnhancementSuccessSummary); Add(Preview, SummaryFrame, 0.f);
 	Columns->SetVisibility(ESlateVisibility::Collapsed);
 }
 
