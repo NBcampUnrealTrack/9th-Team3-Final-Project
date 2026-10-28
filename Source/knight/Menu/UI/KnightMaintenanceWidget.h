@@ -225,7 +225,6 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> EnhancementPreviewLevels;
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> EnhancementIncrease;
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> EnhancementSuccessSummary;
-	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> EnhancementGuidance;
 	UPROPERTY(Transient) TObjectPtr<UImage> EnhancementWeaponImage;
 	UPROPERTY(Transient) TObjectPtr<UImage> EnhancementMaterialImage;
 	UPROPERTY(Transient) TObjectPtr<UVerticalBox> UpgradePanel;
