@@ -41,6 +41,22 @@ void FknightMonsterKnockback::Start(const AActor& Monster, AActor& Target, float
 	UE_LOG(LogknightAI, Verbose, TEXT("%s: knockback %s at %.0f cm/s for %.2fs."), *Monster.GetName(), *Target.GetName(), Speed, Time);
 }
 
+void FknightMonsterKnockback::StartAway(const AActor& Monster, AActor& Target, float Speed, float Time)
+{
+	if (Speed <= 0.f || Time <= 0.f)
+	{
+		return;
+	}
+	SourceMonster = &Monster;
+	Actor = &Target;
+	Velocity = (Target.GetActorLocation() - Monster.GetActorLocation()).GetSafeNormal2D(UE_SMALL_NUMBER, Monster.GetActorForwardVector().GetSafeNormal2D()) * Speed;
+	Side = FVector::ZeroVector;
+	Clearance = 0.f;
+	bFlipped = true;
+	Remaining = Time;
+	UE_LOG(LogknightAI, Verbose, TEXT("%s: knockback %s away at %.0f cm/s for %.2fs."), *Monster.GetName(), *Target.GetName(), Speed, Time);
+}
+
 void FknightMonsterKnockback::Tick(float DeltaTime)
 {
 	AActor* const Target = Actor.Get();

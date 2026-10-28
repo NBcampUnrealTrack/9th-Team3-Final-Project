@@ -8,6 +8,10 @@
 
 class UAnimMontage;
 class UGameplayEffect;
+class UAudioComponent;
+class UNiagaraComponent;
+class UNiagaraSystem;
+class USoundBase;
 
 /** 내려찍기처럼 몸의 한 부분이 땅에 닿는 순간마다 따로 때리는 판정. 그 순간 소켓 위치에 구체를 놓는다. */
 USTRUCT(BlueprintType)
@@ -51,6 +55,7 @@ struct FknightMonsterAreaImpact
  * 내려찍기를 구체 하나로 덮으면 발이 닿지 않는 앞쪽까지 맞는다.
  *
  * KnockbackSpeed를 주면 맞은 대상을 몬스터 진행 경로 옆으로 날려 보낸다(몸통 박치기에 맞고 몸 앞에 붙어 끌려가지 않게).
+ * bKnockbackAway면 몬스터 중심에서 바깥으로 곧장 날린다(돌풍·충격파).
  *
  * 시각(WindupTime, Impacts, LungeStartTime 등)은 몬스터 시간(CustomTimeDilation을 곱한 시간)으로 잰다. 히트스톱으로 몽타주가
  * 멈추는 동안 판정 시계도 같이 멈추므로, 예비 동작 중에 맞아도 판정이 애니메이션보다 먼저 나오지 않는다.
@@ -70,6 +75,9 @@ public:
 
 #if WITH_EDITOR
 	virtual EDataValidationResult IsDataValid(class FDataValidationContext& Context) const override;
+
+	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+		const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
 #endif
 
 protected:
@@ -149,6 +157,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Knockback", meta=(ClampMin=0, ClampMax=1, EditCondition="KnockbackSpeed > 0"))
 	float GuardKnockbackScale = 0.5f;
 
+	/** 켜면 몬스터 중심에서 대상 쪽 바깥으로 곧장 날린다(돌풍·충격파). 끄면 진행 경로 옆으로 날린다(몸통 박치기). */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Knockback", meta=(EditCondition="KnockbackSpeed > 0"))
+	bool bKnockbackAway = false;
+
+	/** 0보다 크면 실제로 맞은 플레이어가 이 시간 동안 멍해진다(초음파 피격과 같은 소리 줄임·화면 울림). */
+	UPROPERTY(EditDefaultsOnly, Category="Attack", meta=(ClampMin=0, Units="s"))
+	float HitDeafenTime = 0.f;
+
 	/** 선택 사항. 실제로 맞은 대상(가드·패링·회피 제외)에게 추가로 거는 효과(브레스 화상 등). */
 	UPROPERTY(EditDefaultsOnly, Category="Attack")
 	TSubclassOf<UGameplayEffect> HitTargetEffect;
@@ -156,6 +172,34 @@ protected:
 	/** 선택 사항. 연출용으로만 재생하며 어빌리티가 끝나면 멈춘다. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Presentation")
 	TObjectPtr<UAnimMontage> Montage;
+
+	/** 선택 사항. WindupEffectStartTime부터 첫 타격까지 WindupEffectSocket에 붙여 재생한다(기 모으기). 공격이 끊겨도 끈다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Presentation")
+	TObjectPtr<UNiagaraSystem> WindupEffect;
+
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Presentation")
+	FName WindupEffectSocket;
+
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Presentation", meta=(ClampMin=0, Units="s"))
+	float WindupEffectStartTime = 0.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Presentation", meta=(ClampMin=0.01))
+	float WindupEffectScale = 1.f;
+
+	/** 선택 사항. WindupEffect와 같은 때 같은 자리에서 재생하고 첫 타격에 짧게 줄여 끊는다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Presentation")
+	TObjectPtr<USoundBase> WindupSound;
+
+	/** 선택 사항. 첫 타격 순간 범위 중심 아래 바닥에서 몬스터가 보는 방향으로 재생한다(충격파 고리, 돌풍). */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Presentation")
+	TArray<TObjectPtr<UNiagaraSystem>> HitAreaEffects;
+
+	/** HitAreaEffects 크기 배율. 범위만큼 퍼지게 맞춘다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Presentation", meta=(ClampMin=0.01))
+	float HitAreaEffectScale = 1.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Presentation")
+	TObjectPtr<USoundBase> HitAreaSound;
 
 	/** 선택 사항. 예고가 시작될 때 범위 중심에서 실행하는 큐(바닥 데칼, 포효 등). */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Presentation", meta=(Categories="GameplayCue"))
@@ -173,6 +217,9 @@ private:
 
 	void ApplyImpact(const FknightMonsterAreaImpact& Impact);
 	void HitArea(const FVector& Center, float Radius);
+	void PlayHitAreaEffects(const FVector& Center) const;
+	void StartWindupEffect();
+	void StopWindupEffect();
 
 	FVector GetAreaCenter() const;
 	bool IsInsideCone(const AActor& Avatar, const FVector& Point) const;
@@ -190,4 +237,8 @@ private:
 	float NextActiveCheck = 0.f;
 	bool bLungeStarted = false;
 	bool bWindupDone = false;
+	bool bHitAreaEffectsPlayed = false;
+	bool bWindupEffectStarted = false;
+	TWeakObjectPtr<UNiagaraComponent> WindupEffectComponent;
+	TWeakObjectPtr<UAudioComponent> WindupSoundComponent;
 };

@@ -5,6 +5,9 @@
 #include "Abilities/Tasks/AbilityTask_ApplyRootMotionConstantForce.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_Repeat.h"
+#include "Camera/knightPlayerCameraManager.h"
+#include "Components/AudioComponent.h"
+#include "NiagaraComponent.h"
 #include "Combat/knightCombatLibrary.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -12,8 +15,11 @@
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/PlayerController.h"
 #include "GameFramework/RootMotionSource.h"
+#include "Kismet/GameplayStatics.h"
 #include "Monster/knightMonsterCharacterBase.h"
+#include "NiagaraFunctionLibrary.h"
 #include "Monster/knightMonsterDebug.h"
 #include "Monster/knightMonsterTargetingComponent.h"
 #include "knight.h"
@@ -55,6 +61,8 @@ void UknightGameplayAbility_MonsterAreaAttack::ActivateAbility(const FGameplayAb
 	}
 	HitActors.Reset();
 	Knockback.Reset();
+	bHitAreaEffectsPlayed = false;
+	bWindupEffectStarted = false;
 
 	const FVector Center = GetAreaCenter();
 	if (TelegraphCue.IsValid())
@@ -105,6 +113,12 @@ void UknightGameplayAbility_MonsterAreaAttack::HandleClockTick(int32 ActionNumbe
 	{
 		bLungeStarted = true;
 		StartLunge();
+	}
+
+	if (!bWindupEffectStarted && !bWindupDone && RecoveryStart < 0.f && Elapsed >= WindupEffectStartTime)
+	{
+		bWindupEffectStarted = true;
+		StartWindupEffect();
 	}
 
 	if (RecoveryStart < 0.f)
@@ -203,7 +217,80 @@ void UknightGameplayAbility_MonsterAreaAttack::StartLunge()
 void UknightGameplayAbility_MonsterAreaAttack::OnImpact()
 {
 	KNIGHT_PERF_SCOPE("Monster.AreaAttackImpact");
-	HitArea(GetAreaCenter(), AreaRadius);
+	const FVector Center = GetAreaCenter();
+	HitArea(Center, AreaRadius);
+	if (!bHitAreaEffectsPlayed)
+	{
+		bHitAreaEffectsPlayed = true;
+		StopWindupEffect();
+		PlayHitAreaEffects(Center);
+	}
+}
+
+void UknightGameplayAbility_MonsterAreaAttack::StartWindupEffect()
+{
+	const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	USkeletalMeshComponent* const Mesh = Character ? Character->GetMesh() : nullptr;
+	if (!Mesh)
+	{
+		return;
+	}
+	if (WindupEffect)
+	{
+		WindupEffectComponent = UNiagaraFunctionLibrary::SpawnSystemAttached(WindupEffect, Mesh, WindupEffectSocket, FVector::ZeroVector, FRotator::ZeroRotator,
+			FVector(WindupEffectScale), EAttachLocation::SnapToTarget, true, ENCPoolMethod::None);
+	}
+	if (WindupSound)
+	{
+		WindupSoundComponent = UGameplayStatics::SpawnSoundAttached(WindupSound, Mesh, WindupEffectSocket);
+	}
+}
+
+void UknightGameplayAbility_MonsterAreaAttack::StopWindupEffect()
+{
+	// 새 입자만 멈추고 남은 입자는 사라지게 둔다.
+	if (UNiagaraComponent* const Effect = WindupEffectComponent.Get())
+	{
+		Effect->Deactivate();
+	}
+	WindupEffectComponent.Reset();
+	if (UAudioComponent* const Sound = WindupSoundComponent.Get())
+	{
+		Sound->FadeOut(0.1f, 0.f);
+	}
+	WindupSoundComponent.Reset();
+}
+
+void UknightGameplayAbility_MonsterAreaAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
+{
+	StopWindupEffect();
+	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
+}
+
+void UknightGameplayAbility_MonsterAreaAttack::PlayHitAreaEffects(const FVector& Center) const
+{
+	const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	UWorld* const World = GetWorld();
+	if (!Character || !World || (HitAreaEffects.IsEmpty() && !HitAreaSound))
+	{
+		return;
+	}
+	// 몬스터 발밑 높이(이동 캡슐 바닥)에 놓는다. 낮게 떠 있는 날짐승도 바닥에서 퍼져 나가게.
+	const UCapsuleComponent* const Capsule = Character->GetCapsuleComponent();
+	const FVector Ground(Center.X, Center.Y, Capsule ? Capsule->GetComponentLocation().Z - Capsule->GetScaledCapsuleHalfHeight() : Center.Z);
+	const FRotator Facing(0.f, Character->GetActorRotation().Yaw, 0.f);
+	for (UNiagaraSystem* const Effect : HitAreaEffects)
+	{
+		if (Effect)
+		{
+			UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, Effect, Ground, Facing, FVector(HitAreaEffectScale), true, true, ENCPoolMethod::AutoRelease);
+		}
+	}
+	if (HitAreaSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(World, HitAreaSound, Ground);
+	}
 }
 
 void UknightGameplayAbility_MonsterAreaAttack::HitArea(const FVector& Center, float Radius)
@@ -221,11 +308,28 @@ void UknightGameplayAbility_MonsterAreaAttack::HitArea(const FVector& Center, fl
 		{
 			if (KnockbackSpeed > 0.f && (Outcome == EknightHitOutcome::Hit || Outcome == EknightHitOutcome::Guarded))
 			{
-				Knockback.Start(*Avatar, Target, KnockbackSpeed * (Outcome == EknightHitOutcome::Guarded ? GuardKnockbackScale : 1.f), KnockbackTime);
+				const float Speed = KnockbackSpeed * (Outcome == EknightHitOutcome::Guarded ? GuardKnockbackScale : 1.f);
+				if (bKnockbackAway)
+				{
+					Knockback.StartAway(*Avatar, Target, Speed, KnockbackTime);
+				}
+				else
+				{
+					Knockback.Start(*Avatar, Target, Speed, KnockbackTime);
+				}
 				const int32 Ticks = FMath::CeilToInt(KnockbackTime / knightMonsterAreaAttack::ActiveCheckInterval);
 				UAbilityTask_Repeat* const KnockbackTask = UAbilityTask_Repeat::RepeatAction(this, knightMonsterAreaAttack::ActiveCheckInterval, Ticks);
 				KnockbackTask->OnPerformAction.AddDynamic(this, &ThisClass::HandleKnockbackTick);
 				KnockbackTask->ReadyForActivation();
+			}
+			if (Outcome == EknightHitOutcome::Hit && HitDeafenTime > 0.f)
+			{
+				const APawn* const Pawn = Cast<APawn>(&Target);
+				const APlayerController* const PC = Pawn ? Cast<APlayerController>(Pawn->GetController()) : nullptr;
+				if (AknightPlayerCameraManager* const Camera = PC && PC->IsLocalController() ? Cast<AknightPlayerCameraManager>(PC->PlayerCameraManager) : nullptr)
+				{
+					Camera->StartDeafen(HitDeafenTime);
+				}
 			}
 			if (Outcome != EknightHitOutcome::Hit || !HitTargetEffect)
 			{

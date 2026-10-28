@@ -14,6 +14,8 @@
 struct FknightMonsterKnockback
 {
 	void Start(const AActor& Monster, AActor& Target, float Speed, float Time);
+	/** 몬스터 중심에서 대상 쪽 바깥으로 곧장 날린다(돌풍·충격파). 벽에 막혀도 방향을 바꾸지 않는다. */
+	void StartAway(const AActor& Monster, AActor& Target, float Speed, float Time);
 	void Tick(float DeltaTime);
 	void Reset() { Remaining = 0.f; }
 
