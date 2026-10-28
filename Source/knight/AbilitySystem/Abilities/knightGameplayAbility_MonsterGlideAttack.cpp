@@ -40,9 +40,9 @@ void UknightGameplayAbility_MonsterGlideAttack::ActivateAbility(const FGameplayA
 {
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
 
-	if (!StrikeMontage)
+	if (!StrikeMontage && Strikes.IsEmpty())
 	{
-		UE_LOG(LogknightAbility, Error, TEXT("%s has no StrikeMontage."), *GetName());
+		UE_LOG(LogknightAbility, Error, TEXT("%s has no StrikeMontage or Strikes."), *GetName());
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
@@ -52,7 +52,9 @@ void UknightGameplayAbility_MonsterGlideAttack::ActivateAbility(const FGameplayA
 		return;
 	}
 	const UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();
-	StrikesLeft = FMath::Max(1, ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Enraged) ? EnragedStrikeCount : StrikeCount);
+	StrikesLeft = !Strikes.IsEmpty() ? Strikes.Num()
+		: FMath::Max(1, ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Enraged) ? EnragedStrikeCount : StrikeCount);
+	StrikeIndex = 0;
 	Phase = EPhase::Roar;
 	PhaseTime = 0.f;
 	bLanded = false;
@@ -85,46 +87,80 @@ void UknightGameplayAbility_MonsterGlideAttack::HandleTick(int32 ActionNumber)
 	{
 	case EPhase::Roar:
 	case EPhase::Turn:
+	{
 		if (Movement && Target)
 		{
 			Movement->TurnTowards(Target->GetActorLocation(), knightMonsterGlide::TickInterval, TurnRate, 2.f);
 		}
-		if (Phase == EPhase::Roar && Target && bDarkenView && BehindDistance > 0.f && PhaseTime >= CircleStartTime)
+		const float HoldTime = Phase == EPhase::Roar ? (bDarkenView ? FMath::Max(RoarTime, DarknessHoldTime) : RoarTime) : TurnTime;
+		// 포효 중에는 어둠이 다 덮인 뒤(CircleStartTime)부터, 찌르기 사이에는 바로 돈다.
+		if (Target && ShouldCircleForNextStrike() && (Phase == EPhase::Turn || PhaseTime >= CircleStartTime))
 		{
-			UpdateCircle(*Monster, *Target);
+			UpdateCircle(*Monster, *Target, HoldTime);
 		}
-		if (PhaseTime >= (Phase == EPhase::Roar ? (bDarkenView ? FMath::Max(RoarTime, DarknessHoldTime) : RoarTime) : TurnTime))
+		if (PhaseTime >= HoldTime)
 		{
 			StartStrike();
 		}
 		break;
+	}
 	case EPhase::Strike:
-		SetSilhouette(SilhouetteLeadTime > 0.f && PhaseTime >= StabTime - SilhouetteLeadTime && PhaseTime < StabTime);
-		if (Target && bDarkenView && HomingTurnRate > 0.f && PhaseTime < StabTime - HomingLockTime)
+	{
+		const float Stab = CurrentStrike.StabTime;
+		SetSilhouette(SilhouetteLeadTime > 0.f && PhaseTime >= Stab - SilhouetteLeadTime && PhaseTime < Stab);
+		if (Target && bDarkenView && HomingTurnRate > 0.f && PhaseTime < Stab - HomingLockTime)
 		{
-			// 찌르기 직전까지 타깃 쪽으로 꺾는다. 속도는 시작할 때 정한 그대로다.
-			const FVector ToTarget = (Target->GetActorLocation() - Monster->GetActorLocation()).GetSafeNormal2D(UE_SMALL_NUMBER, GlideDirection);
-			const FRotator Heading = FMath::RInterpConstantTo(GlideDirection.Rotation(), ToTarget.Rotation(), knightMonsterGlide::TickInterval, HomingTurnRate);
+			// 고정되는 순간부터 찌르는 순간까지 타깃이 지금처럼 움직인다고 보고 그 자리를 겨눈다.
+			const float Remaining = FMath::Max(Stab - PhaseTime, knightMonsterGlide::TickInterval);
+			FVector TargetVelocity = Target->GetVelocity();
+			TargetVelocity.Z = 0.f;
+			const FVector Aim = Target->GetActorLocation() + TargetVelocity * FMath::Min(Remaining, HomingLockTime);
+			const FVector ToAim = Aim - Monster->GetActorLocation();
+			const FRotator Heading = FMath::RInterpConstantTo(GlideDirection.Rotation(), ToAim.GetSafeNormal2D(UE_SMALL_NUMBER, GlideDirection).Rotation(),
+				knightMonsterGlide::TickInterval, HomingTurnRate);
 			GlideDirection = Heading.Vector();
 			Monster->SetActorRotation(Heading);
+			if (HomingMaxSpeed > 0.f)
+			{
+				// 남은 시간에 꼬리 끝(몸 앞 TailReach)이 겨눈 곳에 닿는 속도.
+				GlideSpeed = FMath::Clamp((static_cast<float>(ToAim.Size2D()) - CurrentStrike.Reach) / Remaining, HomingMinSpeed, FMath::Max(HomingMinSpeed, HomingMaxSpeed));
+			}
 			SetGlideVelocity(GlideDirection * GlideSpeed);
 		}
-		if (PhaseTime >= HitStartTime && PhaseTime <= HitEndTime)
+		if (PhaseTime >= CurrentStrike.HitStartTime && PhaseTime <= CurrentStrike.HitEndTime)
 		{
 			ApplyHits();
 		}
 		if (PhaseTime >= StrikeEndTime)
 		{
 			SetNoFlinch(false);
+			++StrikeIndex;
 			if (--StrikesLeft > 0)
 			{
 				Phase = EPhase::Turn;
 				PhaseTime = 0.f;
+				// 등 뒤로 돌 때는 공중으로 올라가 어둠 밖으로 사라졌다가 다음 찌르기에서 다시 내려온다.
+				UknightMonsterHoverComponent* const Hover = ShouldCircleForNextStrike() ? Monster->FindComponentByClass<UknightMonsterHoverComponent>() : nullptr;
+				if (Hover)
+				{
+					Hover->SetAirborne(true, FMath::Max(0.1f, TurnTime * 0.5f));
+				}
 			}
-			else
+			else if (bLand)
 			{
 				StartLand();
 			}
+			else
+			{
+				StartRise();
+			}
+		}
+		break;
+	}
+	case EPhase::Rise:
+		if (PhaseTime >= RiseTime)
+		{
+			EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, false);
 		}
 		break;
 	case EPhase::Land:
@@ -156,6 +192,8 @@ void UknightGameplayAbility_MonsterGlideAttack::StartStrike()
 	const UknightMonsterTargetingComponent* const Targeting = Monster ? Monster->GetTargetingComponent() : nullptr;
 	const AActor* const Target = Targeting ? Targeting->GetCurrentTarget() : nullptr;
 	Phase = EPhase::Strike;
+	CurrentStrike = GetStrike(StrikeIndex);
+	const float Stab = CurrentStrike.StabTime;
 	HitActors.Reset();
 	SetNoFlinch(true);
 
@@ -168,26 +206,29 @@ void UknightGameplayAbility_MonsterGlideAttack::StartStrike()
 	{
 		const FVector ToTarget = Target->GetActorLocation() - Monster->GetActorLocation();
 		Direction = ToTarget.GetSafeNormal2D(UE_SMALL_NUMBER, Direction);
-		Travel = FMath::Max(0.f, static_cast<float>(ToTarget.Size2D()) - TailReach);
+		Travel = FMath::Max(0.f, static_cast<float>(ToTarget.Size2D()) - CurrentStrike.Reach);
 	}
-	const float Speed = FMath::Max(Travel / StabTime, MinGlideSpeed);
+	const float Speed = FMath::Max(Travel / Stab, MinGlideSpeed);
 	// 최소 속도로 날면 일찍 도착하므로 그만큼 몽타주 앞부분을 건너뛴다. 판정 시각은 몽타주 시간 그대로다.
-	const float StartPosition = FMath::Clamp(StabTime - Travel / Speed, 0.f, StabTime);
+	const float StartPosition = FMath::Clamp(Stab - Travel / Speed, 0.f, Stab);
 	PhaseTime = StartPosition;
 	Monster->SetActorRotation(Direction.Rotation());
-	UAbilityTask_PlayMontageAndWait* const StrikeTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, StrikeMontage,
-		1.f, NAME_None, true, 1.f, StartPosition);
-	StrikeTask->ReadyForActivation();
-	// 마지막이 아니면 타깃 너머 RepassDistance까지 지나간다(찌르는 순간 몸은 타깃 TailReach 앞).
-	const float AfterStab = StrikesLeft > 1 ? (TailReach + RepassDistance) / Speed : PassTime;
-	StrikeEndTime = StabTime + AfterStab;
+	if (CurrentStrike.Montage)
+	{
+		UAbilityTask_PlayMontageAndWait* const StrikeTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, CurrentStrike.Montage,
+			1.f, NAME_None, true, 1.f, StartPosition);
+		StrikeTask->ReadyForActivation();
+	}
+	// 마지막이 아니면 타깃 너머 RepassDistance까지 지나간다(찌르는 순간 몸은 타깃 Reach 앞).
+	const float AfterStab = StrikesLeft > 1 ? (CurrentStrike.Reach + RepassDistance) / Speed : PassTime;
+	StrikeEndTime = Stab + AfterStab;
 	GlideDirection = Direction;
 	GlideSpeed = Speed;
 	StartGlideForce(Direction * Speed, StrikeEndTime - StartPosition);
 	// 꼬리가 바닥 가까이의 타깃에 닿도록 찌르는 순간까지 낮게 내려온다.
 	if (UknightMonsterHoverComponent* const Hover = Monster->FindComponentByClass<UknightMonsterHoverComponent>())
 	{
-		Hover->SetAirborne(false, FMath::Max(0.1f, StabTime - StartPosition));
+		Hover->SetAirborne(false, FMath::Max(0.1f, Stab - StartPosition));
 	}
 	UE_LOG(LogknightAI, Log, TEXT("%s: glide strike at %.0f cm/s from %.2f s, %d left."), *GetNameSafe(Monster), Speed, StartPosition, StrikesLeft - 1);
 }
@@ -214,6 +255,48 @@ void UknightGameplayAbility_MonsterGlideAttack::StartLand()
 	UE_LOG(LogknightAI, Log, TEXT("%s: glide ends, exhausted landing."), *GetNameSafe(Monster));
 }
 
+void UknightGameplayAbility_MonsterGlideAttack::StartRise()
+{
+	AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetAvatarActorFromActorInfo());
+	SetDarkness(false);
+	Phase = EPhase::Rise;
+	PhaseTime = 0.f;
+	if (UknightMonsterHoverComponent* const Hover = Monster ? Monster->FindComponentByClass<UknightMonsterHoverComponent>() : nullptr)
+	{
+		Hover->SetAirborne(true, RiseTime);
+	}
+	if (RiseMontage)
+	{
+		UAbilityTask_PlayMontageAndWait* const RiseTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, RiseMontage);
+		RiseTask->ReadyForActivation();
+	}
+	UE_LOG(LogknightAI, Log, TEXT("%s: glide ends, rising back to the air turn."), *GetNameSafe(Monster));
+}
+
+FknightMonsterGlideStrike UknightGameplayAbility_MonsterGlideAttack::GetStrike(int32 Index) const
+{
+	if (!Strikes.IsEmpty())
+	{
+		return Strikes[FMath::Clamp(Index, 0, Strikes.Num() - 1)];
+	}
+	FknightMonsterGlideStrike Strike;
+	Strike.Montage = StrikeMontage;
+	Strike.StabTime = StabTime;
+	Strike.Reach = TailReach;
+	Strike.HitSocket = HitSocket;
+	Strike.HitRadius = HitRadius;
+	Strike.HitStartTime = HitStartTime;
+	Strike.HitEndTime = HitEndTime;
+	// 단일 값이면 첫 찌르기만 등 뒤에서 한다(분노 연속 찌르기는 지나간 뒤 돌아서 바로).
+	Strike.bFromBehind = Index == 0;
+	return Strike;
+}
+
+bool UknightGameplayAbility_MonsterGlideAttack::ShouldCircleForNextStrike() const
+{
+	return bDarkenView && BehindDistance > 0.f && GetStrike(StrikeIndex).bFromBehind;
+}
+
 void UknightGameplayAbility_MonsterGlideAttack::HandleGetUpFinished()
 {
 	if (IsActive())
@@ -230,12 +313,12 @@ void UknightGameplayAbility_MonsterGlideAttack::ApplyHits()
 	{
 		return;
 	}
-	const FVector Center = Mesh && Mesh->DoesSocketExist(HitSocket) ? Mesh->GetSocketLocation(HitSocket) : Avatar->GetActorLocation();
-	const int32 NewHits = UknightCombatLibrary::ApplyAreaMeleeHits(Avatar, Center, FCollisionShape::MakeSphere(HitRadius), HitParams, HitActors);
+	const FVector Center = Mesh && Mesh->DoesSocketExist(CurrentStrike.HitSocket) ? Mesh->GetSocketLocation(CurrentStrike.HitSocket) : Avatar->GetActorLocation();
+	const int32 NewHits = UknightCombatLibrary::ApplyAreaMeleeHits(Avatar, Center, FCollisionShape::MakeSphere(CurrentStrike.HitRadius), HitParams, HitActors);
 #if ENABLE_DRAW_DEBUG
 	if (knightMonsterDebug::ShouldDrawAttacks())
 	{
-		DrawDebugSphere(GetWorld(), Center, HitRadius, 16, NewHits == 0 ? FColor::Red : FColor::Magenta, false, knightMonsterGlide::TickInterval, 0, 3.f);
+		DrawDebugSphere(GetWorld(), Center, CurrentStrike.HitRadius, 16, NewHits == 0 ? FColor::Red : FColor::Magenta, false, knightMonsterGlide::TickInterval, 0, 3.f);
 	}
 #endif
 }
@@ -294,9 +377,9 @@ void UknightGameplayAbility_MonsterGlideAttack::SetCollapsed(bool bOn)
 	bCollapsedApplied = bOn;
 }
 
-void UknightGameplayAbility_MonsterGlideAttack::UpdateCircle(AknightMonsterCharacterBase& Monster, const AActor& Target)
+void UknightGameplayAbility_MonsterGlideAttack::UpdateCircle(AknightMonsterCharacterBase& Monster, const AActor& Target, float HoldTime)
 {
-	const float Remaining = FMath::Max(RoarTime, DarknessHoldTime) - PhaseTime;
+	const float Remaining = HoldTime - PhaseTime;
 	if (Remaining <= 0.f)
 	{
 		return;
