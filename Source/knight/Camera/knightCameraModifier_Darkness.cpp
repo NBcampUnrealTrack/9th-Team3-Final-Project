@@ -39,6 +39,15 @@ void UknightCameraModifier_Darkness::SetSilhouette(const UPrimitiveComponent* So
 	}
 }
 
+void UknightCameraModifier_Darkness::SetWarning(const UPrimitiveComponent* Source, const FVector& Location, float Strength)
+{
+	if (DarknessSource.Get() == Source)
+	{
+		WarningLocation = Location;
+		WarningTarget = bDarkness ? FMath::Clamp(Strength, 0.f, 1.f) : 0.f;
+	}
+}
+
 void UknightCameraModifier_Darkness::SetCustomDepth(bool bOn)
 {
 	UPrimitiveComponent* const Source = DarknessSource.Get();
@@ -58,7 +67,12 @@ bool UknightCameraModifier_Darkness::ModifyCamera(float DeltaTime, FMinimalViewI
 		bDarkness = false;
 		bSilhouette = false;
 	}
-	Alpha = FMath::Clamp(Alpha + DeltaTime / (bDarkness ? FadeInTime : -FadeOutTime), 0.f, 1.f);
+	if (!bDarkness)
+	{
+		WarningTarget = 0.f;
+	}
+	WarningAlpha = FMath::FInterpConstantTo(WarningAlpha, WarningTarget, DeltaTime, 1.f / WarningFadeTime);
+	Alpha =FMath::Clamp(Alpha + DeltaTime / (bDarkness ? FadeInTime : -FadeOutTime), 0.f, 1.f);
 	SilhouetteAlpha = FMath::Clamp(SilhouetteAlpha + DeltaTime / (bSilhouette ? SilhouetteFadeTime : -SilhouetteFadeTime), 0.f, 1.f);
 	// 윤곽선이 다 사라진 뒤에 커스텀 뎁스를 끈다. 끄는 순간 윤곽선이 툭 끊기지 않게 한다.
 	SetCustomDepth(bSilhouette || SilhouetteAlpha > 0.f);
@@ -79,6 +93,10 @@ bool UknightCameraModifier_Darkness::ModifyCamera(float DeltaTime, FMinimalViewI
 			const APawn* const Pawn = PC ? PC->GetPawn() : nullptr;
 			const FVector Center = (Pawn ? Pawn->GetActorLocation() : InOutPOV.Location) - InOutPOV.Location;
 			const FVector Forward = InOutPOV.Rotation.Vector();
+			// 경고: 빛무리 중심(카메라 기준)과 세기. 색의 w는 빛무리 크기.
+			const FVector WarningCenter = WarningLocation - InOutPOV.Location;
+			MaterialInstance->SetVectorParameterValue(TEXT("Warning"), FLinearColor(WarningCenter.X, WarningCenter.Y, WarningCenter.Z, WarningAlpha));
+			MaterialInstance->SetVectorParameterValue(TEXT("WarningColor"), FLinearColor(WarningColor.R, WarningColor.G, WarningColor.B, WarningRadius));
 			MaterialInstance->SetVectorParameterValue(TEXT("Center"), FLinearColor(Center.X, Center.Y, Center.Z, Radius));
 			MaterialInstance->SetVectorParameterValue(TEXT("CameraForward"), FLinearColor(Forward.X, Forward.Y, Forward.Z, Feather));
 			MaterialInstance->SetVectorParameterValue(TEXT("Look"), FLinearColor(Alpha, OutsideBrightness, SilhouetteAlpha * SilhouetteStrength, 0.f));

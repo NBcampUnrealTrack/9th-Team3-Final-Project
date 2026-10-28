@@ -108,6 +108,13 @@ void UknightGameplayAbility_MonsterGlideAttack::HandleTick(int32 ActionNumber)
 	{
 		const float Stab = CurrentStrike.StabTime;
 		SetSilhouette(SilhouetteLeadTime > 0.f && PhaseTime >= Stab - SilhouetteLeadTime && PhaseTime < Stab);
+		if (bDarkenView && WarningStartStrength > 0.f)
+		{
+			// 날아들기 시작하면 희미하게 켜서 방향을 고정하는 순간 가장 진하고, 찌르는 순간 끈다.
+			const float LockTime = Stab - HomingLockTime;
+			const float Progress = FMath::Clamp((PhaseTime - StrikeStartTime) / FMath::Max(LockTime - StrikeStartTime, 0.05f), 0.f, 1.f);
+			SetWarning(PhaseTime < Stab ? FMath::Lerp(WarningStartStrength, 1.f, Progress * Progress) : 0.f);
+		}
 		if (Target && bDarkenView && HomingTurnRate > 0.f && PhaseTime < Stab - HomingLockTime)
 		{
 			// 고정되는 순간부터 찌르는 순간까지 타깃이 지금처럼 움직인다고 보고 그 자리를 겨눈다.
@@ -212,6 +219,7 @@ void UknightGameplayAbility_MonsterGlideAttack::StartStrike()
 	// 최소 속도로 날면 일찍 도착하므로 그만큼 몽타주 앞부분을 건너뛴다. 판정 시각은 몽타주 시간 그대로다.
 	const float StartPosition = FMath::Clamp(Stab - Travel / Speed, 0.f, Stab);
 	PhaseTime = StartPosition;
+	StrikeStartTime = StartPosition;
 	Monster->SetActorRotation(Direction.Rotation());
 	if (CurrentStrike.Montage)
 	{
@@ -514,6 +522,22 @@ void UknightGameplayAbility_MonsterGlideAttack::SetDarkness(bool bOn)
 		}
 	});
 	bDarknessOn = bOn;
+}
+
+void UknightGameplayAbility_MonsterGlideAttack::SetWarning(float Strength)
+{
+	const AActor* const Avatar = GetAvatarActorFromActorInfo();
+	const USkeletalMeshComponent* const Mesh = GetCurrentActorInfo() ? GetCurrentActorInfo()->SkeletalMeshComponent.Get() : nullptr;
+	if (!Avatar || !bDarknessOn)
+	{
+		return;
+	}
+	// 메시는 낮게 내려오거나 떠오르므로 캡슐 대신 몸통(WarningBone)에 띄운다.
+	const FVector Location = Mesh && Mesh->DoesSocketExist(WarningBone) ? Mesh->GetSocketLocation(WarningBone) : Avatar->GetActorLocation();
+	AknightPlayerCameraManager::ForEachLocalCamera(Avatar, [Mesh, Location, Strength](AknightPlayerCameraManager& Camera)
+	{
+		Camera.SetDarknessWarning(Mesh, Location, Strength);
+	});
 }
 
 void UknightGameplayAbility_MonsterGlideAttack::SetSilhouette(bool bOn)

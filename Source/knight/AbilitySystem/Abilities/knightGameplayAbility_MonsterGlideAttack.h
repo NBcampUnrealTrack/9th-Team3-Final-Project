@@ -188,6 +188,17 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Darkness", meta=(EditCondition="bDarkenView", ClampMin=0, Units="s"))
 	float SilhouetteLeadTime = 0.5f;
 
+	/**
+	 * 어둠 속에서 날아드는 동안 몬스터 몸에 붙는 검붉은 빛무리 경고의 시작 세기(0~1). 날아들기 시작할 때 이 세기로 켜서
+	 * 방향을 고정하는 순간(StabTime - HomingLockTime) 1이 되고, 찌르는 순간 끈다. 0이면 경고 없음.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Darkness", meta=(EditCondition="bDarkenView", ClampMin=0, ClampMax=1))
+	float WarningStartStrength = 0.2f;
+
+	/** 빛무리 중심이 되는 뼈. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Darkness", meta=(EditCondition="bDarkenView"))
+	FName WarningBone = TEXT("spine_02");
+
 	/** 어둠 속 첫 찌르기를 시작할 위치: 타깃에서 카메라 반대쪽으로 이 거리. 벽이 있으면 벽 앞까지. 0이면 돌지 않는다. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Darkness", meta=(EditCondition="bDarkenView", ClampMin=0, Units="cm"))
 	float BehindDistance = 2200.f;
@@ -246,6 +257,8 @@ private:
 	void SetDarkness(bool bOn);
 	void SetCollapsed(bool bOn);
 	void SetSilhouette(bool bOn);
+	/** 어둠 속 몬스터 몸에 Strength만큼 검붉은 빛무리를 띄운다. */
+	void SetWarning(float Strength);
 	void SetGettingUp(bool bOn);
 	void UpdateCircle(AknightMonsterCharacterBase& Monster, const AActor& Target, float HoldTime);
 	FVector GetBehindLocation(const AknightMonsterCharacterBase& Monster, const AActor& Target) const;
@@ -263,6 +276,8 @@ private:
 	/** 지금(Strike) 또는 다음(Roar·Turn) 찌르기 번호. */
 	int32 StrikeIndex = 0;
 	FknightMonsterGlideStrike CurrentStrike;
+	/** 이번 찌르기를 시작한 몽타주 위치(앞부분을 건너뛰면 0보다 크다). */
+	float StrikeStartTime = 0.f;
 	/** 이번 찌르기가 끝나는 시각(StrikeMontage 초). */
 	float StrikeEndTime = 0.f;
 	/** 지금 쓰는 이동 루트 모션 소스(등 뒤로 돌기, 활강). 0이면 없음. */
