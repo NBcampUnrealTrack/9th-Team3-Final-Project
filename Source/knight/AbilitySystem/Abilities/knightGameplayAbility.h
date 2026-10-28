@@ -136,7 +136,7 @@ protected:
 
 	/**
 	 * (2026-10-20) 스탠스(한손/양손) 보정을 곱한 타격 값. 공격 어빌리티가 ApplyMeleeHit·그로기 예측(WatchAttack)에 넘기기 전에 부른다.
-	 * 보정값은 ASC(UknightAbilitySystemComponent::GetStanceModifiers). 몬스터는 그대로.
+	 * 보정값은 ASC(UknightAbilitySystemComponent::GetStanceModifiers). 몬스터는 그대로. bApplyStanceHitScale을 끈 공격도 그대로.
 	 */
 	FknightMeleeHitParams GetStanceScaledHitParams(const FknightMeleeHitParams& Params) const;
 
@@ -172,6 +172,14 @@ protected:
 	/** (2026-10-20) 공격 모션에 기계식 타이밍(ASC MechTiming)을 쓸지. 공격마다 끌 수 있다(StartMechTiming을 부르는 공격만 해당). */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Knight|Attack Feel")
 	bool bUseMechTiming = true;
+
+	/**
+	 * (2026-10-28 사용자 결정) 끄면 이 공격은 스탠스 피해·그로기 보정(GetStanceScaledHitParams)을 받지 않는다. 속도·행동 에너지 보정은 그대로.
+	 * 패링 반격처럼 나가는 횟수가 보스 공격에 달린 공격용: 한손이 빨라도 더 나가지 않아서 양손 배율이 그냥 이득이 됐다.
+	 * GA_Knight_ParryCounter가 끈다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Knight|Stance")
+	bool bApplyStanceHitScale = true;
 
 private:
 	TSharedPtr<class FknightMechAttackTiming> ActiveMechTiming;
