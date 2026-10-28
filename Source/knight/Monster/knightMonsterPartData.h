@@ -106,6 +106,10 @@ struct KNIGHT_API FknightMonsterPartDefinition
 	/** 부서지는 순간 부위 자리에서 한 번 재생한다(잔향 가슴 약점). 비우면 소리 없음. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Break", meta=(EditCondition="bBreakable"))
 	TObjectPtr<USoundBase> BreakSound;
+
+	/** 떨어진 조각(BreakPieceMesh)이 처음 땅에 닿을 때 한 번 재생한다. 비우면 소리 없음. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Break", meta=(EditCondition="bBreakable"))
+	TObjectPtr<USoundBase> BreakPieceLandSound;
 };
 
 /** 여러 부위가 모두 부서졌을 때만 붙는 태그(두 앞발이 다 부서져야 봉인되는 공격 등). */

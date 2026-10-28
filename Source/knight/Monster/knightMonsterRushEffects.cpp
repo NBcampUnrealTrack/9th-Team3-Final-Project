@@ -1,7 +1,9 @@
 #include "Monster/knightMonsterRushEffects.h"
 
+#include "Components/AudioComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/Character.h"
+#include "Kismet/GameplayStatics.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 
@@ -17,6 +19,10 @@ void FknightMonsterRushEffects::Start(ACharacter& Character)
 	{
 		Wind = UNiagaraFunctionLibrary::SpawnSystemAttached(WindEffect, Character.GetRootComponent(), NAME_None, WindOffset, FRotator::ZeroRotator,
 			EAttachLocation::KeepRelativeOffset, true, true, ENCPoolMethod::AutoRelease);
+	}
+	if (LoopSound)
+	{
+		LoopAudio = UGameplayStatics::SpawnSoundAttached(LoopSound, Character.GetRootComponent());
 	}
 }
 
@@ -50,4 +56,9 @@ void FknightMonsterRushEffects::Stop()
 		Component->Deactivate();
 	}
 	Wind.Reset();
+	if (UAudioComponent* const Audio = LoopAudio.Get())
+	{
+		Audio->FadeOut(LoopSoundFadeOut, 0.f);
+	}
+	LoopAudio.Reset();
 }

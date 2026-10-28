@@ -360,7 +360,8 @@ void UknightMonsterPartComponent::SpawnBreakPiece(const FknightMonsterPartDefini
 	UClass* const PieceClass = Definition.BreakPieceClass ? Definition.BreakPieceClass.Get() : AknightMonsterBreakPiece::StaticClass();
 	if (AknightMonsterBreakPiece* const Piece = World->SpawnActor<AknightMonsterBreakPiece>(PieceClass, SpawnTransform, Params))
 	{
-		Piece->Launch(Definition.BreakPieceMesh, GetOwner()->GetVelocity(), BoneTransform.GetLocation() - GetOwner()->GetActorLocation());
+		Piece->Launch(Definition.BreakPieceMesh, GetOwner()->GetVelocity(), BoneTransform.GetLocation() - GetOwner()->GetActorLocation(),
+			Definition.BreakPieceLandSound);
 	}
 }
 

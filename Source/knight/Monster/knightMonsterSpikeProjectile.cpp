@@ -5,6 +5,7 @@
 #include "DrawDebugHelpers.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
+#include "Kismet/GameplayStatics.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "Monster/knightMonsterDebug.h"
@@ -73,6 +74,10 @@ void AknightMonsterSpikeProjectile::LaunchDown(AActor* InAttacker, const Fknight
 	Remaining = FMath::Max(FallTime, 0.01f);
 	Velocity = (Impact.Landing - GetActorLocation()) / Remaining;
 	SetActorRotation(Velocity.Rotation());
+	if (Impact.FallSound)
+	{
+		UGameplayStatics::SpawnSoundAttached(Impact.FallSound, Root);
+	}
 	// 올라가는 가시는 금방 사라지므로 떨어지는 가시에만 불길을 붙인다. 가시는 비스듬히 돌 수 있어도 불길은 늘 위로 오른다.
 	if (SpikeEffect)
 	{
@@ -123,6 +128,10 @@ void AknightMonsterSpikeProjectile::Land()
 			UNiagaraFunctionLibrary::SpawnSystemAtLocation(this, Effect, Impact.Landing, FRotator::ZeroRotator, FVector::OneVector, true, true,
 				ENCPoolMethod::AutoRelease);
 		}
+	}
+	if (Impact.ImpactSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, Impact.ImpactSound, Impact.Landing);
 	}
 	UWorld* const World = GetWorld();
 	AActor* const AttackerActor = Attacker.Get();
