@@ -58,6 +58,19 @@ public:
 		UMaterialInterface* SmokeMaterial, UMaterialInterface* EmberMaterial, UMaterialInterface* ScorchMaterial, float Height = 1000.f, float Radius = 150.f);
 
 	/**
+	 * 불기둥이 솟기 직전 그 자리 바닥에서 새어 나오는 예고: 바닥에 낮게 깔려 깜빡이는 열빛, 가늘게 오르는 연기, 위로 튀는 불씨(계속 생성).
+	 * 바닥에 스케일 1로 스폰하고 타격 순간 끈다. Radius(cm)는 새어 나오는 바닥 범위의 반지름.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|FX")
+	static UNiagaraSystem* BuildFireWarningSystem(const FString& PackagePath, UMaterialInterface* GlowMaterial, UMaterialInterface* SmokeMaterial,
+		UMaterialInterface* EmberMaterial, float Radius = 120.f);
+
+	/** 불기둥 예고의 박자 한 번: 바닥에서 짧게 번쩍이는 열빛과 위로 튀어 오르는 불씨(월드에 스폰, 스스로 끝남). */
+	UFUNCTION(BlueprintCallable, Category="Knight|FX")
+	static UNiagaraSystem* BuildFireWarningBeatSystem(const FString& PackagePath, UMaterialInterface* GlowMaterial, UMaterialInterface* EmberMaterial,
+		float Radius = 120.f);
+
+	/**
 	 * 화상 입은 캐릭터 몸에 붙는 작은 불길, 연기, 불씨(계속 생성). 캡슐처럼 스케일 1이고 위가 +Z인 컴포넌트 중심에 붙이며,
 	 * BodyExtent(cm, 반 크기) 상자 안에서 생긴다. FlameScale은 불길·연기 크기와 생성량 배율이다(가시처럼 가는 물체는 작게).
 	 */
