@@ -115,6 +115,10 @@ float UknightGameplayAbility::GetAttackSpeed() const
 FknightMeleeHitParams UknightGameplayAbility::GetStanceScaledHitParams(const FknightMeleeHitParams& Params) const
 {
 	FknightMeleeHitParams Scaled = Params;
+	if (!bApplyStanceHitScale)
+	{
+		return Scaled;
+	}
 	if (const UknightAbilitySystemComponent* const ASC = GetKnightAbilitySystemComponentFromActorInfo())
 	{
 		const FknightStanceModifiers& Modifiers = ASC->GetStanceModifiers();
