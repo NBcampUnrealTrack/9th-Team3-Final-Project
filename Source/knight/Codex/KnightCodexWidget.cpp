@@ -6,6 +6,7 @@
 #include "knightItemDefinition.h"
 #include "Progression/knightProgressionSubsystem.h"
 #include "Progression/knightSaveSubsystem.h"
+#include "Quest/KnightQuestData.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/Button.h"
 #include "Components/ButtonSlot.h"
@@ -35,6 +36,24 @@ namespace
 		Image->SetVisibility(Texture ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 		if (Texture) Image->SetBrushFromTexture(Texture, true);
 		if (Container) Container->SetVisibility(Texture ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
+	}
+	struct FQuestDropGroup
+	{
+		const UknightItemDefinition* Item = nullptr;
+		TArray<FText> Sources;
+	};
+	FText RewardCount(const FknightRaidReward& Reward)
+	{
+		return Reward.MinCount == Reward.MaxCount
+			? FText::Format(LOCTEXT("Count", "수량 {0}"), FText::AsNumber(Reward.MinCount))
+			: FText::Format(LOCTEXT("CountRange", "수량 {0}–{1}"), FText::AsNumber(Reward.MinCount), FText::AsNumber(Reward.MaxCount));
+	}
+	FText PartSource(const FGameplayTag& Tag)
+	{
+		FString Part = Tag.ToString();
+		int32 Dot = INDEX_NONE;
+		if (Part.FindLastChar(TEXT('.'), Dot)) Part.RightChopInline(Dot + 1);
+		return FText::Format(LOCTEXT("BreakSource", "부위 파괴: {0}"), FText::FromString(Part));
 	}
 }
 
@@ -101,6 +120,13 @@ void UKnightCodexDropEntryWidget::Configure(const FknightRaidReward& Reward)
 		Details.Add(FText::Format(LOCTEXT("PartCondition", "부위 파괴: {0}"), FText::FromName(Reward.RequiredBrokenPart.GetTagName())));
 	}
 	if (Text_Details) Text_Details->SetText(FText::Join(LOCTEXT("DetailSeparator", " · "), Details));
+}
+
+void UKnightCodexDropEntryWidget::ConfigureQuestDrop(const UknightItemDefinition* Item, const TArray<FText>& Sources)
+{
+	if (Text_Name) Text_Name->SetText(Item && !Item->DisplayName.IsEmpty() ? Item->DisplayName : LOCTEXT("UnknownItem", "아이템 정보 없음"));
+	SetImage(Image_Icon, Item ? Item->Icon.LoadSynchronous() : nullptr, GetWidgetFromName(TEXT("Size_ItemIcon")));
+	if (Text_Details) Text_Details->SetText(FText::Join(FText::FromString(TEXT("\n")), Sources));
 }
 
 TSubclassOf<UKnightCodexWidget> UKnightCodexWidget::GetSharedWidgetClass()
@@ -458,26 +484,113 @@ void UKnightCodexWidget::RefreshBoss()
 	SetImage(Image_Portrait, Portrait, GetWidgetFromName(TEXT("Size_Portrait")));
 	if (Text_NoPortrait) Text_NoPortrait->SetVisibility(ESlateVisibility::Collapsed);
 	if (Box_Drops) Box_Drops->ClearChildren();
+	bool bDataUnavailable = false;
+	bool bFoundQuest = false;
+	TMap<FPrimaryAssetId, FQuestDropGroup> QuestDrops;
+	const UKnightQuestCatalog* Catalog = UKnightQuestSettings::LoadCatalog();
+	if (!Catalog)
+	{
+		bDataUnavailable = true;
+		UE_LOG(Logknight, Warning, TEXT("Codex quest catalog could not be loaded for %s."), *Boss->BossId.ToString());
+	}
+	else
+	{
+		TArray<UKnightQuestDefinition*> Quests;
+		Catalog->GetQuestDefinitions(Quests);
+		// The catalog lookup excludes null, empty and duplicated IDs. These are bad data, not empty rewards.
+		bDataUnavailable = Quests.Num() != Catalog->Quests.Num();
+		Quests.Sort([](const UKnightQuestDefinition& A, const UKnightQuestDefinition& B)
+		{
+			if (A.Difficulty != B.Difficulty) return A.Difficulty < B.Difficulty;
+			return A.QuestId.ToString() < B.QuestId.ToString();
+		});
+		for (const UKnightQuestDefinition* Quest : Quests)
+		{
+			if (Quest->BossId != Boss->BossId) continue;
+			// BossId is the stable quest/Codex key. Some planned Hard quests have no boss class/definition yet.
+			if (!Boss->MonsterDefinition || (Quest->BossDefinition && Quest->BossDefinition != Boss->MonsterDefinition))
+			{
+				bDataUnavailable = true;
+				UE_LOG(Logknight, Warning, TEXT("Codex %s has a quest with a mismatched monster definition: %s"),
+					*Boss->BossId.ToString(), *Quest->GetPathName());
+				continue;
+			}
+			bFoundQuest = true;
+			const FText Difficulty = Quest->Difficulty == EKnightQuestDifficulty::Hard
+				? LOCTEXT("HardDifficulty", "어려움") : LOCTEXT("NormalDifficulty", "보통");
+			auto AddReward = [&](const FknightRaidReward& Reward, const FText& Source)
+			{
+				const UknightItemDefinition* Item = Reward.Item;
+				const FPrimaryAssetId ItemId = Item ? Item->GetPrimaryAssetId() : FPrimaryAssetId();
+				if (!ItemId.IsValid())
+				{
+					bDataUnavailable = true;
+					UE_LOG(Logknight, Warning, TEXT("Codex quest %s has an unavailable reward item."), *Quest->GetPathName());
+					return;
+				}
+				FQuestDropGroup& Group = QuestDrops.FindOrAdd(ItemId);
+				Group.Item = Item;
+				Group.Sources.Add(FText::Format(LOCTEXT("QuestRewardSource", "{0} · {1} · {2} · 확률 {3}"),
+					Difficulty, Source, RewardCount(Reward), FText::AsPercent(Reward.Chance)));
+			};
+			for (const FknightRaidReward& Reward : Quest->ClearRewards)
+			{
+				AddReward(Reward, LOCTEXT("ClearSource", "완료"));
+			}
+			for (const FKnightQuestPartBreakReward& Entry : Quest->PartBreakRewards)
+			{
+				if (!Entry.Reward.RequiredBrokenPart.IsValid())
+				{
+					bDataUnavailable = true;
+					continue;
+				}
+				AddReward(Entry.Reward, PartSource(Entry.Reward.RequiredBrokenPart));
+			}
+		}
+	}
 	const UknightRaidDefinition* Raid = Boss->RaidDefinition;
 	const bool bMatchingRaid = Raid && (!Raid->TargetMonster || Raid->TargetMonster == Boss->MonsterDefinition);
-	if (Raid && !bMatchingRaid)
+	if (!bFoundQuest && Catalog && !bDataUnavailable && Raid && !bMatchingRaid)
 	{
+		bDataUnavailable = true;
 		UE_LOG(Logknight, Warning, TEXT("Codex %s has a raid targeting a different monster; rewards hidden."), *Boss->BossId.ToString());
 	}
-	if (bMatchingRaid && Box_Drops && GetOwningPlayer())
+	if (Box_Drops && GetOwningPlayer())
 	{
 		TSubclassOf<UKnightCodexDropEntryWidget> Class = DropEntryClass;
 		if (!Class) Class = LoadClass<UKnightCodexDropEntryWidget>(nullptr, TEXT("/Game/Knight/UI/Menu/Codex/WBP_KnightCodexDropEntry.WBP_KnightCodexDropEntry_C"));
 		if (Class)
 		{
-			for (const FknightRaidReward& Reward : Raid->Rewards)
+			if (bFoundQuest)
 			{
-				UKnightCodexDropEntryWidget* Row = CreateWidget<UKnightCodexDropEntryWidget>(GetOwningPlayer(), Class);
-				if (Row) { Row->Configure(Reward); Box_Drops->AddChildToVerticalBox(Row); }
+				TArray<FPrimaryAssetId> ItemIds;
+				QuestDrops.GetKeys(ItemIds);
+				ItemIds.Sort([](const FPrimaryAssetId& A, const FPrimaryAssetId& B) { return A.ToString() < B.ToString(); });
+				for (const FPrimaryAssetId& ItemId : ItemIds)
+				{
+					const FQuestDropGroup& Group = QuestDrops.FindChecked(ItemId);
+					UKnightCodexDropEntryWidget* Row = CreateWidget<UKnightCodexDropEntryWidget>(GetOwningPlayer(), Class);
+					if (Row) { Row->ConfigureQuestDrop(Group.Item, Group.Sources); Box_Drops->AddChildToVerticalBox(Row); }
+				}
+			}
+			else if (Catalog && !bDataUnavailable && bMatchingRaid)
+			{
+				for (const FknightRaidReward& Reward : Raid->Rewards)
+				{
+					UKnightCodexDropEntryWidget* Row = CreateWidget<UKnightCodexDropEntryWidget>(GetOwningPlayer(), Class);
+					if (Row) { Row->Configure(Reward); Box_Drops->AddChildToVerticalBox(Row); }
+				}
 			}
 		}
+		else bDataUnavailable = true;
 	}
-	if (Text_NoDrops) Text_NoDrops->SetVisibility(Box_Drops && Box_Drops->GetChildrenCount() > 0 ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+	if (Text_NoDrops)
+	{
+		Text_NoDrops->SetText(bDataUnavailable ? LOCTEXT("DropsUnavailable", "일부 보상 정보를 불러올 수 없습니다.")
+			: LOCTEXT("NoDrops", "획득 가능한 아이템이 없습니다."));
+		Text_NoDrops->SetVisibility(bDataUnavailable || !Box_Drops || Box_Drops->GetChildrenCount() == 0
+			? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	}
 }
 
 #undef LOCTEXT_NAMESPACE
