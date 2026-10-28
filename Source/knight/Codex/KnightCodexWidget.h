@@ -16,6 +16,7 @@ class UWidgetSwitcher;
 class UTexture2D;
 class UScrollBox;
 class UKnightCodexData;
+class UknightItemDefinition;
 struct FKnightCodexBossEntry;
 struct FknightRaidReward;
 
@@ -68,6 +69,7 @@ class KNIGHT_API UKnightCodexDropEntryWidget : public UUserWidget
 	GENERATED_BODY()
 public:
 	void Configure(const FknightRaidReward& Reward);
+	void ConfigureQuestDrop(const UknightItemDefinition* Item, const TArray<FText>& Sources);
 protected:
 	UPROPERTY(meta=(BindWidget)) TObjectPtr<UTextBlock> Text_Name;
 	UPROPERTY(meta=(BindWidget)) TObjectPtr<UTextBlock> Text_Details;
