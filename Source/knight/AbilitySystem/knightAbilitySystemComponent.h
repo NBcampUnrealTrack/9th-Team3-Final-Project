@@ -298,6 +298,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack", meta=(EditCondition="bOnlyDashCancelsAttackRecovery"))
 	bool bAttacksCancelAttackRecovery = true;
 
+	/**
+	 * (2026-10-28 사용자 결정) 위 후딜 시간에 스탠스 전환(Ability.Stance.Switch)도 허용한다. 캔슬 창이 열리자마자 공격을 끊고 스탠스를 바꾼다.
+	 * 콤보 도중 바꾸고 다음 단계로 이어 가는 용도(UknightGameplayAbility_StanceSwitch::bKeepComboOnSwitch). 끄면 후딜이 지난 뒤에만. 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack", meta=(EditCondition="bOnlyDashCancelsAttackRecovery"))
+	bool bStanceSwitchCancelsAttackRecovery = true;
+
 	/** (2026-10-14) Window.Cancel 태그 수가 늘 때(창이 열릴 때) 시각을 기록한다. */
 	void HandleCancelWindowChanged(const FGameplayTag Tag, int32 NewCount);
 	FDelegateHandle CancelWindowHandle;

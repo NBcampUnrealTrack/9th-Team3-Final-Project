@@ -28,6 +28,7 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_HitReact, "Ability.HitReact", "Hit reaction ability, activated by damage events.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Death, "Ability.Death", "Death ability, activated when Health reaches zero.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Item_RepairKit, "Ability.Item.RepairKit", "Repair kit use (heals Health and the lowest parts first).");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Stance_Switch, "Ability.Stance.Switch", "(2026-10-28) One-handed / two-handed stance switch. May cancel attack recovery like the quickstep.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_ActivateFail_Cost, "Ability.ActivateFail.Cost", "Activation failed: cost not met.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_ActivateFail_Cooldown, "Ability.ActivateFail.Cooldown", "Activation failed: on cooldown.");
@@ -73,6 +74,7 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_PartBroken_Legs, "State.PartBroken.Legs", "Legs broken: lower walk and run speed.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Stance_TwoHanded, "State.Stance.TwoHanded", "(2026-10-15) Two-handed weapon stance. Without it the Knight is one-handed. Removed when the sword is sheathed.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Stance_Switching, "State.Stance.Switching", "(2026-10-15) Stance switch montage is playing (keeps the combat stance awake).");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Combo_Greatsword, "Combo.Greatsword", "Parent of the greatsword combo step tags (steps are in Config/DefaultGameplayTags.ini).");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Window_Combo, "Window.Combo", "Buffered attack input may chain into the next attack.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Window_Cancel, "Window.Cancel", "Buffered evasive input may cancel the current action.");

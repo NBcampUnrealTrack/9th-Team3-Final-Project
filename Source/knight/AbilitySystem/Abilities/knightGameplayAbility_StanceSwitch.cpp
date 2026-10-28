@@ -5,6 +5,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
+#include "knight.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
@@ -17,6 +18,9 @@ UknightGameplayAbility_StanceSwitch::UknightGameplayAbility_StanceSwitch(const F
 	ActivationPolicy = EknightAbilityActivationPolicy::OnInputTriggered;
 	ActivationGroup = EknightAbilityActivationGroup::Exclusive_Replaceable;
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
+	// (2026-10-28) 공격 후딜에도 공격을 끊을 수 있게 ASC가 이 태그를 본다(bStanceSwitchCancelsAttackRecovery).
+	SetAssetTags(FGameplayTagContainer(knightGameplayTags::Ability_Stance_Switch));
+	ComboTagsToKeep.AddTag(knightGameplayTags::Combo_Greatsword);
 	ActivationOwnedTags.AddTag(knightGameplayTags::State_Stance_Switching);
 	ActivationBlockedTags.AddTag(knightGameplayTags::State_Dead);
 	ActivationBlockedTags.AddTag(knightGameplayTags::State_HitReact);
@@ -64,6 +68,25 @@ bool UknightGameplayAbility_StanceSwitch::CanActivateAbility(const FGameplayAbil
 	return Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags) && IsWeaponInHand(ActorInfo);
 }
 
+void UknightGameplayAbility_StanceSwitch::PreActivate(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayAbilityActivationInfo ActivationInfo, FOnGameplayAbilityEnded::FDelegate* OnGameplayAbilityEndedDelegate,
+	const FGameplayEventData* TriggerEventData)
+{
+	// (2026-10-28) Super::PreActivate가 실행 중인 공격을 끊으면 그 공격의 콤보 단계 태그도 빠진다 → 먼저 적어 둔다.
+	// 지난 전환이 남겨 둔 태그도 여기 들어가서, 콤보 중 두 번 바꿔도 이어진다.
+	PendingComboTags.Reset();
+	bInterruptingAction = false;
+	if (const UAbilitySystemComponent* const ASC = ActorInfo ? ActorInfo->AbilitySystemComponent.Get() : nullptr)
+	{
+		if (bKeepComboOnSwitch)
+		{
+			PendingComboTags = ASC->GetOwnedGameplayTags().Filter(ComboTagsToKeep);
+		}
+		bInterruptingAction = ASC->HasMatchingGameplayTag(knightGameplayTags::Window_Cancel) || !PendingComboTags.IsEmpty();
+	}
+	Super::PreActivate(Handle, ActorInfo, ActivationInfo, OnGameplayAbilityEndedDelegate, TriggerEventData);
+}
+
 void UknightGameplayAbility_StanceSwitch::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
 {
@@ -92,9 +115,19 @@ void UknightGameplayAbility_StanceSwitch::ActivateAbility(const FGameplayAbility
 		PlayStanceSwitchEffects(Character, bToTwoHanded);
 	}
 
+	// (2026-10-28) 끊은 공격의 콤보 단계를 남겨서 다음 공격 키가 다음 단계로 이어지게 한다. 지난 전환이 남긴 것은 PendingComboTags에 들어 있다.
+	ReleaseKeptComboTags();
+	if (!PendingComboTags.IsEmpty())
+	{
+		KeepComboTags(ASC, PendingComboTags);
+	}
+
 	const bool bStandingStill = Character && Character->GetVelocity().Size2D() <= MaxSpeedForMontage;
 	UAnimMontage* const Montage = bToTwoHanded ? ToTwoHandedMontage.Get() : ToOneHandedMontage.Get();
-	if (!Montage || !bStandingStill)
+	UE_LOG(LogknightAbility, Log, TEXT("%s: switched to %s, interrupting=%d, kept combo tags [%s]"), *GetName(),
+		bToTwoHanded ? TEXT("two-handed") : TEXT("one-handed"), bInterruptingAction ? 1 : 0, *KeptComboTags.ToStringSimple());
+	// (2026-10-28) 행동을 끊고 바꿀 때는 몽타주 없이 바로 바꾼다(몽타주가 돌면 다음 공격이 막힌다).
+	if (!Montage || !bStandingStill || (bSkipMontageWhenInterrupting && bInterruptingAction))
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
 		return;
@@ -192,6 +225,51 @@ void UknightGameplayAbility_StanceSwitch::PlayStanceSwitchEffects(const ACharact
 				}, FMath::Max(0.05f, ThrusterBurstDuration), false);
 			}
 		}
+	}
+}
+
+void UknightGameplayAbility_StanceSwitch::KeepComboTags(UAbilitySystemComponent* ASC, const FGameplayTagContainer& Tags)
+{
+	UWorld* const World = GetWorld();
+	if (!ASC || !World || ComboKeepTime <= 0.f)
+	{
+		return;
+	}
+	KeptComboTags = Tags;
+	ASC->AddLooseGameplayTags(KeptComboTags);
+	World->GetTimerManager().SetTimer(ComboKeepTimer, this, &ThisClass::ReleaseKeptComboTags, ComboKeepTime, false);
+	ComboKeepActivatedHandle = ASC->AbilityActivatedCallbacks.AddUObject(this, &ThisClass::OnAbilityActivatedWhileKeeping);
+}
+
+void UknightGameplayAbility_StanceSwitch::ReleaseKeptComboTags()
+{
+	if (UWorld* const World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(ComboKeepTimer);
+	}
+	if (UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		if (ComboKeepActivatedHandle.IsValid())
+		{
+			ASC->AbilityActivatedCallbacks.Remove(ComboKeepActivatedHandle);
+		}
+		if (!KeptComboTags.IsEmpty())
+		{
+			ASC->RemoveLooseGameplayTags(KeptComboTags);
+		}
+	}
+	ComboKeepActivatedHandle.Reset();
+	KeptComboTags.Reset();
+}
+
+void UknightGameplayAbility_StanceSwitch::OnAbilityActivatedWhileKeeping(UGameplayAbility* Ability)
+{
+	// 다음 배타 행동(공격·퀵스텝·가드 등)이 나가면 바로 지운다. 공격은 이미 남긴 태그로 발동 검사를 통과한 뒤다.
+	// 남겨 두면 그 다음 단계(예: 2타)가 같은 태그로 한 번 더 나가거나, 퀵스텝 뒤 공격이 퀵스텝 공격 대신 2타가 될 수 있다.
+	const UknightGameplayAbility* const KnightAbility = Cast<UknightGameplayAbility>(Ability);
+	if (KnightAbility && KnightAbility != this && KnightAbility->GetActivationGroup() != EknightAbilityActivationGroup::Independent)
+	{
+		ReleaseKeptComboTags();
 	}
 }
 

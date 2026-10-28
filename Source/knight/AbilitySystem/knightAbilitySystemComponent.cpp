@@ -421,9 +421,11 @@ bool UknightAbilitySystemComponent::IsActivationGroupBlocked(EknightAbilityActiv
 		}
 		// (2026-10-14) 공격 후딜은 퀵스텝만 끊는다. 콤보 창이 같이 열려 있으면 아래 규칙으로 다음 공격은 이어진다.
 		// (2026-10-23) bAttacksCancelAttackRecovery면 후딜에도 다음 공격을 허용한다(콤보 창이 없는 공격용).
+		// (2026-10-28) bStanceSwitchCancelsAttackRecovery면 스탠스 전환도 캔슬 창이 열리자마자 공격을 끊는다.
 		if (HasMatchingGameplayTag(knightGameplayTags::Window_Cancel)
 			&& (!IsAttackRecoveryDashOnly() || AbilityTags.HasTag(knightGameplayTags::Ability_Boost_Dash)
-				|| (bAttacksCancelAttackRecovery && AbilityTags.HasTag(knightGameplayTags::Ability_Attack))))
+				|| (bAttacksCancelAttackRecovery && AbilityTags.HasTag(knightGameplayTags::Ability_Attack))
+				|| (bStanceSwitchCancelsAttackRecovery && AbilityTags.HasTag(knightGameplayTags::Ability_Stance_Switch))))
 		{
 			return false;
 		}
