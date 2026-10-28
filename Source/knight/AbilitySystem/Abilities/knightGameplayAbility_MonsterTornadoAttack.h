@@ -15,6 +15,7 @@ class UAnimMontage;
  *   날갯짓: SummonMontage를 재생하며 타깃 쪽으로 돈다. SpawnTime에 몸 아래 바닥에 회오리를 만들고,
  *           분노 중이면 EnragedTornadoCount개를 SpawnInterval 간격으로 만든다. 여러 개면 좌우로 SpawnSpread씩 벌려 놓고
  *           첫 진행 방향도 SpreadAngle씩 벌려 양옆에서 조여 오게 한다. 0이면 각자 자리에서 타깃 쪽으로 나가 타깃 근처에서 엇갈린다.
+ *           bEnragedVolley면 분노 중에는 벌리지 않고 한 자리에서 연달아 쏘고, 마지막 하나는 EnragedLastScale배 크기로 만든다.
  *   지침: ExhaustTime부터 TiredTime 동안 날갯짓(메시 애니메이션 전체)이 TiredAnimRate까지 점점 느려지고, 높이도 TiredAirAlpha까지
  *         내려온다. 떨어질 것을 미리 보여 플레이어가 다가갈 틈을 준다. 착지 때는 남은 높이를 LandDescendTime 동안 내려온다.
  *   탈진 착지: 지침이 끝나면 공중 턴을 끝내고 LandMontage를 LandHoldTime 동안, 이어서 GetUpMontage를 재생한다(공격 없는 딜 타임).
@@ -61,6 +62,14 @@ protected:
 	/** State.Monster.Enraged일 때 만드는 수(잔향 공명해방 2개). */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Tornado", meta=(ClampMin=1))
 	int32 EnragedTornadoCount = 2;
+
+	/** 분노 중에는 좌우로 벌리지 않고 몸 아래 한 자리에서 SpawnInterval 간격으로 연달아 타깃을 향해 쏜다(잔향 공명 3연사). */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Tornado")
+	bool bEnragedVolley = false;
+
+	/** 분노 중 마지막 회오리의 크기 배율. 판정(Radius·Height)과 이펙트, 물결이 함께 커진다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Tornado", meta=(ClampMin=0.1))
+	float EnragedLastScale = 1.f;
 
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Tornado", meta=(ClampMin=0, Units="s"))
 	float SpawnInterval = 0.6f;
@@ -126,6 +135,7 @@ private:
 	float PhaseTime = 0.f;
 	int32 SpawnCount = 0;
 	int32 Spawned = 0;
+	bool bEnraged = false;
 	bool bLanded = false;
 	bool bGettingUpApplied = false;
 };

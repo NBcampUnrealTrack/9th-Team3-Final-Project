@@ -40,7 +40,8 @@ void UknightGameplayAbility_MonsterTornadoAttack::ActivateAbility(const FGamepla
 		return;
 	}
 	const UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();
-	SpawnCount = FMath::Max(1, ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Enraged) ? EnragedTornadoCount : TornadoCount);
+	bEnraged = ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Enraged);
+	SpawnCount = FMath::Max(1, bEnraged ? EnragedTornadoCount : TornadoCount);
 	Spawned = 0;
 	Phase = EPhase::Summon;
 	PhaseTime = 0.f;
@@ -146,8 +147,9 @@ void UknightGameplayAbility_MonsterTornadoAttack::SpawnTornado(int32 Index, int3
 	const UknightMonsterTargetingComponent* const Targeting = Monster->GetTargetingComponent();
 	AActor* const Target = Targeting ? Targeting->GetCurrentTarget() : nullptr;
 
-	// 몸 아래 바닥(캡슐 바닥)에서 생긴다. 여러 개면 가운데를 기준으로 좌우로 벌린다.
-	const float Side = Index - (Count - 1) * 0.5f;
+	// 몸 아래 바닥(캡슐 바닥)에서 생긴다. 여러 개면 가운데를 기준으로 좌우로 벌린다. 연사는 모두 가운데에서 나간다.
+	const bool bVolley = bEnraged && bEnragedVolley;
+	const float Side = bVolley ? 0.f : Index - (Count - 1) * 0.5f;
 	const UCapsuleComponent* const Capsule = Monster->GetCapsuleComponent();
 	const FVector Ground = Monster->GetActorLocation() - FVector(0.f, 0.f, Capsule ? Capsule->GetScaledCapsuleHalfHeight() : 0.f);
 	const FVector Location = Ground + Monster->GetActorRightVector().GetSafeNormal2D() * Side * SpawnSpread;
@@ -161,7 +163,18 @@ void UknightGameplayAbility_MonsterTornadoAttack::SpawnTornado(int32 Index, int3
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 	if (AknightMonsterTornado* const Spawn = World->SpawnActor<AknightMonsterTornado>(Location, Direction.Rotation(), SpawnParams))
 	{
-		Spawn->Launch(Monster, Target, HitParams, Tornado, Direction);
+		FknightMonsterTornadoParams Params = Tornado;
+		if (bEnraged && Index == Count - 1 && !FMath::IsNearlyEqual(EnragedLastScale, 1.f))
+		{
+			const float Scale = EnragedLastScale;
+			Params.Radius *= Scale;
+			Params.Height *= Scale;
+			Params.EffectScale *= Scale;
+			Params.BurstRippleRadius *= Scale;
+			Params.WaterRippleRadius *= Scale;
+			Params.WaterSplashScale *= Scale;
+		}
+		Spawn->Launch(Monster, Target, HitParams, Params, Direction);
 	}
 	UE_LOG(LogknightAI, Log, TEXT("%s: tornado %d/%d spawned."), *GetNameSafe(Monster), Index + 1, Count);
 }
