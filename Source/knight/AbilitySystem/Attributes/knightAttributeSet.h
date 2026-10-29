@@ -170,7 +170,12 @@ private:
 	UPROPERTY(BlueprintReadOnly, Category="Knight|Mech|Speed", meta=(AllowPrivateAccess=true))
 	FGameplayAttributeData DodgeSpeed;
 
-	/** 퀵스텝을 다시 쓰기까지 기다리는 시간(초, 소수점 가능). 대시 이동이 끝난 시점부터 센다. 기본 0.5초(임시). */
+	/**
+	 * 퀵스텝을 다시 쓰기까지 기다리는 시간(초, 소수점 가능). 대시 이동이 끝난 시점부터 센다.
+	 * (2026-10-28 사용자 결정) 기본 0.5 → 0: 스테미너가 허용하는 한 연속으로 쓴다(경직 캔슬·선입력). 파츠로 다시 늘릴 수 있게 스탯은 남긴다.
+	 * (2026-10-29 사용자 결정) 0 → 0.3: 연속 퀵스텝 사이 후딜 0.3초. 그동안 누른 퀵스텝은 입력 버퍼(0.5초)에 남았다가 끝나는 순간 나간다.
+	 *   공격·가드는 지금처럼 경직(0.1초)부터 퀵스텝을 끊을 수 있다. 바뀔 수 있는 값.
+	 */
 	UPROPERTY(BlueprintReadOnly, Category="Knight|Mech|Speed", meta=(AllowPrivateAccess=true))
 	FGameplayAttributeData DodgeCooldown;
 

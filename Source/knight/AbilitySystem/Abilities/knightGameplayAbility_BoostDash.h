@@ -27,6 +27,8 @@ class USoundBase;
  *   대시 거리 = DashDistance x DodgeSpeed(메카 속성, 배율) x 중량 계수(무브먼트 컴포넌트)
  *   대시 시간(DashDuration)은 그대로 두어 몽타주 타이밍이 어긋나지 않게 한다. 그래서 거리가 늘면 속도도 빨라진다.
  *   쿨타임 = 대시 이동이 끝난 뒤 DodgeCooldown(메카 속성, 초) 동안 다시 대시할 수 없다. 기본 0.5초.
+ *   (2026-10-28 사용자 결정) 기본 0초: 스테미너(StaminaCost, 0보다 많으면 가불)가 허용하는 한 연속으로 쓴다. 파츠로 늘리면 다시 걸린다.
+ *   (2026-10-29 사용자 결정) 기본 0.3초: 연속 퀵스텝 사이 후딜. 그동안 누른 키는 입력 버퍼에 남았다가 쿨타임이 끝나면 나간다(대시 간격 0.65초).
  *
  * 경직과 캔슬 (2026-10-07):
  *   흐름: 대시 이동(DashDuration) → 경직(RecoveryDuration) → 종료. 몽타주는 경직까지 이어서 재생된다.
@@ -36,6 +38,8 @@ class USoundBase;
  *     - 대시: 실행 중에 퀵스텝 키(InputTag.Boost)를 다시 누르면 입력 처리(knightAbilitySystemComponent)가 재발동을 시도한다.
  *       경직 중이고 쿨타임이 끝났을 때만 받아들여 지금 대시를 끝내고 새 대시로 다시 시작한다(bRetriggerInstancedAbility, 비용 다시 냄).
  *       대시 이동 도중의 요청은 거절해 이동이 끊기지 않는다(그 누름은 입력 버퍼에 남아 경직이 시작되면 다시 시도된다).
+ *       (2026-10-28) 쿨타임이 0이면 콤보처럼 이어진다: 이동 중에 미리 누른 키(선입력, 버퍼 0.5초)나 경직 중에 누른 키로 경직을 끊고 다음 대시.
+ *       (2026-10-29) 쿨타임 0.3초가 경직(0.1초)보다 길어서, 다음 대시는 경직 캔슬이 아니라 쿨타임이 끝날 때 버퍼에서 나간다.
  *
  * 입력 (2026-10-08): 퀵스텝 키(기본 LeftControl, IA_Boost → InputTag.Boost)를 한 번 누르면 대시. 달리기는 LeftShift(InputTag.Run)로 분리했다.
  * (전에는 Shift를 누르고 있으면 달리기, 두 번 탭하면 knightGameplayAbility_Sprint가 태그로 대시를 발동했다)
@@ -56,6 +60,13 @@ public:
 		const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
 
 protected:
+	/**
+	 * (2026-10-29 사용자 결정) 퀵스텝 비활성화: 꺼져 있으면 퀵스텝 키(Ctrl)를 눌러도 나가지 않는다(CanActivateAbility가 거절).
+	 * 어빌리티 세트·입력 매핑은 그대로라, GA_Knight_BoostDash에서 이 칸만 켜면 다시 쓸 수 있다. 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Dash")
+	bool bQuickstepEnabled = false;
+
 	/** 배율·중량 계수가 1일 때의 대시 거리. (2026-10-07 900 → 750, 2026-10-16 750 → 375 절반으로 조정) */
 	UPROPERTY(EditDefaultsOnly, Category="Dash", meta=(ClampMin=0, Units="cm"))
 	float DashDistance = 375.f;
