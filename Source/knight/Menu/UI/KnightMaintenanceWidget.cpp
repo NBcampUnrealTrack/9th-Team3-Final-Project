@@ -50,6 +50,15 @@ namespace
 	const FLinearColor Increase(FColor(0x4B, 0xE8, 0x80));
 	const FLinearColor Alert(FColor(0xE5, 0x48, 0x4D));
 
+	bool IsExcludedCraftingRecipe(const UknightCraftRecipeDefinition* Recipe)
+	{
+		if (!Recipe) return false;
+		const FName PackageName = Recipe->GetOutermost()->GetFName();
+		return PackageName == FName(TEXT("/Game/Knight/Dev/Maintenance/DA_Recipe_Test_Head"))
+			|| PackageName == FName(TEXT("/Game/Knight/Dev/Maintenance/DA_Recipe_Test_Torso"))
+			|| PackageName == FName(TEXT("/Game/Knight/Dev/Maintenance/DA_Recipe_Test_Weapon"));
+	}
+
 	enum EInfoTab : int32 { InfoSpec = 0, InfoSet = 1, InfoMaterial = 2 };
 
 	struct FStatRow
@@ -1161,6 +1170,17 @@ void UKnightMaintenanceWidget::RebuildList(bool bRestoreFocus)
 	if (Category == 1) { RebuildEnhancementTarget(bRestoreFocus); return; }
 	if (Category == 3) { RebuildSocketList(); return; }
 	if (Category == 4) { RefreshMaterialContainer(); return; }
+	const bool bExcludedSelection = Category == 0 && IsExcludedCraftingRecipe(SelectedRecipe.Get());
+	if (bExcludedSelection)
+	{
+		ShowConfirm(false);
+		SelectedPart = nullptr;
+		SelectedRecipe = nullptr;
+		SetInfoTab(InfoMaterial);
+		if (Txt_Status) Txt_Status->SetText(FText::GetEmpty());
+		if (Txt_ConfirmTitle) Txt_ConfirmTitle->SetText(FText::GetEmpty());
+		if (Txt_ConfirmBody) Txt_ConfirmBody->SetText(FText::GetEmpty());
+	}
 	// 줄을 다시 만들면 포커스가 사라지므로 기억했다가 복원.
 	const UknightPartItemDefinition* FocusedPart = nullptr;
 	if (bRestoreFocus)
@@ -1195,7 +1215,8 @@ void UKnightMaintenanceWidget::RebuildList(bool bRestoreFocus)
 	if (Category == 0 && Catalog)
 	{
 		for (const UknightCraftRecipeDefinition* Recipe : Catalog->Recipes)
-			if (Recipe && Recipe->Result && Recipe->Result->SlotTag == Slot) AddEntry(Recipe->Result, Recipe);
+			if (Recipe && !IsExcludedCraftingRecipe(Recipe) && Recipe->Result && Recipe->Result->SlotTag == Slot)
+				AddEntry(Recipe->Result, Recipe);
 	}
 	else if (Category != 0 && Progression)
 	{
@@ -1237,6 +1258,7 @@ void UKnightMaintenanceWidget::RebuildList(bool bRestoreFocus)
 		for (UKnightMaintenanceEntryWidget* Entry : Entries)
 			if (Entry && Entry->GetPart() == FocusedPart) { Entry->SetFocus(); break; }
 	}
+	if (bExcludedSelection && Btn_Craft) Btn_Craft->SetFocus();
 }
 
 const UknightWeaponItemDefinition* UKnightMaintenanceWidget::GetEnhancementTarget(bool& bComplete) const
@@ -1727,12 +1749,19 @@ void UKnightMaintenanceWidget::RefreshSocketDetails()
 	if (SocketAssignmentSummary) SocketAssignmentSummary->SetText(Slots > 3
 		? FText::Format(LOCTEXT("SocketOverflowState", "장착 {0} / {1} · 해금 {1}칸\n화면 표시 3칸 · 읽기 전용"), AssignedCount, Slots)
 		: FText::Format(LOCTEXT("SocketActualState", "장착 현황  {0} / {1} · 해금 {1}칸"), AssignedCount, Slots));
-	if (SocketDetailDescription) SocketDetailDescription->SetText(SelectedSocketSlot == INDEX_NONE
+	const FText DetailDescription = SelectedSocketSlot == INDEX_NONE
 		? FText::GetEmpty() : bUnresolved
 			? FText::Format(LOCTEXT("SocketUnknownId", "저장된 아이템 ID: {0}"), FText::FromString(Assignment->ItemId.ToString()))
 			: Equipped ? (Equipped->Effect == EKnightSocketEffect::SocketGaugeCharge
 				? LOCTEXT("SocketGuardDescription", "키트 충전에 필요한 퍼펙트 가드 횟수를 줄입니다. 최소 횟수는 1회입니다.") : Equipped->Description)
-			: LOCTEXT("SocketEmptyDescription", "보유 소켓을 선택한 다음 장착을 누르세요."));
+			: FText::GetEmpty();
+	if (SocketDetailDescription)
+	{
+		SocketDetailDescription->SetText(DetailDescription);
+		SocketDetailDescription->SetVisibility(DetailDescription.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+		if (UVerticalBoxSlot* DetailSlot = Cast<UVerticalBoxSlot>(SocketDetailDescription->Slot))
+			DetailSlot->SetPadding(FMargin(0.f, 0.f, 0.f, DetailDescription.IsEmpty() ? 0.f : 20.f));
+	}
 	TArray<FText> Lines;
 	if (SelectedSocketSlot == INDEX_NONE && Progression)
 	{
@@ -1823,7 +1852,7 @@ void UKnightMaintenanceWidget::RefreshSocketDetails()
 				Equipped ? Equipped->DisplayName : bUnresolved ? LOCTEXT("SocketUnknownTitle", "장착 소켓 확인 불가") : LOCTEXT("SocketEmptyTitle", "빈 소켓 칸"));
 		SocketCandidateText->SetText(Candidate
 			? FText::Format(LOCTEXT("SocketPendingCandidate", "{0}\n장착 후보: {1}\n{2}"), Position, Candidate->DisplayName, SocketItemEffectText(Candidate))
-			: FText::Format(LOCTEXT("SocketChooseCandidate", "{0}\n\n왼쪽 목록에서 장착할 소켓을 선택하세요."), Position));
+			: FText::Format(LOCTEXT("SocketChooseCandidate", "{0}\n\n목록에서 장착할 소켓을 선택하세요."), Position));
 	}
 	FText Notice = SocketFeedback;
 	if (!Saves || !Saves->HasSelectedSlot()) Notice = LOCTEXT("SocketNoProfile", "저장 슬롯을 선택하세요.");
@@ -1838,6 +1867,7 @@ void UKnightMaintenanceWidget::RefreshSocketDetails()
 
 void UKnightMaintenanceWidget::SelectEntry(UKnightMaintenanceEntryWidget* Entry)
 {
+	if (Category == 0 && Entry && IsExcludedCraftingRecipe(Entry->GetRecipe())) Entry = nullptr;
 	if (SelectedPart != (Entry ? Entry->GetPart() : nullptr)) UpgradeResultMessage = FText::GetEmpty();
 	const bool bDifferentRecipe = Category == 0 && SelectedRecipe != (Entry ? Entry->GetRecipe() : nullptr);
 	SelectedPart = Entry ? Entry->GetPart() : nullptr;
@@ -2025,9 +2055,15 @@ void UKnightMaintenanceWidget::RefreshEnhancementDetails()
 		for (const FknightPartStatModifier& Mod : Weapon->StatModifiers)
 			if (Mod.Attribute != UknightCoreAttributeSet::GetAttackPowerAttribute() || Mod.ModifierOp != EGameplayModOp::AddBase)
 				Lines.Add(ModifierText(Mod));
-		if (Weapon->AbilitySet) Lines.Add(LOCTEXT("EnhancementAbilityNotice", "AbilitySet의 조건부 효과는 이 개별 수치에 포함되지 않습니다."));
 	}
-	if (EnhancementStatsText) EnhancementStatsText->SetText(FText::Join(FText::FromString(TEXT("\n")), Lines));
+	if (EnhancementStatsText)
+	{
+		const FText Stats = FText::Join(FText::FromString(TEXT("\n")), Lines);
+		EnhancementStatsText->SetText(Stats);
+		EnhancementStatsText->SetVisibility(Stats.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+		if (UVerticalBoxSlot* StatsSlot = Cast<UVerticalBoxSlot>(EnhancementStatsText->Slot))
+			StatsSlot->SetPadding(FMargin(0.f, 0.f, 0.f, Stats.IsEmpty() ? 0.f : 20.f));
+	}
 	RefreshCurrency();
 	RefreshWeaponUpgradePanel();
 }
@@ -2088,9 +2124,6 @@ void UKnightMaintenanceWidget::RefreshWeaponUpgradePanel()
 	FNumberFormattingOptions Percent; Percent.MinimumFractionalDigits = 1; Percent.MaximumFractionalDigits = 1;
 	if (UpgradeChance) UpgradeChance->SetText(bNext ? FText::AsPercent(Quote.EffectiveSuccessChance, &Percent)
 		: bMax ? LOCTEXT("UpgradeMax", "최대 강화") : FText::GetEmpty());
-	if (EnhancementGuidance) EnhancementGuidance->SetText(FText::Format(LOCTEXT("EnhancementRules",
-		"실패해도 강화 단계는 유지됩니다.\n\n강화 시도마다 돈이 소모됩니다.\n\n관문 소재는 성공 시에만 소모됩니다.\n\n{0}"),
-		Weapon ? FText::Format(LOCTEXT("EnhancementDataMax", "최대 강화 +{0}"), Weapon->UpgradeSteps.Num()) : FText::GetEmpty()));
 	FText Reason;
 	switch (Quote.Availability)
 	{
@@ -2098,7 +2131,7 @@ void UKnightMaintenanceWidget::RefreshWeaponUpgradePanel()
 	case EKnightWeaponUpgradeAvailability::NoSlot: Reason = LOCTEXT("UpgradeNoSlot", "저장 슬롯을 선택하세요."); break;
 	case EKnightWeaponUpgradeAvailability::NotOwned: Reason = LOCTEXT("UpgradeNotOwned", "보유하지 않은 무기입니다."); break;
 	case EKnightWeaponUpgradeAvailability::MaxLevel: Reason = LOCTEXT("UpgradeMax", "최대 강화"); break;
-	case EKnightWeaponUpgradeAvailability::InsufficientMoney: Reason = LOCTEXT("UpgradeNoMoney", "돈이 부족합니다."); break;
+	case EKnightWeaponUpgradeAvailability::InsufficientMoney: break;
 	case EKnightWeaponUpgradeAvailability::MissingMaterial: Reason = LOCTEXT("UpgradeNoGate", "관문 소재가 부족합니다."); break;
 	case EKnightWeaponUpgradeAvailability::SaveBlocked: Reason = LOCTEXT("UpgradeSaveBlocked", "저장 처리 중입니다. 잠시 후 다시 시도하세요."); break;
 	default: Reason = !Weapon && !EnhancementTargetId.IsValid()

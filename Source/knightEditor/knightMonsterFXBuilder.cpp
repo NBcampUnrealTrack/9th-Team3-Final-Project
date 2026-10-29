@@ -704,6 +704,81 @@ UNiagaraSystem* UknightMonsterFXBuilder::BuildFireEruptionSystem(const FString& 
 	return BuildLayeredSystem(PackagePath, Layers, 0.f, 1.f, FVector(-Spread, -Spread, -300.f), FVector(Spread, Spread, Height * 2.f + 600.f), Burst);
 }
 
+UNiagaraSystem* UknightMonsterFXBuilder::BuildFireWarningSystem(const FString& PackagePath, UMaterialInterface* GlowMaterial,
+	UMaterialInterface* SmokeMaterial, UMaterialInterface* EmberMaterial, float Radius)
+{
+	using namespace knightMonsterFX;
+	if (!GlowMaterial)
+	{
+		return nullptr;
+	}
+	const FVector3f Base(Radius * 2.f, Radius * 2.f, 10.f);
+
+	// 바닥에 낮게 깔려 깜빡이는 열빛. 거의 움직이지 않고 짧게 켜졌다 꺼진다.
+	FSpriteLayer Glow{ TEXT("Glow"), GlowMaterial, 14.f, {0.3f, 0.5f}, {160.f, 160.f}, {240.f, 240.f}, {0.f, 0.f}, 0.f, 0.f, 0.f, 0.f, 0.f,
+		{ {0.f, 0.7f}, {0.5f, 1.f}, {1.f, 0.6f} }, { {0.f, 0.f}, {0.3f, 0.7f}, {1.f, 0.f} }, { {0.f, 0.8f}, {1.f, 1.1f} },
+		ENiagaraSpriteAlignment::Unaligned, 1 };
+	Glow.BoxSize = Base;
+	Glow.bUseVelocity = true;
+	Glow.VelocityMin = FVector3f(-10.f, -10.f, 10.f);
+	Glow.VelocityMax = FVector3f(10.f, 10.f, 40.f);
+
+	// 틈에서 가늘게 오르는 연기.
+	FSpriteLayer Smoke{ TEXT("Smoke"), SmokeMaterial, 8.f, {1.f, 1.6f}, {90.f, 90.f}, {150.f, 150.f}, {0.f, 0.f}, 0.f, 120.f, 0.6f, 80.f, 0.01f,
+		{ {0.f, 6.f}, {0.4f, 4.f}, {1.f, 4.f} }, { {0.f, 0.f}, {0.2f, 0.35f}, {1.f, 0.f} }, { {0.f, 0.5f}, {1.f, 2.f} },
+		ENiagaraSpriteAlignment::Unaligned, 0 };
+	Smoke.BoxSize = Base;
+	Smoke.bUseVelocity = true;
+	Smoke.VelocityMin = FVector3f(-20.f, -20.f, 100.f);
+	Smoke.VelocityMax = FVector3f(20.f, 20.f, 200.f);
+
+	// 위로 튀는 불씨. 타격이 가까워 보이도록 빠르게 많이 오른다.
+	FSpriteLayer Embers{ TEXT("Embers"), EmberMaterial, 30.f, {0.5f, 0.9f}, {6.f, 18.f}, {10.f, 34.f}, {0.f, 0.f}, 0.f, 150.f, 0.5f, 200.f, 0.01f,
+		{ {0.f, 1.f}, {1.f, 0.6f} }, { {0.f, 0.f}, {0.1f, 1.f}, {0.7f, 1.f}, {1.f, 0.f} }, { {0.f, 1.f}, {1.f, 0.5f} },
+		ENiagaraSpriteAlignment::VelocityAligned, 2 };
+	Embers.BoxSize = Base;
+	Embers.bUseVelocity = true;
+	Embers.VelocityMin = FVector3f(-120.f, -120.f, 250.f);
+	Embers.VelocityMax = FVector3f(120.f, 120.f, 600.f);
+
+	const FSpriteLayer Layers[] = { Smoke, Glow, Embers };
+	const float Spread = Radius + 400.f;
+	return BuildLayeredSystem(PackagePath, Layers, 0.f, 1.f, FVector(-Spread, -Spread, -100.f), FVector(Spread, Spread, 900.f));
+}
+
+UNiagaraSystem* UknightMonsterFXBuilder::BuildFireWarningBeatSystem(const FString& PackagePath, UMaterialInterface* GlowMaterial,
+	UMaterialInterface* EmberMaterial, float Radius)
+{
+	using namespace knightMonsterFX;
+	if (!GlowMaterial)
+	{
+		return nullptr;
+	}
+	// 0.1초 동안 한꺼번에 나온다.
+	const float Burst = 0.1f;
+	const FVector3f Base(Radius * 2.f, Radius * 2.f, 10.f);
+
+	FSpriteLayer Flash{ TEXT("Flash"), GlowMaterial, 40.f, {0.18f, 0.28f}, {200.f, 200.f}, {320.f, 320.f}, {0.f, 0.f}, 0.f, 0.f, 0.f, 0.f, 0.f,
+		{ {0.f, 1.4f}, {1.f, 0.6f} }, { {0.f, 0.f}, {0.1f, 1.f}, {1.f, 0.f} }, { {0.f, 0.7f}, {1.f, 1.3f} },
+		ENiagaraSpriteAlignment::Unaligned, 1 };
+	Flash.BoxSize = Base;
+	Flash.bUseVelocity = true;
+	Flash.VelocityMin = FVector3f(-10.f, -10.f, 30.f);
+	Flash.VelocityMax = FVector3f(10.f, 10.f, 80.f);
+
+	FSpriteLayer Embers{ TEXT("Embers"), EmberMaterial, 260.f, {0.5f, 0.8f}, {8.f, 24.f}, {14.f, 44.f}, {0.f, 0.f}, 0.f, 150.f, 0.5f, 200.f, 0.01f,
+		{ {0.f, 1.2f}, {1.f, 0.6f} }, { {0.f, 0.f}, {0.05f, 1.f}, {0.7f, 1.f}, {1.f, 0.f} }, { {0.f, 1.f}, {1.f, 0.5f} },
+		ENiagaraSpriteAlignment::VelocityAligned, 2 };
+	Embers.BoxSize = Base;
+	Embers.bUseVelocity = true;
+	Embers.VelocityMin = FVector3f(-200.f, -200.f, 500.f);
+	Embers.VelocityMax = FVector3f(200.f, 200.f, 1100.f);
+
+	const FSpriteLayer Layers[] = { Flash, Embers };
+	const float Spread = Radius + 500.f;
+	return BuildLayeredSystem(PackagePath, Layers, 0.f, 1.f, FVector(-Spread, -Spread, -100.f), FVector(Spread, Spread, 1200.f), Burst);
+}
+
 UNiagaraSystem* UknightMonsterFXBuilder::BuildBurnSystem(const FString& PackagePath, UMaterialInterface* FireMaterial,
 	UMaterialInterface* SmokeMaterial, UMaterialInterface* EmberMaterial, FVector BodyExtent, float FlameScale)
 {

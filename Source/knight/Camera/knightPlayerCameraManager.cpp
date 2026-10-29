@@ -365,6 +365,14 @@ void AknightPlayerCameraManager::SetDarknessSilhouette(const UPrimitiveComponent
 	}
 }
 
+void AknightPlayerCameraManager::SetDarknessWarning(const UPrimitiveComponent* Source, const FVector& Location, float Strength)
+{
+	if (UknightCameraModifier_Darkness* const Modifier = DarknessClass ? Cast<UknightCameraModifier_Darkness>(FindCameraModifierByClass(DarknessClass)) : nullptr)
+	{
+		Modifier->SetWarning(Source, Location, Strength);
+	}
+}
+
 void AknightPlayerCameraManager::StartDeafen(float Seconds)
 {
 	if (UknightCameraModifier_Deafen* const Modifier = knightCamera::FindOrAddModifier(*this, DeafenClass))

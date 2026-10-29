@@ -23,6 +23,7 @@ class USoundBase;
  *                                     (its melee trace hits with LoopHitParams). Releasing plays ChargeReleaseMontage,
  *                                     whose hits use ReleaseHitParams scaled up to MaxChargeMultiplier after MaxChargeTime.
  * Charging starts only when no other attack / guard / dash is running, or inside Window.Cancel (it cancels them).
+ * (2026-10-28) 그때 바로 시작할 수 없으면 누르고 있는 동안 ChargeWaitTime까지 다시 본다(후딜에 누른 차지가 버려지지 않게).
  * While charging the owner has State.Charging and other attacks are blocked.
  *
  * (2026-10-26 사용자 결정) 해방부터는 일반 공격과 같은 캔슬 규칙: 해방할 때 교체 가능 배타 그룹으로 바뀌어(ChangeActivationGroupWhileActive)
@@ -30,13 +31,15 @@ class USoundBase;
  *   그 뒤에는 가드·이동·점프도 된다. 모으는 동안은 지금처럼 독립 그룹이라 가드·퀵스텝으로 그만둘 수 있다.
  *   행동 에너지: 모으는 동안 ChargeStaminaCost를 조금씩, 해방할 때 ReleaseStaminaCost. 계수·그로기는 FullCharge* 값까지 오른다.
  * (2026-10-27 사용자 결정) 차지해서 치는 느낌: 차지량에 따라 해방 모션 배속 1 → FullChargeReleaseRate(1.2), 락온 중 돌진 거리
- *   MaxWarpDistance(4m) → LockOnFullChargeWarpDistance(7m). 돌진하는 동안 대상을 따라가고(bTrackTargetDuringLunge) 잔상을 남긴다(bReleaseGhostTrail).
+ *   MaxWarpDistance(4m) → LockOnFullChargeWarpDistance(7m, 10-28부터 10m). 돌진하는 동안 대상을 따라가고(bTrackTargetDuringLunge) 잔상을 남긴다(bReleaseGhostTrail).
+ *   (2026-10-28) 잔상은 해방 시작부터 휘두르기 끝까지 남긴다(bReleaseGhostTrailWholeSwing).
  *
  * Bind to InputTag.Attack.Secondary. The heavy combo steps are ordinary knightGameplayAbility_MeleeAttack Blueprints
  * with no input tag; chain them with Combo tags exactly like the light combo.
  *
  * (2026-10-08) 행동 속도(ActionSpeed): 차지 몽타주 3개와 발사 돌진은 행동 속도 배속을 따른다(반복 몽타주가 빨라지면 차지 중 타격도 잦아진다).
  * HoldThreshold·MaxChargeTime·TapBufferTime은 버튼을 누르는 시간 기준이라 그대로 둔다.
+ * (2026-10-28 사용자 결정) 단 풀차지 시간은 스탠스 공격 속도로 나눈다(bScaleChargeTimeByStance). 행동 속도는 위처럼 따르지 않는다.
  */
 UCLASS()
 class KNIGHT_API UknightGameplayAbility_HeavyAttack : public UknightGameplayAbility
@@ -64,6 +67,16 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Heavy", meta=(ClampMin=0, Units="s"))
 	float TapBufferTime = 0.35f;
 
+	/**
+	 * (2026-10-28 사용자 결정) HoldThreshold가 지났는데 아직 차지를 시작할 수 없으면(앞 공격이 캔슬 창 전이거나 가드·퀵스텝 중)
+	 * 누르고 있는 동안 0.05초마다 다시 보고, 되는 순간 차지를 시작한다. 이 시간이 지나도 안 되면 그만둔다.
+	 * 기다리는 동안 키를 떼면 아무것도 하지 않는다(탭 강공격도 나가지 않는다). 0이면 예전처럼 한 번만 본다. 바뀔 수 있는 값.
+	 * 1초 → 2초(같은 날 사용자 결정): 4타는 캔슬 창이 늦게 열려 한손 4타 중에 누른 차지가 1.02초 기다리고 0.1~0.3초 차이로 놓쳤다.
+	 * 양손 4타는 더 느려서 시작하자마자 누르면 1.6~1.7초쯤 기다려야 한다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Heavy", meta=(ClampMin=0, Units="s"))
+	float ChargeWaitTime = 2.f;
+
 	UPROPERTY(EditDefaultsOnly, Category="Charge")
 	TObjectPtr<UAnimMontage> ChargeStartMontage;
 
@@ -85,6 +98,14 @@ protected:
 	/** Charge time (seconds, counted from the start of the charge) that reaches MaxChargeMultiplier. */
 	UPROPERTY(EditDefaultsOnly, Category="Charge", meta=(ClampMin=0.1, Units="s"))
 	float MaxChargeTime = 2.f;
+
+	/**
+	 * (2026-10-28 사용자 결정) 켜면 풀차지까지 걸리는 시간 = MaxChargeTime ÷ 스탠스 공격 속도(ASC 스탠스 보정 AttackSpeedScale).
+	 * 한손(1.1) 약 1.82초, 양손(0.92) 약 2.17초. 차지는 버튼 시간이라 한손이 빨라도 이득이 없고 양손 배율만 남던 것을 맞춘다.
+	 * 행동 속도(ActionSpeed)·공격 배속(AttackAnimationSpeed)은 여전히 따르지 않는다. 끄면 두 스탠스 모두 MaxChargeTime. 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Charge")
+	bool bScaleChargeTimeByStance = true;
 
 	UPROPERTY(EditDefaultsOnly, Category="Charge", meta=(ClampMin=1))
 	float MaxChargeMultiplier = 2.f;
@@ -138,9 +159,11 @@ protected:
 	/**
 	 * (2026-10-27 사용자 결정) 락온 중 해방 돌진 최대 거리. 차지량에 따라 MaxWarpDistance(4m)에서 이 값까지 늘어난다(풀차지 7m).
 	 * 락온 없이 유도로 잡은 대상은 MaxWarpDistance 그대로. 바뀔 수 있는 값.
+	 * (2026-10-28 사용자 결정) 7m → 10m. 돌진은 해방 몽타주의 워프 구간(휘두르기 직전) 안에 끝나야 해서,
+	 * 양손 풀차지 약 0.43초·한손 약 0.36초 안에 10m를 간다(7m일 때보다 1.5배쯤 빠름).
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Charge|Motion Warping", meta=(ClampMin=0, Units="cm"))
-	float LockOnFullChargeWarpDistance = 700.f;
+	float LockOnFullChargeWarpDistance = 1000.f;
 
 	/**
 	 * (2026-10-27) 해방 돌진 속도. 돌진 시간 = 거리 / 이 값(최소 0.25초, 휘두르기 직전까지만).
@@ -166,6 +189,13 @@ protected:
 	/** (2026-10-27 사용자 요청) 해방 돌진하는 동안 락온 돌진과 같은 잔상을 남긴다. 대상 1m(InRangeDistance) 안이면 남기지 않는다. */
 	UPROPERTY(EditDefaultsOnly, Category="Charge|Ghost Trail")
 	bool bReleaseGhostTrail = true;
+
+	/**
+	 * (2026-10-28 사용자 요청 '공격 전체에 잔상') 켜면 돌진할 때만이 아니라 해방 시작부터 휘두르기 판정이 끝날 때까지 잔상을 남긴다.
+	 * 락온·돌진이 없어도, 대상 가까이 가도 끊지 않는다. 끄면 위 설명대로 돌진하는 동안만. 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Charge|Ghost Trail", meta=(EditCondition="bReleaseGhostTrail"))
+	bool bReleaseGhostTrailWholeSwing = true;
 
 	UPROPERTY(EditDefaultsOnly, Category="Charge|Ghost Trail", meta=(EditCondition="bReleaseGhostTrail"))
 	FknightGhostTrailSettings ReleaseGhostTrailSettings;
@@ -263,7 +293,11 @@ private:
 	void OnMeleeHitEvent(FGameplayEventData Payload);
 
 	void TryHeavyStep();
+	/** (2026-10-28) 누르고 있는 동안 차지를 시작할 수 있는지 다시 본다(ChargeWaitTime까지). */
+	void TryStartChargeWhileHeld();
 	bool CanStartCharge() const;
+	/** (2026-10-28) 이번 차지의 풀차지 시간(MaxChargeTime, 켜져 있으면 스탠스 공격 속도로 나눔). 모으는 동안은 스탠스를 바꿀 수 없다(State.Charging). */
+	float GetStanceMaxChargeTime() const;
 	void StartCharge();
 	void StartChargeEffects();
 	void StopChargeEffects();
@@ -281,11 +315,14 @@ private:
 	/** (2026-10-26) 해방 후딜: 캔슬 창이 열리고 후딜이 지난 뒤 새로 누른 이동 입력이면 해방 모션을 끊는다(일반 공격과 같은 규칙). */
 	void CheckReleaseMoveCancel();
 
-	enum class EPhase : uint8 { Deciding, TapBuffer, Charging, Releasing };
+	// WaitingCharge: (2026-10-28) HoldThreshold는 지났는데 아직 차지를 시작할 수 없어 기다리는 중.
+	enum class EPhase : uint8 { Deciding, TapBuffer, WaitingCharge, Charging, Releasing };
 	EPhase Phase = EPhase::Deciding;
 	FknightMeleeHitParams ActiveHitParams;
 	double ChargeStartTime = 0.0;
 	double TapDeadline = 0.0;
+	double ChargeWaitStartTime = 0.0;
+	FTimerHandle ChargeWaitTimer;
 	float LastReleaseChargeAlpha = 0.f;
 	/** (2026-10-27) 이번 해방 모션 배속(차지량에 따라 1 ~ FullChargeReleaseRate). 행동 속도에 곱한다. */
 	float ReleaseRateScale = 1.f;

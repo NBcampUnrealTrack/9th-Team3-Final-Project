@@ -33,6 +33,13 @@ public:
 	/** Source의 윤곽선을 어둠 속에 보이거나 숨긴다. */
 	void SetSilhouette(const UPrimitiveComponent* Source, bool bVisible);
 
+	/**
+	 * 어둠 속 Location에 테두리 없는 검붉은 빛무리를 Strength(0~1)로 띄운다(날아드는 몬스터 경고). 안개 너머의 빛처럼 시선이 Location
+	 * 가까이 지날수록 밝고, 모양은 천천히 일렁여 원으로 보이지 않는다. 0이면 끈다.
+	 * 세기는 WarningFadeTime에 걸쳐 따라가므로 매 틱 불러도 깜빡이지 않는다.
+	 */
+	void SetWarning(const UPrimitiveComponent* Source, const FVector& Location, float Strength);
+
 	/** 처음 켤 때 읽는 에셋. 카메라 매니저가 미리 불러 첫 어둠이 끊기지 않게 한다. */
 	void GatherPreloadAssets(TArray<FSoftObjectPath>& OutPaths) const;
 
@@ -73,6 +80,17 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Darkness|Silhouette", meta=(ClampMin=0.01, Units="s"))
 	float SilhouetteFadeTime = 0.1f;
 
+	/** 경고 색(세기 1일 때 더하는 빛). 블룸으로 하얗게 뜨지 않게 어둡게 둔다. */
+	UPROPERTY(EditDefaultsOnly, Category="Darkness|Warning")
+	FLinearColor WarningColor = FLinearColor(0.25f, 0.02f, 0.01f);
+
+	/** 빛무리 크기. 중심에서 이 거리면 밝기가 약 1/3로 준다(가우스). */
+	UPROPERTY(EditDefaultsOnly, Category="Darkness|Warning", meta=(ClampMin=1, Units="cm"))
+	float WarningRadius = 250.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Darkness|Warning", meta=(ClampMin=0.01, Units="s"))
+	float WarningFadeTime = 0.1f;
+
 private:
 	void SetCustomDepth(bool bOn);
 
@@ -86,4 +104,7 @@ private:
 	/** 0 = 어둠 없음, 1 = 다 어두움. */
 	float Alpha = 0.f;
 	float SilhouetteAlpha = 0.f;
+	FVector WarningLocation = FVector::ZeroVector;
+	float WarningTarget = 0.f;
+	float WarningAlpha = 0.f;
 };

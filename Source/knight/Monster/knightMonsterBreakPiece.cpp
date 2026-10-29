@@ -2,6 +2,7 @@
 
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
+#include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
 
 AknightMonsterBreakPiece::AknightMonsterBreakPiece()
@@ -20,8 +21,14 @@ AknightMonsterBreakPiece::AknightMonsterBreakPiece()
 	MeshComponent->SetCanEverAffectNavigation(false);
 }
 
-void AknightMonsterBreakPiece::Launch(UStaticMesh* Mesh, const FVector& Velocity, const FVector& OutwardDirection)
+void AknightMonsterBreakPiece::Launch(UStaticMesh* Mesh, const FVector& Velocity, const FVector& OutwardDirection, USoundBase* InLandSound)
 {
+	LandSound = InLandSound;
+	if (LandSound)
+	{
+		MeshComponent->SetNotifyRigidBodyCollision(true);
+		MeshComponent->OnComponentHit.AddUniqueDynamic(this, &ThisClass::HandleHit);
+	}
 	MeshComponent->SetStaticMesh(Mesh);
 	Materials.Reset();
 	for (int32 Index = 0; Index < MeshComponent->GetNumMaterials(); ++Index)
@@ -46,6 +53,15 @@ void AknightMonsterBreakPiece::Tick(float DeltaSeconds)
 	Age += DeltaSeconds;
 	SetMaterialParameter(HeatParameter, 1.f - FMath::Clamp(Age / HeatCoolTime, 0.f, 1.f));
 	SetMaterialParameter(FadeParameter, FMath::Clamp((Age - LifeTime) / FadeTime, 0.f, 1.f));
+}
+
+void AknightMonsterBreakPiece::HandleHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse,
+	const FHitResult& Hit)
+{
+	// 튀며 여러 번 부딪혀도 처음 떨어질 때 한 번만 낸다.
+	MeshComponent->OnComponentHit.RemoveDynamic(this, &ThisClass::HandleHit);
+	MeshComponent->SetNotifyRigidBodyCollision(false);
+	UGameplayStatics::PlaySoundAtLocation(this, LandSound, Hit.ImpactPoint);
 }
 
 void AknightMonsterBreakPiece::SetMaterialParameter(FName Parameter, float Value)

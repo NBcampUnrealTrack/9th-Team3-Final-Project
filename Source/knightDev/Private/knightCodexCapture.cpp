@@ -43,6 +43,32 @@ struct FCodexCapture : TSharedFromThis<FCodexCapture>
 		const UTextBlock* Label = Cast<UTextBlock>(Widget(Name));
 		return Label ? Label->GetText().ToString() : FString();
 	}
+	FString DropText(const TCHAR* Name) const
+	{
+		FString Result;
+		const UPanelWidget* Drops = Cast<UPanelWidget>(Widget(TEXT("Box_Drops")));
+		if (!Drops) return Result;
+		for (UWidget* Child : Drops->GetAllChildren())
+		{
+			const UUserWidget* Row = Cast<UUserWidget>(Child);
+			const UTextBlock* Label = Row ? Cast<UTextBlock>(Row->GetWidgetFromName(Name)) : nullptr;
+			if (Label) { Result += Label->GetText().ToString(); Result += TEXT("\n"); }
+		}
+		return Result;
+	}
+	bool HasGroupedDifficulties() const
+	{
+		const UPanelWidget* Drops = Cast<UPanelWidget>(Widget(TEXT("Box_Drops")));
+		if (!Drops) return false;
+		for (UWidget* Child : Drops->GetAllChildren())
+		{
+			const UUserWidget* Row = Cast<UUserWidget>(Child);
+			const UTextBlock* Details = Row ? Cast<UTextBlock>(Row->GetWidgetFromName(TEXT("Text_Details"))) : nullptr;
+			if (Details && Details->GetText().ToString().Contains(TEXT("보통 · 완료"))
+				&& Details->GetText().ToString().Contains(TEXT("어려움 · 완료"))) return true;
+		}
+		return false;
+	}
 	void Click(const TCHAR* Name) { if (UButton* Button = Cast<UButton>(Widget(Name))) Button->OnClicked.Broadcast(); }
 	void Entry(const TCHAR* ListName, int32 Index)
 	{
@@ -54,6 +80,7 @@ struct FCodexCapture : TSharedFromThis<FCodexCapture>
 	}
 	void Capture(const TCHAR* Name)
 	{
+		if (FParse::Param(FCommandLine::Get(), TEXT("KnightSkipCodexCaptures"))) return;
 		FVector2D Pixels; World->GetGameViewport()->GetViewportSize(Pixels);
 		UE_LOG(LogTemp, Display, TEXT("CodexCapture IMAGE %s viewport=%.0fx%.0f title=%s"), Name, Pixels.X, Pixels.Y, *Text(TEXT("Text_WorldTitle")));
 		FScreenshotRequest::RequestScreenshot(FPaths::Combine(Directory, FString(Name)+TEXT(".png")), true, false);
@@ -118,7 +145,10 @@ struct FCodexCapture : TSharedFromThis<FCodexCapture>
 			Check(World->GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>()->RecordQuestCompleted(TEXT("Quest_Janyeol_Normal")), TEXT("isolated quest completion")); break;
 		case 7:
 			Check(Text(TEXT("Text_BossDescription")) != TEXT("관련 퀘스트 완료 시 공개됩니다."), TEXT("open codex refreshes on progression event"));
-			UE_LOG(LogTemp, Display, TEXT("CodexCapture actual drop rows=%d"), Cast<UPanelWidget>(Widget(TEXT("Box_Drops")))->GetChildrenCount());
+			Check(Cast<UPanelWidget>(Widget(TEXT("Box_Drops")))->GetChildrenCount() == 8,
+				TEXT("Janyeol quest drops display while raid rewards are empty"));
+			Check(HasGroupedDifficulties() && DropText(TEXT("Text_Details")).Contains(TEXT("부위 파괴: Head")),
+				TEXT("repeated Janyeol items retain difficulty and part sources"));
 			Capture(TEXT("06_monster_unlocked"));
 			AfterCapture = [this] { Cast<UScrollBox>(Widget(TEXT("Scroll_BossDetail")))->ScrollToEnd(); }; break;
 		case 8:
@@ -142,31 +172,24 @@ struct FCodexCapture : TSharedFromThis<FCodexCapture>
 			Check(Menu->GetCurrentPage() == EKnightMainMenuPage::Home, TEXT("close button delegate restores home")); break;
 		case 13:
 		{
-			// The configured raid currently has no reward rows. Exercise the existing drop WBP with real
-			// quest item data as an explicitly labelled transient fixture; never change the codex's links.
+			Check(Menu->SelectQuest(TEXT("Quest_Janhyang_Hard")), TEXT("different quest selected on stage page"));
 			Menu->ShowPage(EKnightMainMenuPage::Codex); Codex->SelectCategory(2); Codex->SelectBoss(TEXT("Janyeol"));
-			const UKnightQuestDefinition* Quest = LoadObject<UKnightQuestDefinition>(nullptr,
-				TEXT("/Game/Knight/Data/Quests/DA_Quest_Janyeol_Normal.DA_Quest_Janyeol_Normal"));
-			TSubclassOf<UKnightCodexDropEntryWidget> RowClass = LoadClass<UKnightCodexDropEntryWidget>(nullptr,
-				TEXT("/Game/Knight/UI/Menu/Codex/WBP_KnightCodexDropEntry.WBP_KnightCodexDropEntry_C"));
-			UPanelWidget* Drops = Cast<UPanelWidget>(Widget(TEXT("Box_Drops")));
-			Check(Quest && !Quest->ClearRewards.IsEmpty() && RowClass && Drops, TEXT("drop fixture real quest data available"));
-			if (Quest && RowClass && Drops)
-			{
-				Drops->ClearChildren();
-				for (const FknightRaidReward& Reward : Quest->ClearRewards)
-				{
-					UKnightCodexDropEntryWidget* Row = CreateWidget<UKnightCodexDropEntryWidget>(World->GetFirstPlayerController(), RowClass);
-					Row->Configure(Reward); Drops->AddChild(Row);
-				}
-				Widget(TEXT("Text_NoDrops"))->SetVisibility(ESlateVisibility::Collapsed);
-				Cast<UTextBlock>(Widget(TEXT("Label_Drops")))->SetText(INVTEXT("드랍 행 표시 검증 · 임시 화면"));
-				Cast<UScrollBox>(Widget(TEXT("Scroll_BossDetail")))->ScrollToEnd();
-				UE_LOG(LogTemp, Display, TEXT("CodexCapture FIXTURE rows=%d; quest data, not codex reward connection"), Drops->GetChildrenCount());
-			}
+			const FString JanyeolNames = DropText(TEXT("Text_Name"));
+			Check(Cast<UPanelWidget>(Widget(TEXT("Box_Drops")))->GetChildrenCount() == 8,
+				TEXT("selected Janhyang quest does not replace Janyeol drops"));
+			Check(World->GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>()->RecordQuestCompleted(TEXT("Quest_0002")),
+				TEXT("Janhyang Codex unlocked in isolated profile"));
+			Codex->SelectBoss(TEXT("Janhyang"));
+			Check(Cast<UPanelWidget>(Widget(TEXT("Box_Drops")))->GetChildrenCount() == 8
+				&& DropText(TEXT("Text_Name")) != JanyeolNames,
+				TEXT("Janhyang normal and hard quest drops display independently"));
+			Check(HasGroupedDifficulties() && DropText(TEXT("Text_Details")).Contains(TEXT("부위 파괴: Chest"))
+				&& DropText(TEXT("Text_Details")).Contains(TEXT("부위 파괴: Tail")),
+				TEXT("Janhyang repeated items retain chest/tail and difficulty sources"));
+			Cast<UScrollBox>(Widget(TEXT("Scroll_BossDetail")))->ScrollToEnd();
 			break;
 		}
-		case 14: Capture(TEXT("11_drop_rows_fixture_720")); break;
+		case 14: Capture(TEXT("11_janhyang_quest_drops_720")); break;
 		case 15: Codex->RequestClose(); break;
 		default:
 			UE_LOG(LogTemp, Display, TEXT("CodexCapture COMPLETE failures=%d; delegate/API checks, not physical input"), Failures);

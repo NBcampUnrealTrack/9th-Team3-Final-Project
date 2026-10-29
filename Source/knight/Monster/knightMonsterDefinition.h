@@ -11,6 +11,33 @@ class UknightAbilitySet;
 class UknightAbilityTagRelationshipMapping;
 class UknightMonsterPartData;
 class UNiagaraSystem;
+class USoundBase;
+
+/** 몬스터가 살아 있는 동안 몸에 붙여 계속 트는 소리 하나. */
+USTRUCT(BlueprintType)
+struct KNIGHT_API FknightMonsterLoopSound
+{
+	GENERATED_BODY()
+
+	/** 반복(Looping)으로 설정된 사운드여야 한다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Sound")
+	TObjectPtr<USoundBase> Sound;
+
+	/** 붙일 뼈나 소켓. None이면 메시 원점. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Sound")
+	FName AttachName;
+
+	/** 켜면 처음부터가 아니라 첫 타깃을 찾았을 때(교전 시작) 튼다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Sound")
+	bool bWaitForEngage = false;
+
+	/** 이 태그가 붙어 있는 동안은 소리를 줄여 둔다(포효·다운 같은 반응 중에 그르렁이 겹치지 않게). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Sound")
+	FGameplayTagContainer MuteTags;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Sound", meta=(ClampMin=0, Units="s"))
+	float FadeTime = 0.5f;
+};
 
 /**
  * Everything that defines a monster species, separate from its Blueprint (mesh, anim BP, StateTree).
@@ -147,4 +174,8 @@ public:
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation")
 	TArray<TObjectPtr<UNiagaraSystem>> PrewarmEffects;
+
+	/** 살아 있는 동안 몸에 붙여 계속 트는 소리(몸 열기, 그르렁). 죽으면 잦아든다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation")
+	TArray<FknightMonsterLoopSound> LoopSounds;
 };

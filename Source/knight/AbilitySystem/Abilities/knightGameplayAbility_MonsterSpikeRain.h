@@ -8,6 +8,7 @@
 class UAnimMontage;
 class UMaterialInterface;
 class UNiagaraSystem;
+class USoundBase;
 class UStaticMesh;
 
 /** 가시 비가 떨어지는 모양. */
@@ -143,6 +144,18 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Fall", meta=(ClampMin=0, Units="s"))
 	float StuckTime = 1.5f;
+
+	/** 떨어지는 가시에 붙여 재생하는 소리. SoundEvery개마다 하나만 낸다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Sound")
+	TObjectPtr<USoundBase> FallSound;
+
+	/** 착탄 지점에서 재생하는 소리. SoundEvery개마다 하나만 낸다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Sound")
+	TObjectPtr<USoundBase> ImpactSound;
+
+	/** 가시가 거의 한꺼번에 꽂히므로 모든 가시가 소리를 내면 뭉개진다. 이 개수마다 하나(첫 가시 포함)만 낸다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Sound", meta=(ClampMin=1))
+	int32 SoundEvery = 6;
 
 	/** 가시 외형. 끝이 +Z인 원뿔 두 개를 밑면끼리 붙인다. SpikeScale은 원뿔 하나의 스케일. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Look")

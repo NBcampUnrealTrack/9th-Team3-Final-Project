@@ -52,6 +52,8 @@ public:
 	void StopDarkness(const UPrimitiveComponent* Source);
 	/** 어둠 속에서 Source의 윤곽선을 보이거나 숨긴다. */
 	void SetDarknessSilhouette(const UPrimitiveComponent* Source, bool bVisible);
+	/** 어둠 속 Location에 검붉은 빛무리를 Strength만큼 띄운다(날아드는 몬스터 경고). */
+	void SetDarknessWarning(const UPrimitiveComponent* Source, const FVector& Location, float Strength);
 
 	/** Seconds 동안 소리가 줄고 화면이 흔들린다(초음파 피격). See UknightCameraModifier_Deafen. */
 	UFUNCTION(BlueprintCallable, Category="Knight|Camera")

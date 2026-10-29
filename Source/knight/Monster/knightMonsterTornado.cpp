@@ -183,10 +183,10 @@ UNiagaraComponent* AknightMonsterTornado::SpawnAtBase(UNiagaraSystem* System, bo
 	if (!bAttached)
 	{
 		return UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), System, GetActorLocation() + FVector(0.f, 0.f, BaseOffset), FRotator::ZeroRotator,
-			FVector::OneVector, true, true, ENCPoolMethod::AutoRelease);
+			FVector(Params.EffectScale), true, true, ENCPoolMethod::AutoRelease);
 	}
 	return UNiagaraFunctionLibrary::SpawnSystemAttached(System, Root, NAME_None, FVector(0.f, 0.f, BaseOffset), FRotator::ZeroRotator,
-		EAttachLocation::KeepRelativeOffset, true, true, ENCPoolMethod::None);
+		FVector(Params.EffectScale), EAttachLocation::KeepRelativeOffset, true, ENCPoolMethod::None, true);
 }
 
 void AknightMonsterTornado::Burst()
@@ -326,7 +326,7 @@ void AknightMonsterTornado::UpdateVisual(float Scale, float Rise, float Lift, fl
 	// 입자는 로컬 공간이라 컴포넌트를 돌리면 함께 돈다. 깔때기가 있으면 크기는 그대로 두고 기둥이 차오르는 것으로 자란다.
 	EffectComponent->SetRelativeLocation(FVector(0.f, 0.f, BaseOffset));
 	EffectComponent->SetRelativeRotation(FRotator(0.f, EffectSpin, 0.f));
-	EffectComponent->SetRelativeScale3D(FVector(bFunnel ? 1.f : Scale));
+	EffectComponent->SetRelativeScale3D(FVector((bFunnel ? 1.f : Scale) * Params.EffectScale));
 	if (FormComponent)
 	{
 		FormComponent->SetRelativeLocation(FVector(0.f, 0.f, BaseOffset));

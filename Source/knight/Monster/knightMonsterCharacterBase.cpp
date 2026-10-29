@@ -9,9 +9,11 @@
 #include "Combat/knightHitReactionComponent.h"
 #include "Combat/knightHitStopComponent.h"
 #include "Combat/knightMeleeTraceComponent.h"
+#include "Components/AudioComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GameplayEffect.h"
+#include "Kismet/GameplayStatics.h"
 #include "Monster/knightGameplayEffect_ParriedPoiseDamage.h"
 #include "Monster/knightGameplayEffect_RageGain.h"
 #include "Monster/knightMonsterBodyBlockerComponent.h"
@@ -105,6 +107,7 @@ void AknightMonsterCharacterBase::BeginPlay()
 	InitializeAbilitySystem();
 	SetCountedAlive(true);
 	PrewarmEffects();
+	StartLoopSounds(false);
 }
 
 void AknightMonsterCharacterBase::PrewarmEffects()
@@ -145,8 +148,80 @@ void AknightMonsterCharacterBase::PrewarmEffects()
 	}), 2.f, false);
 }
 
+namespace
+{
+	/** 줄여 둔 루프 소리의 볼륨. 0으로 틀면 엔진이 소리를 바로 끝내 버려 다시 키울 수 없으므로 들리지 않을 만큼만 남긴다. */
+	constexpr float MutedLoopVolume = 0.001f;
+}
+
+void AknightMonsterCharacterBase::StartLoopSounds(bool bEngaged)
+{
+	UWorld* const World = GetWorld();
+	if (!MonsterDefinition || !World || !World->IsGameWorld())
+	{
+		return;
+	}
+	const TArray<FknightMonsterLoopSound>& Loops = MonsterDefinition->LoopSounds;
+	LoopAudios.SetNum(Loops.Num());
+	for (int32 Index = 0; Index < Loops.Num(); ++Index)
+	{
+		const FknightMonsterLoopSound& Loop = Loops[Index];
+		if (!Loop.Sound || Loop.bWaitForEngage != bEngaged || LoopAudios[Index])
+		{
+			continue;
+		}
+		UAudioComponent* const Audio = UGameplayStatics::SpawnSoundAttached(Loop.Sound, GetMesh(), Loop.AttachName, FVector::ZeroVector,
+			EAttachLocation::KeepRelativeOffset, true, 1.f, 1.f, 0.f, nullptr, nullptr, false);
+		if (!Audio)
+		{
+			continue;
+		}
+		LoopAudios[Index] = Audio;
+		const bool bMuted = AbilitySystemComponent->HasAnyMatchingGameplayTags(Loop.MuteTags);
+		Audio->FadeIn(Loop.FadeTime, bMuted ? MutedLoopVolume : 1.f);
+		for (const FGameplayTag& Tag : Loop.MuteTags)
+		{
+			AbilitySystemComponent->RegisterGameplayTagEvent(Tag, EGameplayTagEventType::NewOrRemoved)
+				.AddUObject(this, &ThisClass::HandleLoopSoundMuteChanged);
+		}
+	}
+}
+
+void AknightMonsterCharacterBase::StopLoopSounds()
+{
+	for (int32 Index = 0; Index < LoopAudios.Num(); ++Index)
+	{
+		if (UAudioComponent* const Audio = LoopAudios[Index])
+		{
+			const float FadeTime = MonsterDefinition && MonsterDefinition->LoopSounds.IsValidIndex(Index) ? MonsterDefinition->LoopSounds[Index].FadeTime : 0.5f;
+			Audio->bAutoDestroy = true;
+			Audio->FadeOut(FadeTime, 0.f);
+		}
+	}
+	LoopAudios.Reset();
+}
+
+void AknightMonsterCharacterBase::HandleLoopSoundMuteChanged(const FGameplayTag Tag, int32 NewCount)
+{
+	if (!MonsterDefinition || IsDead())
+	{
+		return;
+	}
+	for (int32 Index = 0; Index < LoopAudios.Num(); ++Index)
+	{
+		const FknightMonsterLoopSound& Loop = MonsterDefinition->LoopSounds[Index];
+		if (UAudioComponent* const Audio = LoopAudios[Index]; Audio && Loop.MuteTags.HasTagExact(Tag))
+		{
+			// 같은 소리에 걸린 다른 태그가 남아 있으면 계속 줄여 둔다.
+			const bool bMuted = AbilitySystemComponent->HasAnyMatchingGameplayTags(Loop.MuteTags);
+			Audio->AdjustVolume(Loop.FadeTime, bMuted ? MutedLoopVolume : 1.f);
+		}
+	}
+}
+
 void AknightMonsterCharacterBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	StopLoopSounds();
 	SetCountedAlive(false);
 	Super::EndPlay(EndPlayReason);
 }
@@ -252,6 +327,7 @@ void AknightMonsterCharacterBase::HandleOutOfHealth(AActor* DamageInstigator, AA
 	}
 	bIsDying = true;
 	SetCountedAlive(false);
+	StopLoopSounds();
 
 	AbilitySystemComponent->AddLooseGameplayTag(knightGameplayTags::State_Dead);
 
@@ -388,6 +464,7 @@ void AknightMonsterCharacterBase::HandleTargetChanged(AActor* OldTarget, AActor*
 		return;
 	}
 	bHasEngaged = true;
+	StartLoopSounds(true);
 
 	FGameplayEventData Payload;
 	Payload.EventTag = knightGameplayTags::Event_Monster_Engaged;

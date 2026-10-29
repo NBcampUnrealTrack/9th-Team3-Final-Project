@@ -93,6 +93,11 @@ void UknightGameplayAbility_HeavyAttack::OnReleased(float TimeHeld)
 		TapDeadline = (World ? World->GetTimeSeconds() : 0.0) + TapBufferTime;
 		TryHeavyStep();
 	}
+	else if (Phase == EPhase::WaitingCharge)
+	{
+		// (2026-10-28) 차지를 기다리다 떼면 아무것도 하지 않는다(예전에 HoldThreshold에서 차지를 못 시작했을 때와 같다).
+		Finish(false);
+	}
 	else if (Phase == EPhase::Charging)
 	{
 		StopChargeEffects();
@@ -124,7 +129,8 @@ void UknightGameplayAbility_HeavyAttack::OnReleased(float TimeHeld)
 		}
 
 		const double Held = (World ? World->GetTimeSeconds() : ChargeStartTime) - ChargeStartTime;
-		const float Alpha = FMath::Clamp(static_cast<float>(Held) / MaxChargeTime, 0.f, 1.f);
+		const float FullChargeTime = GetStanceMaxChargeTime();
+		const float Alpha = FMath::Clamp(static_cast<float>(Held) / FullChargeTime, 0.f, 1.f);
 		LastReleaseChargeAlpha = Alpha;
 		// (2026-10-26) 풀차지 값(FullCharge*)이 있으면 ReleaseHitParams 값에서 그 값까지, 없으면 MaxChargeMultiplier배까지 오른다.
 		const float MotionScale = FMath::Lerp(1.f, FullChargeMotionValue > 0.f && ReleaseHitParams.MotionValue > 0.f
@@ -135,8 +141,8 @@ void UknightGameplayAbility_HeavyAttack::OnReleased(float TimeHeld)
 		ActiveHitParams = GetStanceScaledHitParams(ReleaseHitParams);
 		ActiveHitParams.MotionValue *= MotionScale;
 		ActiveHitParams.PoiseDamage *= PoiseScale;
-		UE_LOG(LogknightAbility, Log, TEXT("%s: released after %.2fs charge, MV x%.2f (%.0f), poise x%.2f (%.0f), stamina %.1f + %.1f"),
-			*GetName(), Held, MotionScale, ActiveHitParams.MotionValue, PoiseScale, ActiveHitParams.PoiseDamage, ChargeStaminaSpent, ReleaseStaminaCost);
+		UE_LOG(LogknightAbility, Log, TEXT("%s: released after %.2fs charge (full at %.2fs), MV x%.2f (%.0f), poise x%.2f (%.0f), stamina %.1f + %.1f"),
+			*GetName(), Held, FullChargeTime, MotionScale, ActiveHitParams.MotionValue, PoiseScale, ActiveHitParams.PoiseDamage, ChargeStaminaSpent, ReleaseStaminaCost);
 		if (ChargeReleaseMontage)
 		{
 			AActor* const Avatar = GetAvatarActorFromActorInfo();
@@ -155,6 +161,36 @@ void UknightGameplayAbility_HeavyAttack::OnReleased(float TimeHeld)
 				&& UknightCombatLibrary::ComputeAttackWarp(Avatar, WarpDistance, WarpStopDistance,
 					bUseSoftTarget, SoftTargetRange, SoftTargetAngle, WarpLocation, WarpRotation, WarpTravel);
 			PlayMontage(ChargeReleaseMontage, TEXT("ChargeRelease"), false);
+			// (2026-10-28 사용자 요청 '공격 전체에 잔상') 해방 시작부터 휘두르기 판정이 끝날 때까지 남긴다(락온·돌진과 상관없이).
+			// 기계식 타이밍으로 실제 휘두르는 시각이 늦어지므로 시간이 아니라 몽타주 재생 위치(판정 끝)로 멈춘다(지면 균열과 같은 방식).
+			if (bReleaseGhostTrail && bReleaseGhostTrailWholeSwing && Avatar)
+			{
+				float SwingEnd = 0.f;
+				for (const FAnimNotifyEvent& Event : ChargeReleaseMontage->Notifies)
+				{
+					if (Event.NotifyStateClass && Event.NotifyStateClass->IsA<UknightAnimNotifyState_MeleeTrace>())
+					{
+						SwingEnd = FMath::Max(SwingEnd, Event.GetEndTriggerTime());
+					}
+				}
+				if (SwingEnd > 0.f)
+				{
+					FknightGhostTrailSettings WholeSwingSettings = ReleaseGhostTrailSettings;
+					// 대상 가까이 가도 끊지 않는다(남은 거리 검사가 늘 거짓이 되게).
+					WholeSwingSettings.InRangeDistance = -1.f;
+					const TWeakObjectPtr<ThisClass> WeakThis(this);
+					// 시간은 넉넉히(몽타주 길이) 주고, 실제로는 판정 끝 위치를 지나면 멈춘다.
+					AknightGhostTrailActor::StartGhostTrailForAbility(this, WholeSwingSettings, ChargeReleaseMontage->GetPlayLength(),
+						Avatar->GetActorLocation(), [WeakThis, SwingEnd]()
+						{
+							const ThisClass* const Self = WeakThis.Get();
+							const ACharacter* const Character = Self ? Cast<ACharacter>(Self->GetAvatarActorFromActorInfo()) : nullptr;
+							const UAnimInstance* const Anim = Character && Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr;
+							return Anim && Anim->Montage_IsPlaying(Self->ChargeReleaseMontage)
+								&& Anim->Montage_GetPosition(Self->ChargeReleaseMontage) >= SwingEnd;
+						});
+				}
+			}
 			if (bWarp && Avatar)
 			{
 				// 발사 몽타주와 같은 배속(행동 속도 x 해방 배속)을 넘겨야 돌진이 모션과 같이 끝난다. (2026-10-08)
@@ -198,7 +234,7 @@ void UknightGameplayAbility_HeavyAttack::OnReleased(float TimeHeld)
 				// (2026-10-27 사용자 요청) 돌진 잔상: 실제로 움직이는 동안(돌진 시작 ~ 휘두르기 직전)만 남긴다. 그 전 준비 동작에는 남기지 않는다.
 				// 시작·길이는 StartAttackLunge와 같은 계산(워프 구간 끝에 도착하도록 LungeTime만큼).
 				const float WindowSeconds = UknightCombatLibrary::GetWarpWindowEnd(ChargeReleaseMontage) / FMath::Max(Rate, 0.01f);
-				if (bReleaseGhostTrail && World && WindowSeconds > 0.f)
+				if (bReleaseGhostTrail && !bReleaseGhostTrailWholeSwing && World && WindowSeconds > 0.f)
 				{
 					const float LungeDuration = FMath::Clamp(WindowSeconds, 0.05f, LungeTime);
 					const float GhostDelay = WindowSeconds - LungeDuration;
@@ -304,18 +340,65 @@ bool UknightGameplayAbility_HeavyAttack::CanStartCharge() const
 	return true;
 }
 
+float UknightGameplayAbility_HeavyAttack::GetStanceMaxChargeTime() const
+{
+	const UknightAbilitySystemComponent* const ASC = GetKnightAbilitySystemComponentFromActorInfo();
+	const float SpeedScale = bScaleChargeTimeByStance && ASC ? ASC->GetStanceModifiers().AttackSpeedScale : 1.f;
+	return MaxChargeTime / FMath::Max(SpeedScale, 0.1f);
+}
+
 void UknightGameplayAbility_HeavyAttack::OnHoldThreshold()
 {
 	if (Phase != EPhase::Deciding || bReleased)
 	{
 		return;
 	}
-	if (!CanStartCharge())
+	if (CanStartCharge())
+	{
+		StartCharge();
+		return;
+	}
+	// (2026-10-28 사용자 결정) 앞 공격이 아직 캔슬 창 전이면 바로 버리지 않고, 누르고 있는 동안 ChargeWaitTime까지 다시 본다.
+	UWorld* const World = GetWorld();
+	if (ChargeWaitTime <= 0.f || !World)
 	{
 		Finish(false);
 		return;
 	}
-	StartCharge();
+	Phase = EPhase::WaitingCharge;
+	ChargeWaitStartTime = World->GetTimeSeconds();
+	World->GetTimerManager().SetTimer(ChargeWaitTimer, this, &ThisClass::TryStartChargeWhileHeld, 0.05f, false);
+}
+
+void UknightGameplayAbility_HeavyAttack::TryStartChargeWhileHeld()
+{
+	UWorld* const World = GetWorld();
+	const UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();
+	if (!World || !ASC || !IsActive() || Phase != EPhase::WaitingCharge)
+	{
+		return;
+	}
+	// 맞거나 죽으면(발동을 막는 태그) 그만둔다. 맞을 때는 보통 피격 어빌리티가 이 어빌리티를 먼저 끊는다.
+	if (ASC->HasAnyMatchingGameplayTags(ActivationBlockedTags))
+	{
+		Finish(false);
+		return;
+	}
+	const double Waited = World->GetTimeSeconds() - ChargeWaitStartTime;
+	if (CanStartCharge())
+	{
+		// 다음 플레이 로그에서 '기다렸다가 시작한 차지'를 셀 수 있게 남긴다.
+		UE_LOG(LogknightAbility, Log, TEXT("%s: charge started after waiting %.2fs while held"), *GetName(), Waited);
+		StartCharge();
+		return;
+	}
+	if (Waited >= ChargeWaitTime)
+	{
+		UE_LOG(LogknightAbility, Log, TEXT("%s: charge wait timed out after %.2fs"), *GetName(), Waited);
+		Finish(false);
+		return;
+	}
+	World->GetTimerManager().SetTimer(ChargeWaitTimer, this, &ThisClass::TryStartChargeWhileHeld, 0.05f, false);
 }
 
 void UknightGameplayAbility_HeavyAttack::StartCharge()
@@ -437,9 +520,10 @@ void UknightGameplayAbility_HeavyAttack::StartChargeEffects()
 
 	if (UWorld* const World = GetWorld())
 	{
-		if (MaxChargeTime > 0.f)
+		// (2026-10-28) 풀차지 시간은 스탠스 공격 속도를 따른다(GetStanceMaxChargeTime).
+		if (const float FullChargeTime = GetStanceMaxChargeTime(); FullChargeTime > 0.f)
 		{
-			World->GetTimerManager().SetTimer(FullChargeTimer, this, &ThisClass::OnFullChargeReached, MaxChargeTime, false);
+			World->GetTimerManager().SetTimer(FullChargeTimer, this, &ThisClass::OnFullChargeReached, FullChargeTime, false);
 		}
 	}
 }
@@ -733,8 +817,9 @@ void UknightGameplayAbility_HeavyAttack::TickChargeStamina()
 		return;
 	}
 	// 풀차지(MaxChargeTime)까지 ChargeStaminaCost를 고르게 나눠 쓴다. 풀차지 뒤에 더 누르고 있어도 더 쓰지 않는다.
+	// (2026-10-28) 풀차지 시간은 스탠스를 따르므로(GetStanceMaxChargeTime) 합은 두 스탠스 모두 ChargeStaminaCost.
 	const double Now = World->GetTimeSeconds();
-	const float Amount = FMath::Min(ChargeStaminaCost * static_cast<float>(Now - LastChargeStaminaTime) / FMath::Max(MaxChargeTime, 0.1f),
+	const float Amount = FMath::Min(ChargeStaminaCost * static_cast<float>(Now - LastChargeStaminaTime) / FMath::Max(GetStanceMaxChargeTime(), 0.1f),
 		ChargeStaminaCost - ChargeStaminaSpent);
 	LastChargeStaminaTime = Now;
 	if (Amount > 0.f)
@@ -803,6 +888,7 @@ void UknightGameplayAbility_HeavyAttack::EndAbility(const FGameplayAbilitySpecHa
 	if (UWorld* const World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(TapTimer);
+		World->GetTimerManager().ClearTimer(ChargeWaitTimer);
 		World->GetTimerManager().ClearTimer(GroundCrackTimer);
 		World->GetTimerManager().ClearTimer(ChargeStaminaTimer);
 		World->GetTimerManager().ClearTimer(ReleaseMoveCancelTimer);

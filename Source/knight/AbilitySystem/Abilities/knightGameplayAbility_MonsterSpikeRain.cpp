@@ -170,6 +170,18 @@ void UknightGameplayAbility_MonsterSpikeRain::HandleFire()
 	ImpactTemplate.PathHeight = PathHeight;
 	ImpactTemplate.Effects = ImpactEffects;
 	ImpactTemplate.StuckTime = StuckTime;
+	// SoundEvery개마다 하나만 소리를 낸다.
+	const int32 Every = FMath::Max(SoundEvery, 1);
+	const auto ImpactFor = [this, &ImpactTemplate, Every](int32 Index)
+	{
+		FknightSpikeImpact Impact = ImpactTemplate;
+		if (Index % Every == 0)
+		{
+			Impact.FallSound = FallSound;
+			Impact.ImpactSound = ImpactSound;
+		}
+		return Impact;
+	};
 
 	const int32 Count = SpikeCount;
 
@@ -205,7 +217,7 @@ void UknightGameplayAbility_MonsterSpikeRain::HandleFire()
 				const float Angle = FMath::FRandRange(0.f, 2.f * PI);
 				Landing += FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.f) * ScatterRadius * FMath::Pow(FMath::FRand(), CenterBias);
 			}
-			FknightSpikeImpact Impact = ImpactTemplate;
+			FknightSpikeImpact Impact = ImpactFor(Index);
 			Impact.Landing = FindGround(World, Monster, Landing, GroundZ);
 			ScheduleSpike(World, Volley, Impact, FirstLandTime + LandInterval * Index + FMath::FRandRange(0.f, LandJitter));
 		}
@@ -221,11 +233,11 @@ void UknightGameplayAbility_MonsterSpikeRain::HandleFire()
 		const float LandTime = FirstLandTime + LandInterval * Index + FMath::FRandRange(0.f, LandJitter);
 		const float PlaceTime = FMath::Max(LandTime - WarningTime, 0.f);
 		const float LandDelay = LandTime - PlaceTime;
-		const FTimerDelegate Place = FTimerDelegate::CreateWeakLambda(World, [World, Volley, ImpactTemplate, WeakTarget, Center, Jitter, GroundZ, LandDelay]()
+		const FTimerDelegate Place = FTimerDelegate::CreateWeakLambda(World, [World, Volley, SpikeImpact = ImpactFor(Index), WeakTarget, Center, Jitter, GroundZ, LandDelay]()
 		{
 			const AActor* const Goal = WeakTarget.Get();
 			const FVector2D Offset = FMath::RandPointInCircle(Jitter);
-			FknightSpikeImpact Impact = ImpactTemplate;
+			FknightSpikeImpact Impact = SpikeImpact;
 			Impact.Landing = FindGround(World, Volley.Monster.Get(), (Goal ? Goal->GetActorLocation() : Center) + FVector(Offset.X, Offset.Y, 0.f), GroundZ);
 			ScheduleSpike(World, Volley, Impact, LandDelay);
 		});

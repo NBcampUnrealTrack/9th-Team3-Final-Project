@@ -320,13 +320,19 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Stance")
 	bool bApplyStanceModifiers = true;
 
-	/** (2026-10-20 임시값) 한손: 빠르고 가볍다. 피해·그로기는 낮고 행동 에너지를 덜 쓴다. */
+	/**
+	 * (2026-10-20 임시값) 한손: 빠르고 가볍다. 피해·그로기는 낮고 행동 에너지를 덜 쓴다.
+	 * (2026-10-28 사용자 결정) 그로기 0.75 → 0.85(피해 보정과 같게). 플레이 로그에서 초당 그로기가 양손 판이 한손 판의 2배를 넘었다.
+	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Stance", meta=(EditCondition="bApplyStanceModifiers"))
-	FknightStanceModifiers OneHandedModifiers = FknightStanceModifiers(0.85f, 0.75f, 1.1f, 0.8f);
+	FknightStanceModifiers OneHandedModifiers = FknightStanceModifiers(0.85f, 0.85f, 1.1f, 0.8f);
 
-	/** (2026-10-20 임시값) 양손: 느리고 무겁다. 피해·그로기가 높고 행동 에너지를 더 쓴다. */
+	/**
+	 * (2026-10-20 임시값) 양손: 느리고 무겁다. 피해·그로기가 높고 행동 에너지를 더 쓴다.
+	 * (2026-10-28 사용자 결정) 그로기 1.35 → 1.2(피해 보정과 같게). 피해 차이는 적당해서 그대로 둔다.
+	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Stance", meta=(EditCondition="bApplyStanceModifiers"))
-	FknightStanceModifiers TwoHandedModifiers = FknightStanceModifiers(1.2f, 1.35f, 0.92f, 1.25f);
+	FknightStanceModifiers TwoHandedModifiers = FknightStanceModifiers(1.2f, 1.2f, 0.92f, 1.25f);
 
 	/** (2026-10-20) 큰 공격이 맞았을 때 더하는 카메라 흔들림. 비우면 추가 흔들림 없음. BP_Knight에서 CS_Knight_Impact. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack Feel")

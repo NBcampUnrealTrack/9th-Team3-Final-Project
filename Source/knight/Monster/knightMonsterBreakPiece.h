@@ -5,6 +5,7 @@
 #include "knightMonsterBreakPiece.generated.h"
 
 class UMaterialInstanceDynamic;
+class USoundBase;
 class UStaticMesh;
 class UStaticMeshComponent;
 
@@ -23,8 +24,8 @@ class KNIGHT_API AknightMonsterBreakPiece : public AActor
 public:
 	AknightMonsterBreakPiece();
 
-	/** Mesh로 조각을 만들고 Velocity로 날린다. 스폰 직후 한 번 부른다. */
-	void Launch(UStaticMesh* Mesh, const FVector& Velocity, const FVector& OutwardDirection);
+	/** Mesh로 조각을 만들고 Velocity로 날린다. 스폰 직후 한 번 부른다. LandSound는 처음 땅에 닿을 때 한 번 낸다. */
+	void Launch(UStaticMesh* Mesh, const FVector& Velocity, const FVector& OutwardDirection, USoundBase* InLandSound = nullptr);
 
 	virtual void Tick(float DeltaSeconds) override;
 
@@ -64,7 +65,13 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UMaterialInstanceDynamic>> Materials;
 
+	UPROPERTY(Transient)
+	TObjectPtr<USoundBase> LandSound;
+
 	float Age = 0.f;
 
 	void SetMaterialParameter(FName Parameter, float Value);
+
+	UFUNCTION()
+	void HandleHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit);
 };

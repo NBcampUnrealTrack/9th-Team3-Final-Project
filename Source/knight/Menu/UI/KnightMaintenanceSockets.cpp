@@ -182,10 +182,9 @@ void UKnightMaintenanceWidget::BuildSocketPresentation()
 	Add(Right, Details)->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 	UVerticalBox* DetailBody = WidgetTree->ConstructWidget<UVerticalBox>(); Details->AddChild(DetailBody);
 	SocketDetailDescription = Text(WidgetTree, TEXT("SocketDetailDescription"), FText::GetEmpty(), 22, false, Secondary);
-	Add(DetailBody, SocketDetailDescription, 20.f);
-	SocketEffectsText = Text(WidgetTree, TEXT("SocketEffectsText"), FText::GetEmpty(), 26, false, Secondary); Add(DetailBody, SocketEffectsText);
-	Add(Right, Text(WidgetTree, TEXT("SocketGuideTitle"), LOCTEXT("Guide", "소켓 안내"), 28)); Line(WidgetTree, Right);
-	Add(Right, Text(WidgetTree, TEXT("SocketGuide"), LOCTEXT("GuideBody", "소켓 칸을 선택하면 현재 장착 정보를 확인합니다.\n\n같은 칸을 다시 누르면 전체 효과로 돌아갑니다.\n\n장착과 해제는 아이템 수량을 바꾸지 않습니다."), 22, false, Secondary), 0.f);
+	SocketDetailDescription->SetVisibility(ESlateVisibility::Collapsed);
+	Add(DetailBody, SocketDetailDescription, 0.f);
+	SocketEffectsText = Text(WidgetTree, TEXT("SocketEffectsText"), FText::GetEmpty(), 26, false, Secondary); Add(DetailBody, SocketEffectsText, 0.f);
 	Columns->SetVisibility(ESlateVisibility::Collapsed);
 }
 

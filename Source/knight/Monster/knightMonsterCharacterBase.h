@@ -9,6 +9,7 @@
 #include "Interfaces/TargetableInterface.h"
 #include "knightMonsterCharacterBase.generated.h"
 
+class UAudioComponent;
 class UknightAbilitySystemComponent;
 class UknightCoreAttributeSet;
 class UknightHitReactionComponent;
@@ -173,4 +174,13 @@ private:
 	bool bCountedAlive = false;
 
 	void SetCountedAlive(bool bAlive);
+
+	/** MonsterDefinition의 LoopSounds 중 bWaitForEngage가 bEngaged와 같은 것을 튼다. */
+	void StartLoopSounds(bool bEngaged);
+	void StopLoopSounds();
+	void HandleLoopSoundMuteChanged(const FGameplayTag Tag, int32 NewCount);
+
+	/** LoopSounds와 같은 순서. 아직 틀지 않은 소리는 비어 있다. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UAudioComponent>> LoopAudios;
 };
