@@ -588,6 +588,10 @@ void UknightGameplayAbility_PlungeAttack::OnImpact()
 	{
 		GroundImpactLoc = GroundHit.ImpactPoint;
 	}
+	if (ImpactSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(World, ImpactSound, GroundImpactLoc);
+	}
 
 	const bool bTwoHanded = UknightGameplayAbility_StanceSwitch::IsTwoHanded(GetAbilitySystemComponentFromActorInfo());
 	UNiagaraSystem* CrackAsset = GroundCrackEffect;

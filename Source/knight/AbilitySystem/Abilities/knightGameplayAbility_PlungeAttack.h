@@ -211,6 +211,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Plunge|Impact", meta=(ClampMin=0))
 	float ImpactEffectScale = 2.f;
 
+	/** (2026-10-29) 땅을 내려찍는 순간(ImpactDelay) 지면 충격음. 내려찍기는 Plunge_Impact, 점프 베기는 JumpAttack_Land. 비우면 없다. */
+	UPROPERTY(EditDefaultsOnly, Category="Plunge|Impact")
+	TObjectPtr<USoundBase> ImpactSound;
+
 	/** 착지 내려찍기 시 지면에 남는 균열 이펙트 (비우면 NS_Hit_GroundCrack). */
 	UPROPERTY(EditDefaultsOnly, Category="Plunge|Impact")
 	TObjectPtr<UNiagaraSystem> GroundCrackEffect;

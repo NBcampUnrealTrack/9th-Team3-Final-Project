@@ -471,7 +471,8 @@ void UknightAbilitySystemComponent::PlayAttackImpactShake(const float PoiseDamag
 	}
 }
 
-void UknightAbilitySystemComponent::PlayAttackImpactEffects(const FHitResult& Hit, const bool bGuarded, const bool bWeakpoint) const
+void UknightAbilitySystemComponent::PlayAttackImpactEffects(const FHitResult& Hit, const bool bGuarded, const bool bWeakpoint,
+	const float PoiseDamage, const float PartMultiplier) const
 {
 	const float WeakScale = bWeakpoint && !bGuarded ? AttackImpactWeakpointScale : 1.f;
 	UWorld* const World = GetWorld();
@@ -510,12 +511,36 @@ void UknightAbilitySystemComponent::PlayAttackImpactEffects(const FHitResult& Hi
 		}
 	}
 	const double Now = World->GetRealTimeSeconds();
-	if (!AttackImpactSounds.IsEmpty() && AttackImpactSoundVolume > 0.f && Now - LastAttackImpactSoundTime >= AttackImpactSoundCooldown)
+	// (2026-10-29) 타격 종류별 소리: 약점 > 장갑 부위 > 무거운 타격 > 기본. 비어 있는 종류는 기본(AttackImpactSounds)을 쓴다.
+	const TArray<TObjectPtr<USoundBase>>* SoundPool = &AttackImpactSounds;
+	if (!bGuarded)
 	{
-		if (USoundBase* const Sound = AttackImpactSounds[FMath::RandRange(0, AttackImpactSounds.Num() - 1)])
+		if (bWeakpoint && !AttackImpactWeakpointSounds.IsEmpty())
+		{
+			SoundPool = &AttackImpactWeakpointSounds;
+		}
+		else if (PartMultiplier < AttackImpactArmorPartMultiplier && !AttackImpactArmorSounds.IsEmpty())
+		{
+			SoundPool = &AttackImpactArmorSounds;
+		}
+		else if (PoiseDamage >= AttackImpactHeavyPoiseDamage && !AttackImpactHeavySounds.IsEmpty())
+		{
+			SoundPool = &AttackImpactHeavySounds;
+		}
+	}
+	if (!SoundPool->IsEmpty() && AttackImpactSoundVolume > 0.f && Now - LastAttackImpactSoundTime >= AttackImpactSoundCooldown)
+	{
+		int32 Index = FMath::RandRange(0, SoundPool->Num() - 1);
+		if (SoundPool->Num() > 1 && Index == LastAttackImpactSoundIndex)
+		{
+			Index = (Index + 1) % SoundPool->Num();
+		}
+		LastAttackImpactSoundIndex = Index;
+		if (USoundBase* const Sound = (*SoundPool)[Index])
 		{
 			LastAttackImpactSoundTime = Now;
-			UGameplayStatics::PlaySoundAtLocation(World, Sound, Location, AttackImpactSoundVolume * (bGuarded ? 0.7f : 1.f) * FMath::Sqrt(WeakScale));
+			const float WeakVolume = SoundPool == &AttackImpactWeakpointSounds ? 1.f : FMath::Sqrt(WeakScale);
+			UGameplayStatics::PlaySoundAtLocation(World, Sound, Location, AttackImpactSoundVolume * (bGuarded ? 0.7f : 1.f) * WeakVolume);
 		}
 	}
 }
