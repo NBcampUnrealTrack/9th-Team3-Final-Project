@@ -3,6 +3,7 @@
 #include "GameplayEffect.h"
 #include "GameplayEffectExtension.h"
 #include "Engine/World.h"
+#include "Cheats/KnightCheatSubsystem.h"
 
 UknightCoreAttributeSet::UknightCoreAttributeSet()
 {
@@ -109,6 +110,10 @@ void UknightCoreAttributeSet::PostGameplayEffectExecute(const FGameplayEffectMod
 		if (LocalDamage > 0.f)
 		{
 			RecordHit();
+			const UWorld* const World = GetWorld();
+			const UKnightCheatSubsystem* const Cheats = World && World->GetGameInstance()
+				? World->GetGameInstance()->GetSubsystem<UKnightCheatSubsystem>() : nullptr;
+			if (Cheats && Cheats->IsPlayerInvulnerable(GetOwningActor())) return;
 			const float OldHealth = GetHealth();
 			SetHealth(FMath::Clamp(OldHealth - LocalDamage, 0.f, GetMaxHealth()));
 			const float NewHealth = GetHealth();

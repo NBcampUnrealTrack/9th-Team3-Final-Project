@@ -8,6 +8,7 @@
 #include "Item/knightEquipmentStats.h"
 #include "Item/knightPartsComponent.h"
 #include "knightInventoryLibrary.h"
+#include "Engine/AssetManager.h"
 #include "Quest/KnightQuestData.h"
 #include "Quest/KnightProgressionIds.h"
 #include "Progression/knightSaveGame.h"
@@ -154,6 +155,46 @@ bool UknightProgressionSubsystem::AddMoney(int64 Amount)
 	UknightSaveGame* const Save = Saves && Saves->HasSelectedSlot() ? GetSave() : nullptr;
 	if (!Save || Amount <= 0 || Save->Money > MAX_int64 - Amount) return false;
 	Save->Money += Amount;
+	CommitChange();
+	return true;
+}
+
+bool UknightProgressionSubsystem::GrantCheatResources(int32& OutMaterialKinds)
+{
+	OutMaterialKinds = 0;
+	UknightSaveSubsystem* const Saves = GetGameInstance()->GetSubsystem<UknightSaveSubsystem>();
+	UknightSaveGame* const Save = Saves && Saves->CanStartAtomicTransaction() ? Saves->GetSaveGame() : nullptr;
+	constexpr int64 MoneyGrant = 999999;
+	constexpr int32 MaterialGrant = 99;
+	if (!Save || !UAssetManager::IsInitialized() || Save->Money > MAX_int64 - MoneyGrant) return false;
+
+	TArray<FPrimaryAssetId> ItemIds;
+	if (!UAssetManager::Get().GetPrimaryAssetIdList(UknightItemDefinition::ItemAssetType, ItemIds)) return false;
+	ItemIds.Sort([](const FPrimaryAssetId& A, const FPrimaryAssetId& B) { return A.ToString() < B.ToString(); });
+	TArray<FPrimaryAssetId> MaterialIds;
+	TSet<FPrimaryAssetId> Seen;
+	for (const FPrimaryAssetId& Id : ItemIds)
+	{
+		if (!Id.IsValid() || Seen.Contains(Id)) return false;
+		Seen.Add(Id);
+		const UknightItemDefinition* const Item = UknightInventoryLibrary::LoadItemDefinition(Id);
+		if (!Item || Item->GetPrimaryAssetId() != Id) return false;
+		const bool bMaterialClass = Item->IsA<UknightMaterialItemDefinition>();
+		const bool bMaterialType = Item->ItemType == knightGameplayTags::Item_Type_Material;
+		if (bMaterialClass != bMaterialType) return false;
+		if (!bMaterialClass) continue;
+		const int32 Owned = Save->ItemCounts.FindRef(Id);
+		if (Owned < 0 || Owned > MAX_int32 - MaterialGrant) return false;
+		MaterialIds.Add(Id);
+	}
+	if (MaterialIds.IsEmpty()) return false;
+
+	Save->Money += MoneyGrant;
+	for (const FPrimaryAssetId& Id : MaterialIds)
+	{
+		Save->ItemCounts.FindOrAdd(Id) += MaterialGrant;
+	}
+	OutMaterialKinds = MaterialIds.Num();
 	CommitChange();
 	return true;
 }

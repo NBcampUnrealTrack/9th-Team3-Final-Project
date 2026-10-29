@@ -130,6 +130,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|Progression|Rewards")
 	bool AddMoney(int64 Amount);
 
+	/** One validated save/notification for the runtime money-and-materials cheat. Never grants equipment. */
+	bool GrantCheatResources(int32& OutMaterialKinds);
+
 	/** Spend only when the full amount is available. */
 	UFUNCTION(BlueprintCallable, Category="Knight|Progression|Rewards")
 	bool SpendMoney(int64 Amount);
