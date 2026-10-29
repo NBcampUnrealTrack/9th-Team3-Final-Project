@@ -222,7 +222,11 @@ bool UknightGameplayAbility::CanActivateAbility(const FGameplayAbilitySpecHandle
 		return false;
 	}
 	const UknightAbilitySystemComponent* const ASC = Cast<UknightAbilitySystemComponent>(ActorInfo->AbilitySystemComponent.Get());
-	if (ASC && ASC->IsActivationGroupBlocked(ActivationGroup, GetAssetTags()))
+	// (2026-10-29) 같은 콤보의 다음 단계 = 발동에 앞 단계의 콤보 태그(Combo.Greatsword 계열)가 필요한 공격(예: 2타는 Combo.Greatsword.1).
+	// 콤보 창·후딜에서는 이것만 이어진다(ASC bOnlyComboStepsInComboWindow).
+	static const FGameplayTag ComboFamily = FGameplayTag::RequestGameplayTag(TEXT("Combo.Greatsword"), false);
+	const bool bComboStep = ComboFamily.IsValid() && ActivationRequiredTags.HasTag(ComboFamily);
+	if (ASC && ASC->IsActivationGroupBlocked(ActivationGroup, GetAssetTags(), bComboStep))
 	{
 		if (OptionalRelevantTags)
 		{
