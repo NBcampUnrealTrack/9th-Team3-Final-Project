@@ -103,6 +103,20 @@ void UknightGameplayAbility_PlungeAttack::ActivateAbility(const FGameplayAbility
 		return;
 	}
 
+	if (bKeepJumpArc)
+	{
+		// (2026-10-29 사용자 결정, 다크소울식) 반동·역분사 없이 점프 궤적 그대로: 중력·속도는 건드리지 않고 공중 조작만 막는다.
+		Movement->AirControl = 0.f;
+		UAbilityTask_WaitGameplayEvent* const FallHitTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, knightGameplayTags::Event_Melee_Hit, nullptr, false, true);
+		FallHitTask->EventReceived.AddDynamic(this, &ThisClass::OnMeleeHitEvent);
+		FallHitTask->ReadyForActivation();
+		Phase = EPhase::Fall;
+		PhaseStartTime = World->GetTimeSeconds();
+		PlayMontage(ActiveStartMontage, false);
+		World->GetTimerManager().SetTimer(TickTimer, this, &ThisClass::TickPlunge, PlungeTickInterval, true);
+		return;
+	}
+
 	// 낙하 모드는 그대로 두고 중력·공중 조작을 끈다(애님은 공중 자세 유지). 속도는 Tick이 정한다.
 	Movement->GravityScale = 0.f;
 	Movement->AirControl = 0.f;
@@ -431,6 +445,30 @@ void UknightGameplayAbility_PlungeAttack::TickPlunge()
 		if (UAnimInstance* const Anim = Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr)
 		{
 			if (!Anim->Montage_IsPlaying(ActiveLoopMontage))
+			{
+				Anim->Montage_Play(ActiveLoopMontage, PlayRate * GetAttackSpeed());
+			}
+		}
+		break;
+	}
+	case EPhase::Fall:
+	{
+		// (2026-10-29) 점프 궤적 그대로 떨어진다. 땅에 닿으면 내려찍기.
+		if (!Movement->IsFalling())
+		{
+			StartLand();
+			break;
+		}
+		if (Elapsed > MaxDiveTime)
+		{
+			UE_LOG(LogknightAbility, Log, TEXT("PlungeAttack: no ground within %.1fs, ending."), MaxDiveTime);
+			EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, true);
+			break;
+		}
+		// 칼을 드는 자세가 끝나면 착지할 때까지 낙하 자세를 반복한다.
+		if (UAnimInstance* const Anim = Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr)
+		{
+			if (!Anim->Montage_IsPlaying(ActiveStartMontage) && !Anim->Montage_IsPlaying(ActiveLoopMontage))
 			{
 				Anim->Montage_Play(ActiveLoopMontage, PlayRate * GetAttackSpeed());
 			}
