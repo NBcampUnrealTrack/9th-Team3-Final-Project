@@ -213,7 +213,8 @@ void UknightGameplayAbility::TryActivateAbilityOnSpawn(const FGameplayAbilityAct
 bool UknightGameplayAbility::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
 {
-	if (!ActorInfo || !ActorInfo->AbilitySystemComponent.IsValid())
+	// (2026-10-29) 꺼 둔 어빌리티(bAbilityEnabled)는 발동하지 않는다.
+	if (!bAbilityEnabled || !ActorInfo || !ActorInfo->AbilitySystemComponent.IsValid())
 	{
 		return false;
 	}

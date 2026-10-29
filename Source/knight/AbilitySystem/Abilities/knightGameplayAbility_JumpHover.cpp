@@ -55,6 +55,11 @@ bool UknightGameplayAbility_JumpHover::CanActivateAbility(const FGameplayAbility
 	const ACharacter* const Character = ActorInfo ? Cast<ACharacter>(ActorInfo->AvatarActor.Get()) : nullptr;
 	const UCharacterMovementComponent* const Movement = Character ? Character->GetCharacterMovement() : nullptr;
 	const UAnimInstance* const Anim = Character && Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr;
+	// (2026-10-29 사용자 결정) 체공 끔: 공중에서 누르면 아무것도 하지 않는다(땅 위 점프는 그대로).
+	if (!bHoverEnabled && Movement && !Movement->IsMovingOnGround())
+	{
+		return false;
+	}
 	if (!Movement || !Movement->IsMovingOnGround() || !Anim || !Anim->IsAnyMontagePlaying())
 	{
 		return true;

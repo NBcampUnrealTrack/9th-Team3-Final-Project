@@ -27,6 +27,8 @@ class USoundBase;
  *   2. 베기: 도착하면 StrikeMontage를 재생한다. 몽타주의 Knight Melee Trace가 보내는 Event.Melee.Hit를 HitParams로 처리한다.
  *            시작할 때 모션 워프 타깃(WarpTargetName)을 락온 대상 쪽으로 맞춰 몽타주의 워프 구간이 방향을 돌린다.
  *   몽타주가 끝나면 어빌리티가 끝난다. 피격 등으로 끊기면 부스터·이동도 같이 멈춘다.
+ *   (2026-10-29) 0. 예열(선딜레이): 돌진 전에 StartupDelay초 동안 대상 쪽으로 돌아 돌진 자세로 멈추고 등 부스터를 먼저 켠다.
+ *            이동 입력은 막고, 돌진 방향·거리는 예열이 끝날 때 다시 잰다.
  */
 UCLASS()
 class KNIGHT_API UknightGameplayAbility_BoostLunge : public UknightGameplayAbility
@@ -67,16 +69,28 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Lunge|Motion", meta=(ClampMin=0, Units="cm"))
 	float MaxLungeDistance = 700.f;
 
+	/**
+	 * (2026-10-29 사용자 요청) 선딜레이: 돌진하기 전에 돌진 자세로 멈춰 등 부스터를 예열하는 시간(초, 실제 시간). 0이면 예전처럼 바로 돌진.
+	 * 공중 돌진(bAirLunge)에는 쓰지 않는다. 바뀔 수 있는 값. (같은 날 사용자 결정) 0.4 → 0.2.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Lunge|Motion", meta=(ClampMin=0, Units="s"))
+	float StartupDelay = 0.2f;
+
 	/** 대상 표면(부위 지점이면 그 지점)에서 이만큼 앞에 멈춘다. 칼이 닿는 거리. */
 	UPROPERTY(EditDefaultsOnly, Category="Lunge|Motion", meta=(ClampMin=0, Units="cm"))
 	float StopDistance = 170.f;
 
+	/**
+	 * 돌진 속도. (2026-10-29 사용자 결정) GA_Knight_BoostLunge 2600 → 1300(절반) → 1000('좀 더'):
+	 * 최대 7m를 0.27초 → 0.7초에 간다(MaxLungeTime도 0.6 → 0.75로 올려 먼 거리도 느려지게). 바뀔 수 있는 값.
+	 */
 	UPROPERTY(EditDefaultsOnly, Category="Lunge|Motion", meta=(ClampMin=100, Units="CentimetersPerSecond"))
 	float LungeSpeed = 2600.f;
 
 	UPROPERTY(EditDefaultsOnly, Category="Lunge|Motion", meta=(ClampMin=0.05, Units="s"))
 	float MinLungeTime = 0.18f;
 
+	/** 돌진 시간 상한. (2026-10-29) GA_Knight_BoostLunge 0.6 → 0.75: 돌진 속도를 1000으로 줄여도 7m(0.7초)가 잘리지 않게. */
 	UPROPERTY(EditDefaultsOnly, Category="Lunge|Motion", meta=(ClampMin=0.05, Units="s"))
 	float MaxLungeTime = 0.6f;
 
@@ -91,6 +105,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Lunge|Montage")
 	TObjectPtr<UAnimMontage> StrikeMontage;
 
+	/**
+	 * 베기 몽타주 배속(행동 속도·공격 배속·스탠스를 곱함). (2026-10-29 사용자 결정) GA_Knight_BoostLunge 1.15 → 1.25 → 1.37:
+	 * 한 번에 약 0.2초씩, 베기가 끝나는 시점이 처음보다 한손 약 0.37초·양손 약 0.45초 빨라졌다(2.5초 몽타주, 공격 배속 0.75 기준). 바뀔 수 있는 값.
+	 */
 	UPROPERTY(EditDefaultsOnly, Category="Lunge|Montage", meta=(ClampMin=0.01))
 	float StrikePlayRate = 1.f;
 
@@ -196,6 +214,15 @@ protected:
 	float GhostInRangeDistance = 100.f;
 
 private:
+	/** (2026-10-29) 예열이 끝나면(또는 예열 없이 바로) 돌진 방향을 다시 재고 돌진을 시작한다. */
+	void StartLunge();
+
+	/** (2026-10-29) 예열 동안 이동 입력을 막는다(컨트롤러 SetIgnoreMoveInput, 내가 건 만큼만 푼다). */
+	void SetStartupMoveLocked(bool bLock);
+
+	FTimerHandle StartupDelayTimer;
+	bool bStartupMoveLocked = false;
+
 	UFUNCTION()
 	void OnLungeFinished();
 
