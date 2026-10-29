@@ -351,6 +351,16 @@ void UknightMovementComponent::OnMovementUpdated(float DeltaSeconds, const FVect
 	{
 		if (ASC)
 		{
+			// (2026-10-28) 달리기 시동 소리. 달리기를 꺼다 켜다 해도 SprintStartCooldown마다 한 번만.
+			if (bSprint && SprintStartSound && CharacterOwner && GetWorld())
+			{
+				const double Now = GetWorld()->GetTimeSeconds();
+				if (Now - LastSprintStartSoundTime >= SprintStartCooldown)
+				{
+					LastSprintStartSoundTime = Now;
+					UGameplayStatics::PlaySoundAtLocation(CharacterOwner, SprintStartSound, CharacterOwner->GetActorLocation(), SprintStartVolume);
+				}
+			}
 			ASC->SetLooseGameplayTagCount(TAG_State_Sprinting, bSprint ? 1 : 0);
 			bSprintTagged = bSprint;
 		}

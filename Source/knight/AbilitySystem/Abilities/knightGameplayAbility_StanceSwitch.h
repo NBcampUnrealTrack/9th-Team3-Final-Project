@@ -5,7 +5,6 @@
 #include "knightGameplayAbility_StanceSwitch.generated.h"
 
 class UAnimMontage;
-class UNiagaraSystem;
 
 /**
  * (2026-10-15) Q: 한손 ↔ 양손 스탠스 전환. Q·E 스킬(SpinSlash, Shockwave)을 대신한다.
@@ -17,6 +16,8 @@ class UNiagaraSystem;
  *
  * 검이 손에 있을 때만 쓴다. 서 있으면 전환 몽타주(ToTwoHandedMontage / ToOneHandedMontage)를 재생하고,
  * 움직이는 중이면 몽타주 없이 바로 바꾼다(애님 블루프린트가 자세를 블렌드한다).
+ * (2026-10-28) 전환 이펙트는 눈부심 피드백으로 제거. 이동 중 전환은 ABP_Knight_Demo의 Weapon style 전이(Inertialization)와
+ *   DeadBlending 노드가 직전 포즈에서 자연스럽게 이어 준다.
  * 태그는 누른 순간 바꾼다. 몽타주가 중간에 끊겨도 스탠스는 이미 바뀐 상태다.
  *
  * 활성화 그룹은 공격과 같다(Exclusive_Replaceable): 공격 도중에 누르면 입력 버퍼에서 기다렸다가 캔슬 창에서 나간다.
@@ -63,38 +64,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Stance")
 	FName WeaponComponentTag = TEXT("Weapon");
 
-	/** 스탠스 전환 시 검신 스파크 및 등 뒤 부스터 순간 분사 이펙트를 재생할지 여부. */
-	UPROPERTY(EditDefaultsOnly, Category="Stance|Effects")
-	bool bPlayStanceSwitchEffects = true;
-
-	/** 스탠스를 고쳐 잡을 때 검 손잡이/검신에서 튀는 금속 스파크 (기본: NS_Knight_ParrySpark). */
-	UPROPERTY(EditDefaultsOnly, Category="Stance|Effects", meta=(EditCondition="bPlayStanceSwitchEffects"))
-	TObjectPtr<UNiagaraSystem> WeaponSparkEffect;
-
-	/** 양손 스탠스로 전환할 때 검에서 터지는 열기/화염 파동 (기본: NS_Hit_Fire_Once). */
-	UPROPERTY(EditDefaultsOnly, Category="Stance|Effects", meta=(EditCondition="bPlayStanceSwitchEffects"))
-	TObjectPtr<UNiagaraSystem> ToTwoHandedBurstEffect;
-
-	/** 한손 스탠스로 전환할 때 검에서 터지는 청백색 에너지 파동 (기본: NS_Hit_Scifi_Once). */
-	UPROPERTY(EditDefaultsOnly, Category="Stance|Effects", meta=(EditCondition="bPlayStanceSwitchEffects"))
-	TObjectPtr<UNiagaraSystem> ToOneHandedBurstEffect;
-
-	/** 양손 스탠스 전환 시 등 뒤 부스터에서 짧게 뿜어져 나오는 분사 이펙트 (기본: NS_Knight_Thruster). */
-	UPROPERTY(EditDefaultsOnly, Category="Stance|Effects", meta=(EditCondition="bPlayStanceSwitchEffects"))
-	TObjectPtr<UNiagaraSystem> ThrusterBurstEffect;
-
-	/** 등 뒤 부스터 소켓 이름 목록. */
-	UPROPERTY(EditDefaultsOnly, Category="Stance|Effects", meta=(EditCondition="bPlayStanceSwitchEffects"))
-	TArray<FName> ThrusterSockets = { TEXT("thruster_l"), TEXT("thruster_r") };
-
-	/** 양손 전환 시 부스터 분사 유지 시간(초). */
-	UPROPERTY(EditDefaultsOnly, Category="Stance|Effects", meta=(ClampMin=0.05, Units="s", EditCondition="bPlayStanceSwitchEffects"))
-	float ThrusterBurstDuration = 0.28f;
-
 private:
 	UFUNCTION()
 	void OnMontageFinished();
 
 	bool IsWeaponInHand(const FGameplayAbilityActorInfo* ActorInfo) const;
-	void PlayStanceSwitchEffects(const ACharacter* Character, bool bToTwoHanded) const;
 };

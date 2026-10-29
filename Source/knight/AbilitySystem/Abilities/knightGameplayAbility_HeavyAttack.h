@@ -8,8 +8,10 @@
 #include "knightGameplayAbility_HeavyAttack.generated.h"
 
 class UAnimMontage;
+class UAudioComponent;
 class UNiagaraComponent;
 class UNiagaraSystem;
+class USoundBase;
 
 /**
  * Secondary attack key (mouse thumb button): tap for the heavy combo, hold to charge.
@@ -248,6 +250,29 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Charge|Effects", meta=(ClampMin=0.02, Units="s", EditCondition="bPlayChargeEffects"))
 	float ReleaseGroundCrackDelay = 0.60f;
 
+	/**
+	 * (2026-10-28) 차지 유지 루프 사운드. 차지 시작 후 ChargeLoopSoundDelay 뒤부터 페이드 인으로 깔리고, 해방·취소하면 페이드 아웃.
+	 * 차지 시작 소리는 AM_Knight_Charge_Start 몽타주 노티파이가 낸다(터빈 가속음이 끝날 무렵 루프가 이어 받는다). 비우면 없다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Charge|Sound")
+	TObjectPtr<USoundBase> ChargeLoopSound;
+
+	UPROPERTY(EditDefaultsOnly, Category="Charge|Sound", meta=(ClampMin=0, Units="s"))
+	float ChargeLoopSoundDelay = 0.7f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Charge|Sound", meta=(ClampMin=0, Units="s"))
+	float ChargeLoopFadeIn = 0.3f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Charge|Sound", meta=(ClampMin=0, Units="s"))
+	float ChargeLoopFadeOut = 0.15f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Charge|Sound", meta=(ClampMin=0))
+	float ChargeLoopVolume = 0.8f;
+
+	/** (2026-10-28) 최대 차지(MaxChargeTime) 도달 순간 사운드. 비우면 없다. */
+	UPROPERTY(EditDefaultsOnly, Category="Charge|Sound")
+	TObjectPtr<USoundBase> ChargeFullSound;
+
 private:
 	UFUNCTION()
 	void OnReleased(float TimeHeld);
@@ -276,6 +301,9 @@ private:
 	void StartCharge();
 	void StartChargeEffects();
 	void StopChargeEffects();
+	/** (2026-10-28) 차지 유지 루프 사운드. StopChargeEffects가 함께 끈다. */
+	void StartChargeLoopSound();
+	void StopChargeLoopSound();
 	void OnFullChargeReached();
 	void CheckReleaseGroundCrackTiming();
 	void SpawnReleaseGroundCrack();
@@ -303,6 +331,7 @@ private:
 	bool bChargeStateApplied = false;
 	FTimerHandle TapTimer;
 	FTimerHandle FullChargeTimer;
+	FTimerHandle ChargeLoopSoundTimer;
 	FTimerHandle GroundCrackTimer;
 
 	// (2026-10-26) 차지 행동 에너지·해방 후딜.
@@ -321,4 +350,7 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UNiagaraComponent> ActiveChargeSwordFX;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAudioComponent> ActiveChargeLoopAudio;
 };

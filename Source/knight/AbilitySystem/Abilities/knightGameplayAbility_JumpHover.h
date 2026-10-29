@@ -190,6 +190,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Hover|Effects")
 	TObjectPtr<USoundBase> HoverLoopSound;
 
+	/** (2026-10-28) 체공이 끝날 때(추진기가 꺼질 때) 소리. 비우면 없다. */
+	UPROPERTY(EditDefaultsOnly, Category="Hover|Effects")
+	TObjectPtr<USoundBase> HoverEndSound;
+
+	/** (2026-10-28) 체공 중 부스트 게이지가 바닥나 떨어질 때 소리(노즐 헛격발). HoverEndSound 위에 겹친다. 비우면 없다. */
+	UPROPERTY(EditDefaultsOnly, Category="Hover|Effects")
+	TObjectPtr<USoundBase> HoverGaugeEmptySound;
+
 	/**
 	 * 추진음 변화 (2026-10-12). 루프 소리에 로우패스 필터를 걸어 제자리에서는 낮게 웅웅거리고,
 	 * 수평으로 빠르게 날수록 필터가 열리고 피치가 올라 "쉬이익" 하는 분사음이 된다.
