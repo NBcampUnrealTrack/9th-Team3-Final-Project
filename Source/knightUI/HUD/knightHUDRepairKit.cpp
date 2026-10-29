@@ -53,8 +53,9 @@ void UknightHUDRepairKit::Refresh()
 	const int32 Count = VM->GetRepairKitCount();
 	if (Bar_RepairGauge)
 	{
-		// Lit whenever a kit is ready to use; the charge only shows while there is none.
-		Bar_RepairGauge->SetPercent(Count > 0 ? 1.f : VM->GetRepairKitGaugePercent());
+		// (2026-10-29 사용자 요청) 키트 개수와 상관없이 늘 수리 키트 게이지(0~100)만큼 찬다. 다 차면 키트 +1과 함께 게이지가 0으로 돌아간다.
+		// 전에는 키트가 하나라도 있으면 꽉 찬 채로 그려서 게이지가 차는 게 키트 0개일 때만 보였다.
+		Bar_RepairGauge->SetPercent(VM->GetRepairKitGaugePercent());
 		Bar_RepairGauge->SetFillColorAndOpacity(GaugeColor);
 	}
 	if (Txt_RepairKitCount)
