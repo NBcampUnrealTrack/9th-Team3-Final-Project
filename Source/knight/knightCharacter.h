@@ -120,26 +120,13 @@ protected:
 	TObjectPtr<UknightAbilityTagRelationshipMapping> TagRelationshipMapping;
 
 	/**
-	 * (2026-10-28 사용자 결정) 퍼펙트 가드(패링) 1번에 차는 에너지(메카 속성 Energy, 최대 100). 기본 10. 키트 개수와 상관없이 찬다. 바뀔 수 있는 값.
-	 * 전에는 수리 키트 게이지 20씩(퍼펙트 가드 5번에 키트 자동 +1, 2026-10-16)이었다.
+	 * (2026-10-16 사용자 결정) 퍼펙트 가드 1번에 차는 수리 키트 게이지(메카 속성 RepairKitGauge, 100이면 키트 +1).
+	 * 기본 20 = 퍼펙트 가드 5번에 키트 1개. 키트가 최대 개수(MaxRepairKitCount)면 차지 않는다. 바뀔 수 있는 값.
+	 * (2026-10-22) 충전 보조 소켓 1개마다 필요한 퍼펙트 가드 수가 1번 줄어든다(5번 → 4번, 한 번에 25). 최소 1번.
+	 * 그래서 실제 한 번 충전량은 100 ÷ 필요 횟수(올림한 100 ÷ 이 값에서 소켓 수를 뺀 것)로 맞춘다.
 	 */
-	UPROPERTY(EditDefaultsOnly, Category="Knight|Energy", meta=(ClampMin=0))
-	float EnergyPerPerfectGuard = 10.f;
-
-	/** (2026-10-28 사용자 결정) 전환 키(E)로 수리 키트 1개를 만드는 데 드는 에너지. 기본 50(패링 5번). 바뀔 수 있는 값. */
-	UPROPERTY(EditDefaultsOnly, Category="Knight|Energy", meta=(ClampMin=0))
-	float EnergyConvertCost = 50.f;
-
-	/**
-	 * (2026-10-28 사용자 결정) 충전 보조 소켓(SocketGaugeCharge) 1개마다 줄어드는 전환 비용. 기본 10(50 → 40 = 패링 4번, 예전 '퍼펙트 가드 -1회'와 같은 효과).
-	 * 소켓의 EffectValue(배율)는 쓰지 않고 끼운 개수만 센다. 바뀔 수 있는 값.
-	 */
-	UPROPERTY(EditDefaultsOnly, Category="Knight|Energy", meta=(ClampMin=0))
-	float EnergyConvertCostPerSocket = 10.f;
-
-	/** (2026-10-28) 소켓을 아무리 끼워도 전환 비용은 이 값 밑으로 내려가지 않는다. 기본 10. 바뀔 수 있는 값. */
-	UPROPERTY(EditDefaultsOnly, Category="Knight|Energy", meta=(ClampMin=0))
-	float MinEnergyConvertCost = 10.f;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|RepairKit", meta=(ClampMin=0))
+	float RepairKitGaugePerPerfectGuard = 20.f;
 
 	/** This socket bonus is a removable GE; kit count is never replenished by a loadout refresh. */
 	UPROPERTY(Transient) TObjectPtr<UGameplayEffect> SocketRepairCapacityEffect;
@@ -280,22 +267,13 @@ protected:
 	void HandleOutOfHealth(AActor* DamageInstigator, AActor* DamageCauser, const FGameplayEffectSpec* DamageEffectSpec,
 		float DamageMagnitude, float OldValue, float NewValue);
 
-	/** 퍼펙트 가드 성공(Event.ParrySucceeded): 에너지 +EnergyPerPerfectGuard(최대 100). (2026-10-28, 전에는 수리 키트 게이지·자동 키트 +1) */
+	/** 퍼펙트 가드 성공(Event.ParrySucceeded): 키트가 최대보다 적으면 수리 키트 게이지를 채우고, 꽉 차면 키트 +1. (2026-10-16) */
 	void HandlePerfectGuard(const FGameplayEventData* Payload);
 
 public:
 
-	/** (2026-10-28) 소켓 보정 전의 수리 키트 전환 비용(EnergyConvertCost). 정비 화면이 소켓 효과를 보여 줄 때 쓴다. */
-	float GetBaseEnergyConvertCost() const { return EnergyConvertCost; }
-
-	/** (2026-10-28) 지금 수리 키트 1개를 만드는 데 드는 에너지 = EnergyConvertCost − 충전 보조 소켓 수 × EnergyConvertCostPerSocket(최소 MinEnergyConvertCost). */
-	float GetEnergyConvertCost() const;
-
-	/** (2026-10-28) 에너지가 전환 비용 이상이고 키트가 최대 개수보다 적으면 true. 죽었으면 false. */
-	bool CanConvertEnergyToRepairKit() const;
-
-	/** (2026-10-28) 에너지를 전환 비용만큼 쓰고 수리 키트 +1. 못 하면 아무것도 바꾸지 않고 false. GA_Knight_EnergyConvert(E 키)가 부른다. */
-	bool ConvertEnergyToRepairKit();
+	/** Baseline used by HandlePerfectGuard before equipped socket reductions. Zero when charging is disabled. */
+	int32 GetBaseRepairKitGuardsPerKit() const;
 
 	/** 조작이나 UI에서 오는 이동 입력을 처리한다 */
 	UFUNCTION(BlueprintCallable, Category="Input")

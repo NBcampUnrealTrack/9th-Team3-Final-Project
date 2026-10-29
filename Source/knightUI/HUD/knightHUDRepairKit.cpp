@@ -20,7 +20,7 @@ void UknightHUDRepairKit::NativeConstruct()
 	ViewModel = VM;
 
 	using FFields = UknightVM_PlayerStatus::FFieldNotificationClassDescriptor;
-	const UE::FieldNotification::FFieldId Fields[] = { FFields::RepairKitCount, FFields::MaxRepairKitCount, FFields::EnergyPercent };
+	const UE::FieldNotification::FFieldId Fields[] = { FFields::RepairKitCount, FFields::MaxRepairKitCount, FFields::RepairKitGaugePercent };
 	for (const UE::FieldNotification::FFieldId& Field : Fields)
 	{
 		VM->AddFieldValueChangedDelegate(Field, INotifyFieldValueChanged::FFieldValueChangedDelegate::CreateUObject(this, &ThisClass::HandleViewModelChanged));
@@ -53,9 +53,8 @@ void UknightHUDRepairKit::Refresh()
 	const int32 Count = VM->GetRepairKitCount();
 	if (Bar_RepairGauge)
 	{
-		// (2026-10-28) The bar is the energy (0..100) at all times: perfect guards fill it and the convert key spends 50 on a kit.
-		// It used to stay full while a kit was ready and only showed the charge toward the next automatic kit when there was none.
-		Bar_RepairGauge->SetPercent(VM->GetEnergyPercent());
+		// Lit whenever a kit is ready to use; the charge only shows while there is none.
+		Bar_RepairGauge->SetPercent(Count > 0 ? 1.f : VM->GetRepairKitGaugePercent());
 		Bar_RepairGauge->SetFillColorAndOpacity(GaugeColor);
 	}
 	if (Txt_RepairKitCount)

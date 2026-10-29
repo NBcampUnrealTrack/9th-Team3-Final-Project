@@ -11,9 +11,8 @@ class UknightVM_PlayerStatus;
 
 /**
  * Repair kits next to the mech frame (the Knight's groggy gauge): a large wrench in a faint frame with the number of kits on
- * its bottom-right corner. At 0 kits the whole widget dims.
- * (2026-10-28) The wrench fills from the bottom with the energy (0..100): perfect guards add 10, the convert key (E) spends 50 on a kit.
- * Before, the wrench stayed full while any kit was left and only showed the charge toward the next automatic kit at 0 kits.
+ * its bottom-right corner. The wrench is fully lit while any kit is left. At 0 kits the whole widget dims and the wrench
+ * fills from the bottom as perfect guards charge the next kit.
  *
  * Widgets are found by name: Bar_RepairGauge (bottom-to-top bar, fill image = the wrench) and Txt_RepairKitCount.
  */

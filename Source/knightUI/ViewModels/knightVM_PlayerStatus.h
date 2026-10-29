@@ -57,7 +57,7 @@ public:
 	bool IsGroggy() const { return bGroggy; }
 	int32 GetRepairKitCount() const { return RepairKitCount; }
 	int32 GetMaxRepairKitCount() const { return MaxRepairKitCount; }
-	float GetEnergyPercent() const { return EnergyPercent; }
+	float GetRepairKitGaugePercent() const { return RepairKitGaugePercent; }
 
 	/** One of the Knight's parts just got its broken tag (not on rebind to an already broken part). */
 	FknightPlayerPartBroken OnPlayerPartBroken;
@@ -161,9 +161,9 @@ private:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Getter, Category="Knight|Status", meta=(AllowPrivateAccess=true))
 	int32 MaxRepairKitCount = 0;
 
-	/** (2026-10-28) Energy 0..1 (was the repair kit gauge). Perfect guards fill it; the convert key spends it on a repair kit. */
+	/** Progress to the next repair kit (perfect guards), 0..1. */
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Getter, Category="Knight|Status", meta=(AllowPrivateAccess=true))
-	float EnergyPercent = 0.f;
+	float RepairKitGaugePercent = 0.f;
 
 	TWeakObjectPtr<UAbilitySystemComponent> BoundASC;
 	TWeakObjectPtr<UknightTargetLockComponent> BoundTargetLock;

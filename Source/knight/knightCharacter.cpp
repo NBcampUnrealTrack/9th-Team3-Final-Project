@@ -312,51 +312,40 @@ void AknightCharacter::UpdateFullHealthAttackBonus()
 		bWant ? TEXT("on") : TEXT("off"), CoreAttributeSet->GetHealth(), MaxHealth, CoreAttributeSet->GetAttackPower());
 }
 
-float AknightCharacter::GetEnergyConvertCost() const
+int32 AknightCharacter::GetBaseRepairKitGuardsPerKit() const
 {
-	// (2026-10-28 사용자 결정) 충전 보조 소켓(SocketGaugeCharge) 1개마다 EnergyConvertCostPerSocket만큼 싸진다(기본 50 → 40).
-	// 소켓의 EffectValue(배율)는 쓰지 않고 끼운 개수만 센다.
-	const UknightProgressionSubsystem* const Progression = GetGameInstance()
-		? GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>() : nullptr;
-	const int32 Sockets = Progression ? Progression->GetSocketEffectCount(EKnightSocketEffect::SocketGaugeCharge) : 0;
-	return FMath::Max(FMath::Min(MinEnergyConvertCost, EnergyConvertCost), EnergyConvertCost - Sockets * EnergyConvertCostPerSocket);
-}
-
-bool AknightCharacter::CanConvertEnergyToRepairKit() const
-{
-	return !IsDead() && MechAttributeSet
-		&& MechAttributeSet->GetRepairKitCount() < MechAttributeSet->GetMaxRepairKitCount()
-		&& MechAttributeSet->GetEnergy() >= GetEnergyConvertCost();
-}
-
-bool AknightCharacter::ConvertEnergyToRepairKit()
-{
-	if (!CanConvertEnergyToRepairKit() || !AbilitySystemComponent)
-	{
-		return false;
-	}
-	const float Cost = GetEnergyConvertCost();
-	const float Energy = MechAttributeSet->GetEnergy() - Cost;
-	const float KitCount = MechAttributeSet->GetRepairKitCount() + 1.f;
-	AbilitySystemComponent->SetNumericAttributeBase(UknightAttributeSet::GetEnergyAttribute(), Energy);
-	AbilitySystemComponent->SetNumericAttributeBase(UknightAttributeSet::GetRepairKitCountAttribute(), KitCount);
-	UE_LOG(Logknight, Log, TEXT("%s: converted %.0f energy -> repair kit (energy %.0f / %.0f, kits %.0f / %.0f)."), *GetNameSafe(this),
-		Cost, Energy, UknightAttributeSet::MaxEnergy, KitCount, MechAttributeSet->GetMaxRepairKitCount());
-	return true;
+	return RepairKitGaugePerPerfectGuard > 0.f
+		? FMath::Max(1, FMath::CeilToInt(UknightAttributeSet::RepairKitGaugeFull / RepairKitGaugePerPerfectGuard)) : 0;
 }
 
 void AknightCharacter::HandlePerfectGuard(const FGameplayEventData* Payload)
 {
-	// (2026-10-28 사용자 결정) 키트 개수와 상관없이 패링 1번에 EnergyPerPerfectGuard씩 찬다(최대 100, 어트리뷰트가 자른다).
-	// 전에는 키트가 최대보다 적을 때만 수리 키트 게이지가 차고, 꽉 차면 키트가 자동으로 +1 됐다(2026-10-16).
-	if (IsDead() || EnergyPerPerfectGuard <= 0.f)
+	const float KitCount = MechAttributeSet->GetRepairKitCount();
+	const float MaxKitCount = MechAttributeSet->GetMaxRepairKitCount();
+	// 키트가 가득이면 게이지가 오르지 않는다(사용자 결정).
+	if (IsDead() || RepairKitGaugePerPerfectGuard <= 0.f || KitCount >= MaxKitCount)
 	{
 		return;
 	}
-	const float Energy = FMath::Min(MechAttributeSet->GetEnergy() + EnergyPerPerfectGuard, UknightAttributeSet::MaxEnergy);
-	AbilitySystemComponent->SetNumericAttributeBase(UknightAttributeSet::GetEnergyAttribute(), Energy);
-	UE_LOG(Logknight, Log, TEXT("%s: perfect guard -> energy %.0f / %.0f (repair kit costs %.0f), kits %.0f / %.0f."), *GetNameSafe(this),
-		Energy, UknightAttributeSet::MaxEnergy, GetEnergyConvertCost(), MechAttributeSet->GetRepairKitCount(), MechAttributeSet->GetMaxRepairKitCount());
+	// (2026-10-22 사용자 결정) 충전 보조 소켓(SocketGaugeCharge) 1개마다 키트 하나에 필요한 퍼펙트 가드 수 -1 (기본 5번 → 4번).
+	// 소켓의 EffectValue(배율)는 쓰지 않고 끼운 개수만 센다. 최소 1번.
+	const UknightProgressionSubsystem* const Progression = GetGameInstance()
+		? GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>() : nullptr;
+	const int32 BaseGuardsPerKit = GetBaseRepairKitGuardsPerKit();
+	const int32 GuardsPerKit = Progression ? Progression->GetSocketGaugeGuardsPerKit(BaseGuardsPerKit)
+		: FMath::Max(1, BaseGuardsPerKit);
+	float Gauge = MechAttributeSet->GetRepairKitGauge() + UknightAttributeSet::RepairKitGaugeFull / GuardsPerKit;
+	float NewKitCount = KitCount;
+	if (Gauge >= UknightAttributeSet::RepairKitGaugeFull)
+	{
+		// 꽉 차면 키트 +1, 넘친 만큼은 다음 게이지로. 그래서 최대 개수가 되면 0부터.
+		NewKitCount = FMath::Min(KitCount + 1.f, MaxKitCount);
+		Gauge = NewKitCount >= MaxKitCount ? 0.f : Gauge - UknightAttributeSet::RepairKitGaugeFull;
+		AbilitySystemComponent->SetNumericAttributeBase(UknightAttributeSet::GetRepairKitCountAttribute(), NewKitCount);
+	}
+	AbilitySystemComponent->SetNumericAttributeBase(UknightAttributeSet::GetRepairKitGaugeAttribute(), Gauge);
+	UE_LOG(Logknight, Log, TEXT("%s: perfect guard -> repair kit gauge %.0f / %.0f (%d guards per kit), kits %.0f / %.0f."), *GetNameSafe(this),
+		Gauge, UknightAttributeSet::RepairKitGaugeFull, GuardsPerKit, NewKitCount, MaxKitCount);
 }
 
 FGameplayTag AknightCharacter::ResolveHitPart(const FHitResult& Hit) const

@@ -17,7 +17,6 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_LockOn_SwitchRight, "InputTag.LockOn.SwitchRight", "Switch to the target point on the right.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_Interact, "InputTag.Interact", "Interact with gathering points and raid exits.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_Item_Use, "InputTag.Item.Use", "Use the selected consumable.");
-	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_Energy_Convert, "InputTag.Energy.Convert", "(2026-10-28) Spend energy on one repair kit (E).");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_StanceSwitch, "InputTag.StanceSwitch", "(2026-10-15) Switch between one-handed and two-handed stance (Q).");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Attack, "Ability.Attack", "Any attack ability.");
@@ -29,7 +28,6 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_HitReact, "Ability.HitReact", "Hit reaction ability, activated by damage events.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Death, "Ability.Death", "Death ability, activated when Health reaches zero.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Item_RepairKit, "Ability.Item.RepairKit", "Repair kit use (heals Health and the lowest parts first).");
-	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Energy_Convert, "Ability.Energy.Convert", "(2026-10-28) Energy to repair kit conversion (energy is filled by perfect guards).");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_ActivateFail_Cost, "Ability.ActivateFail.Cost", "Activation failed: cost not met.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_ActivateFail_Cooldown, "Ability.ActivateFail.Cooldown", "Activation failed: on cooldown.");

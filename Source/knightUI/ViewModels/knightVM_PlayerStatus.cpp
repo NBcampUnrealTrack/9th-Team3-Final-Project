@@ -35,7 +35,7 @@ void UknightVM_PlayerStatus::Bind(UAbilitySystemComponent* InASC, UknightTargetL
 			UknightCoreAttributeSet::GetMaxPoiseAttribute(),
 			UknightAttributeSet::GetRepairKitCountAttribute(),
 			UknightAttributeSet::GetMaxRepairKitCountAttribute(),
-			UknightAttributeSet::GetEnergyAttribute()
+			UknightAttributeSet::GetRepairKitGaugeAttribute()
 		};
 		for (const FGameplayAttribute& Attribute : Attributes)
 		{
@@ -232,7 +232,7 @@ void UknightVM_PlayerStatus::RefreshKnightParts()
 
 	UE_MVVM_SET_PROPERTY_VALUE(RepairKitCount, FMath::RoundToInt(Value(UknightAttributeSet::GetRepairKitCountAttribute())));
 	UE_MVVM_SET_PROPERTY_VALUE(MaxRepairKitCount, FMath::RoundToInt(Value(UknightAttributeSet::GetMaxRepairKitCountAttribute())));
-	UE_MVVM_SET_PROPERTY_VALUE(EnergyPercent, FMath::Clamp(Value(UknightAttributeSet::GetEnergyAttribute()) / UknightAttributeSet::MaxEnergy, 0.f, 1.f));
+	UE_MVVM_SET_PROPERTY_VALUE(RepairKitGaugePercent, FMath::Clamp(Value(UknightAttributeSet::GetRepairKitGaugeAttribute()) / UknightAttributeSet::RepairKitGaugeFull, 0.f, 1.f));
 }
 
 void UknightVM_PlayerStatus::HandleOverheatedChanged(const FGameplayTag Tag, int32 NewCount)

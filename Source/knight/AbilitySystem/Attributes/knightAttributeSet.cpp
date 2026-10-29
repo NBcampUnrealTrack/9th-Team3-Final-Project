@@ -50,8 +50,7 @@ UknightAttributeSet::UknightAttributeSet()
 	// (2026-10-19 사용자 결정) 시작·최대 3 → 5개.
 	InitRepairKitCount(5.f);
 	InitMaxRepairKitCount(5.f);
-	// (2026-10-28) 수리 키트 게이지 → 에너지. 출격마다 0에서 시작.
-	InitEnergy(0.f);
+	InitRepairKitGauge(0.f);
 }
 
 void UknightAttributeSet::PreAttributeBaseChange(const FGameplayAttribute& Attribute, float& NewValue) const
@@ -111,9 +110,9 @@ void UknightAttributeSet::ClampAttribute(const FGameplayAttribute& Attribute, fl
 	{
 		NewValue = FMath::Max(NewValue, 0.1f);
 	}
-	else if (Attribute == GetEnergyAttribute())
+	else if (Attribute == GetRepairKitGaugeAttribute())
 	{
-		NewValue = FMath::Clamp(NewValue, 0.f, MaxEnergy);
+		NewValue = FMath::Clamp(NewValue, 0.f, RepairKitGaugeFull);
 	}
 	// 나머지는 음수만 막는다.
 	else if (Attribute == GetWeightAttribute() || Attribute == GetWalkSpeedAttribute()

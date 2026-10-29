@@ -443,11 +443,11 @@ namespace
 			}
 			else if (Mode == TEXT("Effect"))
 			{
-				// (2026-10-28) 충전 보조 소켓은 에너지 → 수리 키트 전환 비용을 개수만큼 줄인다(AknightCharacter::GetEnergyConvertCost).
 				const AknightCharacter* const Defaults = GetDefault<AknightCharacter>();
-				const float Base = Defaults ? Defaults->GetBaseEnergyConvertCost() : 0.f;
-				Check(Base > 0.f && Progression->GetSocketEffectCount(EKnightSocketEffect::SocketGaugeCharge) == 1,
-					TEXT("charge socket uses the character's energy convert cost and the socket count, not effect-value multiplier"));
+				const int32 Base = Defaults ? Defaults->GetBaseRepairKitGuardsPerKit() : 0;
+				Check(Base > 0 && Progression->GetSocketGaugeGuardsPerKit(Base) == FMath::Max(1, Base - 1)
+					&& Progression->GetSocketEffectCount(EKnightSocketEffect::SocketGaugeCharge) == 1,
+					TEXT("gauge uses character baseline and guards-per-kit query, not effect-value multiplier"));
 				Check(Progression->GetRepairKitCapacityBonus() == FMath::RoundToInt(Repair->EffectValue)
 					&& FMath::IsNearlyEqual(Progression->GetAttackStaminaCostMultiplier(), 1.f - Attack->EffectValue),
 					TEXT("combined effects match gameplay query semantics"));
@@ -459,7 +459,7 @@ namespace
 				Check(Save->EquippedSocketItems[1] == AttackId, TEXT("same equipped slot click only deselects and never unequips"));
 				SlotButton(2)->OnClicked().Broadcast();
 				Check(Bonus->GetText().ToString().Contains(TEXT("기준")) && !Bonus->GetText().ToString().Contains(TEXT("%")),
-					TEXT("charge detail uses energy cost context rather than percentage"));
+					TEXT("charge detail uses guards-per-kit context rather than percentage"));
 			}
 			else if (Mode == TEXT("Overflow"))
 			{

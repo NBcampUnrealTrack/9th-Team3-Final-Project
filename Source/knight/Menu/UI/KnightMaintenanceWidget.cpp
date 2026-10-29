@@ -337,8 +337,7 @@ namespace
 		{
 		case EKnightSocketEffect::RepairKitCapacity: return LOCTEXT("SocketEffectKit", "수리키트 최대량");
 		case EKnightSocketEffect::AttackStaminaCost: return LOCTEXT("SocketEffectAttack", "공격 스태미너 소모량");
-		// (2026-10-28) 수리 키트 자동 충전 → 에너지 전환으로 바뀌어 효과도 '전환에 드는 에너지 감소'가 됐다.
-		case EKnightSocketEffect::SocketGaugeCharge: return LOCTEXT("SocketEffectCharge", "수리 키트 전환 에너지");
+		case EKnightSocketEffect::SocketGaugeCharge: return LOCTEXT("SocketEffectCharge", "키트 충전에 필요한 퍼펙트 가드");
 		case EKnightSocketEffect::LoadCapacity: return LOCTEXT("SocketEffectLoad", "장비 중량 한계");
 		case EKnightSocketEffect::StaminaRecovery: return LOCTEXT("SocketEffectRecovery", "스태미너 회복량");
 		case EKnightSocketEffect::FullHealthAttack: return LOCTEXT("SocketEffectFullHealth", "최대 체력일 때 공격력");
@@ -350,7 +349,7 @@ namespace
 	{
 		if (!Item) return FText::GetEmpty();
 		if (Item->Effect == EKnightSocketEffect::SocketGaugeCharge)
-			return LOCTEXT("SocketGuardOneLess", "수리 키트 전환에 드는 에너지 감소");
+			return LOCTEXT("SocketGuardOneLess", "키트 충전에 필요한 퍼펙트 가드 -1회");
 		if (!FMath::IsFinite(Item->EffectValue) || Item->EffectValue < 0.f)
 			return LOCTEXT("SocketInvalidEffectValue", "효과 수치 확인 불가");
 		if (Item->Effect == EKnightSocketEffect::RepairKitCapacity)
@@ -1754,7 +1753,7 @@ void UKnightMaintenanceWidget::RefreshSocketDetails()
 		? FText::GetEmpty() : bUnresolved
 			? FText::Format(LOCTEXT("SocketUnknownId", "저장된 아이템 ID: {0}"), FText::FromString(Assignment->ItemId.ToString()))
 			: Equipped ? (Equipped->Effect == EKnightSocketEffect::SocketGaugeCharge
-				? LOCTEXT("SocketGuardDescription", "에너지를 수리 키트로 바꿀 때(E) 드는 에너지를 줄입니다. 패링으로 에너지를 모읍니다.") : Equipped->Description)
+				? LOCTEXT("SocketGuardDescription", "키트 충전에 필요한 퍼펙트 가드 횟수를 줄입니다. 최소 횟수는 1회입니다.") : Equipped->Description)
 			: FText::GetEmpty();
 	if (SocketDetailDescription)
 	{
@@ -1775,10 +1774,11 @@ void UKnightMaintenanceWidget::RefreshSocketDetails()
 		if (const int32 Charge = Progression->GetSocketEffectCount(EKnightSocketEffect::SocketGaugeCharge))
 		{
 			const AknightCharacter* const Character = Cast<AknightCharacter>(GetOwningPlayerPawn());
-			Active.Add(Character
-				? FText::Format(LOCTEXT("SocketActiveChargeExact", "수리 키트 전환 에너지 {0} → {1}"),
-					FText::AsNumber(FMath::RoundToInt(Character->GetBaseEnergyConvertCost())), FText::AsNumber(FMath::RoundToInt(Character->GetEnergyConvertCost())))
-				: FText::Format(LOCTEXT("SocketActiveChargeContext", "충전 보조 {0}개 · 전투 플레이어 기준 비용 확인 불가"), Charge));
+			const int32 Base = Character ? Character->GetBaseRepairKitGuardsPerKit() : 0;
+			Active.Add(Base > 0
+				? FText::Format(LOCTEXT("SocketActiveChargeExact", "키트 충전 퍼펙트 가드 {0}회 → {1}회"),
+					Base, Progression->GetSocketGaugeGuardsPerKit(Base))
+				: FText::Format(LOCTEXT("SocketActiveChargeContext", "충전 보조 {0}개 · 전투 플레이어 기준 횟수 확인 불가"), Charge));
 		}
 		for (const EKnightSocketEffect Effect : { EKnightSocketEffect::LoadCapacity, EKnightSocketEffect::StaminaRecovery, EKnightSocketEffect::FullHealthAttack })
 		{
@@ -1808,10 +1808,11 @@ void UKnightMaintenanceWidget::RefreshSocketDetails()
 		if (Equipped->Effect == EKnightSocketEffect::SocketGaugeCharge && Progression)
 		{
 			const AknightCharacter* const Character = Cast<AknightCharacter>(GetOwningPlayerPawn());
-			Lines.Add(Character
-				? FText::Format(LOCTEXT("SocketIndividualChargeExact", "현재 전체 장착 기준: 에너지 {0} → {1}"),
-					FText::AsNumber(FMath::RoundToInt(Character->GetBaseEnergyConvertCost())), FText::AsNumber(FMath::RoundToInt(Character->GetEnergyConvertCost())))
-				: LOCTEXT("SocketIndividualChargeContext", "전투 플레이어의 기준 전환 비용은 현재 확인할 수 없습니다."));
+			const int32 Base = Character ? Character->GetBaseRepairKitGuardsPerKit() : 0;
+			Lines.Add(Base > 0
+				? FText::Format(LOCTEXT("SocketIndividualChargeExact", "현재 전체 장착 기준: {0}회 → {1}회"),
+					Base, Progression->GetSocketGaugeGuardsPerKit(Base))
+				: LOCTEXT("SocketIndividualChargeContext", "전투 플레이어의 기준 충전 횟수는 현재 확인할 수 없습니다."));
 		}
 	}
 	else Lines.Add(LOCTEXT("SocketEmptyEffect", "이 칸에는 활성 효과가 없습니다. 보유 아이템을 선택한 뒤 장착하세요."));

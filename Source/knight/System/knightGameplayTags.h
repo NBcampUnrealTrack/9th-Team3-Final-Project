@@ -35,8 +35,6 @@ namespace knightGameplayTags
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_LockOn_SwitchRight);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Interact);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Item_Use);
-	// (2026-10-28) E: 에너지 50 → 수리 키트 1개
-	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Energy_Convert);
 	// (2026-10-15) Q: 한손 ↔ 양손 스탠스 전환
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_StanceSwitch);
 
@@ -50,8 +48,6 @@ namespace knightGameplayTags
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_HitReact);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Death);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Item_RepairKit);
-	// (2026-10-28) 에너지 → 수리 키트 전환(UknightGameplayAbility_EnergyConvert)
-	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Energy_Convert);
 
 	// 어빌리티 활성화 실패 사유 (UI와 디버거에서 읽는다)
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_ActivateFail_Cost);
