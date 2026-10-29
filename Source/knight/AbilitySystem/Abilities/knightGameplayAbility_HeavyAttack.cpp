@@ -10,6 +10,7 @@
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
 #include "Animation/knightAnimNotifyState_MeleeTrace.h"
+#include "Components/AudioComponent.h"
 #include "Combat/knightCombatLibrary.h"
 #include "Combat/knightGroggyFeedbackComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -18,11 +19,13 @@
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/Controller.h"
+#include "Kismet/GameplayStatics.h"
 #include "Input/knightInputBufferComponent.h"
 #include "MotionWarpingComponent.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
+#include "Sound/SoundBase.h"
 #include "TimerManager.h"
 #include "System/knightGameplayTags.h"
 #include "knight.h"
@@ -363,6 +366,12 @@ void UknightGameplayAbility_HeavyAttack::StartCharge()
 	{
 		StartChargeEffects();
 	}
+	// (2026-10-28) 차지 유지 루프는 이펙트 설정과 따로 켠다. 시작 소리(몽타주 노티파이)가 잦아들 무렵 이어 받는다.
+	if (ChargeLoopSound && GetWorld())
+	{
+		GetWorld()->GetTimerManager().SetTimer(ChargeLoopSoundTimer, this, &ThisClass::StartChargeLoopSound,
+			FMath::Max(ChargeLoopSoundDelay, 0.01f), false);
+	}
 
 	if (ChargeStartMontage)
 	{
@@ -435,8 +444,46 @@ void UknightGameplayAbility_HeavyAttack::StartChargeEffects()
 	}
 }
 
+void UknightGameplayAbility_HeavyAttack::StartChargeLoopSound()
+{
+	if (Phase != EPhase::Charging || !IsActive() || !ChargeLoopSound)
+	{
+		return;
+	}
+	const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	USkeletalMeshComponent* const Mesh = Character ? Character->GetMesh() : nullptr;
+	if (!Mesh)
+	{
+		return;
+	}
+	if (ActiveChargeLoopAudio)
+	{
+		ActiveChargeLoopAudio->Stop();
+	}
+	ActiveChargeLoopAudio = UGameplayStatics::SpawnSoundAttached(ChargeLoopSound, Mesh, NAME_None, FVector::ZeroVector,
+		EAttachLocation::SnapToTarget, true, ChargeLoopVolume);
+	if (ActiveChargeLoopAudio)
+	{
+		ActiveChargeLoopAudio->FadeIn(ChargeLoopFadeIn);
+	}
+}
+
+void UknightGameplayAbility_HeavyAttack::StopChargeLoopSound()
+{
+	if (UWorld* const World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(ChargeLoopSoundTimer);
+	}
+	if (ActiveChargeLoopAudio)
+	{
+		ActiveChargeLoopAudio->FadeOut(ChargeLoopFadeOut, 0.f);
+		ActiveChargeLoopAudio = nullptr;
+	}
+}
+
 void UknightGameplayAbility_HeavyAttack::StopChargeEffects()
 {
+	StopChargeLoopSound();
 	if (UWorld* const World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(FullChargeTimer);
@@ -458,6 +505,13 @@ void UknightGameplayAbility_HeavyAttack::OnFullChargeReached()
 	if (Phase != EPhase::Charging || !IsActive())
 	{
 		return;
+	}
+	if (ChargeFullSound)
+	{
+		if (const AActor* const Avatar = GetAvatarActorFromActorInfo())
+		{
+			UGameplayStatics::PlaySoundAtLocation(Avatar, ChargeFullSound, Avatar->GetActorLocation());
+		}
 	}
 	ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
 	USkeletalMeshComponent* const CharacterMesh = Character ? Character->GetMesh() : nullptr;

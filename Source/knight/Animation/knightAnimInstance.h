@@ -8,6 +8,7 @@
 class ACharacter;
 class UAbilitySystemComponent;
 class UAnimMontage;
+class UAudioComponent;
 class UNiagaraSystem;
 class USoundBase;
 
@@ -93,6 +94,63 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Footstep")
 	TObjectPtr<USoundBase> FootstepRunSound;
 
+	/**
+	 * (2026-10-28) 발소리 변주. 비어 있지 않으면 FootstepWalkSound / FootstepRunSound 대신 매 걸음 여기서 무작위로
+	 * (직전과 다른 것을) 고른다. Sound Cue 없이 변주 수를 늘릴 수 있다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Footstep")
+	TArray<TObjectPtr<USoundBase>> FootstepWalkSounds;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Footstep")
+	TArray<TObjectPtr<USoundBase>> FootstepRunSounds;
+
+	/** 매 걸음 피치를 1 ± 이 값 안에서 흔든다(같은 소리가 기계적으로 반복되지 않게). */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Footstep", meta=(ClampMin=0, ClampMax=0.5))
+	float FootstepPitchVariance = 0.04f;
+
+	/**
+	 * (2026-10-28) 물 발소리. 디딘 발이 수면 아래면(UknightWaterRippleSubsystem::FindWaterSurface)
+	 *   얕을 때: 발소리 위에 FootstepWaterSounds(물 가르기 레이어)를 겹친다.
+	 *   FootstepDeepWaterDepth 이상 깊을 때: 발소리 대신 FootstepDeepWaterSounds를 낸다.
+	 * 비우면 물을 확인하지 않는다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Footstep|Water")
+	TArray<TObjectPtr<USoundBase>> FootstepWaterSounds;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Footstep|Water")
+	TArray<TObjectPtr<USoundBase>> FootstepDeepWaterSounds;
+
+	/** 발 뼈에서 수면까지 이 깊이 이상이면 깊은 물 발소리. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Footstep|Water", meta=(ClampMin=0, Units="cm"))
+	float FootstepDeepWaterDepth = 45.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Footstep|Water", meta=(ClampMin=0))
+	float FootstepWaterVolume = 0.8f;
+
+	/**
+	 * (2026-10-28) 서보 구동 루프. 땅 위를 움직이는 동안 작게 깔리는 기계 구동음으로, 속도에 따라 볼륨·피치가 오른다.
+	 * 멈추거나 공중이면 서서히 사라진다. 비우면 없다(몬스터 기본).
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Servo")
+	TObjectPtr<USoundBase> ServoLoopSound;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Servo", meta=(ClampMin=0))
+	float ServoLoopMaxVolume = 0.35f;
+
+	/** 이 수평 속도에서 볼륨·피치가 최대가 된다. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Servo", meta=(ClampMin=1, Units="CentimetersPerSecond"))
+	float ServoLoopFullSpeed = 650.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Servo", meta=(ClampMin=0.1, ClampMax=4))
+	float ServoLoopPitchSlow = 0.9f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Servo", meta=(ClampMin=0.1, ClampMax=4))
+	float ServoLoopPitchFast = 1.1f;
+
+	/** 볼륨이 목표를 따라가는 속도(초당 최대 볼륨 비율). */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Servo", meta=(ClampMin=0.1))
+	float ServoLoopFadeRate = 3.f;
+
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Footstep")
 	TArray<FName> FootstepBones = { TEXT("foot_l"), TEXT("foot_r") };
 
@@ -142,6 +200,19 @@ private:
 		double LastStepTime = -UE_BIG_NUMBER;
 	};
 	TArray<FFootState> FootStates;
+
+	/** (2026-10-28) 변주 배열에서 직전과 다른 것을 고른다. 비었으면 nullptr. */
+	static USoundBase* PickVariation(const TArray<TObjectPtr<USoundBase>>& Sounds, int32& LastIndex);
+	int32 LastWalkIndex = INDEX_NONE;
+	int32 LastRunIndex = INDEX_NONE;
+	int32 LastWaterIndex = INDEX_NONE;
+	int32 LastDeepWaterIndex = INDEX_NONE;
+
+	/** (2026-10-28) 서보 구동 루프. 게임 월드에서만 켠다. */
+	void UpdateServoLoop(float DeltaSeconds);
+	UPROPERTY(Transient)
+	TObjectPtr<UAudioComponent> ServoLoopAudio;
+	float ServoLoopCurrentVolume = 0.f;
 
 	// Game thread copies read by the thread-safe update.
 	FVector CachedVelocity = FVector::ZeroVector;

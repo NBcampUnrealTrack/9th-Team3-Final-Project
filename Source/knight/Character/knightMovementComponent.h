@@ -174,6 +174,17 @@ protected:
 	/** 달리기 태그가 붙는 속도. 걷기 최대 속도에 대한 비율이다. 1보다 조금 크게 둬서 걷기와 섞이지 않게 한다. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Speed", meta=(ClampMin=0.5, ClampMax=2))
 	float SprintTagSpeedRatio = 1.05f;
+
+	/** (2026-10-28) 달리기가 시작될 때(State.Sprinting이 붙는 순간) 소리. 비우면 없다. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Speed")
+	TObjectPtr<USoundBase> SprintStartSound;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Speed", meta=(ClampMin=0))
+	float SprintStartVolume = 0.8f;
+
+	/** 달렸다 멈췄다를 빠르게 반복할 때 소리가 겹치지 않게 하는 최소 간격. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Speed", meta=(ClampMin=0, Units="s"))
+	float SprintStartCooldown = 1.f;
 	virtual bool DoJump(bool bReplayingMoves, float DeltaTime) override;
 	virtual void ApplyVelocityBraking(float DeltaTime, float Friction, float BrakingDeceleration) override;
 
@@ -263,6 +274,7 @@ private:
 	int32 MoveInputLockCount = 0;
 	int32 RunLockCount = 0;
 	bool bSprintTagged = false;
+	double LastSprintStartSoundTime = -1000.0;
 	bool bLandingRecovery = false;
 	FTimerHandle LandingRecoveryTimer;
 };

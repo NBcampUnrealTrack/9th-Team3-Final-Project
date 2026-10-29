@@ -4,8 +4,10 @@
 #include "AbilitySystemGlobals.h"
 #include "Animation/AnimMontage.h"
 #include "Character/knightMovementComponent.h"
+#include "Components/AudioComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
+#include "Environment/knightWaterRippleSubsystem.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
@@ -81,10 +83,69 @@ void UknightAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		? FMath::FInterpConstantTo(AirLegLockAlpha, LegLockTarget, DeltaSeconds, 1.f / AirLegLockBlendTime)
 		: LegLockTarget;
 
-	if (Character && (FootstepWalkSound || FootstepRunSound))
+	if (Character && (FootstepWalkSound || FootstepRunSound || FootstepWalkSounds.Num() > 0 || FootstepRunSounds.Num() > 0))
 	{
 		UpdateFootsteps(DeltaSeconds, *Character);
 	}
+	if (ServoLoopSound)
+	{
+		UpdateServoLoop(DeltaSeconds);
+	}
+}
+
+USoundBase* UknightAnimInstance::PickVariation(const TArray<TObjectPtr<USoundBase>>& Sounds, int32& LastIndex)
+{
+	if (Sounds.Num() == 0)
+	{
+		return nullptr;
+	}
+	int32 Index = FMath::RandRange(0, Sounds.Num() - 1);
+	if (Sounds.Num() > 1 && Index == LastIndex)
+	{
+		Index = (Index + FMath::RandRange(1, Sounds.Num() - 1)) % Sounds.Num();
+	}
+	LastIndex = Index;
+	return Sounds[Index];
+}
+
+void UknightAnimInstance::UpdateServoLoop(const float DeltaSeconds)
+{
+	const UWorld* const World = GetWorld();
+	USkeletalMeshComponent* const Mesh = GetSkelMeshComponent();
+	if (!World || !World->IsGameWorld() || !Mesh)
+	{
+		return;
+	}
+	const float SpeedAlpha = FMath::Clamp(static_cast<float>(CachedVelocity.Size2D()) / FMath::Max(ServoLoopFullSpeed, 1.f), 0.f, 1.f);
+	const float TargetVolume = bCachedIsFalling ? 0.f : ServoLoopMaxVolume * SpeedAlpha;
+	ServoLoopCurrentVolume = FMath::FInterpConstantTo(ServoLoopCurrentVolume, TargetVolume, DeltaSeconds,
+		FMath::Max(ServoLoopMaxVolume, 0.01f) * ServoLoopFadeRate);
+
+	if (ServoLoopCurrentVolume <= KINDA_SMALL_NUMBER)
+	{
+		// 멈췄을 때는 소리 채널을 차지하지 않게 끈다.
+		if (ServoLoopAudio && ServoLoopAudio->IsPlaying())
+		{
+			ServoLoopAudio->Stop();
+		}
+		return;
+	}
+	if (!ServoLoopAudio)
+	{
+		ServoLoopAudio = UGameplayStatics::SpawnSoundAttached(ServoLoopSound, Mesh, NAME_None, FVector::ZeroVector,
+			EAttachLocation::SnapToTarget, true, ServoLoopCurrentVolume, 1.f, 0.f, nullptr, nullptr, false);
+	}
+	if (!ServoLoopAudio)
+	{
+		return;
+	}
+	if (!ServoLoopAudio->IsPlaying())
+	{
+		// 루프 어디서나 시작해 멈췄다 출발할 때마다 같은 소리로 시작하지 않게 한다.
+		ServoLoopAudio->Play(FMath::FRandRange(0.f, 2.5f));
+	}
+	ServoLoopAudio->SetVolumeMultiplier(ServoLoopCurrentVolume);
+	ServoLoopAudio->SetPitchMultiplier(FMath::Lerp(ServoLoopPitchSlow, ServoLoopPitchFast, SpeedAlpha));
 }
 
 void UknightAnimInstance::UpdateFootsteps(const float DeltaSeconds, const ACharacter& Character)
@@ -102,7 +163,8 @@ void UknightAnimInstance::UpdateFootsteps(const float DeltaSeconds, const AChara
 
 	const bool bActive = !bCachedIsFalling && CachedVelocity.Size2D() >= FootstepMinSpeed;
 	const UknightMovementComponent* const KnightMovement = Cast<UknightMovementComponent>(Character.GetCharacterMovement());
-	USoundBase* const Sound = (KnightMovement && KnightMovement->IsRunning() && FootstepRunSound) ? FootstepRunSound.Get()
+	const bool bRunning = KnightMovement && KnightMovement->IsRunning();
+	USoundBase* const Sound = (bRunning && FootstepRunSound) ? FootstepRunSound.Get()
 		: (FootstepWalkSound ? FootstepWalkSound.Get() : FootstepRunSound.Get());
 	const double Now = World->GetTimeSeconds();
 	const float MeshZ = Mesh->GetComponentLocation().Z;
@@ -150,10 +212,40 @@ void UknightAnimInstance::UpdateFootsteps(const float DeltaSeconds, const AChara
 		else if (Height <= Foot.MinHeight + Range * FootstepPlantRatio)
 		{
 			Foot.bLifted = false;
-			if (Sound && Now - Foot.LastStepTime >= FootstepCooldown)
+			if (Now - Foot.LastStepTime >= FootstepCooldown)
 			{
 				Foot.LastStepTime = Now;
-				UGameplayStatics::PlaySoundAtLocation(&Character, Sound, FootLocation, FootstepVolume);
+				// (2026-10-28) 변주 배열이 있으면 거기서 고르고, 물에 잠긴 발이면 물 발소리를 겹치거나 바꾼다.
+				USoundBase* StepSound = bRunning
+					? (FootstepRunSounds.Num() > 0 ? PickVariation(FootstepRunSounds, LastRunIndex) : Sound)
+					: (FootstepWalkSounds.Num() > 0 ? PickVariation(FootstepWalkSounds, LastWalkIndex) : Sound);
+				bool bInWater = false;
+				bool bDeepWater = false;
+				if (FootstepWaterSounds.Num() > 0 || FootstepDeepWaterSounds.Num() > 0)
+				{
+					float SurfaceZ = 0.f;
+					if (UknightWaterRippleSubsystem::FindWaterSurface(World, FootLocation, SurfaceZ) && SurfaceZ > FootLocation.Z)
+					{
+						bInWater = true;
+						bDeepWater = FootstepDeepWaterSounds.Num() > 0 && SurfaceZ - FootLocation.Z >= FootstepDeepWaterDepth;
+					}
+				}
+				if (bDeepWater)
+				{
+					StepSound = PickVariation(FootstepDeepWaterSounds, LastDeepWaterIndex);
+				}
+				const float StepPitch = 1.f + FMath::FRandRange(-FootstepPitchVariance, FootstepPitchVariance);
+				if (StepSound)
+				{
+					UGameplayStatics::PlaySoundAtLocation(&Character, StepSound, FootLocation, FootstepVolume, StepPitch);
+				}
+				if (bInWater && !bDeepWater)
+				{
+					if (USoundBase* const WaterSound = PickVariation(FootstepWaterSounds, LastWaterIndex))
+					{
+						UGameplayStatics::PlaySoundAtLocation(&Character, WaterSound, FootLocation, FootstepWaterVolume, StepPitch);
+					}
+				}
 				if (bSpawnFootstepRunDust && KnightMovement && KnightMovement->IsRunning())
 				{
 					UNiagaraSystem* DustAsset = FootstepRunDustEffect;
@@ -171,7 +263,8 @@ void UknightAnimInstance::UpdateFootsteps(const float DeltaSeconds, const AChara
 				if (CVarDebugFootsteps.GetValueOnGameThread() > 0)
 				{
 					DrawDebugSphere(World, FootLocation, 12.f, 8, FColor::Green, false, 0.5f);
-					UE_LOG(LogTemp, Log, TEXT("[Footstep] %s %s"), *FootstepBones[Index].ToString(), *GetNameSafe(Sound));
+					UE_LOG(LogTemp, Log, TEXT("[Footstep] %s %s water %d deep %d"), *FootstepBones[Index].ToString(), *GetNameSafe(StepSound),
+						bInWater ? 1 : 0, bDeepWater ? 1 : 0);
 				}
 #endif
 			}

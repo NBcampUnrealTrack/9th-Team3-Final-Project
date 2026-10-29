@@ -273,6 +273,10 @@ void UknightGameplayAbility_JumpHover::TickHover()
 				if (GaugeValue <= 0.f)
 				{
 					UE_LOG(LogknightAbility, Log, TEXT("JumpHover: boost gauge empty, falling"));
+					if (HoverGaugeEmptySound)
+					{
+						UGameplayStatics::PlaySoundAtLocation(Character, HoverGaugeEmptySound, Character->GetActorLocation());
+					}
 					EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, false);
 					return;
 				}
@@ -418,6 +422,14 @@ void UknightGameplayAbility_JumpHover::StartEffects()
 
 void UknightGameplayAbility_JumpHover::StopEffects()
 {
+	// (2026-10-28) 체공 연출이 켜져 있었을 때만(점프만 하고 끝난 경우는 제외) 추진기 꺼지는 소리를 낸다.
+	if (HoverEndSound && (LoopAudio || ThrusterComponents.Num() > 0))
+	{
+		if (const AActor* const Avatar = GetAvatarActorFromActorInfo())
+		{
+			UGameplayStatics::PlaySoundAtLocation(Avatar, HoverEndSound, Avatar->GetActorLocation());
+		}
+	}
 	for (UNiagaraComponent* const Jet : ThrusterComponents)
 	{
 		if (Jet)
