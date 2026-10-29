@@ -56,6 +56,11 @@ float UknightGameplayAbility_BoostDash::GetMechAttributeValue(const FGameplayAtt
 bool UknightGameplayAbility_BoostDash::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
 {
+	// (2026-10-29 사용자 결정) 퀵스텝 비활성화 중이면 발동하지 않는다.
+	if (!bQuickstepEnabled)
+	{
+		return false;
+	}
 	// 퀵스텝 쿨타임 중이면 발동하지 않는다.
 	const UWorld* const World = GetWorld();
 	if (World && World->GetTimeSeconds() < CooldownEndTime)

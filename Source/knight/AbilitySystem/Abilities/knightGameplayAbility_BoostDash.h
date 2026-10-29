@@ -60,6 +60,13 @@ public:
 		const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
 
 protected:
+	/**
+	 * (2026-10-29 사용자 결정) 퀵스텝 비활성화: 꺼져 있으면 퀵스텝 키(Ctrl)를 눌러도 나가지 않는다(CanActivateAbility가 거절).
+	 * 어빌리티 세트·입력 매핑은 그대로라, GA_Knight_BoostDash에서 이 칸만 켜면 다시 쓸 수 있다. 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Dash")
+	bool bQuickstepEnabled = false;
+
 	/** 배율·중량 계수가 1일 때의 대시 거리. (2026-10-07 900 → 750, 2026-10-16 750 → 375 절반으로 조정) */
 	UPROPERTY(EditDefaultsOnly, Category="Dash", meta=(ClampMin=0, Units="cm"))
 	float DashDistance = 375.f;
