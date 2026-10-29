@@ -42,6 +42,7 @@ void UknightGameplayAbility_MonsterProjectileAttack::ActivateAbility(const FGame
 	const UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();
 	const bool bEnraged = ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Enraged);
 	ShotsLeft = FMath::Max(1, bEnraged ? EnragedShotCount : ShotCount);
+	ProjectilesPerShot = bEnraged ? FMath::Max(1, EnragedProjectilesPerShot) : 1;
 	ShotEffect = bEnraged && EnragedProjectileEffect ? EnragedProjectileEffect.Get() : ProjectileEffect.Get();
 	Elapsed = 0.f;
 	NextShotTime = FireTime;
@@ -108,12 +109,18 @@ void UknightGameplayAbility_MonsterProjectileAttack::Fire()
 	Params.Owner = Monster;
 	Params.Instigator = Monster;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-	AknightMonsterSonicProjectile* const Projectile = World->SpawnActor<AknightMonsterSonicProjectile>(Muzzle, (Aim - Muzzle).Rotation(), Params);
-	if (Projectile)
+	for (int32 Index = 0; Index < ProjectilesPerShot; ++Index)
 	{
-		Projectile->SetDeafenTime(DeafenTime);
-		Projectile->SetImpactEffects(ImpactEffects);
-		Projectile->Launch(Monster, HitParams, Aim - Muzzle, ProjectileSpeed, ProjectileRadius, MaxDistance, ShotEffect);
+		// 가운데가 타깃을 겨누고 나머지는 수평으로 EnragedSpreadAngle 안에 고르게 벌린다.
+		const float Yaw = ProjectilesPerShot > 1 ? EnragedSpreadAngle * (static_cast<float>(Index) / (ProjectilesPerShot - 1) - 0.5f) : 0.f;
+		const FVector Direction = (Aim - Muzzle).RotateAngleAxis(Yaw, FVector::UpVector);
+		AknightMonsterSonicProjectile* const Projectile = World->SpawnActor<AknightMonsterSonicProjectile>(Muzzle, Direction.Rotation(), Params);
+		if (Projectile)
+		{
+			Projectile->SetDeafenTime(DeafenTime);
+			Projectile->SetImpactEffects(ImpactEffects);
+			Projectile->Launch(Monster, HitParams, Direction, ProjectileSpeed, ProjectileRadius, MaxDistance, ShotEffect);
+		}
 	}
 	if (FireSound && Mesh)
 	{

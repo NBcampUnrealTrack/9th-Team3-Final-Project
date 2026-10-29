@@ -47,12 +47,54 @@ UknightGameplayAbility_MonsterAttack::UknightGameplayAbility_MonsterAttack(const
 
 float UknightGameplayAbility_MonsterAttack::GetSelectionWeight(const FknightMonsterAttackContext& Context) const
 {
-	if (Selection.Weight <= 0.f || GetCooldownRemaining(Context.WorldTime) > 0.f)
+	return GetSelectionWeightInternal(Context, true);
+}
+
+FGameplayAbilitySpecHandle UknightGameplayAbility_MonsterAttack::PickFollowUp(UAbilitySystemComponent& ASC, const FknightMonsterAttackContext& Context) const
+{
+	if (FollowUpAttacks.IsEmpty() || !ASC.HasAllMatchingGameplayTags(FollowUpRequiredTags) || FMath::FRand() > FollowUpChance)
+	{
+		return FGameplayAbilitySpecHandle();
+	}
+	TArray<TPair<FGameplayAbilitySpecHandle, float>> Candidates;
+	float TotalWeight = 0.f;
+	for (const TSubclassOf<UknightGameplayAbility_MonsterAttack>& AttackClass : FollowUpAttacks)
+	{
+		const FGameplayAbilitySpec* const Spec = AttackClass ? ASC.FindAbilitySpecFromClass(AttackClass) : nullptr;
+		const UknightGameplayAbility_MonsterAttack* const Attack = Spec && !Spec->IsActive()
+			? Cast<UknightGameplayAbility_MonsterAttack>(Spec->GetPrimaryInstance() ? Spec->GetPrimaryInstance() : Spec->Ability.Get()) : nullptr;
+		const float Weight = Attack ? Attack->GetSelectionWeightInternal(Context, false) : 0.f;
+		if (Weight > 0.f)
+		{
+			Candidates.Emplace(Spec->Handle, Weight);
+			TotalWeight += Weight;
+		}
+	}
+	float Roll = FMath::FRandRange(0.f, TotalWeight);
+	for (const TPair<FGameplayAbilitySpecHandle, float>& Candidate : Candidates)
+	{
+		Roll -= Candidate.Value;
+		if (Roll <= 0.f)
+		{
+			return Candidate.Key;
+		}
+	}
+	return Candidates.IsEmpty() ? FGameplayAbilitySpecHandle() : Candidates.Last().Key;
+}
+
+float UknightGameplayAbility_MonsterAttack::GetSelectionWeightInternal(const FknightMonsterAttackContext& Context, bool bCheckCooldown) const
+{
+	if (Selection.Weight <= 0.f || (bCheckCooldown && GetCooldownRemaining(Context.WorldTime) > 0.f))
 	{
 		return 0.f;
 	}
 	if (Context.MonsterASC)
 	{
+		// 분노 마무리 공격은 몬스터가 직접 쓴다. 그동안 AI는 다른 공격을 고르지 않는다.
+		if (Context.MonsterASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_EnrageFinale))
+		{
+			return 0.f;
+		}
 		if (!Context.MonsterASC->HasAllMatchingGameplayTags(Selection.RequiredOwnerTags)
 			|| Context.MonsterASC->HasAnyMatchingGameplayTags(Selection.BlockedOwnerTags))
 		{

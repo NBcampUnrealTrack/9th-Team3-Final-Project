@@ -179,8 +179,23 @@ private:
 	void StartLoopSounds(bool bEngaged);
 	void StopLoopSounds();
 	void HandleLoopSoundMuteChanged(const FGameplayTag Tag, int32 NewCount);
+	/** 태그로 줄여 두거나 BurstTime 사이에 쉬는 중이면 줄인 볼륨, 아니면 원래 볼륨. */
+	float GetLoopVolume(int32 Index) const;
+	/** BurstTime을 쓰는 소리를 들림 ↔ 쉼으로 바꾸고 다음 전환을 예약한다. */
+	void ToggleLoopBurst(int32 Index);
+
+	/** 분노 마무리 공격(MonsterDefinition::EnrageFinaleAttack) 진행 단계: 분노 중 대기 → 남은 시간이 짧아져 쓸 준비 → 쓰는 중. */
+	enum class EEnrageFinale : uint8 { None, Waiting, Pending, Running };
+	EEnrageFinale EnrageFinale = EEnrageFinale::None;
+	double EnrageFinaleGiveUpTime = 0.0;
+	FTimerHandle EnrageFinaleTimer;
+	void UpdateEnrageFinale();
+	void EndEnrageFinale();
 
 	/** LoopSounds와 같은 순서. 아직 틀지 않은 소리는 비어 있다. */
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UAudioComponent>> LoopAudios;
+	/** LoopSounds와 같은 순서. BurstTime을 쓰는 소리가 지금 쉬는 중인지. */
+	TArray<bool> LoopResting;
+	TArray<FTimerHandle> LoopBurstTimers;
 };

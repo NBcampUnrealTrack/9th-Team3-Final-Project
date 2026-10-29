@@ -9,6 +9,7 @@ class UAnimMontage;
 class UGameplayEffect;
 class UknightAbilitySet;
 class UknightAbilityTagRelationshipMapping;
+class UknightGameplayAbility_MonsterAttack;
 class UknightMonsterPartData;
 class UNiagaraSystem;
 class USoundBase;
@@ -37,6 +38,17 @@ struct KNIGHT_API FknightMonsterLoopSound
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Sound", meta=(ClampMin=0, Units="s"))
 	float FadeTime = 0.5f;
+
+	/**
+	 * 0보다 크면 내내 들리게 두지 않고 이 시간만큼만 들린 뒤 RestTime 동안 줄여 둔다(가끔 그르렁거리는 소리).
+	 * 짧은 반복음이 계속 깔리면 같은 소리가 되풀이되는 게 귀에 띄어서 쓴다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Sound", meta=(ClampMin=0, Units="s"))
+	float BurstTime = 0.f;
+
+	/** BurstTime을 쓸 때 다시 들릴 때까지 쉬는 시간. 매번 이 범위에서 무작위로 고른다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Sound", meta=(EditCondition="BurstTime > 0"))
+	FFloatInterval RestTime = FFloatInterval(6.f, 10.f);
 };
 
 /**
@@ -72,6 +84,17 @@ public:
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="States", meta=(ClampMin=0, ClampMax=1))
 	float RageFullDamageRatio = 0.f;
+
+	/**
+	 * 분노(EnrageEffect)가 끝나기 전 마지막으로 반드시 쓰는 공격(잔향: 공명해방 끝의 강화 물 회오리).
+	 * 남은 시간이 EnrageFinaleLeadTime 이하가 되면 다른 공격을 고르지 않고, 지금 공격이 끝나는 대로 쓴다(공중 공격이면 먼저 이륙).
+	 * 이 공격이 끝나거나 지쳐 내려앉을 때(State.Monster.Collapsed)까지 분노를 유지한다. 비우면 쓰지 않는다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="States")
+	TSubclassOf<UknightGameplayAbility_MonsterAttack> EnrageFinaleAttack;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="States", meta=(EditCondition="EnrageFinaleAttack != nullptr", ClampMin=0, Units="s"))
+	float EnrageFinaleLeadTime = 8.f;
 
 	/** Applied when Stamina runs out: grants State.Monster.Exhausted for a duration and restores Stamina. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="States")

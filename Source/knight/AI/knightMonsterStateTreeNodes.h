@@ -126,6 +126,8 @@ struct FknightActivateAbilityTaskInstanceData
 	/** 발동한 몬스터 공격이 끝난 뒤 쉴 시간(MonsterDefinition의 AttackRestTime). 0이면 어빌리티가 끝나는 즉시 성공한다. */
 	float RestTime = 0.f;
 	double SucceedAtTime = -1.0;
+	/** 발동한 공격이 연계(FollowUpAttacks)를 가질 수 있어 끝난 뒤 Tick에서 이어 쓸지 본다. 이어 쓴 공격은 다시 잇지 않는다. */
+	bool bMayFollowUp = false;
 };
 
 /**
@@ -133,6 +135,7 @@ struct FknightActivateAbilityTaskInstanceData
  * 못하면 실패). 몬스터 공격(UknightGameplayAbility_MonsterAttack)은 Selection이 현재 타깃을 허용하는 것들 중
  * 가중치 랜덤으로 고른다. 조건에 맞는 다른 어빌리티는 가중치 1로 친다.
  * 몬스터 공격은 끝난 뒤 MonsterDefinition의 AttackRestTime(2페이즈는 Phase2AttackRestTime)만큼 더 서 있다가 성공한다.
+ * 끝난 공격에 연계(FollowUpAttacks)가 있으면 쉬지 않고 이어 쓰고, 그 공격이 끝날 때까지 기다린다.
  */
 USTRUCT(meta=(DisplayName="Knight Activate Ability", Category="Knight"))
 struct KNIGHT_API FknightStateTreeActivateAbilityTask : public FStateTreeTaskCommonBase
@@ -141,7 +144,7 @@ struct KNIGHT_API FknightStateTreeActivateAbilityTask : public FStateTreeTaskCom
 
 	FknightStateTreeActivateAbilityTask()
 	{
-		// Tick은 재시도 대기와 공격 뒤 쉬는 시간을 끝내는 용도로만 쓴다. 실행 중인 어빌리티는 종료 델리게이트로 Task를 끝낸다.
+		// Tick은 재시도 대기, 연계, 공격 뒤 쉬는 시간을 끝내는 용도로만 쓴다. 실행 중인 어빌리티는 종료 델리게이트로 Task를 끝낸다.
 		bShouldCallTick = true;
 	}
 
@@ -151,6 +154,12 @@ struct KNIGHT_API FknightStateTreeActivateAbilityTask : public FStateTreeTaskCom
 	virtual EStateTreeRunStatus EnterState(FStateTreeExecutionContext& Context, const FStateTreeTransitionResult& Transition) const override;
 	virtual EStateTreeRunStatus Tick(FStateTreeExecutionContext& Context, const float DeltaTime) const override;
 	virtual void ExitState(FStateTreeExecutionContext& Context, const FStateTreeTransitionResult& Transition) const override;
+
+private:
+	/** Handle이 끝나는 것을 지켜본다(취소되면 실패, 쉬는 시간·연계가 없으면 바로 성공). 이전 바인딩은 푼다. */
+	static void BindAbilityEnded(FStateTreeExecutionContext& Context, FInstanceDataType& InstanceData, FGameplayAbilitySpecHandle Handle);
+	/** 방금 끝난 공격의 연계를 하나 발동한다. 발동했으면 true. */
+	static bool TryFollowUp(FStateTreeExecutionContext& Context, FInstanceDataType& InstanceData);
 };
 
 ////////////////////////////////////////////////////////////////////
