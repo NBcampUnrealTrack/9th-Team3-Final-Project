@@ -36,4 +36,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|Anim Splice")
 	static UAnimSequence* BakeAlignedSplicedSequence(UAnimSequence* First, float FirstEndTime, UAnimSequence* Second, float SecondStartTime,
 		float BlendTime, const FTransform& SecondOffset, const FString& PackagePath);
+
+	/**
+	 * Sequence의 Bone을 컴포넌트 공간 위쪽(Z) 축으로 YawDegrees만큼 돌려 굽는다. 그 뼈 아래(팔 전체 등)가 뼈 위치를 중심으로 함께 돈다.
+	 * FadeInStart~HoldStart 동안 0에서 YawDegrees로, HoldEnd~FadeOutEnd 동안 다시 0으로 부드럽게 바뀐다.
+	 * 예: 할퀴기의 팔 궤적을 몸 안쪽으로 틀어 정면을 지나게 한다. 시퀀스를 직접 고친다. 저장은 호출한 쪽.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|Anim Splice")
+	static bool BakeBoneYawOffset(UAnimSequence* Sequence, FName Bone, float FadeInStart, float HoldStart, float HoldEnd, float FadeOutEnd,
+		float YawDegrees);
 };
