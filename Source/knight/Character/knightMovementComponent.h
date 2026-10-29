@@ -174,6 +174,17 @@ protected:
 	/** 달리기 태그가 붙는 속도. 걷기 최대 속도에 대한 비율이다. 1보다 조금 크게 둬서 걷기와 섞이지 않게 한다. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Speed", meta=(ClampMin=0.5, ClampMax=2))
 	float SprintTagSpeedRatio = 1.05f;
+
+	/** (2026-10-28) 달리기가 시작될 때(State.Sprinting이 붙는 순간) 소리. 비우면 없다. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Speed")
+	TObjectPtr<USoundBase> SprintStartSound;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Speed", meta=(ClampMin=0))
+	float SprintStartVolume = 0.8f;
+
+	/** 달렸다 멈췄다를 빠르게 반복할 때 소리가 겹치지 않게 하는 최소 간격. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Speed", meta=(ClampMin=0, Units="s"))
+	float SprintStartCooldown = 1.f;
 	virtual bool DoJump(bool bReplayingMoves, float DeltaTime) override;
 	virtual void ApplyVelocityBraking(float DeltaTime, float Friction, float BrakingDeceleration) override;
 
@@ -188,16 +199,19 @@ protected:
 	/**
 	 * 배율 1.0일 때의 걷기 속도. 바뀔 수 있는 값.
 	 * (2026-10-14) 600 → 540 (-10%): '게임이 너무 스피디하다'는 의견으로 시험. MaxAcceleration도 같이 낮춤(생성자, 1200 → 1100).
+	 * (2026-10-28) 540 → 450: 이동 중 미끄러지는 느낌 수정. 조깅 애니(원래 384cm/s)를 1.17배로 재생해 이 속도에 맞췄다.
+	 *   블렌드스페이스(UE4_*_Jog_*_BlendSpace, BS_Knight_Locomotion) 샘플 위치·재생 배율과 같이 바꿔야 한다.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Speed", meta=(ClampMin=0, Units="CentimetersPerSecond"))
-	float BaseWalkSpeed = 540.f;
+	float BaseWalkSpeed = 450.f;
 
 	/**
 	 * 배율 1.0일 때의 달리기 속도. 무거운 메카 느낌을 위해 걷기의 1.5배로 시작한다. 바뀔 수 있는 값.
 	 * (2026-10-14) 900 → 810 (-10%), 걷기와 같은 이유.
+	 * (2026-10-28) 810 → 650: 달리기 애니(원래 480cm/s)를 1.35배로 재생해 맞췄다. 걷기와 같은 이유.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Speed", meta=(ClampMin=0, Units="CentimetersPerSecond"))
-	float BaseRunSpeed = 810.f;
+	float BaseRunSpeed = 650.f;
 
 	/**
 	 * (2026-10-23 사용자 결정) 락온 중에는 이동 방향이 앞(캐릭터가 보는 쪽)과 이 값 이상으로 겹칠 때만 달린다(내적, 1 = 정면).
@@ -260,6 +274,7 @@ private:
 	int32 MoveInputLockCount = 0;
 	int32 RunLockCount = 0;
 	bool bSprintTagged = false;
+	double LastSprintStartSoundTime = -1000.0;
 	bool bLandingRecovery = false;
 	FTimerHandle LandingRecoveryTimer;
 };
