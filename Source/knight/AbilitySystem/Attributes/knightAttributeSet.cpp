@@ -34,12 +34,13 @@ UknightAttributeSet::UknightAttributeSet()
 	// 배율 스탯은 1.0으로 두어 기존 동작이 바뀌지 않게 한다.
 	// 퀵스텝 쿨타임은 0.5초 (2026-10-07, 연타 테스트 후 임시로 정한 값 — 이후 조정).
 	// (2026-10-28 사용자 결정) 0.5 → 0: 스테미너가 허용하는 한 연속 사용.
+	// (2026-10-29 사용자 결정) 0 → 0.3: 연속 퀵스텝 사이에 후딜 0.3초. 그동안 누른 퀵스텝은 입력 버퍼(0.5초)에 남았다가 끝나면 나간다.
 	InitWalkSpeed(1.f);
 	InitRunSpeed(1.f);
 	InitActionSpeed(1.f);
 	InitJumpSpeed(1.f);
 	InitDodgeSpeed(1.f);
-	InitDodgeCooldown(0.f);
+	InitDodgeCooldown(0.3f);
 
 	// 퍼펙트 가드 판정 시간 0.25초 (2026-10-08).
 	InitPerfectGuardWindow(0.25f);
