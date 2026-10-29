@@ -490,7 +490,7 @@ void AknightCharacter::ApplyLookInput(FVector2D LookAxisVector, bool bFromMouse)
 		}
 	}
 
-	// 락온 중에는 시점 입력을 휙 움직인 방향의 다른 대상(부위)으로 바꾸는 데 쓴다(다크소울 방식, knightTargetLockComponent).
+	// 락온 중에는 시점 입력을 휙 움직인 방향의 다른 대상(부위)으로 바꾸는 데 쓴다(knightTargetLockComponent).
 	// 락온 직전부터 움직이던 입력을 거르려고 락온이 아닐 때도 넘긴다.
 	TargetLock->AddSwitchLookInput(bFromMouse ? LookAxisVector : StickTilt, !bFromMouse);
 

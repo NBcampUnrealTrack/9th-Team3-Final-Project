@@ -105,7 +105,7 @@ void UknightGameplayAbility_PlungeAttack::ActivateAbility(const FGameplayAbility
 
 	if (bKeepJumpArc)
 	{
-		// (2026-10-29 사용자 결정, 다크소울식) 반동·역분사 없이 점프 궤적 그대로: 중력·속도는 건드리지 않고 공중 조작만 막는다.
+		// (2026-10-29 사용자 결정) 반동·역분사 없이 점프 궤적 그대로: 중력·속도는 건드리지 않고 공중 조작만 막는다.
 		Movement->AirControl = 0.f;
 		UAbilityTask_WaitGameplayEvent* const FallHitTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, knightGameplayTags::Event_Melee_Hit, nullptr, false, true);
 		FallHitTask->EventReceived.AddDynamic(this, &ThisClass::OnMeleeHitEvent);

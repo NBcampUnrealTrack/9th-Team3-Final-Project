@@ -20,7 +20,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FknightLockOnTargetChanged, AActor*
  * Debug: knight.Combat.DrawLockOn 1
  *
  * (2026-10-14 추가)
- * - 시점 입력으로 대상 바꾸기(다크소울 방식): 락온 중 마우스를 휙 움직이거나 패드 오른쪽 스틱을 한쪽으로 튕기면
+ * - 시점 입력으로 대상 바꾸기: 락온 중 마우스를 휙 움직이거나 패드 오른쪽 스틱을 한쪽으로 튕기면
  *   화면에서 그 방향(상하좌우)에 있는 다른 지점(같은 몬스터의 다른 부위 또는 다른 적)으로 바꾼다. 캐릭터의 시점 입력이
  *   AddSwitchLookInput으로 넘어온다. 휠 전환(SwitchTarget)은 그대로. 조절 값은 Knight|LockOn|Switch.
  * - 잠근 지점이 대상의 락온 지점 목록에서 빠지면(잘려 나간 꼬리 등) 같은 대상의 가장 가까운 지점으로 옮긴다. 남은 지점이 없으면 푼다.
@@ -222,7 +222,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|LockOn|Camera", meta=(Units="deg"))
 	float MaxPitch = 35.f;
 
-	/** 락온 중 시점 입력(마우스·패드 오른쪽 스틱)으로 대상을 바꾼다(다크소울 방식). 끄면 휠로만 바꾼다. (2026-10-14) */
+	/** 락온 중 시점 입력(마우스·패드 오른쪽 스틱)으로 대상을 바꾼다. 끄면 휠로만 바꾼다. (2026-10-14) */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|LockOn|Switch")
 	bool bSwitchByLookInput = true;
 

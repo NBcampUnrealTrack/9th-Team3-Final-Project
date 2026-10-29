@@ -28,7 +28,7 @@ class USoundBase;
  *            무브먼트 컴포넌트의 착지 충격이 맡는다. 착지 후 ImpactDelay에 맞은 대상이 없어도 자기 히트스톱(ImpactSelfHitStop)과
  *            충격 이펙트(ImpactEffect)를 낸다.
  *   MaxDiveTime 안에 땅에 닿지 않으면(낭떠러지) 원래대로 돌려 놓고 끝낸다.
- * (2026-10-29) bKeepJumpArc(다크소울식): 1·2 없이 점프 궤적 그대로 떨어지며 칼을 든 자세 → 착지하면 3.
+ * (2026-10-29) bKeepJumpArc(점프 궤적 유지): 1·2 없이 점프 궤적 그대로 떨어지며 칼을 든 자세 → 착지하면 3.
  */
 UCLASS()
 class KNIGHT_API UknightGameplayAbility_PlungeAttack : public UknightGameplayAbility
@@ -123,7 +123,7 @@ protected:
 	bool bLeapToTarget = false;
 
 	/**
-	 * (2026-10-29 사용자 결정, 다크소울식) 켜면 반동·역분사(추진기)로 꽂히지 않고, 누른 순간의 점프 궤적 그대로 떨어진다.
+	 * (2026-10-29 사용자 결정) 켜면 반동·역분사(추진기)로 꽂히지 않고, 누른 순간의 점프 궤적 그대로 떨어진다.
 	 * 떨어지는 동안 StartMontage(칼을 드는 자세) → LoopMontage, 땅에 닿는 순간 EndMontage(내려찍기)와 충격 이펙트·피해.
 	 * 공중 조작은 막는다(누른 순간 속도 그대로). 낙하 공격(GA_Knight_PlungeAttack)이 켠다. bLeapToTarget이 켜져 있으면 그쪽이 먼저. 바뀔 수 있는 값.
 	 */
