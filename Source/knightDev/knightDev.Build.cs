@@ -23,11 +23,14 @@ public class knightDev : ModuleRules
 			"GameplayAbilities",
 			"GameplayTags",
 			"GameplayTasks",
+			"InputCore",
 			"knight",
 			"knightUI",
 			"knightInventory",
 			"knightPerfTracker",
-			"UMG"
+			"UMG",
+			"Slate",
+			"SlateCore"
 		});
 	}
 }
