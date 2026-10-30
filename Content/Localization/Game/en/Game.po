@@ -4,8 +4,8 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: Game\n"
-"POT-Creation-Date: 2026-10-30 08:58\n"
-"PO-Revision-Date: 2026-10-30 08:58\n"
+"POT-Creation-Date: 2026-10-30 17:26\n"
+"PO-Revision-Date: 2026-10-30 17:26\n"
 "Language-Team: \n"
 "Language: en\n"
 "MIME-Version: 1.0\n"
@@ -146,10 +146,10 @@ msgctxt ",BBF9A9234E4D3FB1916B0FA2C220D8AD"
 msgid "단절"
 msgstr "Severance"
 
-#. Key:	7B60C15A4A1C1C0A4A1B28B34F1D04C9
+#. Key:	CEA9D9CD4B5D758EF6BA7FB9E6917B30
 #. SourceLocation:	/Game/Knight/Creatures/Janhyang/Data/DA_Janhyang.DA_Janhyang.DisplayName
 #: /Game/Knight/Creatures/Janhyang/Data/DA_Janhyang.DA_Janhyang.DisplayName
-msgctxt ",7B60C15A4A1C1C0A4A1B28B34F1D04C9"
+msgctxt ",CEA9D9CD4B5D758EF6BA7FB9E6917B30"
 msgid "잔향"
 msgstr "Janhyang"
 
@@ -202,10 +202,10 @@ msgctxt ",809EFA2E4D351833656D11BB20EC5032"
 msgid "꼬리"
 msgstr "Tail"
 
-#. Key:	0A44BA90409B4112D3CF29A7C1BB2034
+#. Key:	DE4A9F2D41D43E1C137C11858E53D986
 #. SourceLocation:	/Game/Knight/Creatures/Janyeol/Data/DA_Janyeol.DA_Janyeol.DisplayName
 #: /Game/Knight/Creatures/Janyeol/Data/DA_Janyeol.DA_Janyeol.DisplayName
-msgctxt ",0A44BA90409B4112D3CF29A7C1BB2034"
+msgctxt ",DE4A9F2D41D43E1C137C11858E53D986"
 msgid "잔열"
 msgstr "Janyeol"
 
