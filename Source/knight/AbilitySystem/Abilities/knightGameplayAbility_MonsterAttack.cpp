@@ -3,6 +3,7 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "Abilities/Tasks/AbilityTask_Repeat.h"
+#include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
 #include "Engine/World.h"
 #include "Monster/knightMonsterCharacterBase.h"
 #include "Monster/knightMonsterMovementComponent.h"
@@ -20,6 +21,10 @@ FknightMonsterAttackContext FknightMonsterAttackContext::Make(const AActor* Mons
 	FknightMonsterAttackContext Context;
 	Context.MonsterASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Monster);
 	Context.WorldTime = Monster && Monster->GetWorld() ? Monster->GetWorld()->GetTimeSeconds() : 0.0;
+	if (const UknightCoreAttributeSet* const CoreSet = Context.MonsterASC ? Context.MonsterASC->GetSet<UknightCoreAttributeSet>() : nullptr)
+	{
+		Context.TimeSinceHit = static_cast<float>(Context.WorldTime - CoreSet->GetLastHitTime());
+	}
 	if (Monster && Target)
 	{
 		const FVector ToTarget = Target->GetActorLocation() - Monster->GetActorLocation();
@@ -47,18 +52,34 @@ UknightGameplayAbility_MonsterAttack::UknightGameplayAbility_MonsterAttack(const
 
 float UknightGameplayAbility_MonsterAttack::GetSelectionWeight(const FknightMonsterAttackContext& Context) const
 {
+	// 연계 전용은 PickFollowUp(GetSelectionWeightInternal 직접 호출)에서만 고른다.
+	if (Selection.bOnlyAsFollowUp)
+	{
+		return 0.f;
+	}
 	return GetSelectionWeightInternal(Context, true);
 }
 
 FGameplayAbilitySpecHandle UknightGameplayAbility_MonsterAttack::PickFollowUp(UAbilitySystemComponent& ASC, const FknightMonsterAttackContext& Context) const
 {
-	if (FollowUpAttacks.IsEmpty() || !ASC.HasAllMatchingGameplayTags(FollowUpRequiredTags) || FMath::FRand() > FollowUpChance)
+	if (!FollowUpAttacks.IsEmpty() && ASC.HasAllMatchingGameplayTags(FollowUpRequiredTags) && FMath::FRand() <= FollowUpChance)
 	{
-		return FGameplayAbilitySpecHandle();
+		const FGameplayAbilitySpecHandle FollowUp = PickWeighted(ASC, Context, FollowUpAttacks);
+		if (FollowUp.IsValid())
+		{
+			return FollowUp;
+		}
 	}
+	// 연계가 없으면 공격 후 이동(물러나기 등)을 본다. 각자 Selection 조건(맞지 않은 시간 등)으로 걸러진다.
+	return PickWeighted(ASC, Context, AfterAttackMoves);
+}
+
+FGameplayAbilitySpecHandle UknightGameplayAbility_MonsterAttack::PickWeighted(UAbilitySystemComponent& ASC, const FknightMonsterAttackContext& Context,
+	const TArray<TSubclassOf<UknightGameplayAbility_MonsterAttack>>& Classes) const
+{
 	TArray<TPair<FGameplayAbilitySpecHandle, float>> Candidates;
 	float TotalWeight = 0.f;
-	for (const TSubclassOf<UknightGameplayAbility_MonsterAttack>& AttackClass : FollowUpAttacks)
+	for (const TSubclassOf<UknightGameplayAbility_MonsterAttack>& AttackClass : Classes)
 	{
 		const FGameplayAbilitySpec* const Spec = AttackClass ? ASC.FindAbilitySpecFromClass(AttackClass) : nullptr;
 		const UknightGameplayAbility_MonsterAttack* const Attack = Spec && !Spec->IsActive()
@@ -122,6 +143,10 @@ float UknightGameplayAbility_MonsterAttack::GetSelectionWeightInternal(const Fkn
 		return 0.f;
 	}
 	if (Selection.MinTargetBehindTime > 0.f && Context.TargetBehindTime < Selection.MinTargetBehindTime)
+	{
+		return 0.f;
+	}
+	if (Selection.MinTimeSinceHit > 0.f && Context.TimeSinceHit < Selection.MinTimeSinceHit)
 	{
 		return 0.f;
 	}

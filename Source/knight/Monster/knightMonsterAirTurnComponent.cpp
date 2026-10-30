@@ -213,10 +213,11 @@ void UknightMonsterAirTurnComponent::EndAirTurn(float BlendTime, bool bSendLandE
 
 void UknightMonsterAirTurnComponent::HandleAbilityEnded(const FAbilityEndedData& Data)
 {
-	if (Cast<UknightGameplayAbility_MonsterAttack>(Data.AbilityThatEnded))
+	if (const UknightGameplayAbility_MonsterAttack* const Attack = Cast<UknightGameplayAbility_MonsterAttack>(Data.AbilityThatEnded))
 	{
 		LastAttackEndTime = GetWorld()->GetTimeSeconds();
-		if (bAirborne)
+		// 공격 사이의 탐색 비행 같은 이동 행동은 공중 공격 횟수에 넣지 않는다.
+		if (bAirborne && Attack->CountsAsAttack())
 		{
 			++AirAttacksUsed;
 			UpdateLastAttackTag();

@@ -19,6 +19,8 @@ class KNIGHT_API UknightGameplayAbility_MonsterStepBack : public UknightGameplay
 	GENERATED_BODY()
 
 public:
+	virtual bool CountsAsAttack() const override { return false; }
+
 	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 		const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData) override;
 
