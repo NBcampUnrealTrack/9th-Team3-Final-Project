@@ -116,6 +116,19 @@ public:
 	static bool SetMontagePlayRateWindow(UAnimMontage* Montage, float Start, float End, float PlayRate);
 
 	/**
+	 * Source 몽타주에서 시작 시간이 SourceStart~SourceEnd(Source 몽타주 시간)인 노티파이를 복제해 Target의 TargetStart부터 같은 간격으로 넣는다.
+	 * 노티파이 상태는 길이를 유지하되 Target 끝을 넘으면 자른다. 트랙은 이름으로 찾거나 만든다. OnlyClass가 있으면 그 클래스 노티파이만 복사한다.
+	 * 단독 공격 몽타주들을 이어 붙인 연계 공격을 만들 때, 이미 맞춘 판정·소리·속도 구간을 그대로 옮기려고 쓴다. 복사한 개수를 돌려준다. 저장은 호출한 쪽.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
+	static int32 CopyMontageNotifies(const UAnimMontage* Source, float SourceStart, float SourceEnd, UAnimMontage* Target, float TargetStart,
+		TSubclassOf<UObject> OnlyClass = nullptr);
+
+	/** 몽타주의 노티파이를 모두 지운다(트랙은 남긴다). 애니를 통째로 바꾼 뒤 CopyMontageNotifies로 다시 채우기 전에 쓴다. 저장은 호출한 쪽. */
+	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
+	static int32 ClearMontageNotifies(UAnimMontage* Montage);
+
+	/**
 	 * 피격용 피직스 에셋을 만들거나 다시 만들고 메시에 연결한다. CapsuleBones·BoxBones의 뼈마다 바디 하나를 만들고, 그 뼈와
 	 * 목록에 없는 자식 뼈(발가락, 귀 등)에 붙은 정점에 맞춰 크기를 잡는다. 날개 막처럼 넓적한 곳은 BoxBones에 넣는다.
 	 * 바디는 모두 Kinematic(애니메이션을 따라감)이고 제약은 만들지 않는다. 기존 바디는 지운다. 저장은 호출한 쪽.

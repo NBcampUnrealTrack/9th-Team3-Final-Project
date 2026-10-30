@@ -2,6 +2,7 @@
 
 #include "AIController.h"
 #include "BrainComponent.h"
+#include "AbilitySystem/Abilities/knightGameplayAbility_MonsterAttack.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
 #include "AbilitySystem/Attributes/knightMonsterAttributeSet.h"
 #include "AbilitySystem/knightAbilitySystemComponent.h"
@@ -163,6 +164,8 @@ void AknightMonsterCharacterBase::StartLoopSounds(bool bEngaged)
 	}
 	const TArray<FknightMonsterLoopSound>& Loops = MonsterDefinition->LoopSounds;
 	LoopAudios.SetNum(Loops.Num());
+	LoopResting.SetNum(Loops.Num());
+	LoopBurstTimers.SetNum(Loops.Num());
 	for (int32 Index = 0; Index < Loops.Num(); ++Index)
 	{
 		const FknightMonsterLoopSound& Loop = Loops[Index];
@@ -177,8 +180,14 @@ void AknightMonsterCharacterBase::StartLoopSounds(bool bEngaged)
 			continue;
 		}
 		LoopAudios[Index] = Audio;
-		const bool bMuted = AbilitySystemComponent->HasAnyMatchingGameplayTags(Loop.MuteTags);
-		Audio->FadeIn(Loop.FadeTime, bMuted ? MutedLoopVolume : 1.f);
+		// 가끔 들리는 소리는 쉬는 상태로 시작해 첫 RestTime 뒤에 처음 들린다.
+		LoopResting[Index] = Loop.BurstTime > 0.f;
+		if (LoopResting[Index])
+		{
+			World->GetTimerManager().SetTimer(LoopBurstTimers[Index], FTimerDelegate::CreateUObject(this, &ThisClass::ToggleLoopBurst, Index),
+				FMath::RandRange(Loop.RestTime.Min, Loop.RestTime.Max), false);
+		}
+		Audio->FadeIn(Loop.FadeTime, GetLoopVolume(Index));
 		for (const FGameplayTag& Tag : Loop.MuteTags)
 		{
 			AbilitySystemComponent->RegisterGameplayTagEvent(Tag, EGameplayTagEventType::NewOrRemoved)
@@ -199,6 +208,15 @@ void AknightMonsterCharacterBase::StopLoopSounds()
 		}
 	}
 	LoopAudios.Reset();
+	if (UWorld* const World = GetWorld())
+	{
+		for (FTimerHandle& Timer : LoopBurstTimers)
+		{
+			World->GetTimerManager().ClearTimer(Timer);
+		}
+	}
+	LoopBurstTimers.Reset();
+	LoopResting.Reset();
 }
 
 void AknightMonsterCharacterBase::HandleLoopSoundMuteChanged(const FGameplayTag Tag, int32 NewCount)
@@ -213,10 +231,31 @@ void AknightMonsterCharacterBase::HandleLoopSoundMuteChanged(const FGameplayTag 
 		if (UAudioComponent* const Audio = LoopAudios[Index]; Audio && Loop.MuteTags.HasTagExact(Tag))
 		{
 			// 같은 소리에 걸린 다른 태그가 남아 있으면 계속 줄여 둔다.
-			const bool bMuted = AbilitySystemComponent->HasAnyMatchingGameplayTags(Loop.MuteTags);
-			Audio->AdjustVolume(Loop.FadeTime, bMuted ? MutedLoopVolume : 1.f);
+			Audio->AdjustVolume(Loop.FadeTime, GetLoopVolume(Index));
 		}
 	}
+}
+
+float AknightMonsterCharacterBase::GetLoopVolume(int32 Index) const
+{
+	const FknightMonsterLoopSound& Loop = MonsterDefinition->LoopSounds[Index];
+	const bool bResting = LoopResting.IsValidIndex(Index) && LoopResting[Index];
+	return bResting || AbilitySystemComponent->HasAnyMatchingGameplayTags(Loop.MuteTags) ? MutedLoopVolume : 1.f;
+}
+
+void AknightMonsterCharacterBase::ToggleLoopBurst(int32 Index)
+{
+	UWorld* const World = GetWorld();
+	if (!MonsterDefinition || !World || !LoopAudios.IsValidIndex(Index) || !LoopAudios[Index] || IsDead())
+	{
+		return;
+	}
+	const FknightMonsterLoopSound& Loop = MonsterDefinition->LoopSounds[Index];
+	LoopResting[Index] = !LoopResting[Index];
+	LoopAudios[Index]->AdjustVolume(Loop.FadeTime, GetLoopVolume(Index));
+	UE_LOG(LogknightAI, Verbose, TEXT("%s: loop sound %s %s."), *GetName(), *GetNameSafe(Loop.Sound), LoopResting[Index] ? TEXT("rests") : TEXT("plays"));
+	const float Delay = LoopResting[Index] ? FMath::RandRange(Loop.RestTime.Min, Loop.RestTime.Max) : Loop.BurstTime;
+	World->GetTimerManager().SetTimer(LoopBurstTimers[Index], FTimerDelegate::CreateUObject(this, &ThisClass::ToggleLoopBurst, Index), Delay, false);
 }
 
 void AknightMonsterCharacterBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -576,7 +615,110 @@ void AknightMonsterCharacterBase::HandleEnragedChanged(const FGameplayTag Tag, i
 	{
 		return;
 	}
+	if (NewCount > 0 && EnrageFinale == EEnrageFinale::None && MonsterDefinition && MonsterDefinition->EnrageFinaleAttack)
+	{
+		EnrageFinale = EEnrageFinale::Waiting;
+		GetWorldTimerManager().SetTimer(EnrageFinaleTimer, this, &ThisClass::UpdateEnrageFinale, 0.25f, true);
+	}
+	else if (NewCount <= 0 && EnrageFinale == EEnrageFinale::Waiting)
+	{
+		EndEnrageFinale();
+	}
 	OnEnragedChanged(NewCount > 0);
+}
+
+void AknightMonsterCharacterBase::UpdateEnrageFinale()
+{
+	const TSubclassOf<UknightGameplayAbility_MonsterAttack> FinaleClass = MonsterDefinition ? MonsterDefinition->EnrageFinaleAttack : nullptr;
+	FGameplayAbilitySpec* const Spec = FinaleClass ? AbilitySystemComponent->FindAbilitySpecFromClass(FinaleClass) : nullptr;
+	if (IsDead() || !Spec)
+	{
+		EndEnrageFinale();
+		return;
+	}
+	const double Now = GetWorld()->GetTimeSeconds();
+	switch (EnrageFinale)
+	{
+	case EEnrageFinale::Waiting:
+	{
+		FGameplayEffectQuery Query;
+		Query.EffectDefinition = MonsterDefinition->EnrageEffect;
+		float Remaining = 0.f;
+		for (const float Time : AbilitySystemComponent->GetActiveEffectsTimeRemaining(Query))
+		{
+			Remaining = FMath::Max(Remaining, Time);
+		}
+		if (Remaining > MonsterDefinition->EnrageFinaleLeadTime)
+		{
+			return;
+		}
+		// 효과가 끝나도 분노 태그가 떨어지지 않게 직접 붙여 두고, 마무리 공격이 끝나면 뗀다.
+		AbilitySystemComponent->AddLooseGameplayTag(knightGameplayTags::State_Monster_Enraged);
+		AbilitySystemComponent->AddLooseGameplayTag(knightGameplayTags::State_Monster_EnrageFinale);
+		EnrageFinale = Spec->IsActive() ? EEnrageFinale::Running : EEnrageFinale::Pending;
+		EnrageFinaleGiveUpTime = Now + 20.0;
+		UE_LOG(LogknightAI, Log, TEXT("%s: enrage ends in %.1f s, finale %s next."), *GetName(), Remaining, *GetNameSafe(FinaleClass));
+		return;
+	}
+	case EEnrageFinale::Pending:
+	{
+		if (Now > EnrageFinaleGiveUpTime)
+		{
+			UE_LOG(LogknightAI, Warning, TEXT("%s: gave up the enrage finale (still blocked after 20 s)."), *GetName());
+			EndEnrageFinale();
+			return;
+		}
+		// 지금 공격이나 반응(다운·포효)이 끝난 뒤에 쓴다.
+		for (const FGameplayAbilitySpec& Other : AbilitySystemComponent->GetActivatableAbilities())
+		{
+			if (Other.IsActive() && Cast<UknightGameplayAbility_MonsterAttack>(Other.GetPrimaryInstance()))
+			{
+				return;
+			}
+		}
+		if (AbilitySystemComponent->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Reacting))
+		{
+			return;
+		}
+		// 공중 공격이면 먼저 뜨고, 지상 공격이면 먼저 내린다.
+		const FknightMonsterAttackSelection& Selection = GetDefault<UknightGameplayAbility_MonsterAttack>(FinaleClass)->GetSelection();
+		const bool bAirAttack = Selection.RequiredOwnerTags.HasTagExact(knightGameplayTags::State_Monster_Airborne);
+		const bool bGroundAttack = Selection.BlockedOwnerTags.HasTagExact(knightGameplayTags::State_Monster_Airborne);
+		if (AirTurn && (bAirAttack || bGroundAttack) && AirTurn->IsAirborne() != bAirAttack)
+		{
+			bAirAttack ? AirTurn->TakeOff() : AirTurn->Land();
+			return;
+		}
+		if (AbilitySystemComponent->TryActivateAbility(Spec->Handle))
+		{
+			EnrageFinale = EEnrageFinale::Running;
+			UE_LOG(LogknightAI, Log, TEXT("%s: enrage finale %s started."), *GetName(), *GetNameSafe(FinaleClass));
+		}
+		return;
+	}
+	case EEnrageFinale::Running:
+		// 지쳐 내려앉는 순간(State.Monster.Collapsed) 분노를 푼다. 그 뒤의 딜 타임은 평소 상태다.
+		if (!Spec->IsActive() || AbilitySystemComponent->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Collapsed))
+		{
+			UE_LOG(LogknightAI, Log, TEXT("%s: enrage finale ended."), *GetName());
+			EndEnrageFinale();
+		}
+		return;
+	default:
+		EndEnrageFinale();
+	}
+}
+
+void AknightMonsterCharacterBase::EndEnrageFinale()
+{
+	GetWorldTimerManager().ClearTimer(EnrageFinaleTimer);
+	const bool bTagsAdded = EnrageFinale == EEnrageFinale::Pending || EnrageFinale == EEnrageFinale::Running;
+	EnrageFinale = EEnrageFinale::None;
+	if (bTagsAdded)
+	{
+		AbilitySystemComponent->RemoveLooseGameplayTag(knightGameplayTags::State_Monster_EnrageFinale);
+		AbilitySystemComponent->RemoveLooseGameplayTag(knightGameplayTags::State_Monster_Enraged);
+	}
 }
 
 void AknightMonsterCharacterBase::HandleStaminaDepleted(AActor* EffectInstigator, AActor* EffectCauser, const FGameplayEffectSpec* EffectSpec,

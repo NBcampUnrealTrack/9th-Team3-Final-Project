@@ -59,6 +59,7 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Monster_Exhausted, "State.Monster.Exhausted", "Monster fatigue state.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Monster_Airborne, "State.Monster.Airborne", "Flying monster is in its air turn (ground attacks blocked, air attacks allowed).");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Monster_LastAirAttack, "State.Monster.LastAirAttack", "The next air attack is the last one of this air turn (attacks that end the air turn require it, e.g. the tornado).");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Monster_EnrageFinale, "State.Monster.EnrageFinale", "Enrage is about to end and the monster is using its finale attack (AI picks no other attack, the air turn does not land).");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Monster_NoFlinch, "State.Monster.NoFlinch", "Parry and part-break flinch reactions do not start (the running attack handles the parry itself, e.g. a dive).");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Monster_Warning, "State.Monster.Warning", "A dodge-only attack is about to come. On the monster during the warning, for the HUD WARNING banner.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Monster_Reacting, "State.Monster.Reacting", "Monster is in a down, flinch or roar; its StateTree waits instead of acting.");

@@ -59,6 +59,7 @@ void UknightGameplayAbility_MonsterGlideAttack::ActivateAbility(const FGameplayA
 	PhaseTime = 0.f;
 	bLanded = false;
 	bCircling = false;
+	DarkEchoTime = 0.f;
 	SetDarkness(bDarkenView);
 	if (RoarMontage)
 	{
@@ -82,6 +83,10 @@ void UknightGameplayAbility_MonsterGlideAttack::HandleTick(int32 ActionNumber)
 	const UknightMonsterTargetingComponent* const Targeting = Monster->GetTargetingComponent();
 	const AActor* const Target = Targeting ? Targeting->GetCurrentTarget() : nullptr;
 	UknightMonsterMovementComponent* const Movement = Monster->GetMonsterMovementComponent();
+	if (bDarknessOn && Target)
+	{
+		UpdateDarkEcho(*Target);
+	}
 
 	switch (Phase)
 	{
@@ -447,6 +452,19 @@ FVector UknightGameplayAbility_MonsterGlideAttack::GetBehindLocation(const Aknig
 		Goal = Hit.Location - Back * Monster.GetSimpleCollisionRadius();
 	}
 	return Goal;
+}
+
+void UknightGameplayAbility_MonsterGlideAttack::UpdateDarkEcho(const AActor& Target)
+{
+	DarkEchoTime -= knightMonsterGlide::TickInterval;
+	if (!DarkEchoSound || DarkEchoTime > 0.f)
+	{
+		return;
+	}
+	DarkEchoTime = FMath::RandRange(DarkEchoInterval.Min, DarkEchoInterval.Max);
+	const FVector Direction = FRotator(0.f, FMath::FRandRange(0.f, 360.f), 0.f).Vector();
+	const FVector Location = Target.GetActorLocation() + Direction * FMath::RandRange(DarkEchoDistance.Min, DarkEchoDistance.Max);
+	UGameplayStatics::PlaySoundAtLocation(this, DarkEchoSound, Location, DarkEchoVolume, FMath::RandRange(DarkEchoPitch.Min, DarkEchoPitch.Max));
 }
 
 void UknightGameplayAbility_MonsterGlideAttack::StartGlideForce(const FVector& Velocity, float Duration)

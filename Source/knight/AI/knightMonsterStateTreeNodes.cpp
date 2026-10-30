@@ -92,6 +92,7 @@ EStateTreeRunStatus FknightStateTreeActivateAbilityTask::EnterState(FStateTreeEx
 	InstanceData.FailAtTime = -1.0;
 	InstanceData.RestTime = 0.f;
 	InstanceData.SucceedAtTime = -1.0;
+	InstanceData.bMayFollowUp = false;
 	InstanceData.StopWaitUntil = -1.0;
 	const bool bStopWaitDone = InstanceData.bStopWaitDone;
 	InstanceData.bStopWaitDone = false;
@@ -191,29 +192,15 @@ EStateTreeRunStatus FknightStateTreeActivateAbilityTask::EnterState(FStateTreeEx
 			// 발동 도중에 이미 끝났다(즉발 기술).
 			return EStateTreeRunStatus::Succeeded;
 		}
-		if (Definition && Cast<UknightGameplayAbility_MonsterAttack>(Spec->GetPrimaryInstance()))
+		if (const UknightGameplayAbility_MonsterAttack* const Attack = Cast<UknightGameplayAbility_MonsterAttack>(Spec->GetPrimaryInstance()))
 		{
-			InstanceData.RestTime = ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Phase2) ? Definition->Phase2AttackRestTime : Definition->AttackRestTime;
-		}
-		// 발동 후에 바인딩해서 EnterState가 아직 실행 중일 때 콜백이 Task를 끝내는 일이 없게 한다.
-		// 쉬는 시간이 있으면 정상 종료는 Tick이 맡는다(어빌리티가 끝난 걸 보고 RestTime 뒤에 성공).
-		InstanceData.EndedDelegateHandle = ASC->OnAbilityEnded.AddLambda(
-			[WeakContext = Context.MakeWeakExecutionContext(), Handle, bRest = InstanceData.RestTime > 0.f](const FAbilityEndedData& Data)
+			if (Definition)
 			{
-				if (Data.AbilitySpecHandle != Handle)
-				{
-					return;
-				}
-				if (Data.bWasCancelled)
-				{
-					WeakContext.FinishTask(EStateTreeFinishTaskType::Failed);
-				}
-				else if (!bRest)
-				{
-					WeakContext.FinishTask(EStateTreeFinishTaskType::Succeeded);
-				}
-			});
-		InstanceData.ActiveHandle = Handle;
+				InstanceData.RestTime = ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Phase2) ? Definition->Phase2AttackRestTime : Definition->AttackRestTime;
+			}
+			InstanceData.bMayFollowUp = Attack->HasFollowUps();
+		}
+		BindAbilityEnded(Context, InstanceData, Handle);
 		return EStateTreeRunStatus::Running;
 	}
 
@@ -226,6 +213,64 @@ EStateTreeRunStatus FknightStateTreeActivateAbilityTask::EnterState(FStateTreeEx
 		return EStateTreeRunStatus::Running;
 	}
 	return EStateTreeRunStatus::Failed;
+}
+
+void FknightStateTreeActivateAbilityTask::BindAbilityEnded(FStateTreeExecutionContext& Context, FInstanceDataType& InstanceData,
+	FGameplayAbilitySpecHandle Handle)
+{
+	UAbilitySystemComponent* const ASC = InstanceData.AbilitySystem.Get();
+	if (InstanceData.EndedDelegateHandle.IsValid())
+	{
+		ASC->OnAbilityEnded.Remove(InstanceData.EndedDelegateHandle);
+	}
+	// 발동 후에 바인딩해서 EnterState가 아직 실행 중일 때 콜백이 Task를 끝내는 일이 없게 한다.
+	// 쉬는 시간이나 연계가 있으면 정상 종료는 Tick이 맡는다(어빌리티가 끝난 걸 보고 연계를 쓰거나 RestTime 뒤에 성공).
+	InstanceData.EndedDelegateHandle = ASC->OnAbilityEnded.AddLambda(
+		[WeakContext = Context.MakeWeakExecutionContext(), Handle, bWaitInTick = InstanceData.RestTime > 0.f || InstanceData.bMayFollowUp](const FAbilityEndedData& Data)
+		{
+			if (Data.AbilitySpecHandle != Handle)
+			{
+				return;
+			}
+			if (Data.bWasCancelled)
+			{
+				WeakContext.FinishTask(EStateTreeFinishTaskType::Failed);
+			}
+			else if (!bWaitInTick)
+			{
+				WeakContext.FinishTask(EStateTreeFinishTaskType::Succeeded);
+			}
+		});
+	InstanceData.ActiveHandle = Handle;
+}
+
+bool FknightStateTreeActivateAbilityTask::TryFollowUp(FStateTreeExecutionContext& Context, FInstanceDataType& InstanceData)
+{
+	InstanceData.bMayFollowUp = false;
+	UAbilitySystemComponent* const ASC = InstanceData.AbilitySystem.Get();
+	const FGameplayAbilitySpec* const Ended = ASC ? ASC->FindAbilitySpecFromHandle(InstanceData.ActiveHandle) : nullptr;
+	const UknightGameplayAbility_MonsterAttack* const Attack = Ended ? Cast<UknightGameplayAbility_MonsterAttack>(Ended->GetPrimaryInstance()) : nullptr;
+	if (!Attack)
+	{
+		return false;
+	}
+	const FknightMonsterAttackContext AttackContext = FknightMonsterAttackContext::Make(InstanceData.Actor, InstanceData.Target);
+	const FGameplayAbilitySpecHandle Next = Attack->PickFollowUp(*ASC, AttackContext);
+	if (!Next.IsValid() || !ASC->TryActivateAbility(Next))
+	{
+		UE_LOG(LogknightAI, Verbose, TEXT("%s: %s has no usable follow-up (%s, %.0f cm, %.0f deg)."), *GetNameSafe(InstanceData.Actor), *GetNameSafe(Attack),
+			Next.IsValid() ? TEXT("activation blocked") : TEXT("none passes selection"), AttackContext.Distance, AttackContext.AngleToTarget);
+		return false;
+	}
+	const FGameplayAbilitySpec* const Spec = ASC->FindAbilitySpecFromHandle(Next);
+	UE_LOG(LogknightAI, Log, TEXT("%s: %s follows up with %s."), *GetNameSafe(InstanceData.Actor), *GetNameSafe(Attack),
+		Spec ? *GetNameSafe(Spec->GetPrimaryInstance()) : TEXT("none"));
+	if (!Spec || !Spec->IsActive())
+	{
+		return false;
+	}
+	BindAbilityEnded(Context, InstanceData, Next);
+	return true;
 }
 
 EStateTreeRunStatus FknightStateTreeActivateAbilityTask::Tick(FStateTreeExecutionContext& Context, const float DeltaTime) const
@@ -248,7 +293,7 @@ EStateTreeRunStatus FknightStateTreeActivateAbilityTask::Tick(FStateTreeExecutio
 	{
 		return EStateTreeRunStatus::Failed;
 	}
-	if (InstanceData.RestTime > 0.f && InstanceData.ActiveHandle.IsValid())
+	if ((InstanceData.RestTime > 0.f || InstanceData.bMayFollowUp) && InstanceData.ActiveHandle.IsValid())
 	{
 		if (InstanceData.SucceedAtTime < 0.0)
 		{
@@ -256,6 +301,14 @@ EStateTreeRunStatus FknightStateTreeActivateAbilityTask::Tick(FStateTreeExecutio
 			const FGameplayAbilitySpec* const Spec = ASC ? ASC->FindAbilitySpecFromHandle(InstanceData.ActiveHandle) : nullptr;
 			if (!Spec || !Spec->IsActive())
 			{
+				if (InstanceData.bMayFollowUp && TryFollowUp(Context, InstanceData))
+				{
+					return EStateTreeRunStatus::Running;
+				}
+				if (InstanceData.RestTime <= 0.f)
+				{
+					return EStateTreeRunStatus::Succeeded;
+				}
 				InstanceData.SucceedAtTime = Now + InstanceData.RestTime;
 			}
 		}

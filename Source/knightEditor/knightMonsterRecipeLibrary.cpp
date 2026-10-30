@@ -2201,6 +2201,74 @@ bool UknightMonsterRecipeLibrary::SetMontagePlayRateWindow(UAnimMontage* Montage
 	return true;
 }
 
+int32 UknightMonsterRecipeLibrary::CopyMontageNotifies(const UAnimMontage* Source, float SourceStart, float SourceEnd, UAnimMontage* Target,
+	float TargetStart, TSubclassOf<UObject> OnlyClass)
+{
+	if (!Source || !Target || Source == Target || SourceEnd < SourceStart || TargetStart < 0.f)
+	{
+		UE_LOG(LogTemp, Error, TEXT("CopyMontageNotifies %s -> %s: 몽타주가 없거나 구간 %.3f~%.3f가 잘못됐습니다."),
+			*GetNameSafe(Source), *GetNameSafe(Target), SourceStart, SourceEnd);
+		return 0;
+	}
+	const float TargetLength = Target->GetPlayLength();
+	Target->Modify();
+	int32 Copied = 0;
+	for (const FAnimNotifyEvent& Event : Source->Notifies)
+	{
+		UObject* const Object = Event.Notify ? static_cast<UObject*>(Event.Notify) : static_cast<UObject*>(Event.NotifyStateClass);
+		const float Time = Event.GetTime();
+		if (!Object || Time < SourceStart || Time > SourceEnd || (OnlyClass && !Object->IsA(OnlyClass)))
+		{
+			continue;
+		}
+		const float Start = TargetStart + (Time - SourceStart);
+		if (Start > TargetLength)
+		{
+			continue;
+		}
+		// 노티파이 객체는 몽타주 안에 사는 인스턴스라 Target을 Outer로 복제해야 Source와 값을 공유하지 않는다.
+		UObject* const Copy = DuplicateObject(Object, Target);
+		const FName TrackName = Source->AnimNotifyTracks.IsValidIndex(Event.TrackIndex) ? Source->AnimNotifyTracks[Event.TrackIndex].TrackName : FName(TEXT("Copied"));
+		const int32 TrackIndex = knightRecipe::FindOrAddNotifyTrack(Target, TrackName);
+		if (UAnimNotifyState* const State = Cast<UAnimNotifyState>(Copy))
+		{
+			knightRecipe::AddNotifyState(Target, State, Start, FMath::Min(Start + Event.GetDuration(), TargetLength), TrackIndex);
+			Target->Notifies.Last().NotifyName = Event.NotifyName;
+		}
+		else
+		{
+			FAnimNotifyEvent& NewEvent = Target->Notifies.AddDefaulted_GetRef();
+			NewEvent.NotifyName = Event.NotifyName;
+			NewEvent.Notify = CastChecked<UAnimNotify>(Copy);
+			NewEvent.Link(Target, Start);
+			NewEvent.TriggerTimeOffset = GetTriggerTimeOffsetForType(Target->CalculateOffsetForNotify(Start));
+			NewEvent.TrackIndex = TrackIndex;
+			NewEvent.Guid = FGuid::NewGuid();
+		}
+		++Copied;
+	}
+	Target->SortNotifies();
+	Target->RefreshCacheData();
+	Target->PostEditChange();
+	Target->MarkPackageDirty();
+	return Copied;
+}
+
+int32 UknightMonsterRecipeLibrary::ClearMontageNotifies(UAnimMontage* Montage)
+{
+	if (!Montage)
+	{
+		return 0;
+	}
+	Montage->Modify();
+	const int32 Removed = Montage->Notifies.Num();
+	Montage->Notifies.Reset();
+	Montage->RefreshCacheData();
+	Montage->PostEditChange();
+	Montage->MarkPackageDirty();
+	return Removed;
+}
+
 UPhysicsAsset* UknightMonsterRecipeLibrary::CreateMonsterPhysicsAsset(USkeletalMesh* Mesh, const FString& PackagePath,
 	const TArray<FName>& CapsuleBones, const TArray<FName>& BoxBones)
 {

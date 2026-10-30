@@ -47,6 +47,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Projectile", meta=(ClampMin=1))
 	int32 EnragedShotCount = 1;
 
+	/** State.Monster.Enraged일 때 한 발마다 부채꼴로 함께 쏘는 투사체 수(잔향 공명해방 3갈래). */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Projectile", meta=(ClampMin=1))
+	int32 EnragedProjectilesPerShot = 1;
+
+	/** EnragedProjectilesPerShot이 2 이상일 때 양 끝 투사체 사이 각도. 가운데 투사체가 타깃을 겨눈다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Projectile", meta=(ClampMin=0, ClampMax=180, Units="deg"))
+	float EnragedSpreadAngle = 40.f;
+
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Projectile", meta=(ClampMin=0, Units="s"))
 	float ShotInterval = 0.6f;
 
@@ -103,6 +111,7 @@ private:
 	float Elapsed = 0.f;
 	float NextShotTime = 0.f;
 	int32 ShotsLeft = 0;
+	int32 ProjectilesPerShot = 1;
 	/** 발동할 때 분노 여부로 고른 외형. 연발 도중 분노가 바뀌어도 한 번의 공격은 같은 외형으로 쏜다. */
 	UPROPERTY()
 	TObjectPtr<UNiagaraSystem> ShotEffect;

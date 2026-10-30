@@ -217,6 +217,28 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Darkness", meta=(EditCondition="bDarkenView", ClampMin=0.05, Units="s"))
 	float CircleFlapInterval = 0.5f;
 
+	/**
+	 * 어둠이 덮여 있는 동안 타깃 둘레 아무 곳에서나 되풀이해 트는 초음파 소리. 여러 개가 겹쳐 사방에서 들리므로 소리만으로는
+	 * 몬스터 위치를 알 수 없다(위치 단서는 CircleFlapSound). 비우면 틀지 않는다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Darkness", meta=(EditCondition="bDarkenView"))
+	TObjectPtr<USoundBase> DarkEchoSound;
+
+	/** 다음 초음파까지의 간격. 매번 이 범위에서 무작위로 고른다. 소리 길이보다 짧으면 겹친다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Darkness", meta=(EditCondition="bDarkenView"))
+	FFloatInterval DarkEchoInterval = FFloatInterval(0.4f, 0.9f);
+
+	/** 초음파를 틀 위치: 타깃에서 아무 방향으로 이 거리(cm) 범위. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Darkness", meta=(EditCondition="bDarkenView"))
+	FFloatInterval DarkEchoDistance = FFloatInterval(800.f, 2000.f);
+
+	/** 초음파마다 무작위로 고르는 피치 범위. 같은 소리가 겹쳐도 하나로 뭉쳐 들리지 않게 한다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Darkness", meta=(EditCondition="bDarkenView"))
+	FFloatInterval DarkEchoPitch = FFloatInterval(0.9f, 1.3f);
+
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Darkness", meta=(EditCondition="bDarkenView", ClampMin=0))
+	float DarkEchoVolume = 0.4f;
+
 	/** 어둠 속 찌르기가 타깃 쪽으로 방향을 꺾는 최대 속도. 0이면 일직선. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Darkness", meta=(EditCondition="bDarkenView", ClampMin=0, Units="deg"))
 	float HomingTurnRate = 90.f;
@@ -261,6 +283,8 @@ private:
 	void SetWarning(float Strength);
 	void SetGettingUp(bool bOn);
 	void UpdateCircle(AknightMonsterCharacterBase& Monster, const AActor& Target, float HoldTime);
+	/** 어둠이 덮인 동안 DarkEchoInterval마다 타깃 둘레 아무 곳에 초음파를 하나 튼다. */
+	void UpdateDarkEcho(const AActor& Target);
 	FVector GetBehindLocation(const AknightMonsterCharacterBase& Monster, const AActor& Target) const;
 	void StartGlideForce(const FVector& Velocity, float Duration);
 	void SetGlideVelocity(const FVector& Velocity);
@@ -285,6 +309,7 @@ private:
 	FVector GlideDirection = FVector::ForwardVector;
 	float GlideSpeed = 0.f;
 	float CircleFlapTime = 0.f;
+	float DarkEchoTime = 0.f;
 	bool bCircling = false;
 	bool bNoFlinchApplied = false;
 	bool bLanded = false;
