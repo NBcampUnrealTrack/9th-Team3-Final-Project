@@ -126,6 +126,13 @@ public:
 	const FknightMonsterAttackSelection& GetSelection() const { return Selection; }
 
 	/**
+	 * 이 공격이 끝난 뒤 쉬지 않고 바로 이어 쓸 공격을 FollowUpAttacks에서 고른다. Selection 조건(사거리·각도·태그)은 보되
+	 * 쿨다운은 보지 않는다. 이어 쓸 게 없으면 무효 핸들.
+	 */
+	FGameplayAbilitySpecHandle PickFollowUp(UAbilitySystemComponent& ASC, const FknightMonsterAttackContext& Context) const;
+	bool HasFollowUps() const { return !FollowUpAttacks.IsEmpty(); }
+
+	/**
 	 * 탈진(State.Monster.Exhausted) 중에는 어떤 공격도 시작하지 않는다. 이미 시작한 공격은 끝까지 한다.
 	 * ActivationBlockedTags는 BP와 몬스터 생성기가 부위 파괴 태그로 통째로 덮어쓰므로 여기서 검사한다.
 	 */
@@ -154,7 +161,23 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Turn", meta=(ClampMin=0, Units="s", EditCondition="StartTurnYaw != 0"))
 	float StartTurnMaxTime = 0.5f;
 
+	/**
+	 * 이 공격이 끝나면 쉬는 시간 없이 바로 이어 쓸 공격 후보(연계). 지금 쓸 수 있는 것 중 Selection.Weight로 하나를 고른다.
+	 * 자기 자신을 넣으면 한 번 더 쓴다(연타). 이어서 쓴 공격의 연계는 다시 잇지 않는다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|FollowUp")
+	TArray<TSubclassOf<UknightGameplayAbility_MonsterAttack>> FollowUpAttacks;
+
+	/** 몬스터에 이 태그가 모두 있을 때만 잇는다(잔향은 공명해방 State.Monster.Enraged). 비우면 항상. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|FollowUp")
+	FGameplayTagContainer FollowUpRequiredTags;
+
+	UPROPERTY(EditDefaultsOnly, Category="Attack|FollowUp", meta=(ClampMin=0, ClampMax=1))
+	float FollowUpChance = 1.f;
+
 private:
+	float GetSelectionWeightInternal(const FknightMonsterAttackContext& Context, bool bCheckCooldown) const;
+
 	UFUNCTION()
 	void HandleStartTurnTick(int32 ActionNumber);
 

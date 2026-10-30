@@ -71,6 +71,18 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(ClampMin=0, Units="s", EditCondition="GroundTurnTime > 0"))
 	float AirTurnMaxTime = 20.f;
 
+	/** State.Monster.Enraged 동안 GroundTurnTime 대신 쓴다(공명해방은 공중 위주로). 0이면 평소 값. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn|Enraged", meta=(ClampMin=0, Units="s", EditCondition="GroundTurnTime > 0"))
+	float EnragedGroundTurnTime = 0.f;
+
+	/** State.Monster.Enraged 동안 AirAttacksPerTurn 대신 쓴다. 0이면 평소 값. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn|Enraged", meta=(ClampMin=0, EditCondition="GroundTurnTime > 0"))
+	int32 EnragedAirAttacksPerTurn = 0;
+
+	/** State.Monster.Enraged 동안 AirTurnMaxTime 대신 쓴다. 0이면 평소 값. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn|Enraged", meta=(ClampMin=0, Units="s", EditCondition="GroundTurnTime > 0"))
+	float EnragedAirTurnMaxTime = 0.f;
+
 	/** 메시가 공중 높이로 오르는 시간. 이륙 애니메이션 길이에 맞춘다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(ClampMin=0, Units="s", EditCondition="GroundTurnTime > 0"))
 	float TakeOffBlendTime = 1.f;
@@ -116,6 +128,10 @@ private:
 	/** 공중 턴이고 남은 공중 공격이 하나면 State.Monster.LastAirAttack을 붙이고, 아니면 뗀다. */
 	void UpdateLastAttackTag();
 	bool IsAttacking() const;
+	bool IsEnraged() const;
+	float GetGroundTurnTime() const;
+	int32 GetAirAttacksPerTurn() const;
+	float GetAirTurnMaxTime() const;
 	bool CanChangeTurn() const;
 	void SendEvent(const FGameplayTag& EventTag) const;
 	/** 타깃이 AirKeepDistance보다 가까우면 뒤로 물러난다. */
@@ -132,6 +148,8 @@ private:
 	FDelegateHandle AbilityEndedHandle;
 	FDelegateHandle KnockdownHandle;
 	bool bAirborne = false;
+	double LastAttackEndTime = -1.e9;
+	static constexpr float FollowUpGraceTime = 0.2f;
 	float GroundTime = 0.f;
 	float AirTime = 0.f;
 	int32 AirAttacksUsed = 0;
