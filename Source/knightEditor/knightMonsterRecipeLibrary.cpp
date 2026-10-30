@@ -2071,6 +2071,64 @@ int32 UknightMonsterRecipeLibrary::SetMontageSoundTime(UAnimMontage* Montage, co
 	return Moved;
 }
 
+bool UknightMonsterRecipeLibrary::AddHitFlinchNode(UAnimBlueprint* AnimBlueprint)
+{
+	UClass* const FlinchClass = FindObject<UClass>(nullptr, TEXT("/Script/knightAnimGraph.AnimGraphNode_knightHitFlinch"));
+	if (!AnimBlueprint || !FlinchClass)
+	{
+		return false;
+	}
+	TArray<UEdGraph*> Graphs;
+	AnimBlueprint->GetAllGraphs(Graphs);
+	UEdGraphNode* SlotNode = nullptr;
+	for (UEdGraph* const Graph : Graphs)
+	{
+		for (UEdGraphNode* const Node : Graph->Nodes)
+		{
+			if (Node && Node->GetClass() == FlinchClass)
+			{
+				return true;
+			}
+			if (Node && Node->GetClass()->GetFName() == TEXT("AnimGraphNode_Slot"))
+			{
+				SlotNode = Node;
+			}
+		}
+	}
+	UEdGraphPin* const SlotOut = SlotNode ? SlotNode->FindPin(TEXT("Pose"), EGPD_Output) : nullptr;
+	if (!SlotOut)
+	{
+		UE_LOG(LogTemp, Error, TEXT("AddHitFlinchNode %s: Slot 노드를 찾지 못했습니다."), *GetNameSafe(AnimBlueprint));
+		return false;
+	}
+	UEdGraph* const Graph = SlotNode->GetGraph();
+	Graph->Modify();
+	UEdGraphNode* const FlinchNode = NewObject<UEdGraphNode>(Graph, FlinchClass, NAME_None, RF_Transactional);
+	Graph->AddNode(FlinchNode, false, false);
+	FlinchNode->CreateNewGuid();
+	FlinchNode->PostPlacedNewNode();
+	FlinchNode->AllocateDefaultPins();
+	FlinchNode->NodePosX = SlotNode->NodePosX + 280;
+	FlinchNode->NodePosY = SlotNode->NodePosY + 160;
+	UEdGraphPin* const FlinchIn = FlinchNode->FindPin(TEXT("Source"), EGPD_Input);
+	UEdGraphPin* const FlinchOut = FlinchNode->FindPin(TEXT("Pose"), EGPD_Output);
+	if (!FlinchIn || !FlinchOut)
+	{
+		Graph->RemoveNode(FlinchNode);
+		return false;
+	}
+	const TArray<UEdGraphPin*> Targets = SlotOut->LinkedTo;
+	SlotOut->BreakAllPinLinks();
+	SlotOut->MakeLinkTo(FlinchIn);
+	for (UEdGraphPin* const Target : Targets)
+	{
+		FlinchOut->MakeLinkTo(Target);
+	}
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(AnimBlueprint);
+	FKismetEditorUtilities::CompileBlueprint(AnimBlueprint, EBlueprintCompileOptions::SkipGarbageCollection);
+	return true;
+}
+
 USoundCue* UknightMonsterRecipeLibrary::CreateRandomSoundCue(const FString& PackagePath, const TArray<USoundWave*>& Waves, USoundClass* SoundClass,
 	USoundAttenuation* Attenuation)
 {

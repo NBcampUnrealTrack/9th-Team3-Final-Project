@@ -10,6 +10,8 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Monster/knightMonsterCharacterBase.h"
+#include "Monster/knightMonsterDefinition.h"
 #include "System/knightGameplayTags.h"
 #include "knight.h"
 #include "knightPerfCounters.h"
@@ -49,6 +51,20 @@ void UknightGameplayAbility_MonsterReaction::ActivateAbility(const FGameplayAbil
 		return;
 	}
 	KNIGHT_PERF_COUNT("Monster.Reactions", 1);
+
+	ActiveHoldMontage = HoldMontage;
+	const AActor* const Instigator = TriggerEventData ? TriggerEventData->Instigator.Get() : nullptr;
+	if (Instigator && Instigator != Character)
+	{
+		const EknightHitSide Side = AknightMonsterCharacterBase::GetHitSide(*Character, Instigator->GetActorLocation());
+		UAnimMontage* const SideMontage = Side == EknightHitSide::Back ? HoldMontageBack.Get()
+			: Side == EknightHitSide::Left ? HoldMontageLeft.Get()
+			: Side == EknightHitSide::Right ? HoldMontageRight.Get() : nullptr;
+		if (SideMontage)
+		{
+			ActiveHoldMontage = SideMontage;
+		}
+	}
 
 	// 다른 반응(다운 등) 중에 켜졌으면 그 몽타주를 덮지 않고 물러났다가, 그 반응이 끝난 뒤 EndAbility의 다시 실행 경로로 켜진다.
 	// Reacting은 자기 ActivationOwnedTags로도 하나 붙어 있으므로 1보다 많아야 다른 반응이 있는 것이다.
@@ -109,7 +125,7 @@ bool UknightGameplayAbility_MonsterReaction::TryStartRewind(ACharacter& Characte
 	const FAnimMontageInstance* Interrupted = nullptr;
 	for (const FAnimMontageInstance* const Instance : AnimInstance->MontageInstances)
 	{
-		if (Instance && Instance->Montage && Instance->Montage != HoldMontage && Instance->Montage != RecoverMontage)
+		if (Instance && Instance->Montage && Instance->Montage != ActiveHoldMontage && Instance->Montage != RecoverMontage)
 		{
 			Interrupted = Instance;
 		}
@@ -136,7 +152,7 @@ bool UknightGameplayAbility_MonsterReaction::TryStartRewind(ACharacter& Characte
 		}
 		// 같은 자세에서 이어지므로 블렌드 인 없이 시작하고, 끝(되감긴 자세)에 도착하면 유지 몽타주의 블렌드 인과 같은 시간으로 넘긴다.
 		// 블렌드 아웃 시점을 0으로 둬야 짧은 되감기 도중에 블렌드 아웃이 먼저 시작되지 않는다.
-		const float BlendOutTime = HoldMontage ? HoldMontage->BlendIn.GetBlendTime() : 0.25f;
+		const float BlendOutTime = ActiveHoldMontage ? ActiveHoldMontage->BlendIn.GetBlendTime() : 0.25f;
 		UAnimMontage* const Rewind = UAnimMontage::CreateSlotAnimationAsDynamicMontage(Sequence, Track.SlotName, 0.f, BlendOutTime, 1.f, 1, 0.f);
 		if (!Rewind || Rewind->SlotAnimTracks.IsEmpty() || Rewind->SlotAnimTracks[0].AnimTrack.AnimSegments.IsEmpty())
 		{
@@ -186,9 +202,9 @@ void UknightGameplayAbility_MonsterReaction::StartHold()
 		return;
 	}
 	bHoldStarted = true;
-	if (HoldMontage)
+	if (ActiveHoldMontage)
 	{
-		UAbilityTask_PlayMontageAndWait* const HoldTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, TEXT("Hold"), HoldMontage);
+		UAbilityTask_PlayMontageAndWait* const HoldTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, TEXT("Hold"), ActiveHoldMontage);
 		HoldTask->ReadyForActivation();
 	}
 	UAbilityTask_WaitDelay* const HoldDelay = UAbilityTask_WaitDelay::WaitDelay(this, HoldTime);

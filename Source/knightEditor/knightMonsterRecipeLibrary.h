@@ -98,6 +98,13 @@ public:
 	 * Waves를 번갈아(이미 나온 것은 빼고 무작위로) 재생하는 SoundCue를 PackagePath(/Game/...)에 만든다. 같은 소리가 연달아 나지 않는다.
 	 * 이미 있으면 노드를 새로 짠다. 저장은 호출한 쪽.
 	 */
+	/**
+	 * 애님 Blueprint의 Slot 노드 바로 뒤에 Knight Hit Flinch 노드(맞을 때 덧셈 움찔)를 끼우고 컴파일한다. 이미 있으면 아무것도 하지 않는다.
+	 * 공용 ABP_Monster_Base에 넣어 두면 레시피로 새로 만드는 몬스터는 따라온다. 저장은 호출한 쪽.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
+	static bool AddHitFlinchNode(UAnimBlueprint* AnimBlueprint);
+
 	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
 	static USoundCue* CreateRandomSoundCue(const FString& PackagePath, const TArray<USoundWave*>& Waves, USoundClass* SoundClass, USoundAttenuation* Attenuation);
 
