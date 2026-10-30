@@ -12,6 +12,8 @@
 #include "Progression/knightProgressionSubsystem.h"
 #include "System/knightGameplayTags.h"
 
+#define LOCTEXT_NAMESPACE "knightEquipmentStats"
+
 namespace
 {
 	using FLoadout = knightEquipmentStats::FLoadout;
@@ -122,7 +124,7 @@ FknightEquipmentStats knightEquipmentStats::Calculate(const FLoadout& Loadout, c
 				if (!Effect || Effect->DurationPolicy != EGameplayEffectDurationType::Infinite)
 				{
 					Result.bComplete = false;
-					Result.IncompleteReason = TEXT("비지속 또는 없는 어빌리티 효과는 계산할 수 없습니다.");
+					Result.IncompleteReason = LOCTEXT("NonPersistentEffect", "비지속 또는 없는 어빌리티 효과는 계산할 수 없습니다.");
 					continue;
 				}
 				const float Level = Granted.EffectLevel + (Progression ? Progression->GetUpgradeLevel(Part) : 0);
@@ -134,7 +136,7 @@ FknightEquipmentStats knightEquipmentStats::Calculate(const FLoadout& Loadout, c
 					else
 					{
 						Result.bComplete = false;
-						Result.IncompleteReason = TEXT("조건부 또는 동적 어빌리티 효과는 계산할 수 없습니다.");
+						Result.IncompleteReason = LOCTEXT("ConditionalEffect", "조건부 또는 동적 어빌리티 효과는 계산할 수 없습니다.");
 					}
 				}
 			}
@@ -180,7 +182,7 @@ FknightEquipmentComparison knightEquipmentStats::CompareReplacement(const FLoado
 	Result.Current = Calculate(CurrentLoadout, Catalog, Progression);
 	if (!Slot.IsValid() || (Replacement && Replacement->SlotTag != Slot))
 	{
-		Result.IncompleteReason = TEXT("교체 슬롯과 장비 슬롯이 일치하지 않습니다.");
+		Result.IncompleteReason = LOCTEXT("SlotMismatch", "교체 슬롯과 장비 슬롯이 일치하지 않습니다.");
 		return Result;
 	}
 	Result.bValidReplacement = true;
@@ -190,7 +192,7 @@ FknightEquipmentComparison knightEquipmentStats::CompareReplacement(const FLoado
 	Result.Replacement = Calculate(Changed, Catalog, Progression);
 	if (!Catalog || !Result.Current.bComplete || !Result.Replacement.bComplete)
 	{
-		Result.IncompleteReason = !Catalog ? TEXT("장비 카탈로그를 읽을 수 없어 세트 효과가 불확실합니다.")
+		Result.IncompleteReason = !Catalog ? LOCTEXT("NoCatalog", "장비 카탈로그를 읽을 수 없어 세트 효과가 불확실합니다.")
 			: !Result.Current.bComplete ? Result.Current.IncompleteReason : Result.Replacement.IncompleteReason;
 		return Result;
 	}
@@ -207,7 +209,7 @@ FknightItemContribution knightEquipmentStats::CalculateItemContribution(const Uk
 	if (!Part || !Part->SlotTag.IsValid())
 	{
 		Result.bComplete = false;
-		Result.IncompleteReason = TEXT("장비 또는 슬롯이 유효하지 않습니다.");
+		Result.IncompleteReason = LOCTEXT("InvalidItem", "장비 또는 슬롯이 유효하지 않습니다.");
 		return Result;
 	}
 	FLoadout ItemLoadout;
@@ -246,3 +248,5 @@ TArray<FknightActiveSetBonus> knightEquipmentStats::GetActiveSetBonuses(const Fk
 	});
 	return Result;
 }
+
+#undef LOCTEXT_NAMESPACE
