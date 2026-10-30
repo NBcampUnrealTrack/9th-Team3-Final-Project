@@ -44,6 +44,7 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Charging, "State.Charging", "Holding a charged attack.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Sprinting, "State.Sprinting", "Run key held, or run toggled on (AknightCharacter). The attack key does the run attack instead of light step 1.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Boosting, "State.Boosting", "Boost dash in progress.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Rolling, "State.Rolling", "Dodge roll in progress (knightGameplayAbility_BoostDash). The third-person camera keeps its current follow lag (FreezeLagTags).");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Flying, "State.Flying", "Boost flight movement mode.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Airborne, "State.Airborne", "Not on the ground for any reason.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_LockedOn, "State.LockedOn", "The player has a lock-on target (drives the lock-on camera mode).");

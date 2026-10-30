@@ -22,6 +22,12 @@ class USoundBase;
  * 방향과 자세: 락온이 아니면 이동 입력이 있는 대시는 먼저 나이트를 대시 방향으로 돌리고 DashMontage(정면)를 재생한다.
  * 락온 중(State.LockedOn)이거나 입력 없는 백스텝이면 바라보는 방향을 유지하고, 그 방향 기준의 대시 방향으로
  * 몽타주를 고른다(앞 / 뒤 / 왼쪽 / 오른쪽). 지정하지 않은 방향 몽타주는 DashMontage를 쓴다.
+ * (2026-10-29 사용자 결정) 퀵스텝 → 구르기: 몽타주를 구르기(양손 2H-A_Roll, 한손 1H-B_Roll)로 바꾸고 1배속으로 끝까지 재생한다.
+ *   한손 스탠스는 OneHandedDashMontage 칸들을 쓴다. 등 부스터 이펙트와 잔상은 끄고 부스터 소리는 남겼다(GA_Knight_BoostDash).
+ *   락온 중 대각선은 가장 가까운 구르기에 맞춰 몸을 최대 45° 돌려 구르고(bAlignRollToDirectionWhenLockedOn), 뒤는 왼쪽 BL·오른쪽 BR.
+ *   몽타주 배속은 MontageMoveEndTime 기준으로 구르는 부분 = DashDuration, 일어나는 부분 = RecoveryDuration에 맞춘다.
+ *   땅에서만 구른다. 구르는 내내 방향키로 몸이 돌지 않고(이동 잠금), 다 일어나는 순간 방향키를 누르고 있으면 바로 그 속도로 출발한다.
+ *   State.Boosting 대신 State.Rolling을 단다: Boost 카메라(축소)로 바뀌지 않고, 카메라가 뒤따라오는 거리도 그대로 둔다.
  *
  * 스탯 연결 (2026-10-06):
  *   대시 거리 = DashDistance x DodgeSpeed(메카 속성, 배율) x 중량 계수(무브먼트 컴포넌트)
@@ -40,6 +46,8 @@ class USoundBase;
  *       대시 이동 도중의 요청은 거절해 이동이 끊기지 않는다(그 누름은 입력 버퍼에 남아 경직이 시작되면 다시 시도된다).
  *       (2026-10-28) 쿨타임이 0이면 콤보처럼 이어진다: 이동 중에 미리 누른 키(선입력, 버퍼 0.5초)나 경직 중에 누른 키로 경직을 끊고 다음 대시.
  *       (2026-10-29) 쿨타임 0.3초가 경직(0.1초)보다 길어서, 다음 대시는 경직 캔슬이 아니라 쿨타임이 끝날 때 버퍼에서 나간다.
+ *       (2026-10-29 구르기) 경직이 0.48초로 길어져, 다음 구르기는 이동이 끝나고 0.3초 뒤(경직 도중)에 경직을 끊고 나간다(간격 0.9초).
+ *       같은 날 이동 0.72초·경직 0.3초로 바꿔, 쿨타임과 경직이 같이 끝난다(간격 1.02초 = 구르기 전체 길이).
  *
  * 입력 (2026-10-08): 퀵스텝 키(기본 LeftControl, IA_Boost → InputTag.Boost)를 한 번 누르면 대시. 달리기는 LeftShift(InputTag.Run)로 분리했다.
  * (전에는 Shift를 누르고 있으면 달리기, 두 번 탭하면 knightGameplayAbility_Sprint가 태그로 대시를 발동했다)
@@ -63,63 +71,142 @@ protected:
 	/**
 	 * (2026-10-29 사용자 결정) 퀵스텝 비활성화: 꺼져 있으면 퀵스텝 키(Ctrl)를 눌러도 나가지 않는다(CanActivateAbility가 거절).
 	 * 어빌리티 세트·입력 매핑은 그대로라, GA_Knight_BoostDash에서 이 칸만 켜면 다시 쓸 수 있다. 바뀔 수 있는 값.
+	 * (2026-10-29 사용자 결정, 같은 날) 퀵스텝을 구르기로 바꾸고 다시 켬.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Dash")
-	bool bQuickstepEnabled = false;
+	bool bQuickstepEnabled = true;
 
-	/** 배율·중량 계수가 1일 때의 대시 거리. (2026-10-07 900 → 750, 2026-10-16 750 → 375 절반으로 조정) */
+	/**
+	 * 배율·중량 계수가 1일 때의 대시 거리. (2026-10-07 900 → 750, 2026-10-16 750 → 375 절반으로 조정)
+	 * (2026-10-29 사용자 결정, 구르기 '살짝만 줄이기') 375 → 330, 같은 날 다시 375로 되돌림. 바뀔 수 있는 값.
+	 */
 	UPROPERTY(EditDefaultsOnly, Category="Dash", meta=(ClampMin=0, Units="cm"))
 	float DashDistance = 375.f;
 
+	/**
+	 * 대시 이동 시간. (2026-10-29 구르기 0.35 → 0.6: 구르기 몽타주(1.08초)에서 몸이 실제로 나가는 구간이 0 ~ 0.6초)
+	 * 바뀔 수 있는 값. 몽타주를 바꾸면 이 값과 RecoveryDuration을 새 몽타주에 맞춘다.
+	 * (2026-10-29 사용자 결정, 같은 날) 0.6 → 0.72: 총 시간(1.08초)은 그대로 두고 일어나는 동작을 빠르게 한 만큼 구르는 부분을 늘림.
+	 */
 	UPROPERTY(EditDefaultsOnly, Category="Dash", meta=(ClampMin=0.05, Units="s"))
-	float DashDuration = 0.35f;
+	float DashDuration = 0.72f;
 
 	/**
 	 * 대시 이동이 끝난 뒤의 경직 시간. 이 동안 공격·가드·(쿨타임이 끝난) 대시로 캔슬할 수 있다. 0이면 경직 없이 바로 끝난다.
 	 * (2026-10-07 0.25 → 0.1, 플레이해 보니 경직이 길게 느껴져 줄임)
+	 * (2026-10-29 구르기 0.1 → 0.48: 구르기 몽타주의 일어나는 동작(0.6 ~ 1.08초)을 끝까지 보여 준다. 이동 + 경직 = 몽타주 길이)
+	 * (2026-10-29 사용자 결정, 같은 날) 0.48 → 0.36: 일어나는 동작을 약 1.34배속으로 빠르게(MontageMoveEndTime 참고).
+	 * (2026-10-29 사용자 결정, 같은 날) 0.36 → 0.3: 일어나는 후딜을 조금 더 줄임(약 1.6배속).
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Dash", meta=(ClampMin=0, Units="s"))
-	float RecoveryDuration = 0.1f;
+	float RecoveryDuration = 0.3f;
+
+	/**
+	 * (2026-10-29) 몽타주에서 몸이 실제로 나가는 구간이 끝나는 시각(몽타주 기준 초). 구르기 몽타주는 0.6초(그 뒤는 일어나는 동작).
+	 * 0보다 크면 배속을 시간에 맞춘다: 몽타주 0 ~ 이 시각을 DashDuration 동안, 나머지(일어나기)를 RecoveryDuration 동안 재생한다.
+	 * 그래서 BP에서 DashDuration·RecoveryDuration만 바꿔도 몽타주가 그 시간에 맞춰 끝까지 재생된다. 0이면 MontagePlayRate 고정.
+	 * 바뀔 수 있는 값. 몽타주를 바꾸면 새 몽타주의 이동이 끝나는 시각으로 맞춘다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Dash", meta=(ClampMin=0, Units="s"))
+	float MontageMoveEndTime = 0.6f;
+
+	/**
+	 * (2026-10-29 사용자 결정) 몽타주에서 몸이 다 일어선 시각(몽타주 기준 초). 그 뒤의 정리 동작은 방향키를 누르면 건너뛴다:
+	 * 경직 중 이 시각이 지나고 방향키를 누르고 있으면 경직을 끝내고 바로 출발한다(일어나는 동작은 항상 끝까지 보인다).
+	 * 방향키를 안 누르면 몽타주 끝까지 재생한다. 0이면 건너뛰지 않는다.
+	 * MontageStandUpTimes에 없는 몽타주가 이 값을 쓴다(앞 구르기 기준 0.9초). 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Dash", meta=(ClampMin=0, Units="s"))
+	float MontageStandUpTime = 0.9f;
+
+	/**
+	 * (2026-10-29) 몽타주별 다 일어선 시각(골반 높이가 서 있을 때의 95%에 닿는 시각으로 잼).
+	 * 양손 앞 0.9·왼쪽 0.81·오른쪽 0.81·뒤 0.69·오른쪽 뒤 0.72, 한손 앞 0.87·왼쪽 0.78·오른쪽 0.75·뒤 0.69·오른쪽 뒤 0.69. 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Dash")
+	TMap<TObjectPtr<UAnimMontage>, float> MontageStandUpTimes;
 
 	/**
 	 * 관성 이어가기 각도 (2026-10-09 사용자 결정, 바뀔 수 있는 값). 대시가 끝날 때 대시 방향에서 이 각도 안쪽으로 방향키를 누르고 있으면
 	 * 경직 동안 이동을 잠그지 않아, 걷기·달리기 속도 그대로 이어서 움직인다. 방향키를 안 누르거나 이 각도 밖이면 전처럼 미끄러지며 버틴다.
 	 * (출발 Easing을 넣은 뒤 '퀵스텝 → 경직에서 거의 정지 → 느린 출발'이 어색해서 넣음. 캔슬 창은 어느 쪽이든 그대로)
 	 * 0이면 항상 잠근다.
+	 * (2026-10-29 사용자 결정, 구르기) 90 → 0: 방향키와 상관없이 일어나는 동작을 끝까지 보인다(움직이면 일어나며 미끄러져 보임).
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Dash", meta=(ClampMin=0, ClampMax=180, Units="Degrees"))
-	float CarryMomentumMaxAngle = 90.f;
+	float CarryMomentumMaxAngle = 0.f;
 
 	/**
 	 * 대시 몽타주 재생 속도(고정). 어빌리티가 끝나면(대시 + 경직) 그 지점에서 블렌드 아웃된다.
 	 * 1.5배속, 대시 0.35초 + 경직 0.1초면 몽타주(1.33초) 약 51% 지점에서 끝난다.
 	 * (2026-10-07: 대시+경직 시간에 맞춘 자동 배속(약 2.4~3배)은 대시 중에 동작이 너무 빨리 지나가서 고정 배속으로 바꿈.
 	 *  1.0배속도 시험해 본 뒤 1.5배속으로 정함)
+	 * (2026-10-29 사용자 결정, 구르기) 1.5 → 1.0: 구르기를 원래 속도로 끝까지 재생한다(대시 0.6초 + 경직 0.48초 = 1.08초).
+	 * (2026-10-29) MontageMoveEndTime이 0보다 크면 이 값은 쓰지 않는다(시간에 맞춘 배속).
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Dash", meta=(ClampMin=0.1))
-	float MontagePlayRate = 1.5f;
+	float MontagePlayRate = 1.f;
 
-	/** 선택 사항. 대시 동안의 0..1 커브. 거리는 크게 바꾸지 않고 순간 가속 모양만 바꾼다. */
+	/**
+	 * 선택 사항. 대시 동안의 0..1 커브. 거리는 크게 바꾸지 않고 순간 가속 모양만 바꾼다.
+	 * 가로축은 대시 이동 시간을 0~1로 본 값이고, 값이 속도 배율이다(평균이 1이면 거리가 DashDistance 그대로).
+	 * (2026-10-29) GA_Knight_BoostDash = CF_Knight_Roll_Speed: 0.06초 만에 붙고, 0.33초까지 일정, 일어나며 부드럽게 감속.
+	 */
 	UPROPERTY(EditDefaultsOnly, Category="Dash")
 	TObjectPtr<UCurveFloat> StrengthOverTime;
 
-	/** 대시 시작부터의 회피(무적) 시간. */
+	/** 대시 시작부터의 회피(무적) 시간. (2026-10-29 사용자 결정, 구르기가 느려진 만큼 0.2 → 0.3, 바뀔 수 있는 값) */
 	UPROPERTY(EditDefaultsOnly, Category="Dash", meta=(ClampMin=0, Units="s"))
-	float InvulnerableDuration = 0.2f;
+	float InvulnerableDuration = 0.3f;
 
-	/** 선택 사항. 추진기 자세(정면). 몽타주의 루트 모션은 무시하고 루트 모션 소스가 이동을 맡는다. */
+	/**
+	 * 선택 사항. 대시 자세(정면, 2026-10-29부터 구르기). 몽타주의 루트 모션은 무시하고 루트 모션 소스가 이동을 맡는다.
+	 * 그래서 몽타주에 쓰는 시퀀스는 루트 모션을 끄고 루트를 고정한다(Force Root Lock).
+	 * 이 4칸(DashMontage~Right)은 양손 스탠스용이고, 한손 스탠스는 아래 OneHanded 칸을 쓴다.
+	 */
 	UPROPERTY(EditDefaultsOnly, Category="Dash")
 	TObjectPtr<UAnimMontage> DashMontage;
 
-	/** 바라보는 방향 기준으로 뒤로 움직일 때의 대시 자세 (락온, 또는 입력 없는 백스텝). */
+	/** 바라보는 방향 기준으로 뒤로 움직일 때의 대시 자세 (락온, 또는 입력 없는 백스텝). DashMontageBackRight가 있으면 왼쪽 뒤용. */
 	UPROPERTY(EditDefaultsOnly, Category="Dash|Directional")
 	TObjectPtr<UAnimMontage> DashMontageBack;
+
+	/** (2026-10-29) 오른쪽 뒤로 움직일 때의 뒤 구르기(BR: 오른쪽으로 몸을 틀며 뒤로). 비우면 DashMontageBack을 쓴다. */
+	UPROPERTY(EditDefaultsOnly, Category="Dash|Directional")
+	TObjectPtr<UAnimMontage> DashMontageBackRight;
 
 	UPROPERTY(EditDefaultsOnly, Category="Dash|Directional")
 	TObjectPtr<UAnimMontage> DashMontageLeft;
 
 	UPROPERTY(EditDefaultsOnly, Category="Dash|Directional")
 	TObjectPtr<UAnimMontage> DashMontageRight;
+
+	/**
+	 * (2026-10-29 사용자 결정) 락온 중 대각선 구르기: 누른 방향에 가장 가까운 구르기(앞·왼쪽·오른쪽·뒤)를 고르고,
+	 * 그 구르기 방향이 실제 이동 방향과 맞도록 몸을 최대 45° 돌린다. 구르는 동안은 락온 회전을 멈추고, 끝나면 다시 대상을 본다.
+	 * 정확한 대각선(45°)은 앞·뒤 구르기로 처리한다. 끄면 몸은 대상을 본 채 가장 가까운 방향 몽타주만 고른다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Dash|Directional")
+	bool bAlignRollToDirectionWhenLockedOn = true;
+
+	/**
+	 * (2026-10-29) 한손 스탠스(State.Stance.TwoHanded가 없을 때)의 정면 대시 자세. 비우면 한손에서도 위의 양손 4칸을 쓴다.
+	 * 한손 방향 칸(Back·Left·Right)이 비어 있으면 그 방향은 이 칸을 쓴다(양손 칸과 같은 규칙).
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Dash|One Handed")
+	TObjectPtr<UAnimMontage> OneHandedDashMontage;
+
+	UPROPERTY(EditDefaultsOnly, Category="Dash|One Handed")
+	TObjectPtr<UAnimMontage> OneHandedDashMontageBack;
+
+	UPROPERTY(EditDefaultsOnly, Category="Dash|One Handed")
+	TObjectPtr<UAnimMontage> OneHandedDashMontageBackRight;
+
+	UPROPERTY(EditDefaultsOnly, Category="Dash|One Handed")
+	TObjectPtr<UAnimMontage> OneHandedDashMontageLeft;
+
+	UPROPERTY(EditDefaultsOnly, Category="Dash|One Handed")
+	TObjectPtr<UAnimMontage> OneHandedDashMontageRight;
 
 	/**
 	 * (2026-10-15 사용자 결정) 방향키를 누르고 있을 때만 퀵스텝이 나간다. 끄면 예전처럼 입력 없이 누르면 뒤로(백스텝) 나간다.
@@ -182,9 +269,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Dash|Noise", meta=(ClampMin=0, Units="cm"))
 	float NoiseRange = 0.f;
 
-	/** 퀵스텝 대시 이동 동안 메카 홀로그램 잔상(애프터이미지)을 남길지 여부. */
+	/** 퀵스텝 대시 이동 동안 메카 홀로그램 잔상(애프터이미지)을 남길지 여부. (2026-10-29 사용자 결정, 구르기로 바꾸며 끔) */
 	UPROPERTY(EditDefaultsOnly, Category="Dash|Ghost Trail")
-	bool bSpawnGhostTrail = true;
+	bool bSpawnGhostTrail = false;
 
 	/** 잔상에 덮어쓸 반투명/애디티브 머티리얼 (비우면 M_Knight_GhostTrail). */
 	UPROPERTY(EditDefaultsOnly, Category="Dash|Ghost Trail", meta=(EditCondition="bSpawnGhostTrail"))
@@ -211,7 +298,11 @@ protected:
 	FLinearColor TwoHandedGhostColor = FLinearColor(3.2f, 0.22f, 0.08f, 1.f);
 
 private:
-	UAnimMontage* SelectDashMontage(const ACharacter& Character, const FVector& Direction) const;
+	/**
+	 * 바라보는 방향 기준 대시 방향으로 몽타주를 고른다. OutMontageYaw에는 고른 몽타주가 구르는 방향
+	 * (바라보는 방향 기준 각도, 오른쪽 +: 앞 0, 오른쪽 90, 왼쪽 -90, 뒤 ±180)을 돌려준다.
+	 */
+	UAnimMontage* SelectDashMontage(const ACharacter& Character, const FVector& Direction, float* OutMontageYaw = nullptr) const;
 
 	/** 대시 한 번(방향·몽타주·무적·루트 모션). */
 	void StartDash(ACharacter& Character);
@@ -234,6 +325,9 @@ private:
 	UFUNCTION()
 	void OnRecoveryFinished();
 
+	/** (2026-10-29) 몸이 다 일어선 뒤 경직 동안 매 프레임 부른다. 방향키를 누르고 있으면 경직을 끝내고 바로 출발한다. */
+	void CheckStandUpMove();
+
 	/** 경직 상태(Window.Cancel, 이동 잠금)를 푼다. */
 	void ReleaseRecoveryState();
 
@@ -252,11 +346,21 @@ private:
 	FTimerHandle BackThrusterTimer;
 	FTimerHandle BackThrusterStopTimer;
 	FTimerHandle GhostTrailTimer;
+	FTimerHandle StandUpMoveTimer;
 
 	bool bInvulnerableApplied = false;
 	bool bCancelWindowApplied = false;
 	bool bMoveLockApplied = false;
 	bool bInRecovery = false;
+
+	/**
+	 * (2026-10-29) 구르는 동안 방향키로 몸이 돌지 않게(비락온 이동 방향 회전·락온 회전 모두) 건 이동 잠금.
+	 * 락온 여부와 상관없이 구르기 시작부터 건다. 어빌리티가 끝날 때 푼다.
+	 */
+	bool bFacingLockApplied = false;
+
+	/** 지금 재생 중인 대시 몽타주. 경직이 시작될 때 일어나는 동작의 배속을 바꾸는 데 쓴다. */
+	TWeakObjectPtr<UAnimMontage> PlayingDashMontage;
 
 	/** 이번 대시의 방향(수평 단위 벡터). 경직에서 관성 이어가기 여부를 정할 때 쓴다. */
 	FVector DashDirection = FVector::ZeroVector;
