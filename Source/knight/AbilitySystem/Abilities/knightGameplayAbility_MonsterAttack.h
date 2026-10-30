@@ -155,10 +155,17 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Turn", meta=(ClampMin=-180, ClampMax=180, Units="deg"))
 	float StartTurnYaw = 0.f;
 
-	UPROPERTY(EditDefaultsOnly, Category="Attack|Turn", meta=(ClampMin=1, EditCondition="StartTurnYaw != 0"))
+	/**
+	 * 켜면 StartTurnYaw가 0이어도 발동할 때 타깃 쪽으로 돈다. AI가 공격 전에 몸을 돌려 주지 않는 연계(FollowUpAttacks)로
+	 * 나오는 공격이 옆을 보고 발동하지 않게 한다. 이미 타깃을 보고 있으면 바로 끝난다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Turn")
+	bool bStartTurnToTarget = false;
+
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Turn", meta=(ClampMin=1, EditCondition="StartTurnYaw != 0 || bStartTurnToTarget"))
 	float StartTurnRate = 180.f;
 
-	UPROPERTY(EditDefaultsOnly, Category="Attack|Turn", meta=(ClampMin=0, Units="s", EditCondition="StartTurnYaw != 0"))
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Turn", meta=(ClampMin=0, Units="s", EditCondition="StartTurnYaw != 0 || bStartTurnToTarget"))
 	float StartTurnMaxTime = 0.5f;
 
 	/**

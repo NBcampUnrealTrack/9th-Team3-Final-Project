@@ -467,6 +467,7 @@ namespace knightRecipe
 		SetValue(CDO, TEXT("HitParams"), Attack.HitParams, Log);
 		SetObject(CDO, TEXT("Montage"), Montage, Log);
 		SetValue<float>(CDO, TEXT("StartTurnYaw"), Attack.StartTurnYaw, Log);
+		SetValue<bool>(CDO, TEXT("bStartTurnToTarget"), Attack.bStartTurnToTarget, Log);
 		SetValue<float>(CDO, TEXT("StartTurnRate"), Attack.StartTurnRate, Log);
 		SetValue<float>(CDO, TEXT("StartTurnMaxTime"), Attack.StartTurnMaxTime, Log);
 		if (Attack.Type == EknightRecipeAttackType::Area)
@@ -1853,6 +1854,7 @@ UknightMonsterRecipe* UknightMonsterRecipeLibrary::CreateRecipeFromMonster(TSubc
 				Attack.Selection.BlockedOwnerTags.RemoveTag(AirborneTag);
 				GetValue(CDO, TEXT("HitParams"), Attack.HitParams);
 				GetValue(CDO, TEXT("StartTurnYaw"), Attack.StartTurnYaw);
+				GetValue(CDO, TEXT("bStartTurnToTarget"), Attack.bStartTurnToTarget);
 				GetValue(CDO, TEXT("StartTurnRate"), Attack.StartTurnRate);
 				GetValue(CDO, TEXT("StartTurnMaxTime"), Attack.StartTurnMaxTime);
 				if (Attack.Type == EknightRecipeAttackType::Area)

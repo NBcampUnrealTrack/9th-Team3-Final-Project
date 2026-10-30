@@ -86,6 +86,11 @@ void UknightGameplayAbility_MonsterRushAttack::HandleTick(int32 ActionNumber)
 		break;
 	}
 	case EPhase::Step:
+		if (StepTurnYaw != 0.f && Step.ContactTime > 0.f && PhaseTime <= Step.ContactTime + knightMonsterRush::TickInterval)
+		{
+			const float Alpha = FMath::Clamp(PhaseTime / Step.ContactTime, 0.f, 1.f);
+			Monster->SetActorRotation(FRotator(0.f, StepStartYaw + StepTurnYaw * FMath::SmoothStep(0.f, 1.f, Alpha), 0.f));
+		}
 		if (PhaseTime >= Step.HitStartTime && PhaseTime <= Step.HitEndTime)
 		{
 			ApplyHits(Step);
@@ -134,6 +139,13 @@ void UknightGameplayAbility_MonsterRushAttack::StartReposition()
 	FVector Destination = TargetLocation - ToTarget * Reach;
 	Destination.Z = Current.Z;
 	TargetYaw = ToTarget.Rotation().Yaw - ContactYaw;
+	StepTurnYaw = 0.f;
+	if (Step.bFaceTargetAtStart)
+	{
+		// 자리는 같고(타깃에서 Reach 거리), 접촉 각도만큼은 동작 중에 돈다.
+		TargetYaw = ToTarget.Rotation().Yaw;
+		StepTurnYaw = -ContactYaw;
+	}
 
 	const FVector Move = Destination - Current;
 	const float Distance = Move.Size2D();
@@ -155,6 +167,8 @@ void UknightGameplayAbility_MonsterRushAttack::StartStep()
 	Phase = EPhase::Step;
 	PhaseTime = 0.f;
 	HitActors.Reset();
+	const AActor* const Avatar = GetAvatarActorFromActorInfo();
+	StepStartYaw = Avatar ? Avatar->GetActorRotation().Yaw : 0.f;
 	const float Length = Step.Montage ? Step.Montage->GetPlayLength() : Step.HitEndTime;
 	PhaseDuration = Step.EndTime > 0.f ? FMath::Min(Step.EndTime, Length) : Length;
 	if (Step.Montage)
