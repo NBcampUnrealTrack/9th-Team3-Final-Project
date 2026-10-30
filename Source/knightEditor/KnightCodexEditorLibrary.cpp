@@ -24,7 +24,7 @@ namespace
 {
 	const FLinearColor Navy(FColor(0x10, 0x1A, 0x2A));
 	const FLinearColor Blue(FColor(0x1C, 0x30, 0x47));
-	const FLinearColor Frost(FColor(0xA8, 0xC8, 0xF0));
+	const FLinearColor CodexFrost(FColor(0xA8, 0xC8, 0xF0));
 	const FLinearColor CodexFrame(FColor(0x0D, 0x15, 0x1D));
 	const FLinearColor CodexSidebar(FColor(0x21, 0x2D, 0x36));
 	const FLinearColor CodexReadingPanel(FColor(0x18, 0x25, 0x30));
@@ -301,13 +301,13 @@ bool UKnightCodexEditorLibrary::StyleBossEntry(UWidgetBlueprint* BP)
 		UVerticalBox* Glyph = New<UVerticalBox>(BP, TEXT("Column_LockGlyph"));
 		Row(LockRow, Sized(BP, TEXT("Size_LockGlyph"), 22.f, 25.f, Glyph), false, FMargin(0.f, 0.f, 6.f, 0.f));
 		UBorder* Shackle = New<UBorder>(BP, TEXT("Border_LockShackle"));
-		Shackle->SetBrushColor(Frost); Shackle->SetPadding(FMargin(3.f, 3.f, 3.f, 0.f));
+		Shackle->SetBrushColor(CodexFrost); Shackle->SetPadding(FMargin(3.f, 3.f, 3.f, 0.f));
 		UBorder* ShackleHole = New<UBorder>(BP, TEXT("Border_LockShackleHole"));
 		ShackleHole->SetBrushColor(CodexReadingPanel);
 		Shackle->AddChild(ShackleHole);
 		Col(Glyph, Sized(BP, TEXT("Size_LockShackle"), 14.f, 11.f, Shackle), false, FMargin(4.f, 0.f, 0.f, 0.f));
 		UBorder* LockBody = New<UBorder>(BP, TEXT("Border_LockBody"));
-		LockBody->SetBrushColor(Frost);
+		LockBody->SetBrushColor(CodexFrost);
 		Col(Glyph, Sized(BP, TEXT("Size_LockBody"), 22.f, 14.f, LockBody), false);
 		Row(LockRow, LockState, true);
 	}
