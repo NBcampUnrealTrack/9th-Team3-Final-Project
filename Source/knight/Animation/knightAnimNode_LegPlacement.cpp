@@ -458,7 +458,7 @@ void FAnimNode_knightLegPlacement::EvaluateSkeletalControl_AnyThread(FComponentS
 		UpdateFootLockState(*Pose.Leg, bPlanted, AnimFeetWorld.Last(), ComponentToWorld);
 	}
 
-	if (bEnableAutoStep && bFootLockActive)
+	if (bEnableAutoStep && bFootLockActive && ComponentVelocity.SizeSquared2D() <= FMath::Square(MaxAutoStepSpeed))
 	{
 		// 다리 길이 대비 가장 많이 끌린 발부터 걸음을 뗀다. 같이 드는 발은 대각선이어야 몸이 버틴다.
 		auto Drift = [&](int32 Index)

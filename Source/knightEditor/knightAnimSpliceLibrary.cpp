@@ -106,7 +106,25 @@ UAnimSequence* UknightAnimSpliceLibrary::BakeAlignedSplicedSequence(UAnimSequenc
 
 		// 보이는 루트는 맞춘 자리, 실제로 쓰는 루트는 맞추지 않은 자리에서 맞춘 자리로 끝까지 천천히 옮겨 간다.
 		// 그 차이만큼 루트 바로 아래 뼈를 되돌려 놓아 몸은 맞춘 자리에 그대로 보인다.
-		const FTransform VisualRoot = BlendLocal(0, SecondOffset);
+		FTransform VisualRoot = BlendLocal(0, SecondOffset);
+		if (!bAligned && Alpha > 0.f && Alpha < 1.f && Key > 0)
+		{
+			// 블렌드 구간에서 위치를 섞으면 빠른 앞 애니에서 느린 뒤 애니로 넘어갈 때 루트가 뒤로 끌려 순간 멈춘다(달리다 멈추기).
+			// 프레임마다 두 애니의 이동량을 섞어 쌓아 속도가 매끄럽게 바뀌게 한다. 블렌드가 끝나면 뒤 애니 궤적을 그 자리부터 따른다.
+			const double PrevSinceSeam = FrameRate.AsSeconds(FFrameNumber(Key - 1)) - FirstEndTime;
+			const FVector FirstStep = ReadLocal(FirstModel, 0, FirstTime).GetTranslation()
+				- ReadLocal(FirstModel, 0, FMath::Min(FirstEndTime + PrevSinceSeam, FirstLength)).GetTranslation();
+			const FVector SecondStep = SeamRoot.TransformVector(SecondStartRoot.InverseTransformVector(
+				ReadLocal(SecondModel, 0, SecondTime).GetTranslation() - ReadLocal(SecondModel, 0, FMath::Clamp(SecondStartTime + PrevSinceSeam, SecondStartTime, SecondLength)).GetTranslation()));
+			VisualRoot.SetTranslation(Positions[0].Last() + FMath::Lerp(FirstStep, SecondStep, Alpha));
+		}
+		else if (!bAligned && Alpha >= 1.f && Key > 0)
+		{
+			const double PrevSinceSeam = FrameRate.AsSeconds(FFrameNumber(Key - 1)) - FirstEndTime;
+			const FVector SecondStep = SeamRoot.TransformVector(SecondStartRoot.InverseTransformVector(
+				ReadLocal(SecondModel, 0, SecondTime).GetTranslation() - ReadLocal(SecondModel, 0, FMath::Clamp(SecondStartTime + PrevSinceSeam, SecondStartTime, SecondLength)).GetTranslation()));
+			VisualRoot.SetTranslation(Positions[0].Last() + SecondStep);
+		}
 		FTransform Root = VisualRoot;
 		if (bAligned && SinceSeam > 0.0)
 		{

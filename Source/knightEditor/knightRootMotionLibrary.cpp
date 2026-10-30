@@ -109,7 +109,7 @@ UAnimSequence* UknightRootMotionLibrary::BakeRootMotionFromBone(UAnimSequence* S
 	return Target;
 }
 
-UAnimSequence* UknightRootMotionLibrary::BakeRootMotionFromFeet(UAnimSequence* Source, const TArray<FName>& FootBones, int32 SmoothKeys, const FString& PackagePath)
+UAnimSequence* UknightRootMotionLibrary::BakeRootMotionFromFeet(UAnimSequence* Source, const TArray<FName>& FootBones, int32 SmoothKeys, const FString& PackagePath, bool bLoop)
 {
 	const USkeleton* const Skeleton = Source ? Source->GetSkeleton() : nullptr;
 	if (!Skeleton || FootBones.IsEmpty())
@@ -161,10 +161,11 @@ UAnimSequence* UknightRootMotionLibrary::BakeRootMotionFromFeet(UAnimSequence* S
 		Feet.Add(Foot);
 	}
 
-	// 프레임 사이 루트 이동량(디딘 발 평균 이동의 반대).
+	// 프레임 사이 루트 이동량(디딘 발 평균 이동의 반대). Steps[Key]는 Key-1 -> Key 구간.
 	TArray<FVector> Steps;
+	TArray<bool> bPlanted;
 	Steps.SetNumZeroed(NumKeys);
-	FVector LastStep = FVector::ZeroVector;
+	bPlanted.SetNumZeroed(NumKeys);
 	for (int32 Key = 1; Key < NumKeys; ++Key)
 	{
 		const float Time0 = FrameRate.AsSeconds(FFrameTime(Key - 1));
@@ -181,10 +182,38 @@ UAnimSequence* UknightRootMotionLibrary::BakeRootMotionFromFeet(UAnimSequence* S
 		}
 		if (Count > 0)
 		{
-			LastStep = -Sum / Count;
-			LastStep.Z = 0.0;
+			Steps[Key] = -Sum / Count;
+			Steps[Key].Z = 0.0;
+			bPlanted[Key] = true;
 		}
-		Steps[Key] = LastStep;
+	}
+	// 구간 번호(1 ~ NumKeys-1)를 반복 애니면 끝에서 처음으로 감아 읽는다. 마지막 키와 첫 키가 같은 자세라 구간 수는 NumKeys-1.
+	const int32 NumSteps = NumKeys - 1;
+	auto StepIndex = [&](int32 Index)
+	{
+		return bLoop ? 1 + ((Index - 1) % NumSteps + NumSteps) % NumSteps : FMath::Clamp(Index, 1, NumKeys - 1);
+	};
+	// 디딘 발이 없는 구간은 앞 구간 속도를 이어 쓴다. 반복 애니면 첫 구간도 끝 쪽에서 이어 온다.
+	for (int32 Key = 1; Key < NumKeys; ++Key)
+	{
+		if (bPlanted[Key])
+		{
+			continue;
+		}
+		for (int32 Back = 1; Back < NumSteps; ++Back)
+		{
+			const int32 Other = Key - Back;
+			if (!bLoop && Other < 1)
+			{
+				break;
+			}
+			const int32 Index = StepIndex(Other);
+			if (bPlanted[Index])
+			{
+				Steps[Key] = Steps[Index];
+				break;
+			}
+		}
 	}
 	// 첫 프레임은 디딘 발이 있는 다음 값으로 채운다(앞 프레임이 없어서 0으로 남는다).
 	Steps[0] = Steps[1];
@@ -196,9 +225,9 @@ UAnimSequence* UknightRootMotionLibrary::BakeRootMotionFromFeet(UAnimSequence* S
 		for (int32 Offset = -SmoothKeys; Offset <= SmoothKeys; ++Offset)
 		{
 			const int32 Other = Key + Offset;
-			if (Other >= 1 && Other < NumKeys)
+			if (bLoop || (Other >= 1 && Other < NumKeys))
 			{
-				Sum += Steps[Other];
+				Sum += Steps[StepIndex(Other)];
 				++Count;
 			}
 		}
