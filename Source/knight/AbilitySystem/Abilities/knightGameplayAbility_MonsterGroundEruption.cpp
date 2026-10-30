@@ -27,6 +27,7 @@ void UknightGameplayAbility_MonsterGroundEruption::ActivateAbility(const FGamepl
 	// 불길이 솟을 자리를 지금 정해 두어 예고 효과와 실제 불길이 같은 곳에 난다.
 	PickScatterPoints();
 	WarningCenter = FindGround(Avatar->GetActorTransform().TransformPosition(AreaOffset));
+	WarningSeed = FMath::FRandRange(0.f, 100.f);
 	if (WindupTime <= 0.f)
 	{
 		return;
@@ -34,8 +35,9 @@ void UknightGameplayAbility_MonsterGroundEruption::ActivateAbility(const FGamepl
 	if (WarningDecal)
 	{
 		// 바닥 데칼은 위에서 아래로 투영한다. 몸 높이와 경사를 덮도록 깊게 둔다.
+		// 수명을 WindupTime으로 걸면 타격이 한 프레임만 늦어도 분출 전에 사라지므로, 분출·종료 때 StopWarning이 지운다.
 		UDecalComponent* const Decal = UGameplayStatics::SpawnDecalAtLocation(Avatar, WarningDecal, FVector(800.f, AreaRadius, AreaRadius),
-			WarningCenter, FRotator(-90.f, 0.f, 0.f), WindupTime);
+			WarningCenter, FRotator(-90.f, 0.f, 0.f), 0.f);
 		if (Decal)
 		{
 			Decal->SetFadeIn(0.f, WindupTime);
@@ -43,7 +45,7 @@ void UknightGameplayAbility_MonsterGroundEruption::ActivateAbility(const FGamepl
 			// 머티리얼에 Seed가 있으면 공격마다 무늬를 바꾼다.
 			if (UMaterialInstanceDynamic* const Material = Decal->CreateDynamicMaterialInstance())
 			{
-				Material->SetScalarParameterValue(TEXT("Seed"), FMath::FRandRange(0.f, 100.f));
+				Material->SetScalarParameterValue(TEXT("Seed"), WarningSeed);
 				static const FName BeatParameters[] = { TEXT("Beat0"), TEXT("Beat1"), TEXT("Beat2") };
 				for (int32 Index = 0; Index < UE_ARRAY_COUNT(BeatParameters); ++Index)
 				{
@@ -173,6 +175,34 @@ void UknightGameplayAbility_MonsterGroundEruption::StopWarning()
 	WarningBeatTimers.Reset();
 }
 
+void UknightGameplayAbility_MonsterGroundEruption::SpawnAfterglow()
+{
+	// 예고 데칼이 없던 공격(WindupTime 0, 예고 중 데칼 미생성)에는 식는 균열도 없다.
+	if (!WarningDecal || AfterglowTime <= 0.f || !WarningDecalComponent.IsValid())
+	{
+		return;
+	}
+	UDecalComponent* const Decal = UGameplayStatics::SpawnDecalAtLocation(GetAvatarActorFromActorInfo(), WarningDecal,
+		FVector(800.f, AreaRadius, AreaRadius), WarningCenter, FRotator(-90.f, 0.f, 0.f), 0.f);
+	if (!Decal)
+	{
+		return;
+	}
+	Decal->SetFadeScreenSize(0.f);
+	// 페이드아웃의 1 → 0을 머티리얼이 식는 정도로 읽는다. 데칼만 지우고 주인 액터는 남긴다.
+	Decal->SetFadeOut(0.f, AfterglowTime, false);
+	if (Decal->GetFadeDuration() <= 0.f)
+	{
+		// r.Decal.FadeDurationScale이 0이면 페이드가 꺼지므로 수명만 따로 건다.
+		Decal->SetLifeSpan(AfterglowTime);
+	}
+	if (UMaterialInstanceDynamic* const Material = Decal->CreateDynamicMaterialInstance())
+	{
+		Material->SetScalarParameterValue(TEXT("Seed"), WarningSeed);
+		Material->SetScalarParameterValue(TEXT("Cooling"), 1.f);
+	}
+}
+
 void UknightGameplayAbility_MonsterGroundEruption::OnImpact()
 {
 	Super::OnImpact();
@@ -185,6 +215,7 @@ void UknightGameplayAbility_MonsterGroundEruption::OnImpact()
 		return;
 	}
 	bErupted = true;
+	SpawnAfterglow();
 	StopWarning();
 	const FVector Ground = FindGround(Avatar->GetActorTransform().TransformPosition(AreaOffset));
 	if (EruptionSound)

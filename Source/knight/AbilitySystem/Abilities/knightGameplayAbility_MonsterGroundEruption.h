@@ -40,6 +40,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Presentation")
 	TObjectPtr<UMaterialInterface> WarningDecal;
 
+	/**
+	 * 분출 뒤 같은 무늬의 균열이 식어 가며 남는 시간. 같은 머티리얼을 Cooling = 1로 다시 깔고 이 시간 동안 페이드아웃하므로
+	 * 머티리얼은 DecalLifetimeOpacity(1 → 0)를 식는 정도로 쓴다. 0이면 분출 순간 바로 지운다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Presentation", meta=(ClampMin=0, Units="s"))
+	float AfterglowTime = 3.f;
+
 	/** 예고 동안 불길이 솟을 자리마다 띄우는 효과(새어 나오는 불씨·연기). 계속 생성하는 시스템을 쓰고, 타격 순간 끈다. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Presentation")
 	TObjectPtr<UNiagaraSystem> WarningEffect;
@@ -90,7 +97,11 @@ private:
 
 	void PlayWarningBeat(int32 Index);
 
+	/** 분출 순간 예고 데칼 자리에 식어 가는 균열을 깐다. 어빌리티가 끝나도 AfterglowTime 동안 남는다. */
+	void SpawnAfterglow();
+
 	TArray<FVector> ScatterPoints;
+	float WarningSeed = 0.f;
 	FVector WarningCenter = FVector::ZeroVector;
 	TArray<FTimerHandle> WarningBeatTimers;
 	TWeakObjectPtr<UAudioComponent> WarningSoundComponent;
