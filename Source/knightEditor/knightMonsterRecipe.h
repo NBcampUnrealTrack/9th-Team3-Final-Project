@@ -123,10 +123,14 @@ struct FknightRecipeAttack
 	UPROPERTY(EditAnywhere, Category="Turn", meta=(ClampMin=-180, ClampMax=180, Units="deg"))
 	float StartTurnYaw = 0.f;
 
-	UPROPERTY(EditAnywhere, Category="Turn", meta=(ClampMin=1, EditCondition="StartTurnYaw != 0"))
+	/** 켜면 StartTurnYaw가 0이어도 발동할 때 타깃 쪽으로 돈다(연계로 나오는 공격용). */
+	UPROPERTY(EditAnywhere, Category="Turn")
+	bool bStartTurnToTarget = false;
+
+	UPROPERTY(EditAnywhere, Category="Turn", meta=(ClampMin=1, EditCondition="StartTurnYaw != 0 || bStartTurnToTarget"))
 	float StartTurnRate = 180.f;
 
-	UPROPERTY(EditAnywhere, Category="Turn", meta=(ClampMin=0, Units="s", EditCondition="StartTurnYaw != 0"))
+	UPROPERTY(EditAnywhere, Category="Turn", meta=(ClampMin=0, Units="s", EditCondition="StartTurnYaw != 0 || bStartTurnToTarget"))
 	float StartTurnMaxTime = 0.5f;
 };
 
