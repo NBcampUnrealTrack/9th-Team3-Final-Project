@@ -119,6 +119,13 @@ struct FknightActivateAbilityTaskInstanceData
 	UPROPERTY(EditAnywhere, Category="Parameter", meta=(ClampMin=0, Units="s"))
 	float RetryDelay = 0.5f;
 
+	/**
+	 * 몬스터가 달려오다 들어왔으면 걷는 속도까지 감속(이동 컴포넌트의 RunBrakingDeceleration)할 때까지 최대 이 시간(초)
+	 * 기다린 뒤 공격을 고른다. 달리는 자세에서 바로 공격 몽타주로 넘어가면 몸이 뚝 멈추기 때문이다. 0이면 기다리지 않는다.
+	 */
+	UPROPERTY(EditAnywhere, Category="Parameter", meta=(ClampMin=0, Units="s"))
+	float MaxStopWaitTime = 1.f;
+
 	FGameplayAbilitySpecHandle ActiveHandle;
 	FDelegateHandle EndedDelegateHandle;
 	TWeakObjectPtr<UAbilitySystemComponent> AbilitySystem;
@@ -126,6 +133,10 @@ struct FknightActivateAbilityTaskInstanceData
 	/** 발동한 몬스터 공격이 끝난 뒤 쉴 시간(MonsterDefinition의 AttackRestTime). 0이면 어빌리티가 끝나는 즉시 성공한다. */
 	float RestTime = 0.f;
 	double SucceedAtTime = -1.0;
+	/** 0 이상이면 달리기 감속을 기다리는 중이고, 이 시각까지만 기다린다. */
+	double StopWaitUntil = -1.0;
+	/** 감속을 기다린 뒤 다시 고를 때 한 번 더 기다리지 않게 한다(시간이 다 됐는데 아직 빠른 경우). */
+	bool bStopWaitDone = false;
 	/** 발동한 공격이 연계(FollowUpAttacks)를 가질 수 있어 끝난 뒤 Tick에서 이어 쓸지 본다. 이어 쓴 공격은 다시 잇지 않는다. */
 	bool bMayFollowUp = false;
 };

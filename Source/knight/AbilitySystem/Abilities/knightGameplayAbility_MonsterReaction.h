@@ -74,6 +74,19 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Reaction|Presentation")
 	TObjectPtr<UAnimMontage> RecoverMontage;
 
+	/**
+	 * 선택 사항. 반응을 일으킨 쪽(트리거 이벤트의 Instigator, 부위 파괴면 부순 플레이어)이 몬스터의 뒤·왼쪽·오른쪽이면
+	 * HoldMontage 대신 쓴다. 비어 있는 쪽은 HoldMontage를 쓴다(HoldMontage는 정면용).
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Reaction|Presentation")
+	TObjectPtr<UAnimMontage> HoldMontageBack;
+
+	UPROPERTY(EditDefaultsOnly, Category="Reaction|Presentation")
+	TObjectPtr<UAnimMontage> HoldMontageLeft;
+
+	UPROPERTY(EditDefaultsOnly, Category="Reaction|Presentation")
+	TObjectPtr<UAnimMontage> HoldMontageRight;
+
 	/** 회복(RecoverMontage 또는 RecoverTime) 동안 붙이는 루즈 태그. 잔향 다운: State.Monster.GettingUp(일어나는 동안 가슴 약점 노출). */
 	UPROPERTY(EditDefaultsOnly, Category="Reaction", meta=(Categories="State"))
 	FGameplayTagContainer RecoverTags;
@@ -134,6 +147,10 @@ private:
 
 	/** (2026-10-20) 처음 회복할 때의 MaxPoise(상한 기준). 어빌리티는 액터당 하나라 몬스터가 살아 있는 동안 유지된다. */
 	mutable float InitialMaxPoise = -1.f;
+
+	/** 이번 반응에 쓰는 유지 몽타주(방향에 따라 HoldMontage 또는 HoldMontageBack/Left/Right). */
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimMontage> ActiveHoldMontage;
 
 	bool bStateTagApplied = false;
 	bool bRecoverTagsApplied = false;

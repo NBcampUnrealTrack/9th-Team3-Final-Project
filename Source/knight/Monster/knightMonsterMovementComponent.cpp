@@ -3,6 +3,8 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "GameFramework/Actor.h"
+#include "Monster/knightMonsterCharacterBase.h"
+#include "Monster/knightMonsterTargetingComponent.h"
 #include "System/knightGameplayTags.h"
 
 UknightMonsterMovementComponent::UknightMonsterMovementComponent(const FObjectInitializer& ObjectInitializer)
@@ -52,7 +54,67 @@ float UknightMonsterMovementComponent::GetMaxSpeed() const
 	{
 		return 0.f;
 	}
-	return IsMovementSlowed() ? Super::GetMaxSpeed() * SlowSpeedScale : Super::GetMaxSpeed();
+	if (IsMovementSlowed())
+	{
+		bRunning = false;
+		return Super::GetMaxSpeed() * SlowSpeedScale;
+	}
+	if (RunSpeed > 0.f && MovementMode == MOVE_Walking)
+	{
+		const AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetOwner());
+		const UknightMonsterTargetingComponent* const Targeting = Monster ? Monster->GetTargetingComponent() : nullptr;
+		const AActor* const Target = Targeting ? Targeting->GetCurrentTarget() : nullptr;
+		const double Distance = Target ? FVector::Dist2D(Target->GetActorLocation(), Monster->GetActorLocation()) : 0.0;
+		bRunning = Target && (Distance > RunStartDistance || (bRunning && Distance > RunStopDistance));
+		if (bRunning)
+		{
+			return RunSpeed;
+		}
+	}
+	return Super::GetMaxSpeed();
+}
+
+bool UknightMonsterMovementComponent::IsSlowingFromRun() const
+{
+	return RunSpeed > 0.f && RunBrakingDeceleration > 0.f && IsMovingOnGround() && Velocity.SizeSquared2D() > FMath::Square(MaxWalkSpeed + 1.f);
+}
+
+bool UknightMonsterMovementComponent::ApplyRequestedMove(float DeltaTime, float MaxAccel, float MaxSpeed, float Friction, float BrakingDeceleration,
+	FVector& OutAcceleration, float& OutRequestedSpeed)
+{
+	const FVector OldVelocity = Velocity;
+	const bool bApplied = Super::ApplyRequestedMove(DeltaTime, MaxAccel, MaxSpeed, Friction, BrakingDeceleration, OutAcceleration, OutRequestedSpeed);
+	// 엔진은 요청 속도보다 빠르면 속도를 바로 요청 속도로 맞춘다. 달리다 걷기로 바뀔 때는 방향만 따르고 크기는 두어서
+	// CalcVelocity의 제동(ApplyVelocityBraking)이 RunBrakingDeceleration으로 줄이게 한다.
+	if (bApplied && OldVelocity.SizeSquared() > Velocity.SizeSquared() && RunSpeed > 0.f && RunBrakingDeceleration > 0.f
+		&& IsMovingOnGround() && OldVelocity.SizeSquared2D() > FMath::Square(MaxWalkSpeed + 1.f))
+	{
+		Velocity = Velocity.GetSafeNormal() * OldVelocity.Size();
+	}
+	return bApplied;
+}
+
+void UknightMonsterMovementComponent::ApplyVelocityBraking(float DeltaTime, float Friction, float BrakingDeceleration)
+{
+	if (IsSlowingFromRun())
+	{
+		// 마찰 없이 일정한 감속으로 줄인다. 걷는 속도 아래로 내려가면 다음 프레임부터 원래 제동을 쓴다.
+		Super::ApplyVelocityBraking(DeltaTime, 0.f, RunBrakingDeceleration);
+		return;
+	}
+	Super::ApplyVelocityBraking(DeltaTime, Friction, BrakingDeceleration);
+}
+
+void UknightMonsterMovementComponent::StopMovementImmediately()
+{
+	// AI 이동이 끝나거나 끊길 때(StopMovementKeepPathing) 엔진은 속도를 바로 0으로 만든다. 달리던 중이면 요청 이동만 지우고
+	// 속도는 남겨서 RunBrakingDeceleration으로 줄인다. 경직·다운 같은 다른 정지는 그대로 바로 선다.
+	if (!GetNavMovementProperties()->bStopMovementAbortPaths && IsSlowingFromRun())
+	{
+		StopActiveMovement();
+		return;
+	}
+	Super::StopMovementImmediately();
 }
 
 FRotator UknightMonsterMovementComponent::GetDeltaRotation(float DeltaTime) const

@@ -9,7 +9,9 @@
 #include "Interfaces/TargetableInterface.h"
 #include "knightMonsterCharacterBase.generated.h"
 
+class UAnimSequence;
 class UAudioComponent;
+enum class EknightHitSide : uint8;
 class UknightAbilitySystemComponent;
 class UknightCoreAttributeSet;
 class UknightHitReactionComponent;
@@ -38,6 +40,17 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FknightMonsterDefeated, AknightMons
  * Collision: the capsule stays small and only handles movement. Hits land on the mesh's physics asset
  * bodies (object type PhysicsBody, query enabled), which UknightMonsterPartComponent maps to parts.
  */
+/** 지금 얹을 덧셈 피격(Knight Hit Flinch 애님 노드가 읽는다). Count가 바뀌면 새 피격이다. */
+struct FknightHitFlinchState
+{
+	const UAnimSequence* Sequence = nullptr;
+	float Strength = 0.f;
+	float PlayRate = 1.f;
+	float BlendIn = 0.05f;
+	float BlendOut = 0.3f;
+	int32 Count = 0;
+};
+
 UCLASS(Abstract)
 class KNIGHT_API AknightMonsterCharacterBase : public ACharacter, public IAbilitySystemInterface, public ICombatInterface,
 	public ITargetableInterface, public IGenericTeamAgentInterface
@@ -69,6 +82,12 @@ public:
 	UknightMonsterTargetingComponent* GetTargetingComponent() const { return TargetingComponent; }
 	UknightMonsterMovementComponent* GetMonsterMovementComponent() const;
 	const UknightMonsterDefinition* GetMonsterDefinition() const { return MonsterDefinition; }
+
+	/** 지금 얹을 덧셈 피격. Knight Hit Flinch 애님 노드가 게임 스레드(PreUpdate)에서 읽는다. */
+	const FknightHitFlinchState& GetHitFlinch() const { return HitFlinchState; }
+
+	/** Victim 기준으로 From(맞은 자리나 공격한 쪽)이 어느 쪽인가. 앞뒤 ±45° 안이면 앞·뒤, 아니면 좌·우. */
+	static EknightHitSide GetHitSide(const AActor& Victim, const FVector& From);
 
 	/** Fires once when the monster dies. The raid flow listens to this to clear the hunt. */
 	UPROPERTY(BlueprintAssignable, Category="Knight|Monster")
@@ -195,6 +214,11 @@ private:
 	/** LoopSounds와 같은 순서. 아직 틀지 않은 소리는 비어 있다. */
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UAudioComponent>> LoopAudios;
+
+	/** 맞은 쪽에서 움찔하는 덧셈 피격을 건다(MonsterDefinition::HitFlinch). */
+	void TriggerHitFlinch(AActor* DamageInstigator, const FGameplayEffectSpec* EffectSpec, float Damage);
+	FknightHitFlinchState HitFlinchState;
+	double LastHitFlinchTime = -1.e9;
 	/** LoopSounds와 같은 순서. BurstTime을 쓰는 소리가 지금 쉬는 중인지. */
 	TArray<bool> LoopResting;
 	TArray<FTimerHandle> LoopBurstTimers;

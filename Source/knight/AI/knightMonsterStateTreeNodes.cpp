@@ -93,6 +93,19 @@ EStateTreeRunStatus FknightStateTreeActivateAbilityTask::EnterState(FStateTreeEx
 	InstanceData.RestTime = 0.f;
 	InstanceData.SucceedAtTime = -1.0;
 	InstanceData.bMayFollowUp = false;
+	InstanceData.StopWaitUntil = -1.0;
+	const bool bStopWaitDone = InstanceData.bStopWaitDone;
+	InstanceData.bStopWaitDone = false;
+
+	// 달려오다 들어왔으면 걷는 속도까지 줄인 뒤에 고른다(Tick이 기다렸다가 다시 부른다).
+	const AknightMonsterCharacterBase* const WaitingMonster = Cast<AknightMonsterCharacterBase>(InstanceData.Actor);
+	const UknightMonsterMovementComponent* const Movement = WaitingMonster ? WaitingMonster->GetMonsterMovementComponent() : nullptr;
+	if (!bStopWaitDone && InstanceData.MaxStopWaitTime > 0.f && Movement && Movement->IsSlowingFromRun())
+	{
+		UE_LOG(LogknightAI, Verbose, TEXT("%s: waits for the run to slow down (%.0f cm/s) before attacking."), *GetNameSafe(InstanceData.Actor), Movement->Velocity.Size2D());
+		InstanceData.StopWaitUntil = Context.GetWorld()->GetTimeSeconds() + InstanceData.MaxStopWaitTime;
+		return EStateTreeRunStatus::Running;
+	}
 
 	UAbilitySystemComponent* const ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(InstanceData.Actor);
 	InstanceData.AbilitySystem = ASC;
@@ -264,6 +277,18 @@ EStateTreeRunStatus FknightStateTreeActivateAbilityTask::Tick(FStateTreeExecutio
 {
 	FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
 	const double Now = Context.GetWorld()->GetTimeSeconds();
+	if (InstanceData.StopWaitUntil >= 0.0)
+	{
+		const AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(InstanceData.Actor);
+		const UknightMonsterMovementComponent* const Movement = Monster ? Monster->GetMonsterMovementComponent() : nullptr;
+		if (Movement && Movement->IsSlowingFromRun() && Now < InstanceData.StopWaitUntil)
+		{
+			return EStateTreeRunStatus::Running;
+		}
+		// 다 줄었다. 줄이는 동안 거리가 바뀌었으니 지금 상황으로 다시 고른다.
+		InstanceData.bStopWaitDone = true;
+		return EnterState(Context, FStateTreeTransitionResult());
+	}
 	if (InstanceData.FailAtTime >= 0.0 && Now >= InstanceData.FailAtTime)
 	{
 		return EStateTreeRunStatus::Failed;

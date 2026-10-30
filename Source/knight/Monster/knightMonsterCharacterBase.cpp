@@ -430,6 +430,7 @@ void AknightMonsterCharacterBase::HandleDamaged(AActor* DamageInstigator, AActor
 	float Magnitude, float OldValue, float NewValue)
 {
 	AddRageFromDamage(Magnitude, DamageInstigator);
+	TriggerHitFlinch(DamageInstigator, EffectSpec, Magnitude);
 
 	const float Ratio = MonsterDefinition ? MonsterDefinition->Phase2HealthRatio : 0.f;
 	if (bInPhase2 || bPhase2Pending || IsDead() || Ratio <= 0.f
@@ -447,6 +448,58 @@ void AknightMonsterCharacterBase::HandleDamaged(AActor* DamageInstigator, AActor
 		return;
 	}
 	EnterPhase2();
+}
+
+EknightHitSide AknightMonsterCharacterBase::GetHitSide(const AActor& Victim, const FVector& From)
+{
+	const FVector ToFrom = (From - Victim.GetActorLocation()).GetSafeNormal2D();
+	const float Forward = FVector::DotProduct(ToFrom, Victim.GetActorForwardVector());
+	const float Right = FVector::DotProduct(ToFrom, Victim.GetActorRightVector());
+	if (FMath::Abs(Forward) >= FMath::Abs(Right))
+	{
+		return Forward >= 0.f ? EknightHitSide::Front : EknightHitSide::Back;
+	}
+	return Right >= 0.f ? EknightHitSide::Right : EknightHitSide::Left;
+}
+
+void AknightMonsterCharacterBase::TriggerHitFlinch(AActor* DamageInstigator, const FGameplayEffectSpec* EffectSpec, float Damage)
+{
+	if (!MonsterDefinition || IsDead() || Damage <= 0.f)
+	{
+		return;
+	}
+	const FknightMonsterHitFlinch& Settings = MonsterDefinition->HitFlinch;
+	// 맞은 자리(무기 판정의 충돌 지점)가 있으면 그쪽, 없으면 공격한 쪽.
+	const FHitResult* const Hit = EffectSpec ? EffectSpec->GetContext().GetHitResult() : nullptr;
+	const AActor* const Source = DamageInstigator ? DamageInstigator : (EffectSpec ? EffectSpec->GetContext().GetInstigator() : nullptr);
+	if (!Hit && !Source)
+	{
+		return;
+	}
+	const FVector From = Hit ? FVector(Hit->ImpactPoint) : Source->GetActorLocation();
+	const EknightHitSide Side = GetHitSide(*this, From);
+	const UAnimSequence* const Sequence = Side == EknightHitSide::Front ? Settings.Front.Get()
+		: Side == EknightHitSide::Back ? Settings.Back.Get()
+		: Side == EknightHitSide::Left ? Settings.Left.Get() : Settings.Right.Get();
+	if (!Sequence)
+	{
+		return;
+	}
+	const float Strength = FMath::Lerp(Settings.MinStrength, Settings.MaxStrength, FMath::Clamp(Damage / Settings.FullDamage, 0.f, 1.f));
+	const double Now = GetWorld()->GetTimeSeconds();
+	if (Now - LastHitFlinchTime < Settings.MinInterval && Strength <= HitFlinchState.Strength)
+	{
+		return;
+	}
+	LastHitFlinchTime = Now;
+	HitFlinchState.Sequence = Sequence;
+	HitFlinchState.Strength = Strength;
+	HitFlinchState.PlayRate = Settings.PlayRate;
+	HitFlinchState.BlendIn = Settings.BlendIn;
+	HitFlinchState.BlendOut = Settings.BlendOut;
+	++HitFlinchState.Count;
+	UE_LOG(LogknightAI, Verbose, TEXT("%s: hit flinch %s (%s, damage %.0f, strength %.2f)."), *GetName(), *GetNameSafe(Sequence),
+		*StaticEnum<EknightHitSide>()->GetNameStringByValue(static_cast<int64>(Side)), Damage, Strength);
 }
 
 void AknightMonsterCharacterBase::HandleReactingChanged(const FGameplayTag Tag, int32 NewCount)

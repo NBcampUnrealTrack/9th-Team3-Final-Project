@@ -45,6 +45,12 @@ public:
 	/** TurnTowards로 돌고 있거나, 회전을 끝내고 남은 속도를 관성으로 줄이는 중이면 true. */
 	bool IsTurning() const { return !FMath::IsNearlyZero(TurnSpeed); }
 
+	/**
+	 * 달리다가 걷는 속도(MaxWalkSpeed)로 줄이는 중이면 true. 이 동안에는 RunBrakingDeceleration으로 천천히 감속한다.
+	 * 공격 전 Knight Face Target이 이게 끝날 때까지 기다려서, 달리는 자세에서 공격 몽타주로 바로 넘어가지 않게 한다.
+	 */
+	bool IsSlowingFromRun() const;
+
 	/** 지금 회전 속도에 곱할 값. SlowTags가 있으면 SlowTurnScale, 없으면 1. */
 	float GetTurnScale() const { return IsMovementSlowed() ? SlowTurnScale : 1.f; }
 
@@ -52,6 +58,10 @@ public:
 	virtual float GetMaxSpeed() const override;
 	virtual FRotator GetDeltaRotation(float DeltaTime) const override;
 	virtual void PhysicsRotation(float DeltaTime) override;
+	virtual bool ApplyRequestedMove(float DeltaTime, float MaxAccel, float MaxSpeed, float Friction, float BrakingDeceleration,
+		FVector& OutAcceleration, float& OutRequestedSpeed) override;
+	virtual void ApplyVelocityBraking(float DeltaTime, float Friction, float BrakingDeceleration) override;
+	virtual void StopMovementImmediately() override;
 
 protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Monster")
@@ -63,6 +73,26 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Knight|Monster", meta=(ClampMin=0, ClampMax=1))
 	float SlowSpeedScale = 0.5f;
+
+	/**
+	 * 0보다 크면 타깃이 RunStartDistance보다 멀 때 MaxWalkSpeed 대신 이 속도로 달려 거리를 좁힌다. RunStopDistance 안으로
+	 * 들어오면 다시 걷는다(두 거리 사이에서는 하던 대로). 탈진(SlowTags) 중에는 달리지 않는다. 0이면 끈다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Knight|Monster|Run", meta=(ClampMin=0, Units="cm/s"))
+	float RunSpeed = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Knight|Monster|Run", meta=(ClampMin=0, Units="cm", EditCondition="RunSpeed > 0"))
+	float RunStartDistance = 2500.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Knight|Monster|Run", meta=(ClampMin=0, Units="cm", EditCondition="RunSpeed > 0"))
+	float RunStopDistance = 1500.f;
+
+	/**
+	 * 달리는 속도에서 걷는 속도까지 줄일 때의 감속(cm/s²). 엔진 기본 동작은 걷기로 바뀌는 순간 속도를 바로 낮추고,
+	 * 멈출 때도 지면 마찰로 0.1~0.2초 만에 서 버려서 큰 몸이 뚝 멈춘다. 걷는 속도 아래는 원래 제동을 쓴다. 0이면 끈다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Knight|Monster|Run", meta=(ClampMin=0, Units="CentimetersPerSecondSquared", EditCondition="RunSpeed > 0"))
+	float RunBrakingDeceleration = 1000.f;
 
 	/** SlowTags가 있을 때 회전 속도(TurnTowards의 TurnRate, 이동 방향 회전의 RotationRate, 제자리 회전 몽타주의 재생 속도)에 곱한다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Knight|Monster", meta=(ClampMin=0, ClampMax=1))
@@ -89,4 +119,6 @@ private:
 	double LastTurnTime = -1.0;
 	/** TurnTowards가 허용 각도에 들어와 회전을 넘겼다. 남은 속도는 관성으로 감속한다. */
 	bool bCoastingTurn = false;
+	/** RunSpeed로 달리는 중(RunStartDistance를 넘었고 아직 RunStopDistance 안으로 들어오지 않음). */
+	mutable bool bRunning = false;
 };
