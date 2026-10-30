@@ -73,6 +73,14 @@ struct KNIGHT_API FknightMonsterAttackSelection
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Selection", meta=(ClampMin=0, Units="s"))
 	float MinTargetBehindTime = 0.f;
 
+	/** 몬스터가 마지막으로 맞은 뒤 이 시간(초)이 지나야 고를 수 있다. 0이면 보지 않는다. 공격하는 동안 맞지 않았을 때만 쓰는 행동(물러나기)에 쓴다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Selection", meta=(ClampMin=0, Units="s"))
+	float MinTimeSinceHit = 0.f;
+
+	/** 켜면 AI가 직접 고르지 않고 다른 공격의 연계(FollowUpAttacks)로만 나온다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Selection")
+	bool bOnlyAsFollowUp = false;
+
 	/** 몬스터에 이 태그가 모두 있어야 한다(분노 전용 기술이면 State.Monster.Enraged). */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Selection", meta=(Categories="State"))
 	FGameplayTagContainer RequiredOwnerTags;
@@ -95,6 +103,8 @@ struct KNIGHT_API FknightMonsterAttackContext
 	bool bTargetAirborne = false;
 	/** 타깃이 등 뒤에 계속 머문 시간(초). */
 	float TargetBehindTime = 0.f;
+	/** 몬스터가 마지막으로 맞은 뒤 지난 시간(초). 맞은 적이 없으면 아주 큰 값이다. */
+	float TimeSinceHit = UE_BIG_NUMBER;
 	double WorldTime = 0.0;
 
 	static FknightMonsterAttackContext Make(const AActor* Monster, const AActor* Target);
@@ -125,12 +135,15 @@ public:
 
 	const FknightMonsterAttackSelection& GetSelection() const { return Selection; }
 
+	/** 공격 판정이 없는 이동 행동(옆걸음, 물러나기)이면 false. 공중 턴의 공격 횟수에 세지 않는다. */
+	virtual bool CountsAsAttack() const { return true; }
+
 	/**
 	 * 이 공격이 끝난 뒤 쉬지 않고 바로 이어 쓸 공격을 FollowUpAttacks에서 고른다. Selection 조건(사거리·각도·태그)은 보되
-	 * 쿨다운은 보지 않는다. 이어 쓸 게 없으면 무효 핸들.
+	 * 쿨다운은 보지 않는다. 연계가 없으면 AfterAttackMoves에서 고른다. 이어 쓸 게 없으면 무효 핸들.
 	 */
 	FGameplayAbilitySpecHandle PickFollowUp(UAbilitySystemComponent& ASC, const FknightMonsterAttackContext& Context) const;
-	bool HasFollowUps() const { return !FollowUpAttacks.IsEmpty(); }
+	bool HasFollowUps() const { return !FollowUpAttacks.IsEmpty() || !AfterAttackMoves.IsEmpty(); }
 
 	/**
 	 * 탈진(State.Monster.Exhausted) 중에는 어떤 공격도 시작하지 않는다. 이미 시작한 공격은 끝까지 한다.
@@ -182,8 +195,19 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack|FollowUp", meta=(ClampMin=0, ClampMax=1))
 	float FollowUpChance = 1.f;
 
+	/**
+	 * 연계가 나오지 않았을 때 이 공격 뒤에 바로 쓸 이동 행동 후보(물러나기 등). FollowUpRequiredTags·FollowUpChance를 보지 않고
+	 * 각자의 Selection 조건(예: MinTimeSinceHit)만 본다. 연계 전용으로 두려면 그쪽 Selection.bOnlyAsFollowUp을 켠다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|FollowUp")
+	TArray<TSubclassOf<UknightGameplayAbility_MonsterAttack>> AfterAttackMoves;
+
 private:
 	float GetSelectionWeightInternal(const FknightMonsterAttackContext& Context, bool bCheckCooldown) const;
+
+	/** Classes 중 지금 쓸 수 있는 것(Selection 조건, 쿨다운 제외)을 가중치로 하나 고른다. */
+	FGameplayAbilitySpecHandle PickWeighted(UAbilitySystemComponent& ASC, const FknightMonsterAttackContext& Context,
+		const TArray<TSubclassOf<UknightGameplayAbility_MonsterAttack>>& Classes) const;
 
 	UFUNCTION()
 	void HandleStartTurnTick(int32 ActionNumber);
