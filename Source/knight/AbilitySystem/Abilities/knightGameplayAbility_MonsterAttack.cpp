@@ -153,7 +153,7 @@ void UknightGameplayAbility_MonsterAttack::ActivateAbility(const FGameplayAbilit
 	}
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
 
-	if (!FMath::IsNearlyZero(StartTurnYaw) && StartTurnMaxTime > 0.f)
+	if ((bStartTurnToTarget || !FMath::IsNearlyZero(StartTurnYaw)) && StartTurnMaxTime > 0.f)
 	{
 		const int32 Steps = FMath::Max(1, FMath::CeilToInt(StartTurnMaxTime / knightMonsterAttack::StartTurnInterval));
 		UAbilityTask_Repeat* const TurnTask = UAbilityTask_Repeat::RepeatAction(this, knightMonsterAttack::StartTurnInterval, Steps);
