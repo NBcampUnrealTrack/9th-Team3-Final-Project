@@ -412,7 +412,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stats", meta=(ClampMin=0, ClampMax=1))
 	float ParriedPoiseDamageRatio = 0.25f;
 
-	/** 플레이어 타격이 깎는 경직도 배율(받는 경직 배율). 0이면 타격으로는 그로기가 쌓이지 않고 퍼펙트 가드로만 쌓인다. */
+	/** 플레이어 타격이 깎는 경직도 배율(받는 경직 배율). 퍼펙트 가드는 그로기를 깎지 않으므로(knight.Combat.ParryBuildsPoise 0) 0이면 그로기에 걸리지 않는다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stats", meta=(ClampMin=0))
 	float PoiseDamageTakenMultiplier = 1.f;
 
