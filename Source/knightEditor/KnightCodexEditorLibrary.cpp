@@ -92,7 +92,7 @@ namespace
 	{
 		UVerticalBox* Column = New<UVerticalBox>(BP, *FString::Printf(TEXT("Column_%s"), Prefix));
 		Col(Column, Text(BP, *FString::Printf(TEXT("Text_%sTitle"), Prefix), Title, TEXT("TS_Knight_Title"), true), false, FMargin(0,0,0,24));
-		Col(Column, Text(BP, *FString::Printf(TEXT("Text_%sBody"), Prefix), INVTEXT("설명 준비 중"), TEXT("TS_Knight_Body"), true), false);
+		Col(Column, Text(BP, *FString::Printf(TEXT("Text_%sBody"), Prefix), NSLOCTEXT("KnightCodexEditor", "Library01", "설명 준비 중"), TEXT("TS_Knight_Body"), true), false);
 		return Column;
 	}
 	void StyleCodexButton(UButton* Widget, const FLinearColor& Color)
@@ -121,11 +121,11 @@ bool UKnightCodexEditorLibrary::BuildCodex(UWidgetBlueprint* BP)
 	Frame->AddChild(Main);
 	UVerticalBox* Sidebar = New<UVerticalBox>(BP, TEXT("Column_Categories"));
 	Row(Main, Sized(BP, TEXT("Width_Categories"), 180, 0, Sidebar), false, FMargin(20,20,16,20));
-	Col(Sidebar, Text(BP, TEXT("Label_Codex"), INVTEXT("도감"), TEXT("TS_Knight_Subhead")), false, FMargin(0,0,0,20));
-	Col(Sidebar, Button(BP, TEXT("Button_World"), INVTEXT("세계관")), false, FMargin(0,0,0,12));
-	Col(Sidebar, Button(BP, TEXT("Button_Mech"), INVTEXT("기체 설명")), false, FMargin(0,0,0,12));
-	Col(Sidebar, Button(BP, TEXT("Button_Monster"), INVTEXT("몬스터")), false, FMargin(0,0,0,12));
-	UButton* Close = Button(BP, TEXT("Button_Close"), INVTEXT("닫기"));
+	Col(Sidebar, Text(BP, TEXT("Label_Codex"), NSLOCTEXT("KnightCodexEditor", "Library02", "도감"), TEXT("TS_Knight_Subhead")), false, FMargin(0,0,0,20));
+	Col(Sidebar, Button(BP, TEXT("Button_World"), NSLOCTEXT("KnightCodexEditor", "Library03", "세계관")), false, FMargin(0,0,0,12));
+	Col(Sidebar, Button(BP, TEXT("Button_Mech"), NSLOCTEXT("KnightCodexEditor", "Library04", "기체 설명")), false, FMargin(0,0,0,12));
+	Col(Sidebar, Button(BP, TEXT("Button_Monster"), NSLOCTEXT("KnightCodexEditor", "Library05", "몬스터")), false, FMargin(0,0,0,12));
+	UButton* Close = Button(BP, TEXT("Button_Close"), NSLOCTEXT("KnightCodexEditor", "Library06", "닫기"));
 	UWidgetSwitcher* Switcher = New<UWidgetSwitcher>(BP, TEXT("Switcher_Content"), true);
 	UVerticalBox* Content = New<UVerticalBox>(BP, TEXT("Column_Content"));
 	Row(Main, Content, true, FMargin(0,20,20,20));
@@ -134,24 +134,24 @@ bool UKnightCodexEditorLibrary::BuildCodex(UWidgetBlueprint* BP)
 	Row(Header, New<USpacer>(BP, TEXT("Spacer_ContentHeader")), true);
 	Row(Header, Close, false);
 	Col(Content, Switcher, true);
-	Switcher->AddChild(Scroll(BP, TEXT("Scroll_World"), TextPage(BP, TEXT("World"), INVTEXT("세계관"))));
-	Switcher->AddChild(Scroll(BP, TEXT("Scroll_Mech"), TextPage(BP, TEXT("Mech"), INVTEXT("기체 설명"))));
+	Switcher->AddChild(Scroll(BP, TEXT("Scroll_World"), TextPage(BP, TEXT("World"), NSLOCTEXT("KnightCodexEditor", "Library07", "세계관"))));
+	Switcher->AddChild(Scroll(BP, TEXT("Scroll_Mech"), TextPage(BP, TEXT("Mech"), NSLOCTEXT("KnightCodexEditor", "Library08", "기체 설명"))));
 	UHorizontalBox* Monster = New<UHorizontalBox>(BP, TEXT("Row_Monster"));
 	Switcher->AddChild(Monster);
 	UVerticalBox* List = New<UVerticalBox>(BP, TEXT("Column_BossList"));
-	Col(List, Text(BP, TEXT("Label_BossList"), INVTEXT("보스 목록"), TEXT("TS_Knight_Subhead")), false, FMargin(0,0,0,12));
-	Col(List, Text(BP, TEXT("Text_NoBosses"), INVTEXT("등록된 보스가 없습니다"), TEXT("TS_Knight_BodyDim"), true), false);
+	Col(List, Text(BP, TEXT("Label_BossList"), NSLOCTEXT("KnightCodexEditor", "Library09", "보스 목록"), TEXT("TS_Knight_Subhead")), false, FMargin(0,0,0,12));
+	Col(List, Text(BP, TEXT("Text_NoBosses"), NSLOCTEXT("KnightCodexEditor", "Library10", "등록된 보스가 없습니다"), TEXT("TS_Knight_BodyDim"), true), false);
 	Col(List, New<UVerticalBox>(BP, TEXT("Box_Bosses"), true), false);
 	Row(Monster, Sized(BP, TEXT("Width_BossList"), 180, 0, Scroll(BP, TEXT("Scroll_BossList"), List)), false, FMargin(0,0,18,0));
 	UVerticalBox* Detail = New<UVerticalBox>(BP, TEXT("Column_BossDetail"));
-	Col(Detail, Text(BP, TEXT("Text_BossName"), INVTEXT("보스를 선택해 주세요"), TEXT("TS_Knight_Title"), true), false, FMargin(0,0,0,16));
+	Col(Detail, Text(BP, TEXT("Text_BossName"), NSLOCTEXT("KnightCodexEditor", "Library11", "보스를 선택해 주세요"), TEXT("TS_Knight_Title"), true), false, FMargin(0,0,0,16));
 	Col(Detail, Sized(BP, TEXT("Size_Portrait"), 0, 260, New<UImage>(BP, TEXT("Image_Portrait"), true)), false, FMargin(0,0,0,12));
-	Col(Detail, Text(BP, TEXT("Text_NoPortrait"), INVTEXT("이미지 준비 중"), TEXT("TS_Knight_BodyDim"), true), false, FMargin(0,0,0,12));
-	Col(Detail, Text(BP, TEXT("Text_BossDescription"), INVTEXT("설명 준비 중"), TEXT("TS_Knight_Body"), true), false, FMargin(0,0,0,16));
+	Col(Detail, Text(BP, TEXT("Text_NoPortrait"), NSLOCTEXT("KnightCodexEditor", "Library12", "이미지 준비 중"), TEXT("TS_Knight_BodyDim"), true), false, FMargin(0,0,0,12));
+	Col(Detail, Text(BP, TEXT("Text_BossDescription"), NSLOCTEXT("KnightCodexEditor", "Library13", "설명 준비 중"), TEXT("TS_Knight_Body"), true), false, FMargin(0,0,0,16));
 	Col(Detail, Text(BP, TEXT("Text_BossExtra"), FText::GetEmpty(), TEXT("TS_Knight_Body"), true), false, FMargin(0,0,0,16));
-	Col(Detail, Text(BP, TEXT("Label_Drops"), INVTEXT("드랍 아이템"), TEXT("TS_Knight_Subhead")), false, FMargin(0,0,0,12));
+	Col(Detail, Text(BP, TEXT("Label_Drops"), NSLOCTEXT("KnightCodexEditor", "Library14", "드랍 아이템"), TEXT("TS_Knight_Subhead")), false, FMargin(0,0,0,12));
 	Col(Detail, New<UVerticalBox>(BP, TEXT("Box_Drops"), true), false);
-	Col(Detail, Text(BP, TEXT("Text_NoDrops"), INVTEXT("등록된 드랍 정보가 없습니다"), TEXT("TS_Knight_BodyDim"), true), false);
+	Col(Detail, Text(BP, TEXT("Text_NoDrops"), NSLOCTEXT("KnightCodexEditor", "Library15", "등록된 드랍 정보가 없습니다"), TEXT("TS_Knight_BodyDim"), true), false);
 	Row(Monster, Scroll(BP, TEXT("Scroll_BossDetail"), Detail), true);
 	End(BP); return true;
 }
@@ -165,7 +165,7 @@ bool UKnightCodexEditorLibrary::BuildBossEntry(UWidgetBlueprint* BP)
 	UVerticalBox* Column = New<UVerticalBox>(BP, TEXT("Column_Entry"));
 	Root->AddChild(Column);
 	Col(Column, Sized(BP, TEXT("Size_Icon"), 80, 80, New<UImage>(BP, TEXT("Image_Icon"), true)), false);
-	Col(Column, Text(BP, TEXT("Text_Name"), INVTEXT("보스"), TEXT("TS_Knight_Button"), true), false, FMargin(4,4,4,8));
+	Col(Column, Text(BP, TEXT("Text_Name"), NSLOCTEXT("KnightCodexEditor", "Library16", "보스"), TEXT("TS_Knight_Button"), true), false, FMargin(4,4,4,8));
 	End(BP); return true;
 }
 
@@ -177,7 +177,7 @@ bool UKnightCodexEditorLibrary::BuildDropEntry(UWidgetBlueprint* BP)
 	Row(Root, Sized(BP, TEXT("Size_ItemIcon"), 48, 48, New<UImage>(BP, TEXT("Image_Icon"), true)), false, FMargin(0,0,12,8));
 	UVerticalBox* Labels = New<UVerticalBox>(BP, TEXT("Column_DropLabels"));
 	Row(Root, Labels, true);
-	Col(Labels, Text(BP, TEXT("Text_Name"), INVTEXT("아이템"), TEXT("TS_Knight_Body"), true), false);
+	Col(Labels, Text(BP, TEXT("Text_Name"), NSLOCTEXT("KnightCodexEditor", "Library17", "아이템"), TEXT("TS_Knight_Body"), true), false);
 	Col(Labels, Text(BP, TEXT("Text_Details"), FText::GetEmpty(), TEXT("TS_Knight_Caption"), true), false);
 	End(BP); return true;
 }
@@ -257,7 +257,7 @@ bool UKnightCodexEditorLibrary::StyleCodex(UWidgetBlueprint* BP)
 	ReadingPanel->Modify(); ReadingPanel->SetBrushColor(CodexReadingPanel); ReadingPanel->SetPadding(FMargin(20.f, 12.f));
 	if (UCommonTextBlock* Label = Cast<UCommonTextBlock>(BP->WidgetTree->FindWidget(TEXT("Label_Codex"))))
 	{
-		Label->Modify(); Label->SetText(INVTEXT("작전 기록 / 도감"));
+		Label->Modify(); Label->SetText(NSLOCTEXT("KnightCodexEditor", "Library18", "작전 기록 / 도감"));
 	}
 	for (const TCHAR* Name : {TEXT("Button_World"), TEXT("Button_Mech"), TEXT("Button_Monster"), TEXT("Button_Close")})
 		StyleCodexButton(Cast<UButton>(BP->WidgetTree->FindWidget(Name)), FLinearColor(FColor(0x32, 0x48, 0x5C)));
@@ -293,9 +293,9 @@ bool UKnightCodexEditorLibrary::StyleBossEntry(UWidgetBlueprint* BP)
 	if (!BP->WidgetTree->FindWidget(TEXT("Row_LockState")))
 	{
 		UCommonTextBlock* LockState = Cast<UCommonTextBlock>(BP->WidgetTree->FindWidget(TEXT("Text_LockState")));
-		if (!LockState) LockState = Text(BP, TEXT("Text_LockState"), INVTEXT("미해금"), TEXT("TS_Knight_Caption"), true);
+		if (!LockState) LockState = Text(BP, TEXT("Text_LockState"), NSLOCTEXT("KnightCodexEditor", "Library19", "미해금"), TEXT("TS_Knight_Caption"), true);
 		LockState->RemoveFromParent();
-		LockState->Modify(); LockState->SetText(INVTEXT("미해금"));
+		LockState->Modify(); LockState->SetText(NSLOCTEXT("KnightCodexEditor", "Library20", "미해금"));
 		UHorizontalBox* LockRow = New<UHorizontalBox>(BP, TEXT("Row_LockState"), true);
 		Col(Column, LockRow, false, FMargin(4.f, 0.f, 4.f, 8.f));
 		UVerticalBox* Glyph = New<UVerticalBox>(BP, TEXT("Column_LockGlyph"));
@@ -414,7 +414,7 @@ bool UKnightCodexEditorLibrary::RedesignCodex(UWidgetBlueprint* BP)
 	Surface->AddChild(Shell);
 	UHorizontalBox* Header = New<UHorizontalBox>(BP, TEXT("Row_CodexHeader"));
 	Col(Shell, Header, false, FMargin(6.f, 0.f, 6.f, 10.f));
-	Title->SetText(INVTEXT("도감"));
+	Title->SetText(NSLOCTEXT("KnightCodexEditor", "Library21", "도감"));
 	if (TSubclassOf<UCommonTextStyle> S = Style(TEXT("TS_Knight_Title"))) Title->SetStyle(S);
 	Row(Header, Title, true);
 	StyleCodexButton(Close, FLinearColor(0.10f, 0.18f, 0.28f, 1.f));
@@ -434,7 +434,7 @@ bool UKnightCodexEditorLibrary::RedesignCodex(UWidgetBlueprint* BP)
 	CategoriesSurface->SetPadding(FMargin(10.f, 14.f));
 	CategoriesPanel->AddChild(CategoriesSurface);
 	CategoriesSurface->AddChild(Categories);
-	Col(Categories, Text(BP, TEXT("Label_CodexCategories"), INVTEXT("분류"), TEXT("TS_Knight_Caption")), false, FMargin(4.f, 0.f, 0.f, 14.f));
+	Col(Categories, Text(BP, TEXT("Label_CodexCategories"), NSLOCTEXT("KnightCodexEditor", "Library22", "분류"), TEXT("TS_Knight_Caption")), false, FMargin(4.f, 0.f, 0.f, 14.f));
 	for (UButton* ButtonWidget : {World, Mech, Monster})
 	{
 		StyleCodexButton(ButtonWidget, FLinearColor(0.10f, 0.17f, 0.25f, 1.f));
@@ -457,7 +457,7 @@ bool UKnightCodexEditorLibrary::RedesignCodex(UWidgetBlueprint* BP)
 	EntriesBorder->AddChild(EntriesSurface);
 	UVerticalBox* EntriesColumn = New<UVerticalBox>(BP, TEXT("Column_CodexEntries"));
 	EntriesSurface->AddChild(EntriesColumn);
-	Col(EntriesColumn, Text(BP, TEXT("Label_CodexEntries"), INVTEXT("항목"), TEXT("TS_Knight_Subhead")), false, FMargin(3.f, 0.f, 0.f, 10.f));
+	Col(EntriesColumn, Text(BP, TEXT("Label_CodexEntries"), NSLOCTEXT("KnightCodexEditor", "Library23", "항목"), TEXT("TS_Knight_Subhead")), false, FMargin(3.f, 0.f, 0.f, 10.f));
 	UWidgetSwitcher* EntrySwitcher = New<UWidgetSwitcher>(BP, TEXT("Switcher_Entries"), true);
 	Col(EntriesColumn, EntrySwitcher, true);
 	for (const TCHAR* Name : {TEXT("World"), TEXT("Mech")})
@@ -483,7 +483,7 @@ bool UKnightCodexEditorLibrary::RedesignCodex(UWidgetBlueprint* BP)
 	FooterRule->SetBrushColor(FLinearColor(0.20f, 0.54f, 0.73f, 0.55f));
 	FooterRule->SetVisibility(ESlateVisibility::HitTestInvisible);
 	Col(Shell, Sized(BP, TEXT("Height_CodexFooterRule"), 0.f, 1.f, FooterRule), false, FMargin(0.f, 12.f, 0.f, 7.f));
-	Col(Shell, Text(BP, TEXT("Label_CodexHints"), INVTEXT("항목 선택  ·  마우스 휠로 읽기  ·  Esc 뒤로"), TEXT("TS_Knight_Caption")), false, FMargin(6.f, 0.f, 0.f, 0.f));
+	Col(Shell, Text(BP, TEXT("Label_CodexHints"), NSLOCTEXT("KnightCodexEditor", "Library24", "항목 선택  ·  마우스 휠로 읽기  ·  Esc 뒤로"), TEXT("TS_Knight_Caption")), false, FMargin(6.f, 0.f, 0.f, 0.f));
 	for (const TCHAR* Name : {TEXT("Scroll_World"), TEXT("Scroll_Mech"), TEXT("Scroll_BossList"), TEXT("Scroll_BossDetail"), TEXT("Scroll_WorldEntries"), TEXT("Scroll_MechEntries")})
 		if (UScrollBox* Box = Cast<UScrollBox>(Find(Name)))
 		{
