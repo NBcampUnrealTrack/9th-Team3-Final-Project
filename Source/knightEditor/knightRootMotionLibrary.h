@@ -26,4 +26,13 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category="Knight|Root Motion")
 	static UAnimSequence* BakeRootMotionFromBone(UAnimSequence* Source, FName Bone, float HoldAfterTime, const FString& PackagePath);
+
+	/**
+	 * 제자리 걷기 애니메이션(옆걸음, 뒷걸음)에 디딘 발이 땅에서 미끄러지지 않는 만큼의 수평 이동을 루트로 넣어 PackagePath에 굽는다.
+	 * 프레임마다 디딘 발(FootLock_<발 뼈> 커브가 0.5 이상, 먼저 BakeFootLockCurves로 굽는다)의 평균 수평 이동을 반대로 루트에 더하므로
+	 * 걸음마다 빨라지고 느려지는 속도가 애니메이션과 정확히 맞는다. 디딘 발이 없는 프레임은 앞 프레임 속도를 이어 쓴다.
+	 * SmoothKeys만큼 앞뒤 프레임 속도를 평균해 발이 바뀌는 순간의 튐을 줄인다. 처음이면 Source를 복제하고, 이미 있으면 루트 트랙만 다시 쓴다.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|Root Motion")
+	static UAnimSequence* BakeRootMotionFromFeet(UAnimSequence* Source, const TArray<FName>& FootBones, int32 SmoothKeys, const FString& PackagePath);
 };
