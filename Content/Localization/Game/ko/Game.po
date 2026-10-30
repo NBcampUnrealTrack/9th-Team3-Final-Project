@@ -4,14 +4,154 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: Game\n"
-"POT-Creation-Date: 2026-10-30 07:34\n"
-"PO-Revision-Date: 2026-10-30 07:34\n"
+"POT-Creation-Date: 2026-10-30 08:58\n"
+"PO-Revision-Date: 2026-10-30 08:58\n"
 "Language-Team: \n"
 "Language: ko\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
+
+#. Key:	3EE7DA8545BB8C99FAE53F8C82F1172D
+#. SourceLocation:	/Game/Input/IMC_Default.IMC_Default:PMKS_Jump.DisplayCategory
+#: /Game/Input/IMC_Default.IMC_Default:PMKS_Jump.DisplayCategory
+msgctxt ",3EE7DA8545BB8C99FAE53F8C82F1172D"
+msgid "이동"
+msgstr "이동"
+
+#. Key:	73A38C2E4A9B03879B1C6F861CBF21CD
+#. SourceLocation:	/Game/Input/IMC_Default.IMC_Default:PMKS_Jump.DisplayName
+#: /Game/Input/IMC_Default.IMC_Default:PMKS_Jump.DisplayName
+msgctxt ",73A38C2E4A9B03879B1C6F861CBF21CD"
+msgid "점프·체공"
+msgstr "점프·체공"
+
+#. Key:	D1F66AF949B85CCB7D4F0EAA539371F8
+#. SourceLocation:	/Game/Input/IMC_Default.IMC_Default:PMKS_MoveBackward.DisplayCategory
+#: /Game/Input/IMC_Default.IMC_Default:PMKS_MoveBackward.DisplayCategory
+msgctxt ",D1F66AF949B85CCB7D4F0EAA539371F8"
+msgid "이동"
+msgstr "이동"
+
+#. Key:	C4B2D6C44D417381668408AD377B8577
+#. SourceLocation:	/Game/Input/IMC_Default.IMC_Default:PMKS_MoveBackward.DisplayName
+#: /Game/Input/IMC_Default.IMC_Default:PMKS_MoveBackward.DisplayName
+msgctxt ",C4B2D6C44D417381668408AD377B8577"
+msgid "이동 뒤로"
+msgstr "이동 뒤로"
+
+#. Key:	134C8A5D4EB2956F10E1D2A6A542749C
+#. SourceLocation:	/Game/Input/IMC_Default.IMC_Default:PMKS_MoveBackwardAlt.DisplayCategory
+#: /Game/Input/IMC_Default.IMC_Default:PMKS_MoveBackwardAlt.DisplayCategory
+msgctxt ",134C8A5D4EB2956F10E1D2A6A542749C"
+msgid "이동"
+msgstr "이동"
+
+#. Key:	4934A98A4F00B39E7BC35AA20FC1E917
+#. SourceLocation:	/Game/Input/IMC_Default.IMC_Default:PMKS_MoveBackwardAlt.DisplayName
+#: /Game/Input/IMC_Default.IMC_Default:PMKS_MoveBackwardAlt.DisplayName
+msgctxt ",4934A98A4F00B39E7BC35AA20FC1E917"
+msgid "이동 뒤로 (보조)"
+msgstr "이동 뒤로 (보조)"
+
+#. Key:	BB439497477A49E9C05D64B613D985E8
+#. SourceLocation:	/Game/Input/IMC_Default.IMC_Default:PMKS_MoveForward.DisplayCategory
+#: /Game/Input/IMC_Default.IMC_Default:PMKS_MoveForward.DisplayCategory
+msgctxt ",BB439497477A49E9C05D64B613D985E8"
+msgid "이동"
+msgstr "이동"
+
+#. Key:	DE13F8A1490B60210CDC3E9F0E7A26CC
+#. SourceLocation:	/Game/Input/IMC_Default.IMC_Default:PMKS_MoveForward.DisplayName
+#: /Game/Input/IMC_Default.IMC_Default:PMKS_MoveForward.DisplayName
+msgctxt ",DE13F8A1490B60210CDC3E9F0E7A26CC"
+msgid "이동 앞으로"
+msgstr "이동 앞으로"
+
+#. Key:	C56F65B049F883098413598CF0A2F2C1
+#. SourceLocation:	/Game/Input/IMC_Default.IMC_Default:PMKS_MoveForwardAlt.DisplayCategory
+#: /Game/Input/IMC_Default.IMC_Default:PMKS_MoveForwardAlt.DisplayCategory
+msgctxt ",C56F65B049F883098413598CF0A2F2C1"
+msgid "이동"
+msgstr "이동"
+
+#. Key:	9AA7926847576CD83E8C6A9CC7C67183
+#. SourceLocation:	/Game/Input/IMC_Default.IMC_Default:PMKS_MoveForwardAlt.DisplayName
+#: /Game/Input/IMC_Default.IMC_Default:PMKS_MoveForwardAlt.DisplayName
+msgctxt ",9AA7926847576CD83E8C6A9CC7C67183"
+msgid "이동 앞으로 (보조)"
+msgstr "이동 앞으로 (보조)"
+
+#. Key:	7BF398CE4E33C4FB1E803BBC07034945
+#. SourceLocation:	/Game/Input/IMC_Default.IMC_Default:PMKS_MoveLeft.DisplayCategory
+#: /Game/Input/IMC_Default.IMC_Default:PMKS_MoveLeft.DisplayCategory
+msgctxt ",7BF398CE4E33C4FB1E803BBC07034945"
+msgid "이동"
+msgstr "이동"
+
+#. Key:	B2733B7C4DF38BAE99719EABD3D77D5E
+#. SourceLocation:	/Game/Input/IMC_Default.IMC_Default:PMKS_MoveLeft.DisplayName
+#: /Game/Input/IMC_Default.IMC_Default:PMKS_MoveLeft.DisplayName
+msgctxt ",B2733B7C4DF38BAE99719EABD3D77D5E"
+msgid "이동 왼쪽"
+msgstr "이동 왼쪽"
+
+#. Key:	5C82FCCD469D2D838C84028582F339AC
+#. SourceLocation:	/Game/Input/IMC_Default.IMC_Default:PMKS_MoveLeftAlt.DisplayCategory
+#: /Game/Input/IMC_Default.IMC_Default:PMKS_MoveLeftAlt.DisplayCategory
+msgctxt ",5C82FCCD469D2D838C84028582F339AC"
+msgid "이동"
+msgstr "이동"
+
+#. Key:	8A8010CD4A8C658921032DB37A54CBC7
+#. SourceLocation:	/Game/Input/IMC_Default.IMC_Default:PMKS_MoveLeftAlt.DisplayName
+#: /Game/Input/IMC_Default.IMC_Default:PMKS_MoveLeftAlt.DisplayName
+msgctxt ",8A8010CD4A8C658921032DB37A54CBC7"
+msgid "이동 왼쪽 (보조)"
+msgstr "이동 왼쪽 (보조)"
+
+#. Key:	621F9C98419480624EE2FAB81CDC7174
+#. SourceLocation:	/Game/Input/IMC_Default.IMC_Default:PMKS_MoveRight.DisplayCategory
+#: /Game/Input/IMC_Default.IMC_Default:PMKS_MoveRight.DisplayCategory
+msgctxt ",621F9C98419480624EE2FAB81CDC7174"
+msgid "이동"
+msgstr "이동"
+
+#. Key:	4409ECAE45B834E7B8E68C9EC5CA0F31
+#. SourceLocation:	/Game/Input/IMC_Default.IMC_Default:PMKS_MoveRight.DisplayName
+#: /Game/Input/IMC_Default.IMC_Default:PMKS_MoveRight.DisplayName
+msgctxt ",4409ECAE45B834E7B8E68C9EC5CA0F31"
+msgid "이동 오른쪽"
+msgstr "이동 오른쪽"
+
+#. Key:	8FFB1E6D40FA8CD8F3AE8181526704BE
+#. SourceLocation:	/Game/Input/IMC_Default.IMC_Default:PMKS_MoveRightAlt.DisplayCategory
+#: /Game/Input/IMC_Default.IMC_Default:PMKS_MoveRightAlt.DisplayCategory
+msgctxt ",8FFB1E6D40FA8CD8F3AE8181526704BE"
+msgid "이동"
+msgstr "이동"
+
+#. Key:	0C74613D493EB8BA8E19478BF4A2C274
+#. SourceLocation:	/Game/Input/IMC_Default.IMC_Default:PMKS_MoveRightAlt.DisplayName
+#: /Game/Input/IMC_Default.IMC_Default:PMKS_MoveRightAlt.DisplayName
+msgctxt ",0C74613D493EB8BA8E19478BF4A2C274"
+msgid "이동 오른쪽 (보조)"
+msgstr "이동 오른쪽 (보조)"
+
+#. Key:	BBF9A9234E4D3FB1916B0FA2C220D8AD
+#. SourceLocation:	/Game/Knight/Character/Knights/Weapons/Danjeol/DA_Weapon_Danjeol.DA_Weapon_Danjeol.DisplayName
+#: /Game/Knight/Character/Knights/Weapons/Danjeol/DA_Weapon_Danjeol.DA_Weapon_Danjeol.DisplayName
+msgctxt ",BBF9A9234E4D3FB1916B0FA2C220D8AD"
+msgid "단절"
+msgstr "단절"
+
+#. Key:	7B60C15A4A1C1C0A4A1B28B34F1D04C9
+#. SourceLocation:	/Game/Knight/Creatures/Janhyang/Data/DA_Janhyang.DA_Janhyang.DisplayName
+#: /Game/Knight/Creatures/Janhyang/Data/DA_Janhyang.DA_Janhyang.DisplayName
+msgctxt ",7B60C15A4A1C1C0A4A1B28B34F1D04C9"
+msgid "잔향"
+msgstr "잔향"
 
 #. Key:	A4C34EE445F0C1C2881678AA1042C189
 #. SourceLocation:	/Game/Knight/Creatures/Janhyang/Data/DA_Janhyang_Parts.DA_Janhyang_Parts.Parts(0).Parts.DisplayName
@@ -61,6 +201,13 @@ msgstr "다리"
 msgctxt ",809EFA2E4D351833656D11BB20EC5032"
 msgid "꼬리"
 msgstr "꼬리"
+
+#. Key:	0A44BA90409B4112D3CF29A7C1BB2034
+#. SourceLocation:	/Game/Knight/Creatures/Janyeol/Data/DA_Janyeol.DA_Janyeol.DisplayName
+#: /Game/Knight/Creatures/Janyeol/Data/DA_Janyeol.DA_Janyeol.DisplayName
+msgctxt ",0A44BA90409B4112D3CF29A7C1BB2034"
+msgid "잔열"
+msgstr "잔열"
 
 #. Key:	6C77B9F4437D0E15EBBB8AAB3B601EB7
 #. SourceLocation:	/Game/Knight/Creatures/Janyeol/Data/DA_Janyeol_Parts.DA_Janyeol_Parts.Parts(0).Parts.DisplayName
@@ -118,6 +265,13 @@ msgctxt ",2652FCE34F586150EBDBDE8BCE12A315"
 msgid "보강 제안\n거점 인근의 복합 연료 시설에는 구형 연료 저장 구역과 이후 증설된 이상 에너지 설비가 함께 남아 있다. 도마뱀에서 변한 잔열은 누출된 이상 에너지를 먹으며 그곳에 둥지를 틀었다.\n\n잔열을 쓰러뜨리면 수송대가 시설에 진입한다. 일반 연료 저장 구역에서 회수 가능한 기름을 확보하고, 공작 장비와 산업용 소재를 거점으로 옮긴다. 장기적인 연료 수급을 위해서는 이후 저장·정제 시설과 수송로를 복구해야 한다.\n\n대장간을 재가동한 뒤 대장장이는 잔열의 뼈 갑판을 가공해 첫 괴수 소재 파츠를 만든다. 플레이어는 처음으로 자신의 사냥이 기체의 변화와 주민들의 생존에 동시에 기여한다는 것을 경험한다.\n\n단절의 원형은 첫 출격 전에 회수 소재로 제작되어 있다는 연결을 제안한다. 잔열을 쓰러뜨려야 첫 무기를 얻는 구조는 채택하지 않는다. 구체적인 제작자와 최초 재료 회수 장소는 미정이다."
 msgstr "보강 제안\n거점 인근의 복합 연료 시설에는 구형 연료 저장 구역과 이후 증설된 이상 에너지 설비가 함께 남아 있다. 도마뱀에서 변한 잔열은 누출된 이상 에너지를 먹으며 그곳에 둥지를 틀었다.\n\n잔열을 쓰러뜨리면 수송대가 시설에 진입한다. 일반 연료 저장 구역에서 회수 가능한 기름을 확보하고, 공작 장비와 산업용 소재를 거점으로 옮긴다. 장기적인 연료 수급을 위해서는 이후 저장·정제 시설과 수송로를 복구해야 한다.\n\n대장간을 재가동한 뒤 대장장이는 잔열의 뼈 갑판을 가공해 첫 괴수 소재 파츠를 만든다. 플레이어는 처음으로 자신의 사냥이 기체의 변화와 주민들의 생존에 동시에 기여한다는 것을 경험한다.\n\n단절의 원형은 첫 출격 전에 회수 소재로 제작되어 있다는 연결을 제안한다. 잔열을 쓰러뜨려야 첫 무기를 얻는 구조는 채택하지 않는다. 구체적인 제작자와 최초 재료 회수 장소는 미정이다."
 
+#. Key:	988EA1F542782333B0A218AE391201EB
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.Bosses(0).Bosses.ReaderDescription
+#: /Game/Knight/Data/DA_Codex.DA_Codex.Bosses(0).Bosses.ReaderDescription
+msgctxt ",988EA1F542782333B0A218AE391201EB"
+msgid "거점 인근의 복합 연료 시설에는 구형 연료 저장 구역과 이후 증설된 이상 에너지 설비가 함께 남아 있다. 도마뱀에서 변한 잔열은 누출된 이상 에너지를 먹으며 그곳에 둥지를 틀었다.\n\n잔열을 쓰러뜨리면 수송대가 시설에 진입한다. 일반 연료 저장 구역에서 회수 가능한 기름을 확보하고, 공작 장비와 산업용 소재를 거점으로 옮긴다. 장기적인 연료 수급을 위해서는 이후 저장·정제 시설과 수송로를 복구해야 한다.\n\n대장간을 재가동한 뒤 대장장이는 잔열의 뼈 갑판을 가공해 첫 괴수 소재 파츠를 만든다. 플레이어는 처음으로 자신의 사냥이 기체의 변화와 주민들의 생존에 동시에 기여한다는 것을 경험한다."
+msgstr "거점 인근의 복합 연료 시설에는 구형 연료 저장 구역과 이후 증설된 이상 에너지 설비가 함께 남아 있다. 도마뱀에서 변한 잔열은 누출된 이상 에너지를 먹으며 그곳에 둥지를 틀었다.\n\n잔열을 쓰러뜨리면 수송대가 시설에 진입한다. 일반 연료 저장 구역에서 회수 가능한 기름을 확보하고, 공작 장비와 산업용 소재를 거점으로 옮긴다. 장기적인 연료 수급을 위해서는 이후 저장·정제 시설과 수송로를 복구해야 한다.\n\n대장간을 재가동한 뒤 대장장이는 잔열의 뼈 갑판을 가공해 첫 괴수 소재 파츠를 만든다. 플레이어는 처음으로 자신의 사냥이 기체의 변화와 주민들의 생존에 동시에 기여한다는 것을 경험한다."
+
 #. Key:	77D09C1B44B2ABA996F270BC742841B0
 #. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.Bosses(1).Bosses.AdditionalDescription
 #: /Game/Knight/Data/DA_Codex.DA_Codex.Bosses(1).Bosses.AdditionalDescription
@@ -139,12 +293,642 @@ msgctxt ",C83697424B230E2EA716049B27D19EA0"
 msgid "잔향"
 msgstr "잔향"
 
+#. Key:	3865C4F94187D4E492D05D955399258C
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.Bosses(1).Bosses.ReaderDescription
+#: /Game/Knight/Data/DA_Codex.DA_Codex.Bosses(1).Bosses.ReaderDescription
+msgctxt ",3865C4F94187D4E492D05D955399258C"
+msgid "고립된 거점과 연락하기 위해, 플레이어 일행은 산악 중계소와 그 아래의 수송 터널을 복구하려 한다. 그러나 복구 작업이 시작될 때마다 거대한 울음이 터널을 타고 들려오고, 날개 달린 괴수 잔향이 발전기와 수송 차량 주변에 나타난다.\n\n토벌 후 중계소와 수송 터널을 되찾으면 다른 생존 거점의 구조 요청과 거래 제안이 들어온다. 상점에는 다른 지역의 물자가 추가되고, 대장간에서는 잔향의 날개막·흉부 골격을 가공한 진동 완충 파츠를 제작할 수 있게 된다.\n\n복구한 통신망에는 멀리 떨어진 여러 거점에서 비슷한 괴수 이동이 관측된다는 보고가 모인다. 이를 통해 각 지역의 이상 현상이 하나의 초대형 개체 이동과 연결되어 있음을 추적한다. 잔향 토벌은 고립된 거점의 생존에서 더 큰 재앙의 조사로 이야기를 넓히는 계기가 된다."
+msgstr "고립된 거점과 연락하기 위해, 플레이어 일행은 산악 중계소와 그 아래의 수송 터널을 복구하려 한다. 그러나 복구 작업이 시작될 때마다 거대한 울음이 터널을 타고 들려오고, 날개 달린 괴수 잔향이 발전기와 수송 차량 주변에 나타난다.\n\n토벌 후 중계소와 수송 터널을 되찾으면 다른 생존 거점의 구조 요청과 거래 제안이 들어온다. 상점에는 다른 지역의 물자가 추가되고, 대장간에서는 잔향의 날개막·흉부 골격을 가공한 진동 완충 파츠를 제작할 수 있게 된다.\n\n복구한 통신망에는 멀리 떨어진 여러 거점에서 비슷한 괴수 이동이 관측된다는 보고가 모인다. 이를 통해 각 지역의 이상 현상이 하나의 초대형 개체 이동과 연결되어 있음을 추적한다. 잔향 토벌은 고립된 거점의 생존에서 더 큰 재앙의 조사로 이야기를 넓히는 계기가 된다."
+
 #. Key:	15F4839B4F9995D2C92D33B13038ED5A
 #. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.Bosses(2).Bosses.DisplayNameOverride
 #: /Game/Knight/Data/DA_Codex.DA_Codex.Bosses(2).Bosses.DisplayNameOverride
 msgctxt ",15F4839B4F9995D2C92D33B13038ED5A"
 msgid "흑관"
 msgstr "흑관"
+
+#. Key:	F2E6B5594BCF2EBA9F3112B7441B7588
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.MechBody
+#: /Game/Knight/Data/DA_Codex.DA_Codex.MechBody
+msgctxt ",F2E6B5594BCF2EBA9F3112B7441B7588"
+msgid "플레이어는 오래된 무명의 프로토타입 메카를 조종한다. 플레이어 기체는 이상 에너지가 아닌 전기와 기름을 동력으로 사용한다."
+msgstr "플레이어는 오래된 무명의 프로토타입 메카를 조종한다. 플레이어 기체는 이상 에너지가 아닌 전기와 기름을 동력으로 사용한다."
+
+#. Key:	D76C96C642C7D3578956DC93E18021EB
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.MechSections(0).MechSections.Heading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.MechSections(0).MechSections.Heading
+msgctxt ",D76C96C642C7D3578956DC93E18021EB"
+msgid "무명의 프로토타입과 조종사 — 보강 제안"
+msgstr "무명의 프로토타입과 조종사 — 보강 제안"
+
+#. Key:	739ED57248DBBFD28474008AA6E083E4
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.MechSections(1).MechSections.Body
+#: /Game/Knight/Data/DA_Codex.DA_Codex.MechSections(1).MechSections.Body
+msgctxt ",739ED57248DBBFD28474008AA6E083E4"
+msgid "피난 거점의 오래된 정비고에 초기형 메카 한 대가 남아 있다. 공식적인 이름이나 개발 기록이 온전히 남지 않은 기체라는 해석을 제안한다. 살아남은 정비사가 구형 설계도와 회수한 부품으로 기체를 복구하고, 플레이어가 첫 실전 조종을 맡는다. 조종사의 이름·출신·전문 경력은 미정으로 둔다.\n\n동력계 초안은 기름을 사용하는 엔진·발전기와 축전지, 전기 구동 장치의 조합이다. 엔진으로 전력을 공급하고 축전지로 순간적인 부하를 보완한다. 정확한 연료 종류, 구동 장치와 충전 방식은 후속 기획에서 결정한다.\n\n옛 연료 시설, 발전기, 기계 부품을 회수해 정비할 수 있다는 점이 나이트의 생존 가능성을 만든다. 대신 연료와 출력, 발열, 무게에 제약이 있다. 이 제약들을 모두 별도 관리 게이지로 구현할지는 정하지 않는다."
+msgstr "피난 거점의 오래된 정비고에 초기형 메카 한 대가 남아 있다. 공식적인 이름이나 개발 기록이 온전히 남지 않은 기체라는 해석을 제안한다. 살아남은 정비사가 구형 설계도와 회수한 부품으로 기체를 복구하고, 플레이어가 첫 실전 조종을 맡는다. 조종사의 이름·출신·전문 경력은 미정으로 둔다.\n\n동력계 초안은 기름을 사용하는 엔진·발전기와 축전지, 전기 구동 장치의 조합이다. 엔진으로 전력을 공급하고 축전지로 순간적인 부하를 보완한다. 정확한 연료 종류, 구동 장치와 충전 방식은 후속 기획에서 결정한다.\n\n옛 연료 시설, 발전기, 기계 부품을 회수해 정비할 수 있다는 점이 나이트의 생존 가능성을 만든다. 대신 연료와 출력, 발열, 무게에 제약이 있다. 이 제약들을 모두 별도 관리 게이지로 구현할지는 정하지 않는다."
+
+#. Key:	9B9FD70344C45D38B6ECA98A868BF90D
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.MechSections(1).MechSections.Heading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.MechSections(1).MechSections.Heading
+msgctxt ",9B9FD70344C45D38B6ECA98A868BF90D"
+msgid "기체가 다시 움직이는 이유"
+msgstr "기체가 다시 움직이는 이유"
+
+#. Key:	5ACE52244BE1FD9D4EFC2EB1ADC9492C
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.MechSections(1).MechSections.ReaderBody
+#: /Game/Knight/Data/DA_Codex.DA_Codex.MechSections(1).MechSections.ReaderBody
+msgctxt ",5ACE52244BE1FD9D4EFC2EB1ADC9492C"
+msgid "피난 거점의 오래된 정비고에 초기형 메카 한 대가 남아 있다.\n\n살아남은 정비사가 구형 설계도와 회수한 부품으로 기체를 복구하고, 플레이어가 첫 실전 조종을 맡는다.\n\n옛 연료 시설, 발전기, 기계 부품을 회수해 정비할 수 있다는 점이 나이트의 생존 가능성을 만든다. 대신 연료와 출력, 발열, 무게에 제약이 있다."
+msgstr "피난 거점의 오래된 정비고에 초기형 메카 한 대가 남아 있다.\n\n살아남은 정비사가 구형 설계도와 회수한 부품으로 기체를 복구하고, 플레이어가 첫 실전 조종을 맡는다.\n\n옛 연료 시설, 발전기, 기계 부품을 회수해 정비할 수 있다는 점이 나이트의 생존 가능성을 만든다. 대신 연료와 출력, 발열, 무게에 제약이 있다."
+
+#. Key:	9D8501F645842CAB3F1F9D900C1D9898
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.MechSections(1).MechSections.ReaderHeading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.MechSections(1).MechSections.ReaderHeading
+msgctxt ",9D8501F645842CAB3F1F9D900C1D9898"
+msgid "기체가 다시 움직이는 이유"
+msgstr "기체가 다시 움직이는 이유"
+
+#. Key:	C9BA208E48484570CC27C1A69A9987AE
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.MechSections(2).MechSections.Body
+#: /Game/Knight/Data/DA_Codex.DA_Codex.MechSections(2).MechSections.Body
+msgctxt ",C9BA208E48484570CC27C1A69A9987AE"
+msgid "기존 설정대로 나이트에는 현대식 이상 에너지 무장을 운용할 기반이 없다. 재래식 총과 폭발물 자체는 존재할 수 있지만, 거대 괴수를 상대할 탄약을 계속 생산하고 운반하기는 어렵다는 방향을 제안한다. 거점의 방어 병력이 화기를 사용하는 설정과도 함께 성립한다.\n\n생존자들은 회수한 산업용 합금으로 실체검을 만들고, 남아 있는 검술·무술 기록을 기체의 움직임에 적용한다. 단단한 부위를 무작정 두드리기보다 관절과 연한 조직을 찾아 베고 찌르는 전투가 발전한다. 정확한 조종 방식과 전투 규칙은 별도 기획 대상이다."
+msgstr "기존 설정대로 나이트에는 현대식 이상 에너지 무장을 운용할 기반이 없다. 재래식 총과 폭발물 자체는 존재할 수 있지만, 거대 괴수를 상대할 탄약을 계속 생산하고 운반하기는 어렵다는 방향을 제안한다. 거점의 방어 병력이 화기를 사용하는 설정과도 함께 성립한다.\n\n생존자들은 회수한 산업용 합금으로 실체검을 만들고, 남아 있는 검술·무술 기록을 기체의 움직임에 적용한다. 단단한 부위를 무작정 두드리기보다 관절과 연한 조직을 찾아 베고 찌르는 전투가 발전한다. 정확한 조종 방식과 전투 규칙은 별도 기획 대상이다."
+
+#. Key:	017657324FD1CD0DE33B40857D66791A
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.MechSections(2).MechSections.Heading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.MechSections(2).MechSections.Heading
+msgctxt ",017657324FD1CD0DE33B40857D66791A"
+msgid "검과 무술을 사용하는 이유"
+msgstr "검과 무술을 사용하는 이유"
+
+#. Key:	337A2A45455454A39F32DF90EF4E854F
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.MechSections(2).MechSections.ReaderBody
+#: /Game/Knight/Data/DA_Codex.DA_Codex.MechSections(2).MechSections.ReaderBody
+msgctxt ",337A2A45455454A39F32DF90EF4E854F"
+msgid "생존자들은 회수한 산업용 합금으로 실체검을 만들고, 남아 있는 검술·무술 기록을 기체의 움직임에 적용한다. 단단한 부위를 무작정 두드리기보다 관절과 연한 조직을 찾아 베고 찌르는 전투가 발전한다."
+msgstr "생존자들은 회수한 산업용 합금으로 실체검을 만들고, 남아 있는 검술·무술 기록을 기체의 움직임에 적용한다. 단단한 부위를 무작정 두드리기보다 관절과 연한 조직을 찾아 베고 찌르는 전투가 발전한다."
+
+#. Key:	57603D8F43194A3B2DE658A41760C854
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.MechSections(2).MechSections.ReaderHeading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.MechSections(2).MechSections.ReaderHeading
+msgctxt ",57603D8F43194A3B2DE658A41760C854"
+msgid "검과 무술"
+msgstr "검과 무술"
+
+#. Key:	C378A6E64EE34BE8A0A48493B1176B68
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.MechSections(3).MechSections.Body
+#: /Game/Knight/Data/DA_Codex.DA_Codex.MechSections(3).MechSections.Body
+msgctxt ",C378A6E64EE34BE8A0A48493B1176B68"
+msgid "첫 목표는 자신이 살아온 거점과 그곳의 사람들을 지키는 것이다. 상점 주인, 정비사, 대장장이, 수송대와 함께 생활하며 출격하는 구조를 제안한다. 플레이어가 되찾은 시설을 이 사람들이 다시 운영하기 때문에, 전투의 성과가 사람들의 생활 변화로 드러난다."
+msgstr "첫 목표는 자신이 살아온 거점과 그곳의 사람들을 지키는 것이다. 상점 주인, 정비사, 대장장이, 수송대와 함께 생활하며 출격하는 구조를 제안한다. 플레이어가 되찾은 시설을 이 사람들이 다시 운영하기 때문에, 전투의 성과가 사람들의 생활 변화로 드러난다."
+
+#. Key:	2744A5FE41FD2E6E21DFD59FE6EC2E9E
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.MechSections(3).MechSections.Heading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.MechSections(3).MechSections.Heading
+msgctxt ",2744A5FE41FD2E6E21DFD59FE6EC2E9E"
+msgid "조종사의 출발점"
+msgstr "조종사의 출발점"
+
+#. Key:	AFAFC002426CFAF139292CAEE0DB3454
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.MechSections(3).MechSections.ReaderBody
+#: /Game/Knight/Data/DA_Codex.DA_Codex.MechSections(3).MechSections.ReaderBody
+msgctxt ",AFAFC002426CFAF139292CAEE0DB3454"
+msgid "첫 목표는 자신이 살아온 거점과 그곳의 사람들을 지키는 것이다."
+msgstr "첫 목표는 자신이 살아온 거점과 그곳의 사람들을 지키는 것이다."
+
+#. Key:	9E2B51B74C70F0783D1166BF6861CE1D
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.MechSections(3).MechSections.ReaderHeading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.MechSections(3).MechSections.ReaderHeading
+msgctxt ",9E2B51B74C70F0783D1166BF6861CE1D"
+msgid "조종사의 출발점"
+msgstr "조종사의 출발점"
+
+#. Key:	46E917B64A2BF2157009AD8BE4C798A3
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.MechSections(4).MechSections.Body
+#: /Game/Knight/Data/DA_Codex.DA_Codex.MechSections(4).MechSections.Body
+msgctxt ",46E917B64A2BF2157009AD8BE4C798A3"
+msgid "괴수의 뼈·외피·발톱·힘줄에는 변이와 생존 과정에서 형성된 물리적 특성이 남아 있다. 생존자들은 그것을 회수해 세척·안정화·가공하고, 금속 프레임과 결합해 메카 장비로 만든다. 일반 상점은 부품과 소모품을 공급하고, 대장간은 괴수 소재 가공과 파츠 제작을 담당한다.\n\n제안하는 기본 규칙은 다음과 같다.\n\n• 기체의 동력은 계속 전기와 기름이다. 괴수의 에너지 기관을 새 동력원으로 삼지 않는다.\n• 뼈와 외피처럼 가공 후에도 강도·내열성·탄성 등이 유지되는 소재를 우선 사용한다.\n• 잔류 에너지가 위험한 소재는 처리와 검사를 거쳐야 한다. 모든 괴수 조직을 바로 장착할 수 있는 것은 아니다.\n• 소재 가공은 장비에 필요한 양을 처리하는 기술이다. 이미 지구 전체에 퍼진 변화를 일괄적으로 되돌리는 정화 기술은 아니다.\n• 강화할수록 소재와 가공 기술, 장착 구조가 중요해진다. 살아 있는 기관 사용이나 원소 공격 부여는 아직 확정하지 않는다.\n\n소재 예시 · 제작 파츠 후보 · 전투상의 변화 후보\n잔열의 뼈 갑판 · 어깨·전완의 복합 장갑 · 무게가 늘어나는 대신 열과 충격을 견디기 쉬워짐\n잔열의 단단한 턱뼈 · 검의 보강재 또는 교체형 타격부 · 큰 일격의 내구성과 충격 전달 보완\n잔향의 날개막 · 관절·조종석의 복합 완충재 · 충격과 진동 전달을 줄이는 장비 후보\n잔향의 흉부 골격 · 진동을 분산하는 흉부 장갑 · 포효에 의한 자세 흔들림을 줄이는 장비 후보\n다른 괴수의 탄성 조직 · 가공한 관절 완충 부품 · 착지와 자세 회복에 도움\n\n표의 효과와 장착 부위는 예시이며 확정된 장비 성능이 아니다. 부위 파괴에 따른 추가 소재, 드롭 확률, 제작 비용과 장비 슬롯 수는 후속 전투·경제 기획에서 정한다.\n\n이 구조를 통해 나이트의 기본 몸체에는 이전 사냥의 흔적이 차례로 쌓인다. 외형에서도 어떤 괴수를 이겨 왔는지 드러나는 방향을 제안한다."
+msgstr "괴수의 뼈·외피·발톱·힘줄에는 변이와 생존 과정에서 형성된 물리적 특성이 남아 있다. 생존자들은 그것을 회수해 세척·안정화·가공하고, 금속 프레임과 결합해 메카 장비로 만든다. 일반 상점은 부품과 소모품을 공급하고, 대장간은 괴수 소재 가공과 파츠 제작을 담당한다.\n\n제안하는 기본 규칙은 다음과 같다.\n\n• 기체의 동력은 계속 전기와 기름이다. 괴수의 에너지 기관을 새 동력원으로 삼지 않는다.\n• 뼈와 외피처럼 가공 후에도 강도·내열성·탄성 등이 유지되는 소재를 우선 사용한다.\n• 잔류 에너지가 위험한 소재는 처리와 검사를 거쳐야 한다. 모든 괴수 조직을 바로 장착할 수 있는 것은 아니다.\n• 소재 가공은 장비에 필요한 양을 처리하는 기술이다. 이미 지구 전체에 퍼진 변화를 일괄적으로 되돌리는 정화 기술은 아니다.\n• 강화할수록 소재와 가공 기술, 장착 구조가 중요해진다. 살아 있는 기관 사용이나 원소 공격 부여는 아직 확정하지 않는다.\n\n소재 예시 · 제작 파츠 후보 · 전투상의 변화 후보\n잔열의 뼈 갑판 · 어깨·전완의 복합 장갑 · 무게가 늘어나는 대신 열과 충격을 견디기 쉬워짐\n잔열의 단단한 턱뼈 · 검의 보강재 또는 교체형 타격부 · 큰 일격의 내구성과 충격 전달 보완\n잔향의 날개막 · 관절·조종석의 복합 완충재 · 충격과 진동 전달을 줄이는 장비 후보\n잔향의 흉부 골격 · 진동을 분산하는 흉부 장갑 · 포효에 의한 자세 흔들림을 줄이는 장비 후보\n다른 괴수의 탄성 조직 · 가공한 관절 완충 부품 · 착지와 자세 회복에 도움\n\n표의 효과와 장착 부위는 예시이며 확정된 장비 성능이 아니다. 부위 파괴에 따른 추가 소재, 드롭 확률, 제작 비용과 장비 슬롯 수는 후속 전투·경제 기획에서 정한다.\n\n이 구조를 통해 나이트의 기본 몸체에는 이전 사냥의 흔적이 차례로 쌓인다. 외형에서도 어떤 괴수를 이겨 왔는지 드러나는 방향을 제안한다."
+
+#. Key:	99F13BC04331E76BAAC558945EEE096B
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.MechSections(4).MechSections.Heading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.MechSections(4).MechSections.Heading
+msgctxt ",99F13BC04331E76BAAC558945EEE096B"
+msgid "괴수 소재로 만드는 메카 파츠 — 보강 제안"
+msgstr "괴수 소재로 만드는 메카 파츠 — 보강 제안"
+
+#. Key:	DE052D9B45A053E9B4DF45AF2E1B5E57
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.MechSections(4).MechSections.ReaderBody
+#: /Game/Knight/Data/DA_Codex.DA_Codex.MechSections(4).MechSections.ReaderBody
+msgctxt ",DE052D9B45A053E9B4DF45AF2E1B5E57"
+msgid "괴수의 뼈·외피·발톱·힘줄에는 변이와 생존 과정에서 형성된 물리적 특성이 남아 있다. 생존자들은 그것을 회수해 세척·안정화·가공하고, 금속 프레임과 결합해 메카 장비로 만든다. 일반 상점은 부품과 소모품을 공급하고, 대장간은 괴수 소재 가공과 파츠 제작을 담당한다.\n\n• 기체의 동력은 계속 전기와 기름이다. 괴수의 에너지 기관을 새 동력원으로 삼지 않는다.\n• 뼈와 외피처럼 가공 후에도 강도·내열성·탄성 등이 유지되는 소재를 우선 사용한다.\n• 잔류 에너지가 위험한 소재는 처리와 검사를 거쳐야 한다. 모든 괴수 조직을 바로 장착할 수 있는 것은 아니다.\n• 소재 가공은 장비에 필요한 양을 처리하는 기술이다. 이미 지구 전체에 퍼진 변화를 일괄적으로 되돌리는 정화 기술은 아니다."
+msgstr "괴수의 뼈·외피·발톱·힘줄에는 변이와 생존 과정에서 형성된 물리적 특성이 남아 있다. 생존자들은 그것을 회수해 세척·안정화·가공하고, 금속 프레임과 결합해 메카 장비로 만든다. 일반 상점은 부품과 소모품을 공급하고, 대장간은 괴수 소재 가공과 파츠 제작을 담당한다.\n\n• 기체의 동력은 계속 전기와 기름이다. 괴수의 에너지 기관을 새 동력원으로 삼지 않는다.\n• 뼈와 외피처럼 가공 후에도 강도·내열성·탄성 등이 유지되는 소재를 우선 사용한다.\n• 잔류 에너지가 위험한 소재는 처리와 검사를 거쳐야 한다. 모든 괴수 조직을 바로 장착할 수 있는 것은 아니다.\n• 소재 가공은 장비에 필요한 양을 처리하는 기술이다. 이미 지구 전체에 퍼진 변화를 일괄적으로 되돌리는 정화 기술은 아니다."
+
+#. Key:	2F69A2874164A94737A833974495E6EA
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.MechSections(4).MechSections.ReaderHeading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.MechSections(4).MechSections.ReaderHeading
+msgctxt ",2F69A2874164A94737A833974495E6EA"
+msgid "괴수 소재로 만드는 메카 파츠"
+msgstr "괴수 소재로 만드는 메카 파츠"
+
+#. Key:	04F61418429D4756E7FB14A6F933FDB6
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.MechSections(5).MechSections.Body
+#: /Game/Knight/Data/DA_Codex.DA_Codex.MechSections(5).MechSections.Body
+msgctxt ",04F61418429D4756E7FB14A6F933FDB6"
+msgid "• 나이트: 전기와 기름으로 움직이는 초기형 기체. 괴수 소재 장비를 덧붙이며 생존자들의 기술과 사냥의 기록이 쌓이는 몸체가 된다.\n• 단절: 산업용 소재로 만든 초기 실체검이라는 기존 기원 제안을 유지한다. 에너지 무효화 능력은 부여하지 않는다. 이후 괴수 소재로 보강하거나 다른 무기를 제작하는 기반이 될 수 있다."
+msgstr "• 나이트: 전기와 기름으로 움직이는 초기형 기체. 괴수 소재 장비를 덧붙이며 생존자들의 기술과 사냥의 기록이 쌓이는 몸체가 된다.\n• 단절: 산업용 소재로 만든 초기 실체검이라는 기존 기원 제안을 유지한다. 에너지 무효화 능력은 부여하지 않는다. 이후 괴수 소재로 보강하거나 다른 무기를 제작하는 기반이 될 수 있다."
+
+#. Key:	7B777BF34BAD3FB19049E8947185E24B
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.MechSections(5).MechSections.Heading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.MechSections(5).MechSections.Heading
+msgctxt ",7B777BF34BAD3FB19049E8947185E24B"
+msgid "기존 기체·무기 에셋과의 연결"
+msgstr "기존 기체·무기 에셋과의 연결"
+
+#. Key:	727F7AB54F650D2DFF94B9AE9DE7D401
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.MechTitle
+#: /Game/Knight/Data/DA_Codex.DA_Codex.MechTitle
+msgctxt ",727F7AB54F650D2DFF94B9AE9DE7D401"
+msgid "기체 설명 · 프로토타입 나이트"
+msgstr "기체 설명 · 프로토타입 나이트"
+
+#. Key:	870DED4B44E23B5C39BAECBEA8C1852C
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldBody
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldBody
+msgctxt ",870DED4B44E23B5C39BAECBEA8C1852C"
+msgid "괴물화한 동물들이 차지한 지구에서, 생존자는 전기와 기름으로 움직이는 낡은 프로토타입 메카에 탑승한다."
+msgstr "괴물화한 동물들이 차지한 지구에서, 생존자는 전기와 기름으로 움직이는 낡은 프로토타입 메카에 탑승한다."
+
+#. Key:	674C0DA94DFB59529417A993E1EA04E2
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(0).WorldSections.Body
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(0).WorldSections.Body
+msgctxt ",674C0DA94DFB59529417A993E1EA04E2"
+msgid "작성일: 2026-09-21\n문서 성격: 사용자가 정한 세계관·진행 구조를 바탕으로 작성한 스토리 보강안. ‘확정 설정’은 사용자가 정한 내용이며, ‘보강 제안’의 사건·인물 역할·기술 원리·장비 효과는 검토 가능한 초안이다. 게임 정식 제목, 이상 에너지 명칭, 조종사와 최종 보스의 이름은 미정이다.\n\n세계관과 진행 구조는 이 문서를 최신 기준으로 본다. 기존 에셋의 외형·디자인 기준은 v01 설정집을 이어받는다. 이 문서는 현재 에셋·애니메이션·게임 시스템의 구현 완료를 뜻하지 않는다."
+msgstr "작성일: 2026-09-21\n문서 성격: 사용자가 정한 세계관·진행 구조를 바탕으로 작성한 스토리 보강안. ‘확정 설정’은 사용자가 정한 내용이며, ‘보강 제안’의 사건·인물 역할·기술 원리·장비 효과는 검토 가능한 초안이다. 게임 정식 제목, 이상 에너지 명칭, 조종사와 최종 보스의 이름은 미정이다.\n\n세계관과 진행 구조는 이 문서를 최신 기준으로 본다. 기존 에셋의 외형·디자인 기준은 v01 설정집을 이어받는다. 이 문서는 현재 에셋·애니메이션·게임 시스템의 구현 완료를 뜻하지 않는다."
+
+#. Key:	01B685C043D9F10D31D6C792BCF1BC15
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(0).WorldSections.Heading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(0).WorldSections.Heading
+msgctxt ",01B685C043D9F10D31D6C792BCF1BC15"
+msgid "문서 안내"
+msgstr "문서 안내"
+
+#. Key:	B54805C9454587055A4F148DA80D1069
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(1).WorldSections.Body
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(1).WorldSections.Body
+msgctxt ",B54805C9454587055A4F148DA80D1069"
+msgid "• 정식 명칭이 정해지지 않은 이상 에너지 때문에 기존 동물들이 괴물화했다.\n• 플레이어는 오래된 무명의 프로토타입 메카를 조종한다.\n• 플레이어 기체는 이상 에너지가 아닌 전기와 기름을 동력으로 사용한다.\n• 괴수를 사냥해 얻은 부위와 소재로 장착 가능한 메카 파츠를 제작한다.\n• 거점을 방어하거나 탈환해야 상점·대장간 등의 시설을 이용할 수 있다.\n• 최종 목표는 인류와 지구를 위협하는 최종 보스를 처치하는 것이다.\n• 최종 보스를 처치해도 변화한 생태계는 유지된다.\n• 클리어 후에도 괴수를 다시 사냥하며, 사용자가 예로 든 ‘역전 개체’처럼 더 강한 개체에 도전할 수 있다. 해당 개체군의 우리 게임 내 명칭은 미정이다.\n• 기존에 제작 중인 잔향을 본편 보스 라인업에 포함한다. 등장 순서와 구체적인 생태·보상은 아래 보강 제안으로 구분한다.\n\n기존에 선택한 ‘메카 대 괴수 보스전’, 실체검과 무술 중심 전투, 나이트·잔열·잔향·단절의 제작 방향을 유지한다. 아래에서 ‘나이트’는 기존 제작명으로 사용한다. ‘무명’이 기체의 정식 명칭 부재인지, 잊힌 개발 기록을 뜻하는지는 아직 확정하지 않는다."
+msgstr "• 정식 명칭이 정해지지 않은 이상 에너지 때문에 기존 동물들이 괴물화했다.\n• 플레이어는 오래된 무명의 프로토타입 메카를 조종한다.\n• 플레이어 기체는 이상 에너지가 아닌 전기와 기름을 동력으로 사용한다.\n• 괴수를 사냥해 얻은 부위와 소재로 장착 가능한 메카 파츠를 제작한다.\n• 거점을 방어하거나 탈환해야 상점·대장간 등의 시설을 이용할 수 있다.\n• 최종 목표는 인류와 지구를 위협하는 최종 보스를 처치하는 것이다.\n• 최종 보스를 처치해도 변화한 생태계는 유지된다.\n• 클리어 후에도 괴수를 다시 사냥하며, 사용자가 예로 든 ‘역전 개체’처럼 더 강한 개체에 도전할 수 있다. 해당 개체군의 우리 게임 내 명칭은 미정이다.\n• 기존에 제작 중인 잔향을 본편 보스 라인업에 포함한다. 등장 순서와 구체적인 생태·보상은 아래 보강 제안으로 구분한다.\n\n기존에 선택한 ‘메카 대 괴수 보스전’, 실체검과 무술 중심 전투, 나이트·잔열·잔향·단절의 제작 방향을 유지한다. 아래에서 ‘나이트’는 기존 제작명으로 사용한다. ‘무명’이 기체의 정식 명칭 부재인지, 잊힌 개발 기록을 뜻하는지는 아직 확정하지 않는다."
+
+#. Key:	9511D2AB4E20E01461A0FDBB6DEACE82
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(1).WorldSections.Heading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(1).WorldSections.Heading
+msgctxt ",9511D2AB4E20E01461A0FDBB6DEACE82"
+msgid "사용자가 정한 핵심 설정"
+msgstr "사용자가 정한 핵심 설정"
+
+#. Key:	498D563940030E785EFEAABC5EBB3F2D
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(1).WorldSections.ReaderBody
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(1).WorldSections.ReaderBody
+msgctxt ",498D563940030E785EFEAABC5EBB3F2D"
+msgid "• 정식 명칭이 정해지지 않은 이상 에너지 때문에 기존 동물들이 괴물화했다.\n• 플레이어는 오래된 무명의 프로토타입 메카를 조종한다.\n• 플레이어 기체는 이상 에너지가 아닌 전기와 기름을 동력으로 사용한다.\n• 괴수를 사냥해 얻은 부위와 소재로 장착 가능한 메카 파츠를 제작한다.\n• 거점을 방어하거나 탈환해야 상점·대장간 등의 시설을 이용할 수 있다.\n• 최종 목표는 인류와 지구를 위협하는 최종 보스를 처치하는 것이다.\n• 최종 보스를 처치해도 변화한 생태계는 유지된다."
+msgstr "• 정식 명칭이 정해지지 않은 이상 에너지 때문에 기존 동물들이 괴물화했다.\n• 플레이어는 오래된 무명의 프로토타입 메카를 조종한다.\n• 플레이어 기체는 이상 에너지가 아닌 전기와 기름을 동력으로 사용한다.\n• 괴수를 사냥해 얻은 부위와 소재로 장착 가능한 메카 파츠를 제작한다.\n• 거점을 방어하거나 탈환해야 상점·대장간 등의 시설을 이용할 수 있다.\n• 최종 목표는 인류와 지구를 위협하는 최종 보스를 처치하는 것이다.\n• 최종 보스를 처치해도 변화한 생태계는 유지된다."
+
+#. Key:	F486E82A4212EBA7905855B3336E50C7
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(1).WorldSections.ReaderHeading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(1).WorldSections.ReaderHeading
+msgctxt ",F486E82A4212EBA7905855B3336E50C7"
+msgid "세계의 기록"
+msgstr "세계의 기록"
+
+#. Key:	B74FCC9A42E7290CCFAAF4BBA035633B
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(10).WorldSections.Body
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(10).WorldSections.Body
+msgctxt ",B74FCC9A42E7290CCFAAF4BBA035633B"
+msgid "최종 보스를 처치하고 중심 시설의 연쇄 붕괴를 저지한다. 괴수의 대규모 이동도 점차 잦아들고, 연결된 거점들이 안정적인 교역과 복구를 시작한다. 이는 본편의 명확한 승리로 남는다.\n\n동물들에게 이미 일어난 변화와 형성된 먹이사슬은 계속 존재한다. 엔딩은 되살아난 시장과 대장간, 다시 오가는 수송대, 그리고 거점 밖에서 살아가는 괴수들을 함께 보여 주는 방향을 제안한다.\n\n나이트의 조종사는 복구된 거점의 정비고로 돌아온다. 다음 출격은 눈앞의 멸망을 막기 위한 마지막 도박에서, 사람들이 살아갈 영역을 유지하고 넓히는 활동으로 이어진다."
+msgstr "최종 보스를 처치하고 중심 시설의 연쇄 붕괴를 저지한다. 괴수의 대규모 이동도 점차 잦아들고, 연결된 거점들이 안정적인 교역과 복구를 시작한다. 이는 본편의 명확한 승리로 남는다.\n\n동물들에게 이미 일어난 변화와 형성된 먹이사슬은 계속 존재한다. 엔딩은 되살아난 시장과 대장간, 다시 오가는 수송대, 그리고 거점 밖에서 살아가는 괴수들을 함께 보여 주는 방향을 제안한다.\n\n나이트의 조종사는 복구된 거점의 정비고로 돌아온다. 다음 출격은 눈앞의 멸망을 막기 위한 마지막 도박에서, 사람들이 살아갈 영역을 유지하고 넓히는 활동으로 이어진다."
+
+#. Key:	597D8FE3465DBB41EE620884453B49F1
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(10).WorldSections.Heading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(10).WorldSections.Heading
+msgctxt ",597D8FE3465DBB41EE620884453B49F1"
+msgid "결말: 다시 출발할 수 있는 세계"
+msgstr "결말: 다시 출발할 수 있는 세계"
+
+#. Key:	B873FB1841BF0639FD50FEBD9DE28D5A
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(10).WorldSections.ReaderBody
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(10).WorldSections.ReaderBody
+msgctxt ",B873FB1841BF0639FD50FEBD9DE28D5A"
+msgid "최종 보스를 처치하고 중심 시설의 연쇄 붕괴를 저지한다. 괴수의 대규모 이동도 점차 잦아들고, 연결된 거점들이 안정적인 교역과 복구를 시작한다. 이는 본편의 명확한 승리로 남는다.\n\n동물들에게 이미 일어난 변화와 형성된 먹이사슬은 계속 존재한다.\n\n나이트의 조종사는 복구된 거점의 정비고로 돌아온다. 다음 출격은 눈앞의 멸망을 막기 위한 마지막 도박에서, 사람들이 살아갈 영역을 유지하고 넓히는 활동으로 이어진다."
+msgstr "최종 보스를 처치하고 중심 시설의 연쇄 붕괴를 저지한다. 괴수의 대규모 이동도 점차 잦아들고, 연결된 거점들이 안정적인 교역과 복구를 시작한다. 이는 본편의 명확한 승리로 남는다.\n\n동물들에게 이미 일어난 변화와 형성된 먹이사슬은 계속 존재한다.\n\n나이트의 조종사는 복구된 거점의 정비고로 돌아온다. 다음 출격은 눈앞의 멸망을 막기 위한 마지막 도박에서, 사람들이 살아갈 영역을 유지하고 넓히는 활동으로 이어진다."
+
+#. Key:	C1140A4A48022FE8BF42DAB668A8EDA7
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(10).WorldSections.ReaderHeading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(10).WorldSections.ReaderHeading
+msgctxt ",C1140A4A48022FE8BF42DAB668A8EDA7"
+msgid "다시 출발할 수 있는 세계"
+msgstr "다시 출발할 수 있는 세계"
+
+#. Key:	5B8E78C845AD603C653A25818FB8EF21
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(11).WorldSections.Body
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(11).WorldSections.Body
+msgctxt ",5B8E78C845AD603C653A25818FB8EF21"
+msgid "플레이어의 성과 · 이야기 속 변화 · 시설·기능 후보\n피난 거점 방어 · 주민과 상인이 정착함 · 기본 상점·기초 정비\n공작 설비 탈환과 기술자 복귀 · 괴수 소재를 가공할 수 있게 됨 · 대장간·파츠 제작\n연료 시설·수송로 확보 · 안정적인 출격과 물자 운송이 가능해짐 · 연료 공급·상점 품목 확장\n잔향 토벌과 중계소·터널 탈환 · 고립된 거점과 연락·교역을 재개함 · 타 거점 의뢰·교역 물자·진동 완충 파츠\n연구 시설 탈환 · 소재 처리법과 개체 차이를 조사함 · 상위 소재 가공·특수 개체 조사\n주요 거점과 연결로 방어 · 여러 거점이 장비와 인력을 지원함 · 최종 출격 준비·클리어 후 의뢰\n\n이는 시설과 임무의 연결 예시다. 표의 각 행이 별도의 맵 하나를 뜻하지는 않는다. 한 거점이나 한 보스의 성과에 여러 기능을 묶을 수 있다. 방어 임무 발생 빈도, 실패 시 시설 영향, 재탈환 규칙은 아직 정하지 않는다.\n\n기본 진행 구조: 위협 조사 → 거점 방어 또는 탈환 전투 → 소재와 시설 확보 → 상점·대장간 이용 및 파츠 제작 → 다음 지역과 더 강한 개체에 도전."
+msgstr "플레이어의 성과 · 이야기 속 변화 · 시설·기능 후보\n피난 거점 방어 · 주민과 상인이 정착함 · 기본 상점·기초 정비\n공작 설비 탈환과 기술자 복귀 · 괴수 소재를 가공할 수 있게 됨 · 대장간·파츠 제작\n연료 시설·수송로 확보 · 안정적인 출격과 물자 운송이 가능해짐 · 연료 공급·상점 품목 확장\n잔향 토벌과 중계소·터널 탈환 · 고립된 거점과 연락·교역을 재개함 · 타 거점 의뢰·교역 물자·진동 완충 파츠\n연구 시설 탈환 · 소재 처리법과 개체 차이를 조사함 · 상위 소재 가공·특수 개체 조사\n주요 거점과 연결로 방어 · 여러 거점이 장비와 인력을 지원함 · 최종 출격 준비·클리어 후 의뢰\n\n이는 시설과 임무의 연결 예시다. 표의 각 행이 별도의 맵 하나를 뜻하지는 않는다. 한 거점이나 한 보스의 성과에 여러 기능을 묶을 수 있다. 방어 임무 발생 빈도, 실패 시 시설 영향, 재탈환 규칙은 아직 정하지 않는다.\n\n기본 진행 구조: 위협 조사 → 거점 방어 또는 탈환 전투 → 소재와 시설 확보 → 상점·대장간 이용 및 파츠 제작 → 다음 지역과 더 강한 개체에 도전."
+
+#. Key:	C254E0D04CD733620B40E7BFBF9F06B4
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(11).WorldSections.Heading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(11).WorldSections.Heading
+msgctxt ",C254E0D04CD733620B40E7BFBF9F06B4"
+msgid "거점과 시설 해금의 관계 — 보강 제안"
+msgstr "거점과 시설 해금의 관계 — 보강 제안"
+
+#. Key:	B9E38F074B12F118DB8341BBEE4A2941
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(12).WorldSections.Heading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(12).WorldSections.Heading
+msgctxt ",B9E38F074B12F118DB8341BBEE4A2941"
+msgid "클리어 후 사냥과 강한 개체 — 보강 제안"
+msgstr "클리어 후 사냥과 강한 개체 — 보강 제안"
+
+#. Key:	853A5F044A4407495616CC9BE1E45EEA
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(13).WorldSections.Body
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(13).WorldSections.Body
+msgctxt ",853A5F044A4407495616CC9BE1E45EEA"
+msgid "괴수화는 이미 환경과 번식 과정에 정착한 변화다. 최종 보스는 그 결과로 나타난 특별히 위험한 개체이므로, 처치 이후에도 다른 괴수의 생존과 번식은 이어진다. 이 사실을 중반 조사에서 먼저 보여 주어 엔딩 이후의 상태가 자연스럽게 이어지게 한다.\n\n같은 종류를 다시 사냥하는 것은 다른 지역의 개체, 새로 영역에 들어온 개체, 성장한 개체를 상대하는 일로 설명한다. 최종 보스 개체의 죽음과 본편에서 해결한 재앙은 유지한다. 최종 보스전 자체의 반복 플레이를 제공할 경우 회상·재도전 모드 등 별도 방식을 검토하며, 정사상 부활은 확정하지 않는다."
+msgstr "괴수화는 이미 환경과 번식 과정에 정착한 변화다. 최종 보스는 그 결과로 나타난 특별히 위험한 개체이므로, 처치 이후에도 다른 괴수의 생존과 번식은 이어진다. 이 사실을 중반 조사에서 먼저 보여 주어 엔딩 이후의 상태가 자연스럽게 이어지게 한다.\n\n같은 종류를 다시 사냥하는 것은 다른 지역의 개체, 새로 영역에 들어온 개체, 성장한 개체를 상대하는 일로 설명한다. 최종 보스 개체의 죽음과 본편에서 해결한 재앙은 유지한다. 최종 보스전 자체의 반복 플레이를 제공할 경우 회상·재도전 모드 등 별도 방식을 검토하며, 정사상 부활은 확정하지 않는다."
+
+#. Key:	E188B7464C7DCE0F3C6ECC854E1D0217
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(13).WorldSections.Heading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(13).WorldSections.Heading
+msgctxt ",E188B7464C7DCE0F3C6ECC854E1D0217"
+msgid "최종 보스를 잡아도 괴수가 남는 이유"
+msgstr "최종 보스를 잡아도 괴수가 남는 이유"
+
+#. Key:	9011EF714421080C8F73189F240D8BF6
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(13).WorldSections.ReaderBody
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(13).WorldSections.ReaderBody
+msgctxt ",9011EF714421080C8F73189F240D8BF6"
+msgid "괴수화는 이미 환경과 번식 과정에 정착한 변화다. 최종 보스는 그 결과로 나타난 특별히 위험한 개체이므로, 처치 이후에도 다른 괴수의 생존과 번식은 이어진다."
+msgstr "괴수화는 이미 환경과 번식 과정에 정착한 변화다. 최종 보스는 그 결과로 나타난 특별히 위험한 개체이므로, 처치 이후에도 다른 괴수의 생존과 번식은 이어진다."
+
+#. Key:	38EF0F844447C32433BE11A99ED1CD0E
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(13).WorldSections.ReaderHeading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(13).WorldSections.ReaderHeading
+msgctxt ",38EF0F844447C32433BE11A99ED1CD0E"
+msgid "변화한 생태계"
+msgstr "변화한 생태계"
+
+#. Key:	9DE9578F4687B488E9966EB8654B5BF6
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(14).WorldSections.Body
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(14).WorldSections.Body
+msgctxt ",9DE9578F4687B488E9966EB8654B5BF6"
+msgid "• 거점이나 수송로에 접근하는 위험 개체를 저지한다.\n• 사람의 생활권과 괴수의 영역이 충돌하는 지역을 조사한다.\n• 새로운 거점 복구에 필요한 자원과 접근로를 확보한다.\n• 특수한 소재로 장비를 제작하고 더 어려운 전투에 도전한다."
+msgstr "• 거점이나 수송로에 접근하는 위험 개체를 저지한다.\n• 사람의 생활권과 괴수의 영역이 충돌하는 지역을 조사한다.\n• 새로운 거점 복구에 필요한 자원과 접근로를 확보한다.\n• 특수한 소재로 장비를 제작하고 더 어려운 전투에 도전한다."
+
+#. Key:	ACDFBBF546F4B45862F81C92A825CB3F
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(14).WorldSections.Heading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(14).WorldSections.Heading
+msgctxt ",ACDFBBF546F4B45862F81C92A825CB3F"
+msgid "클리어 후 임무의 목적"
+msgstr "클리어 후 임무의 목적"
+
+#. Key:	C039F64F467C4DC4B0CB0783A782C38A
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(14).WorldSections.ReaderBody
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(14).WorldSections.ReaderBody
+msgctxt ",C039F64F467C4DC4B0CB0783A782C38A"
+msgid "• 거점이나 수송로에 접근하는 위험 개체를 저지한다.\n• 사람의 생활권과 괴수의 영역이 충돌하는 지역을 조사한다.\n• 새로운 거점 복구에 필요한 자원과 접근로를 확보한다.\n• 특수한 소재로 장비를 제작하고 더 어려운 전투에 도전한다."
+msgstr "• 거점이나 수송로에 접근하는 위험 개체를 저지한다.\n• 사람의 생활권과 괴수의 영역이 충돌하는 지역을 조사한다.\n• 새로운 거점 복구에 필요한 자원과 접근로를 확보한다.\n• 특수한 소재로 장비를 제작하고 더 어려운 전투에 도전한다."
+
+#. Key:	DA988A73496D1A283D017F9ADFA4B9B0
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(14).WorldSections.ReaderHeading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(14).WorldSections.ReaderHeading
+msgctxt ",DA988A73496D1A283D017F9ADFA4B9B0"
+msgid "사냥의 목적"
+msgstr "사냥의 목적"
+
+#. Key:	E63B0EFC4F13C898B396F5BC4AF06EA0
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(15).WorldSections.Body
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(15).WorldSections.Body
+msgctxt ",E63B0EFC4F13C898B396F5BC4AF06EA0"
+msgid "사용자의 ‘역전 개체’ 예시는 ‘오랫동안 살아남아 더 위험해진 개체’라는 방향으로 반영한다. 정식 분류명은 추후 정한다.\n\n오염이 짙은 지역에서 오래 살아남은 개체는 일반 개체보다 단단한 외피나 발달한 기관을 가질 수 있다. 같은 종 안에서도 나이·먹이·영역·부상 경험에 따라 움직임과 공격 방법이 달라지는 설정을 제안한다. 외형과 행동에 차이를 드러내 전투에서 식별할 수 있게 한다.\n\n이런 개체는 본편 이전부터 존재했지만 인간이 접근할 수 없었던 지역에 살고 있었다. 최종 위협이 사라지고 조사·수송망이 복구되면서 발견되는 것이다. 일부는 기존 강자의 부재로 새롭게 영역을 넓힌다.\n\n발달한 소재는 상위 파츠나 다른 성질의 장비 제작에 쓰인다. 구체적인 보상은 강화 수치뿐 아니라 무게·방어·기동·공격 성향의 선택으로 확장할 수 있다. 장비 수치와 반복 사냥량은 아직 확정하지 않는다.\n\n잔향의 강한 개체 예시로는 흉부 골격과 공명 기관이 더 발달해 포효의 간격과 방향이 달라지고, 돌진과 착지를 다른 순서로 연결하는 개체를 제안한다. 외형·예고 동작의 변화로 차이를 읽을 수 있게 하며, 구체적인 패턴과 소재명은 미정으로 둔다."
+msgstr "사용자의 ‘역전 개체’ 예시는 ‘오랫동안 살아남아 더 위험해진 개체’라는 방향으로 반영한다. 정식 분류명은 추후 정한다.\n\n오염이 짙은 지역에서 오래 살아남은 개체는 일반 개체보다 단단한 외피나 발달한 기관을 가질 수 있다. 같은 종 안에서도 나이·먹이·영역·부상 경험에 따라 움직임과 공격 방법이 달라지는 설정을 제안한다. 외형과 행동에 차이를 드러내 전투에서 식별할 수 있게 한다.\n\n이런 개체는 본편 이전부터 존재했지만 인간이 접근할 수 없었던 지역에 살고 있었다. 최종 위협이 사라지고 조사·수송망이 복구되면서 발견되는 것이다. 일부는 기존 강자의 부재로 새롭게 영역을 넓힌다.\n\n발달한 소재는 상위 파츠나 다른 성질의 장비 제작에 쓰인다. 구체적인 보상은 강화 수치뿐 아니라 무게·방어·기동·공격 성향의 선택으로 확장할 수 있다. 장비 수치와 반복 사냥량은 아직 확정하지 않는다.\n\n잔향의 강한 개체 예시로는 흉부 골격과 공명 기관이 더 발달해 포효의 간격과 방향이 달라지고, 돌진과 착지를 다른 순서로 연결하는 개체를 제안한다. 외형·예고 동작의 변화로 차이를 읽을 수 있게 하며, 구체적인 패턴과 소재명은 미정으로 둔다."
+
+#. Key:	F8F5F16B4E467C39DF70AC81E3D95B86
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(15).WorldSections.Heading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(15).WorldSections.Heading
+msgctxt ",F8F5F16B4E467C39DF70AC81E3D95B86"
+msgid "강한 개체의 발생과 보상"
+msgstr "강한 개체의 발생과 보상"
+
+#. Key:	693C4F63446C4E40349E109053E198C5
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(15).WorldSections.ReaderBody
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(15).WorldSections.ReaderBody
+msgctxt ",693C4F63446C4E40349E109053E198C5"
+msgid "오염이 짙은 지역에서 오래 살아남은 개체는 일반 개체보다 단단한 외피나 발달한 기관을 가질 수 있다.\n\n이런 개체는 본편 이전부터 존재했지만 인간이 접근할 수 없었던 지역에 살고 있었다. 최종 위협이 사라지고 조사·수송망이 복구되면서 발견되는 것이다. 일부는 기존 강자의 부재로 새롭게 영역을 넓힌다."
+msgstr "오염이 짙은 지역에서 오래 살아남은 개체는 일반 개체보다 단단한 외피나 발달한 기관을 가질 수 있다.\n\n이런 개체는 본편 이전부터 존재했지만 인간이 접근할 수 없었던 지역에 살고 있었다. 최종 위협이 사라지고 조사·수송망이 복구되면서 발견되는 것이다. 일부는 기존 강자의 부재로 새롭게 영역을 넓힌다."
+
+#. Key:	DB3FEF6C4A61D2300421F1BA8FBA9344
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(15).WorldSections.ReaderHeading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(15).WorldSections.ReaderHeading
+msgctxt ",DB3FEF6C4A61D2300421F1BA8FBA9344"
+msgid "강한 개체"
+msgstr "강한 개체"
+
+#. Key:	365110814510E61A865F3B9CA477A6FA
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(16).WorldSections.Body
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(16).WorldSections.Body
+msgctxt ",365110814510E61A865F3B9CA477A6FA"
+msgid "1. 조종사의 이름·출신과 나이트를 조종하게 된 구체적인 경위.\n2. 이상 에너지의 이름·발견 과정·오염과 변이의 세부 규칙.\n3. ‘무명’의 정확한 의미와 나이트의 게임 내 호칭.\n4. 첫 거점의 위치, 주민과 상점·대장간 담당 인물.\n5. 파츠 장착 부위, 외형 변경 범위, 소재별 효과와 제작 비용.\n6. 거점 방어·탈환 임무의 빈도와 실패 후 복구 방식.\n7. 최종 보스의 원형 동물·외형·위협 방식과 최종 전투 장소.\n8. 클리어 후 강한 개체의 분류명과 기본 개체와의 전투 차이."
+msgstr "1. 조종사의 이름·출신과 나이트를 조종하게 된 구체적인 경위.\n2. 이상 에너지의 이름·발견 과정·오염과 변이의 세부 규칙.\n3. ‘무명’의 정확한 의미와 나이트의 게임 내 호칭.\n4. 첫 거점의 위치, 주민과 상점·대장간 담당 인물.\n5. 파츠 장착 부위, 외형 변경 범위, 소재별 효과와 제작 비용.\n6. 거점 방어·탈환 임무의 빈도와 실패 후 복구 방식.\n7. 최종 보스의 원형 동물·외형·위협 방식과 최종 전투 장소.\n8. 클리어 후 강한 개체의 분류명과 기본 개체와의 전투 차이."
+
+#. Key:	ECCD44D64CFF1FEAD761F080D39BD090
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(16).WorldSections.Heading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(16).WorldSections.Heading
+msgctxt ",ECCD44D64CFF1FEAD761F080D39BD090"
+msgid "다음에 결정할 항목"
+msgstr "다음에 결정할 항목"
+
+#. Key:	0FD9E73443C45D0CA9688A99820F3B6F
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(17).WorldSections.Body
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(17).WorldSections.Body
+msgctxt ",0FD9E73443C45D0CA9688A99820F3B6F"
+msgid "• 2026-09-21 / v02: 동물의 괴수화, 전기·기름 기반 프로토타입, 괴수 소재 파츠 제작, 거점 방어·탈환을 통한 시설 해금, 최종 보스 처치와 생태계 존속을 사용자 확정 설정으로 반영했다.\n• 보강 제안: 첫 방어전부터 잔열 토벌·대장간 복구, 거점 연결, 최종 출격, 클리어 후 사냥으로 이어지는 줄거리를 작성했다.\n• 정합성 보강: 괴수 소재와 기체 동력의 관계, 잔열의 먹이와 회수할 일반 연료의 구분, 첫 무기의 확보 시점, 최종 보스 처치 후에도 반복 사냥이 가능한 이유를 명시했다.\n• 잔향 추가: 사용자의 요청에 따라 본편 보스 라인업에 포함했다. 기존 이미지·리그 자료를 확인하고, 중계소·수송 터널 탈환전과 교역 복구, 괴수 이동 조사, 소재 파츠 보상을 보강 제안으로 연결했다."
+msgstr "• 2026-09-21 / v02: 동물의 괴수화, 전기·기름 기반 프로토타입, 괴수 소재 파츠 제작, 거점 방어·탈환을 통한 시설 해금, 최종 보스 처치와 생태계 존속을 사용자 확정 설정으로 반영했다.\n• 보강 제안: 첫 방어전부터 잔열 토벌·대장간 복구, 거점 연결, 최종 출격, 클리어 후 사냥으로 이어지는 줄거리를 작성했다.\n• 정합성 보강: 괴수 소재와 기체 동력의 관계, 잔열의 먹이와 회수할 일반 연료의 구분, 첫 무기의 확보 시점, 최종 보스 처치 후에도 반복 사냥이 가능한 이유를 명시했다.\n• 잔향 추가: 사용자의 요청에 따라 본편 보스 라인업에 포함했다. 기존 이미지·리그 자료를 확인하고, 중계소·수송 터널 탈환전과 교역 복구, 괴수 이동 조사, 소재 파츠 보상을 보강 제안으로 연결했다."
+
+#. Key:	8E3939A8410234E3EA43BFAED16E38E7
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(17).WorldSections.Heading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(17).WorldSections.Heading
+msgctxt ",8E3939A8410234E3EA43BFAED16E38E7"
+msgid "변경 기록"
+msgstr "변경 기록"
+
+#. Key:	5B98580E43EDDFD8C7D1CB88D48E6A49
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(2).WorldSections.Body
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(2).WorldSections.Body
+msgctxt ",5B98580E43EDDFD8C7D1CB88D48E6A49"
+msgid "괴물화한 동물들이 차지한 지구에서, 생존자는 전기와 기름으로 움직이는 낡은 프로토타입 메카에 탑승한다. 괴수의 몸으로 장비를 만들고 빼앗긴 거점을 되찾으며, 변화한 생태계 속에서 인류가 살아갈 자리를 확보한다.\n\n보강 제안: 이야기의 중심은 ‘되찾은 장소를 사람들이 다시 살아갈 곳으로 만드는 일’이다. 초반에는 하나의 피난처를 지키고, 중반에는 고립된 거점들을 연결하며, 후반에는 인류와 생태계의 존속을 위협하는 재앙을 막는다. 플레이어가 지켜야 할 범위가 여정과 함께 커진다."
+msgstr "괴물화한 동물들이 차지한 지구에서, 생존자는 전기와 기름으로 움직이는 낡은 프로토타입 메카에 탑승한다. 괴수의 몸으로 장비를 만들고 빼앗긴 거점을 되찾으며, 변화한 생태계 속에서 인류가 살아갈 자리를 확보한다.\n\n보강 제안: 이야기의 중심은 ‘되찾은 장소를 사람들이 다시 살아갈 곳으로 만드는 일’이다. 초반에는 하나의 피난처를 지키고, 중반에는 고립된 거점들을 연결하며, 후반에는 인류와 생태계의 존속을 위협하는 재앙을 막는다. 플레이어가 지켜야 할 범위가 여정과 함께 커진다."
+
+#. Key:	793F7EF047C8AF8D85066EB2338C256F
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(2).WorldSections.Heading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(2).WorldSections.Heading
+msgctxt ",793F7EF047C8AF8D85066EB2338C256F"
+msgid "한 문장 소개와 이야기의 중심"
+msgstr "한 문장 소개와 이야기의 중심"
+
+#. Key:	C7B497124FABBCDA71CA6CA5FE8EB8F5
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(2).WorldSections.ReaderBody
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(2).WorldSections.ReaderBody
+msgctxt ",C7B497124FABBCDA71CA6CA5FE8EB8F5"
+msgid "괴물화한 동물들이 차지한 지구에서, 생존자는 전기와 기름으로 움직이는 낡은 프로토타입 메카에 탑승한다. 괴수의 몸으로 장비를 만들고 빼앗긴 거점을 되찾으며, 변화한 생태계 속에서 인류가 살아갈 자리를 확보한다."
+msgstr "괴물화한 동물들이 차지한 지구에서, 생존자는 전기와 기름으로 움직이는 낡은 프로토타입 메카에 탑승한다. 괴수의 몸으로 장비를 만들고 빼앗긴 거점을 되찾으며, 변화한 생태계 속에서 인류가 살아갈 자리를 확보한다."
+
+#. Key:	74C3698F4E5F7917EA83B891ED8651AF
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(2).WorldSections.ReaderHeading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(2).WorldSections.ReaderHeading
+msgctxt ",74C3698F4E5F7917EA83B891ED8651AF"
+msgid "생존자의 여정"
+msgstr "생존자의 여정"
+
+#. Key:	37017F7E4E85DE02EFEC0692F7DDB877
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(3).WorldSections.Body
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(3).WorldSections.Body
+msgctxt ",37017F7E4E85DE02EFEC0692F7DDB877"
+msgid "인류는 산업용·군사용 메카가 일상적으로 쓰이는 문명을 이루었다. 이후 발견된 이상 에너지는 기존 연료보다 큰 출력을 제공했고, 발전 시설과 신형 메카의 동력, 무장에 빠르게 도입되었다. 전기와 기름으로 움직이던 초기 기체들은 비효율적인 구형 장비로 밀려났다.\n\n이상 징후는 에너지 시설 주변의 동물들에게서 먼저 나타났다. 체격과 골격이 변하고, 조직에 새로운 성질이 생기며, 일부 동물이 에너지가 축적된 장소에 모여들기 시작했다. 산업 시설과 서식지에서 시작된 변화는 토양·물·먹이사슬을 따라 퍼졌다. 재앙의 시작에는 에너지의 발견보다 무분별한 사용과 확산이 있었다는 방향을 제안한다. 발견자, 최초 사고와 책임 주체는 미정이다.\n\n괴수의 습격으로 발전소와 생산 시설이 무너지자, 신형 메카를 유지하던 연료·부품 공급망도 끊어졌다. 인간은 도시를 포기하고 작은 거점으로 흩어졌다. 문명이 사라진 자리는 새로운 동물들의 서식지가 되었다.\n\n현재의 괴수는 각자 먹고, 이동하고, 영역을 다투고, 번식하는 생물이다. 변이종 가운데 일부는 세대를 이어 살아가고 있으며, 생존한 평범한 동식물과도 먹이사슬을 이룬다. 인간이 이용하던 길과 시설이 그들의 영역과 겹치기 때문에 충돌이 발생한다."
+msgstr "인류는 산업용·군사용 메카가 일상적으로 쓰이는 문명을 이루었다. 이후 발견된 이상 에너지는 기존 연료보다 큰 출력을 제공했고, 발전 시설과 신형 메카의 동력, 무장에 빠르게 도입되었다. 전기와 기름으로 움직이던 초기 기체들은 비효율적인 구형 장비로 밀려났다.\n\n이상 징후는 에너지 시설 주변의 동물들에게서 먼저 나타났다. 체격과 골격이 변하고, 조직에 새로운 성질이 생기며, 일부 동물이 에너지가 축적된 장소에 모여들기 시작했다. 산업 시설과 서식지에서 시작된 변화는 토양·물·먹이사슬을 따라 퍼졌다. 재앙의 시작에는 에너지의 발견보다 무분별한 사용과 확산이 있었다는 방향을 제안한다. 발견자, 최초 사고와 책임 주체는 미정이다.\n\n괴수의 습격으로 발전소와 생산 시설이 무너지자, 신형 메카를 유지하던 연료·부품 공급망도 끊어졌다. 인간은 도시를 포기하고 작은 거점으로 흩어졌다. 문명이 사라진 자리는 새로운 동물들의 서식지가 되었다.\n\n현재의 괴수는 각자 먹고, 이동하고, 영역을 다투고, 번식하는 생물이다. 변이종 가운데 일부는 세대를 이어 살아가고 있으며, 생존한 평범한 동식물과도 먹이사슬을 이룬다. 인간이 이용하던 길과 시설이 그들의 영역과 겹치기 때문에 충돌이 발생한다."
+
+#. Key:	4569F7F64EEC82261D0B6DBDB4A75AF9
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(3).WorldSections.Heading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(3).WorldSections.Heading
+msgctxt ",4569F7F64EEC82261D0B6DBDB4A75AF9"
+msgid "멸망 이전과 변화한 지구 — 보강 제안"
+msgstr "멸망 이전과 변화한 지구 — 보강 제안"
+
+#. Key:	B63F5DA14FFC3BA3C727AD9AE8443169
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(3).WorldSections.ReaderBody
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(3).WorldSections.ReaderBody
+msgctxt ",B63F5DA14FFC3BA3C727AD9AE8443169"
+msgid "인류는 산업용·군사용 메카가 일상적으로 쓰이는 문명을 이루었다. 이후 발견된 이상 에너지는 기존 연료보다 큰 출력을 제공했고, 발전 시설과 신형 메카의 동력, 무장에 빠르게 도입되었다. 전기와 기름으로 움직이던 초기 기체들은 비효율적인 구형 장비로 밀려났다.\n\n이상 징후는 에너지 시설 주변의 동물들에게서 먼저 나타났다. 체격과 골격이 변하고, 조직에 새로운 성질이 생기며, 일부 동물이 에너지가 축적된 장소에 모여들기 시작했다. 산업 시설과 서식지에서 시작된 변화는 토양·물·먹이사슬을 따라 퍼졌다.\n\n괴수의 습격으로 발전소와 생산 시설이 무너지자, 신형 메카를 유지하던 연료·부품 공급망도 끊어졌다. 인간은 도시를 포기하고 작은 거점으로 흩어졌다. 문명이 사라진 자리는 새로운 동물들의 서식지가 되었다.\n\n현재의 괴수는 각자 먹고, 이동하고, 영역을 다투고, 번식하는 생물이다. 변이종 가운데 일부는 세대를 이어 살아가고 있으며, 생존한 평범한 동식물과도 먹이사슬을 이룬다. 인간이 이용하던 길과 시설이 그들의 영역과 겹치기 때문에 충돌이 발생한다."
+msgstr "인류는 산업용·군사용 메카가 일상적으로 쓰이는 문명을 이루었다. 이후 발견된 이상 에너지는 기존 연료보다 큰 출력을 제공했고, 발전 시설과 신형 메카의 동력, 무장에 빠르게 도입되었다. 전기와 기름으로 움직이던 초기 기체들은 비효율적인 구형 장비로 밀려났다.\n\n이상 징후는 에너지 시설 주변의 동물들에게서 먼저 나타났다. 체격과 골격이 변하고, 조직에 새로운 성질이 생기며, 일부 동물이 에너지가 축적된 장소에 모여들기 시작했다. 산업 시설과 서식지에서 시작된 변화는 토양·물·먹이사슬을 따라 퍼졌다.\n\n괴수의 습격으로 발전소와 생산 시설이 무너지자, 신형 메카를 유지하던 연료·부품 공급망도 끊어졌다. 인간은 도시를 포기하고 작은 거점으로 흩어졌다. 문명이 사라진 자리는 새로운 동물들의 서식지가 되었다.\n\n현재의 괴수는 각자 먹고, 이동하고, 영역을 다투고, 번식하는 생물이다. 변이종 가운데 일부는 세대를 이어 살아가고 있으며, 생존한 평범한 동식물과도 먹이사슬을 이룬다. 인간이 이용하던 길과 시설이 그들의 영역과 겹치기 때문에 충돌이 발생한다."
+
+#. Key:	65537C67463A56FD79C4809F4471EE51
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(3).WorldSections.ReaderHeading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(3).WorldSections.ReaderHeading
+msgctxt ",65537C67463A56FD79C4809F4471EE51"
+msgid "변화한 지구"
+msgstr "변화한 지구"
+
+#. Key:	E5DFF0B144DD8DB4978644996F5D8102
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(4).WorldSections.Heading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(4).WorldSections.Heading
+msgctxt ",E5DFF0B144DD8DB4978644996F5D8102"
+msgid "본편 스토리 흐름 — 보강 제안"
+msgstr "본편 스토리 흐름 — 보강 제안"
+
+#. Key:	F68777AD4D563702AD72A598D9A9584F
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(5).WorldSections.Body
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(5).WorldSections.Body
+msgctxt ",F68777AD4D563702AD72A598D9A9584F"
+msgid "작은 피난 거점이 괴수의 접근으로 고립된다. 수송로가 끊기고 방어 설비의 연료와 부품도 바닥나기 시작한다. 주민들은 보관되어 있던 프로토타입을 복구하고, 플레이어가 탑승해 첫 방어전에 나선다.\n\n방어에 성공하면 피난민과 상인들이 거점에 머물 수 있게 된다. 기본 상점과 정비 기능이 열리고, 사람들은 근처의 버려진 시설을 되찾을 계획을 세운다. 이후 본격적인 첫 탈환 대상으로 잔열이 차지한 연료 시설을 선택한다. 도입 방어전과 잔열전을 하나의 연속 임무로 합칠지는 제작 범위에 따라 정한다."
+msgstr "작은 피난 거점이 괴수의 접근으로 고립된다. 수송로가 끊기고 방어 설비의 연료와 부품도 바닥나기 시작한다. 주민들은 보관되어 있던 프로토타입을 복구하고, 플레이어가 탑승해 첫 방어전에 나선다.\n\n방어에 성공하면 피난민과 상인들이 거점에 머물 수 있게 된다. 기본 상점과 정비 기능이 열리고, 사람들은 근처의 버려진 시설을 되찾을 계획을 세운다. 이후 본격적인 첫 탈환 대상으로 잔열이 차지한 연료 시설을 선택한다. 도입 방어전과 잔열전을 하나의 연속 임무로 합칠지는 제작 범위에 따라 정한다."
+
+#. Key:	B54D704F4E333B847C6E218530E440B1
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(5).WorldSections.Heading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(5).WorldSections.Heading
+msgctxt ",B54D704F4E333B847C6E218530E440B1"
+msgid "도입: 마지막 정비고"
+msgstr "도입: 마지막 정비고"
+
+#. Key:	DB629021429955FA39E180BA4CB22DC5
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(5).WorldSections.ReaderBody
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(5).WorldSections.ReaderBody
+msgctxt ",DB629021429955FA39E180BA4CB22DC5"
+msgid "작은 피난 거점이 괴수의 접근으로 고립된다. 수송로가 끊기고 방어 설비의 연료와 부품도 바닥나기 시작한다. 주민들은 보관되어 있던 프로토타입을 복구하고, 플레이어가 탑승해 첫 방어전에 나선다.\n\n방어에 성공하면 피난민과 상인들이 거점에 머물 수 있게 된다. 기본 상점과 정비 기능이 열리고, 사람들은 근처의 버려진 시설을 되찾을 계획을 세운다. 이후 본격적인 첫 탈환 대상으로 잔열이 차지한 연료 시설을 선택한다."
+msgstr "작은 피난 거점이 괴수의 접근으로 고립된다. 수송로가 끊기고 방어 설비의 연료와 부품도 바닥나기 시작한다. 주민들은 보관되어 있던 프로토타입을 복구하고, 플레이어가 탑승해 첫 방어전에 나선다.\n\n방어에 성공하면 피난민과 상인들이 거점에 머물 수 있게 된다. 기본 상점과 정비 기능이 열리고, 사람들은 근처의 버려진 시설을 되찾을 계획을 세운다. 이후 본격적인 첫 탈환 대상으로 잔열이 차지한 연료 시설을 선택한다."
+
+#. Key:	5DD149D545DBDB50ACB5E3959D99AD1B
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(5).WorldSections.ReaderHeading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(5).WorldSections.ReaderHeading
+msgctxt ",5DD149D545DBDB50ACB5E3959D99AD1B"
+msgid "마지막 정비고"
+msgstr "마지막 정비고"
+
+#. Key:	20AAE30149CD94E94EA72F943FC3EB4B
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(6).WorldSections.Body
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(6).WorldSections.Body
+msgctxt ",20AAE30149CD94E94EA72F943FC3EB4B"
+msgid "거점 인근의 복합 연료 시설에는 구형 연료 저장 구역과 이후 증설된 이상 에너지 설비가 함께 남아 있다. 도마뱀에서 변한 잔열은 누출된 이상 에너지를 먹으며 그곳에 둥지를 틀었다.\n\n잔열을 쓰러뜨리면 수송대가 시설에 진입한다. 일반 연료 저장 구역에서 회수 가능한 기름을 확보하고, 공작 장비와 산업용 소재를 거점으로 옮긴다. 장기적인 연료 수급을 위해서는 이후 저장·정제 시설과 수송로를 복구해야 한다.\n\n대장간을 재가동한 뒤 대장장이는 잔열의 뼈 갑판을 가공해 첫 괴수 소재 파츠를 만든다. 플레이어는 처음으로 자신의 사냥이 기체의 변화와 주민들의 생존에 동시에 기여한다는 것을 경험한다.\n\n단절의 원형은 첫 출격 전에 회수 소재로 제작되어 있다는 연결을 제안한다. 잔열을 쓰러뜨려야 첫 무기를 얻는 구조는 채택하지 않는다. 구체적인 제작자와 최초 재료 회수 장소는 미정이다."
+msgstr "거점 인근의 복합 연료 시설에는 구형 연료 저장 구역과 이후 증설된 이상 에너지 설비가 함께 남아 있다. 도마뱀에서 변한 잔열은 누출된 이상 에너지를 먹으며 그곳에 둥지를 틀었다.\n\n잔열을 쓰러뜨리면 수송대가 시설에 진입한다. 일반 연료 저장 구역에서 회수 가능한 기름을 확보하고, 공작 장비와 산업용 소재를 거점으로 옮긴다. 장기적인 연료 수급을 위해서는 이후 저장·정제 시설과 수송로를 복구해야 한다.\n\n대장간을 재가동한 뒤 대장장이는 잔열의 뼈 갑판을 가공해 첫 괴수 소재 파츠를 만든다. 플레이어는 처음으로 자신의 사냥이 기체의 변화와 주민들의 생존에 동시에 기여한다는 것을 경험한다.\n\n단절의 원형은 첫 출격 전에 회수 소재로 제작되어 있다는 연결을 제안한다. 잔열을 쓰러뜨려야 첫 무기를 얻는 구조는 채택하지 않는다. 구체적인 제작자와 최초 재료 회수 장소는 미정이다."
+
+#. Key:	897E3CE948669692945EB8941BF8C755
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(6).WorldSections.Heading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(6).WorldSections.Heading
+msgctxt ",897E3CE948669692945EB8941BF8C755"
+msgid "초반: 잔열이 차지한 연료 시설"
+msgstr "초반: 잔열이 차지한 연료 시설"
+
+#. Key:	268C92894E11D5E7301FB29F0DB7C4EB
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(6).WorldSections.ReaderBody
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(6).WorldSections.ReaderBody
+msgctxt ",268C92894E11D5E7301FB29F0DB7C4EB"
+msgid "거점 인근의 복합 연료 시설에는 구형 연료 저장 구역과 이후 증설된 이상 에너지 설비가 함께 남아 있다. 도마뱀에서 변한 잔열은 누출된 이상 에너지를 먹으며 그곳에 둥지를 틀었다.\n\n잔열을 쓰러뜨리면 수송대가 시설에 진입한다. 일반 연료 저장 구역에서 회수 가능한 기름을 확보하고, 공작 장비와 산업용 소재를 거점으로 옮긴다. 장기적인 연료 수급을 위해서는 이후 저장·정제 시설과 수송로를 복구해야 한다.\n\n대장간을 재가동한 뒤 대장장이는 잔열의 뼈 갑판을 가공해 첫 괴수 소재 파츠를 만든다. 플레이어는 처음으로 자신의 사냥이 기체의 변화와 주민들의 생존에 동시에 기여한다는 것을 경험한다."
+msgstr "거점 인근의 복합 연료 시설에는 구형 연료 저장 구역과 이후 증설된 이상 에너지 설비가 함께 남아 있다. 도마뱀에서 변한 잔열은 누출된 이상 에너지를 먹으며 그곳에 둥지를 틀었다.\n\n잔열을 쓰러뜨리면 수송대가 시설에 진입한다. 일반 연료 저장 구역에서 회수 가능한 기름을 확보하고, 공작 장비와 산업용 소재를 거점으로 옮긴다. 장기적인 연료 수급을 위해서는 이후 저장·정제 시설과 수송로를 복구해야 한다.\n\n대장간을 재가동한 뒤 대장장이는 잔열의 뼈 갑판을 가공해 첫 괴수 소재 파츠를 만든다. 플레이어는 처음으로 자신의 사냥이 기체의 변화와 주민들의 생존에 동시에 기여한다는 것을 경험한다."
+
+#. Key:	F24938AE40761732474110B8734283EC
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(6).WorldSections.ReaderHeading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(6).WorldSections.ReaderHeading
+msgctxt ",F24938AE40761732474110B8734283EC"
+msgid "잔열의 연료 시설"
+msgstr "잔열의 연료 시설"
+
+#. Key:	AC0AE4724807FE2F74D20486C8161FF2
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(7).WorldSections.Body
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(7).WorldSections.Body
+msgctxt ",AC0AE4724807FE2F74D20486C8161FF2"
+msgid "플레이어는 각 지역을 점유한 괴수를 상대하고, 거점과 보급로를 연결한다. 탈환한 곳에는 기술자와 주민이 들어오고, 방어에 성공한 곳에는 상인과 수송대가 돌아온다. 상점·대장간의 확장은 구조한 사람들의 기술과 확보한 설비에 따라 진행된다.\n\n지역마다 괴수의 생태와 거점의 필요가 맞물린다. 식수 시설의 괴수는 물길을 막고, 산악 수송로의 괴수는 이동을 가로막고, 산업 지대의 괴수는 제작에 필요한 장비를 차지하고 있다. 지역 수와 괴수 종류는 제작 규모에 맞춰 정한다.\n\n회수한 시설 기록과 소재의 조사 결과를 통해, 동물의 변이가 일시적인 증상에 그치지 않고 세대를 이어 정착했다는 사실이 드러난다. 동시에 서로 떨어진 지역에서 대형 괴수들이 이동하기 시작하고, 연쇄적인 거점 습격이 발생한다."
+msgstr "플레이어는 각 지역을 점유한 괴수를 상대하고, 거점과 보급로를 연결한다. 탈환한 곳에는 기술자와 주민이 들어오고, 방어에 성공한 곳에는 상인과 수송대가 돌아온다. 상점·대장간의 확장은 구조한 사람들의 기술과 확보한 설비에 따라 진행된다.\n\n지역마다 괴수의 생태와 거점의 필요가 맞물린다. 식수 시설의 괴수는 물길을 막고, 산악 수송로의 괴수는 이동을 가로막고, 산업 지대의 괴수는 제작에 필요한 장비를 차지하고 있다. 지역 수와 괴수 종류는 제작 규모에 맞춰 정한다.\n\n회수한 시설 기록과 소재의 조사 결과를 통해, 동물의 변이가 일시적인 증상에 그치지 않고 세대를 이어 정착했다는 사실이 드러난다. 동시에 서로 떨어진 지역에서 대형 괴수들이 이동하기 시작하고, 연쇄적인 거점 습격이 발생한다."
+
+#. Key:	DBC0ACD84667EF62D9B75C80AC27B75B
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(7).WorldSections.Heading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(7).WorldSections.Heading
+msgctxt ",DBC0ACD84667EF62D9B75C80AC27B75B"
+msgid "중반: 고립된 거점들을 연결하다"
+msgstr "중반: 고립된 거점들을 연결하다"
+
+#. Key:	A9ADC4924057DBCFEB4156B34A78A47F
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(7).WorldSections.ReaderBody
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(7).WorldSections.ReaderBody
+msgctxt ",A9ADC4924057DBCFEB4156B34A78A47F"
+msgid "플레이어는 각 지역을 점유한 괴수를 상대하고, 거점과 보급로를 연결한다. 탈환한 곳에는 기술자와 주민이 들어오고, 방어에 성공한 곳에는 상인과 수송대가 돌아온다. 상점·대장간의 확장은 구조한 사람들의 기술과 확보한 설비에 따라 진행된다.\n\n지역마다 괴수의 생태와 거점의 필요가 맞물린다. 식수 시설의 괴수는 물길을 막고, 산악 수송로의 괴수는 이동을 가로막고, 산업 지대의 괴수는 제작에 필요한 장비를 차지하고 있다.\n\n회수한 시설 기록과 소재의 조사 결과를 통해, 동물의 변이가 일시적인 증상에 그치지 않고 세대를 이어 정착했다는 사실이 드러난다. 동시에 서로 떨어진 지역에서 대형 괴수들이 이동하기 시작하고, 연쇄적인 거점 습격이 발생한다."
+msgstr "플레이어는 각 지역을 점유한 괴수를 상대하고, 거점과 보급로를 연결한다. 탈환한 곳에는 기술자와 주민이 들어오고, 방어에 성공한 곳에는 상인과 수송대가 돌아온다. 상점·대장간의 확장은 구조한 사람들의 기술과 확보한 설비에 따라 진행된다.\n\n지역마다 괴수의 생태와 거점의 필요가 맞물린다. 식수 시설의 괴수는 물길을 막고, 산악 수송로의 괴수는 이동을 가로막고, 산업 지대의 괴수는 제작에 필요한 장비를 차지하고 있다.\n\n회수한 시설 기록과 소재의 조사 결과를 통해, 동물의 변이가 일시적인 증상에 그치지 않고 세대를 이어 정착했다는 사실이 드러난다. 동시에 서로 떨어진 지역에서 대형 괴수들이 이동하기 시작하고, 연쇄적인 거점 습격이 발생한다."
+
+#. Key:	81B0E8BE4F70A10FEE2913AB22E96219
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(7).WorldSections.ReaderHeading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(7).WorldSections.ReaderHeading
+msgctxt ",81B0E8BE4F70A10FEE2913AB22E96219"
+msgid "고립된 거점들"
+msgstr "고립된 거점들"
+
+#. Key:	A46A2C704FA056526D07C38776D670FD
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(8).WorldSections.Body
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(8).WorldSections.Body
+msgctxt ",A46A2C704FA056526D07C38776D670FD"
+msgid "고립된 거점과 연락하기 위해, 플레이어 일행은 산악 중계소와 그 아래의 수송 터널을 복구하려 한다. 그러나 복구 작업이 시작될 때마다 거대한 울음이 터널을 타고 들려오고, 날개 달린 괴수 잔향이 발전기와 수송 차량 주변에 나타난다.\n\n잔향은 폐쇄된 터널과 중계소 지하 시설을 서식지로 삼았다. 넓은 귀와 발달한 감각으로 소리와 구조물의 진동을 읽고, 흉부의 공명 기관으로 영역을 알린다는 생태를 제안한다. 중계소 복구 과정에서 발생한 엔진 소리와 공사 진동을 영역 침입으로 받아들이는 것이 충돌의 계기다. 무선 신호를 소리처럼 듣는 설정은 부여하지 않는다.\n\n플레이어는 터널 출구와 중계소 앞의 넓은 시설 구역에서 잔향을 상대한다. 포효 준비 때의 흉부 움직임과 귀의 방향을 읽고, 짧은 비행·도약 후의 착지나 돌진 후 회복에 접근해 반격하는 전투를 제안한다. 전투 구조와 패턴은 별도 제작 대상이다.\n\n토벌 후 중계소와 수송 터널을 되찾으면 다른 생존 거점의 구조 요청과 거래 제안이 들어온다. 상점에는 다른 지역의 물자가 추가되고, 대장간에서는 잔향의 날개막·흉부 골격을 가공한 진동 완충 파츠를 제작할 수 있게 된다.\n\n복구한 통신망에는 멀리 떨어진 여러 거점에서 비슷한 괴수 이동이 관측된다는 보고가 모인다. 이를 통해 각 지역의 이상 현상이 하나의 초대형 개체 이동과 연결되어 있음을 추적한다. 잔향 토벌은 고립된 거점의 생존에서 더 큰 재앙의 조사로 이야기를 넓히는 계기가 된다."
+msgstr "고립된 거점과 연락하기 위해, 플레이어 일행은 산악 중계소와 그 아래의 수송 터널을 복구하려 한다. 그러나 복구 작업이 시작될 때마다 거대한 울음이 터널을 타고 들려오고, 날개 달린 괴수 잔향이 발전기와 수송 차량 주변에 나타난다.\n\n잔향은 폐쇄된 터널과 중계소 지하 시설을 서식지로 삼았다. 넓은 귀와 발달한 감각으로 소리와 구조물의 진동을 읽고, 흉부의 공명 기관으로 영역을 알린다는 생태를 제안한다. 중계소 복구 과정에서 발생한 엔진 소리와 공사 진동을 영역 침입으로 받아들이는 것이 충돌의 계기다. 무선 신호를 소리처럼 듣는 설정은 부여하지 않는다.\n\n플레이어는 터널 출구와 중계소 앞의 넓은 시설 구역에서 잔향을 상대한다. 포효 준비 때의 흉부 움직임과 귀의 방향을 읽고, 짧은 비행·도약 후의 착지나 돌진 후 회복에 접근해 반격하는 전투를 제안한다. 전투 구조와 패턴은 별도 제작 대상이다.\n\n토벌 후 중계소와 수송 터널을 되찾으면 다른 생존 거점의 구조 요청과 거래 제안이 들어온다. 상점에는 다른 지역의 물자가 추가되고, 대장간에서는 잔향의 날개막·흉부 골격을 가공한 진동 완충 파츠를 제작할 수 있게 된다.\n\n복구한 통신망에는 멀리 떨어진 여러 거점에서 비슷한 괴수 이동이 관측된다는 보고가 모인다. 이를 통해 각 지역의 이상 현상이 하나의 초대형 개체 이동과 연결되어 있음을 추적한다. 잔향 토벌은 고립된 거점의 생존에서 더 큰 재앙의 조사로 이야기를 넓히는 계기가 된다."
+
+#. Key:	E07617614A325566A1B9CB93229D29DD
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(8).WorldSections.Heading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(8).WorldSections.Heading
+msgctxt ",E07617614A325566A1B9CB93229D29DD"
+msgid "중반의 주요 탈환전: 메아리 속의 잔향"
+msgstr "중반의 주요 탈환전: 메아리 속의 잔향"
+
+#. Key:	E1C210374981220C524505B8CF9A3810
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(8).WorldSections.ReaderBody
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(8).WorldSections.ReaderBody
+msgctxt ",E1C210374981220C524505B8CF9A3810"
+msgid "고립된 거점과 연락하기 위해, 플레이어 일행은 산악 중계소와 그 아래의 수송 터널을 복구하려 한다. 그러나 복구 작업이 시작될 때마다 거대한 울음이 터널을 타고 들려오고, 날개 달린 괴수 잔향이 발전기와 수송 차량 주변에 나타난다.\n\n토벌 후 중계소와 수송 터널을 되찾으면 다른 생존 거점의 구조 요청과 거래 제안이 들어온다. 상점에는 다른 지역의 물자가 추가되고, 대장간에서는 잔향의 날개막·흉부 골격을 가공한 진동 완충 파츠를 제작할 수 있게 된다.\n\n복구한 통신망에는 멀리 떨어진 여러 거점에서 비슷한 괴수 이동이 관측된다는 보고가 모인다. 이를 통해 각 지역의 이상 현상이 하나의 초대형 개체 이동과 연결되어 있음을 추적한다. 잔향 토벌은 고립된 거점의 생존에서 더 큰 재앙의 조사로 이야기를 넓히는 계기가 된다."
+msgstr "고립된 거점과 연락하기 위해, 플레이어 일행은 산악 중계소와 그 아래의 수송 터널을 복구하려 한다. 그러나 복구 작업이 시작될 때마다 거대한 울음이 터널을 타고 들려오고, 날개 달린 괴수 잔향이 발전기와 수송 차량 주변에 나타난다.\n\n토벌 후 중계소와 수송 터널을 되찾으면 다른 생존 거점의 구조 요청과 거래 제안이 들어온다. 상점에는 다른 지역의 물자가 추가되고, 대장간에서는 잔향의 날개막·흉부 골격을 가공한 진동 완충 파츠를 제작할 수 있게 된다.\n\n복구한 통신망에는 멀리 떨어진 여러 거점에서 비슷한 괴수 이동이 관측된다는 보고가 모인다. 이를 통해 각 지역의 이상 현상이 하나의 초대형 개체 이동과 연결되어 있음을 추적한다. 잔향 토벌은 고립된 거점의 생존에서 더 큰 재앙의 조사로 이야기를 넓히는 계기가 된다."
+
+#. Key:	1278F4594E926EC2F28786BA717FEBE7
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(8).WorldSections.ReaderHeading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(8).WorldSections.ReaderHeading
+msgctxt ",1278F4594E926EC2F28786BA717FEBE7"
+msgid "메아리 속의 잔향"
+msgstr "메아리 속의 잔향"
+
+#. Key:	0C511E6749B3A5F040216D94FD4C99BF
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(9).WorldSections.Body
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(9).WorldSections.Body
+msgctxt ",0C511E6749B3A5F040216D94FD4C99BF"
+msgid "조사 결과, 이상 에너지가 많이 축적된 지역들을 따라 이동하는 초대형 변이 개체가 확인된다. 이 개체 역시 동물의 변이에서 시작했지만, 오랜 축적 끝에 다른 괴수와 비교할 수 없는 규모로 성장했다.\n\n최종 보스는 모든 괴수에게 명령을 내리는 존재가 아니다. 이동과 에너지 흡수로 주변의 먹이와 서식 환경을 무너뜨려 다른 괴수들의 이동을 유발한다. 그 결과 인간의 거점에도 연쇄적인 피해가 발생한다.\n\n이 개체가 대규모 에너지 시설이 연결된 중심 구역에 도달하면, 축적된 에너지의 폭주와 시설의 연쇄 붕괴로 남은 거주권과 생태계가 광범위하게 파괴될 위험이 있다. 위협을 일으키는 기관, 규모와 구체적인 원리는 최종 보스 디자인과 함께 검토한다.\n\n플레이어는 탈환한 연구 시설의 자료로 약점과 이동 경로를 파악한다. 복구한 수송로로 연료와 부품을 운반하고, 여러 거점의 대장장이·정비사들이 모여 최종 출격을 준비한다. 본편 동안 복구한 거점망이 마지막 전투를 가능하게 한다."
+msgstr "조사 결과, 이상 에너지가 많이 축적된 지역들을 따라 이동하는 초대형 변이 개체가 확인된다. 이 개체 역시 동물의 변이에서 시작했지만, 오랜 축적 끝에 다른 괴수와 비교할 수 없는 규모로 성장했다.\n\n최종 보스는 모든 괴수에게 명령을 내리는 존재가 아니다. 이동과 에너지 흡수로 주변의 먹이와 서식 환경을 무너뜨려 다른 괴수들의 이동을 유발한다. 그 결과 인간의 거점에도 연쇄적인 피해가 발생한다.\n\n이 개체가 대규모 에너지 시설이 연결된 중심 구역에 도달하면, 축적된 에너지의 폭주와 시설의 연쇄 붕괴로 남은 거주권과 생태계가 광범위하게 파괴될 위험이 있다. 위협을 일으키는 기관, 규모와 구체적인 원리는 최종 보스 디자인과 함께 검토한다.\n\n플레이어는 탈환한 연구 시설의 자료로 약점과 이동 경로를 파악한다. 복구한 수송로로 연료와 부품을 운반하고, 여러 거점의 대장장이·정비사들이 모여 최종 출격을 준비한다. 본편 동안 복구한 거점망이 마지막 전투를 가능하게 한다."
+
+#. Key:	32960F624D642A7527E7DD887D0F178D
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(9).WorldSections.Heading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(9).WorldSections.Heading
+msgctxt ",32960F624D642A7527E7DD887D0F178D"
+msgid "후반: 생태계를 무너뜨리는 거대 개체"
+msgstr "후반: 생태계를 무너뜨리는 거대 개체"
+
+#. Key:	E37E41654979FFFF6F7BD0BF713F6ED2
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(9).WorldSections.ReaderBody
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(9).WorldSections.ReaderBody
+msgctxt ",E37E41654979FFFF6F7BD0BF713F6ED2"
+msgid "조사 결과, 이상 에너지가 많이 축적된 지역들을 따라 이동하는 초대형 변이 개체가 확인된다. 이 개체 역시 동물의 변이에서 시작했지만, 오랜 축적 끝에 다른 괴수와 비교할 수 없는 규모로 성장했다.\n\n최종 보스는 모든 괴수에게 명령을 내리는 존재가 아니다. 이동과 에너지 흡수로 주변의 먹이와 서식 환경을 무너뜨려 다른 괴수들의 이동을 유발한다. 그 결과 인간의 거점에도 연쇄적인 피해가 발생한다.\n\n이 개체가 대규모 에너지 시설이 연결된 중심 구역에 도달하면, 축적된 에너지의 폭주와 시설의 연쇄 붕괴로 남은 거주권과 생태계가 광범위하게 파괴될 위험이 있다.\n\n플레이어는 탈환한 연구 시설의 자료로 약점과 이동 경로를 파악한다. 복구한 수송로로 연료와 부품을 운반하고, 여러 거점의 대장장이·정비사들이 모여 최종 출격을 준비한다. 본편 동안 복구한 거점망이 마지막 전투를 가능하게 한다."
+msgstr "조사 결과, 이상 에너지가 많이 축적된 지역들을 따라 이동하는 초대형 변이 개체가 확인된다. 이 개체 역시 동물의 변이에서 시작했지만, 오랜 축적 끝에 다른 괴수와 비교할 수 없는 규모로 성장했다.\n\n최종 보스는 모든 괴수에게 명령을 내리는 존재가 아니다. 이동과 에너지 흡수로 주변의 먹이와 서식 환경을 무너뜨려 다른 괴수들의 이동을 유발한다. 그 결과 인간의 거점에도 연쇄적인 피해가 발생한다.\n\n이 개체가 대규모 에너지 시설이 연결된 중심 구역에 도달하면, 축적된 에너지의 폭주와 시설의 연쇄 붕괴로 남은 거주권과 생태계가 광범위하게 파괴될 위험이 있다.\n\n플레이어는 탈환한 연구 시설의 자료로 약점과 이동 경로를 파악한다. 복구한 수송로로 연료와 부품을 운반하고, 여러 거점의 대장장이·정비사들이 모여 최종 출격을 준비한다. 본편 동안 복구한 거점망이 마지막 전투를 가능하게 한다."
+
+#. Key:	C39D34DD4588BF87CD21EC9EA40B3D11
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(9).WorldSections.ReaderHeading
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldSections(9).WorldSections.ReaderHeading
+msgctxt ",C39D34DD4588BF87CD21EC9EA40B3D11"
+msgid "거대한 위협"
+msgstr "거대한 위협"
+
+#. Key:	318709B44CFF05C9183187BDD8406CEC
+#. SourceLocation:	/Game/Knight/Data/DA_Codex.DA_Codex.WorldTitle
+#: /Game/Knight/Data/DA_Codex.DA_Codex.WorldTitle
+msgctxt ",318709B44CFF05C9183187BDD8406CEC"
+msgid "세계관 · 기록 보관소"
+msgstr "세계관 · 기록 보관소"
+
+#. Key:	499753824C6092436A5DEAA896DB8D9B
+#. SourceLocation:	/Game/Knight/Data/DA_HUDMessages.DA_HUDMessages.PartBrokenLines(0).PartBrokenLines
+#: /Game/Knight/Data/DA_HUDMessages.DA_HUDMessages.PartBrokenLines(0).PartBrokenLines
+msgctxt ",499753824C6092436A5DEAA896DB8D9B"
+msgid "머리 파손. 피해가 증가합니다."
+msgstr "머리 파손. 피해가 증가합니다."
+
+#. Key:	79E99DCC4D3CCD158BC83D8D5E1EF201
+#. SourceLocation:	/Game/Knight/Data/DA_HUDMessages.DA_HUDMessages.PartBrokenLines(1).PartBrokenLines
+#: /Game/Knight/Data/DA_HUDMessages.DA_HUDMessages.PartBrokenLines(1).PartBrokenLines
+msgctxt ",79E99DCC4D3CCD158BC83D8D5E1EF201"
+msgid "몸통 파손. 자세 유지력이 떨어집니다."
+msgstr "몸통 파손. 자세 유지력이 떨어집니다."
+
+#. Key:	649445D04BA05B4556AFBBB01E53E5C2
+#. SourceLocation:	/Game/Knight/Data/DA_HUDMessages.DA_HUDMessages.PartBrokenLines(2).PartBrokenLines
+#: /Game/Knight/Data/DA_HUDMessages.DA_HUDMessages.PartBrokenLines(2).PartBrokenLines
+msgctxt ",649445D04BA05B4556AFBBB01E53E5C2"
+msgid "팔 파손. 공격력이 떨어집니다."
+msgstr "팔 파손. 공격력이 떨어집니다."
+
+#. Key:	713B9CD645E00136796D1988078AD106
+#. SourceLocation:	/Game/Knight/Data/DA_HUDMessages.DA_HUDMessages.PartBrokenLines(3).PartBrokenLines
+#: /Game/Knight/Data/DA_HUDMessages.DA_HUDMessages.PartBrokenLines(3).PartBrokenLines
+msgctxt ",713B9CD645E00136796D1988078AD106"
+msgid "다리 파손. 이동 속도가 떨어집니다."
+msgstr "다리 파손. 이동 속도가 떨어집니다."
+
+#. Key:	44C7A1F94D3BE8BE8B9FE4985697B4A0
+#. SourceLocation:	/Game/Knight/Data/DA_HUDMessages.DA_HUDMessages.VoiceSubtitles(0).VoiceSubtitles.Line
+#: /Game/Knight/Data/DA_HUDMessages.DA_HUDMessages.VoiceSubtitles(0).VoiceSubtitles.Line
+msgctxt ",44C7A1F94D3BE8BE8B9FE4985697B4A0"
+msgid "시스템 기동. 전투 보조를 시작합니다."
+msgstr "시스템 기동. 전투 보조를 시작합니다."
+
+#. Key:	F5BDF768418FF0032F865485D5385EAF
+#. SourceLocation:	/Game/Knight/Data/DA_HUDMessages.DA_HUDMessages.VoiceSubtitles(1).VoiceSubtitles.Line
+#: /Game/Knight/Data/DA_HUDMessages.DA_HUDMessages.VoiceSubtitles(1).VoiceSubtitles.Line
+msgctxt ",F5BDF768418FF0032F865485D5385EAF"
+msgid "적 개체 감지. 교전을 준비하십시오."
+msgstr "적 개체 감지. 교전을 준비하십시오."
+
+#. Key:	561FECA342FA5D545440D58A2F95410D
+#. SourceLocation:	/Game/Knight/Data/DA_HUDMessages.DA_HUDMessages.VoiceSubtitles(2).VoiceSubtitles.Line
+#: /Game/Knight/Data/DA_HUDMessages.DA_HUDMessages.VoiceSubtitles(2).VoiceSubtitles.Line
+msgctxt ",561FECA342FA5D545440D58A2F95410D"
+msgid "전투 모드로 전환합니다."
+msgstr "전투 모드로 전환합니다."
+
+#. Key:	68ABE94846C89BC1B7FB599B03B05B3B
+#. SourceLocation:	/Game/Knight/Data/DA_HUDMessages.DA_HUDMessages.VoiceSubtitles(3).VoiceSubtitles.Line
+#: /Game/Knight/Data/DA_HUDMessages.DA_HUDMessages.VoiceSubtitles(3).VoiceSubtitles.Line
+msgctxt ",68ABE94846C89BC1B7FB599B03B05B3B"
+msgid "경고. 기체 손상이 심각합니다."
+msgstr "경고. 기체 손상이 심각합니다."
 
 #. Key:	00C3882047D288EE67F88E950878C9BF
 #. SourceLocation:	/Game/Knight/Data/Equipment/Heukgwan/DA_Equipment_Heukgwan_Body.DA_Equipment_Heukgwan_Body.Description
@@ -622,6 +1406,13 @@ msgctxt ",1BBA7BEF4CF025FCED49FC95D2AE229E"
 msgid "잔열 방어전"
 msgstr "잔열 방어전"
 
+#. Key:	70C5050E4238FD4F03A5F9BF0E79693B
+#. SourceLocation:	/Game/Knight/Data/Stage/DA_StageCatalog.DA_StageCatalog.Stages(0).Stages.RegionName
+#: /Game/Knight/Data/Stage/DA_StageCatalog.DA_StageCatalog.Stages(0).Stages.RegionName
+msgctxt ",70C5050E4238FD4F03A5F9BF0E79693B"
+msgid "북부 폐허 도시"
+msgstr "북부 폐허 도시"
+
 #. Key:	A2B2513E41025B1F33F814AA851411F8
 #. SourceLocation:	/Game/Knight/Data/Stage/DA_StageCatalog.DA_StageCatalog.Stages(1).Stages.Description
 #: /Game/Knight/Data/Stage/DA_StageCatalog.DA_StageCatalog.Stages(1).Stages.Description
@@ -635,6 +1426,13 @@ msgstr "잔향 탈환전 출격·귀환 테스트입니다."
 msgctxt ",07D5460F4EB9FA3560F7F2A4B5AC6C5C"
 msgid "잔향 탈환전"
 msgstr "잔향 탈환전"
+
+#. Key:	91DE94F843AA503E3F5BD0A0D4F84C2D
+#. SourceLocation:	/Game/Knight/Data/Stage/DA_StageCatalog.DA_StageCatalog.Stages(1).Stages.RegionName
+#: /Game/Knight/Data/Stage/DA_StageCatalog.DA_StageCatalog.Stages(1).Stages.RegionName
+msgctxt ",91DE94F843AA503E3F5BD0A0D4F84C2D"
+msgid "서부 해안 기지"
+msgstr "서부 해안 기지"
 
 #. Key:	1A6EA2A746A287FDF37C01B7DD3815B5
 #. SourceLocation:	/Game/Knight/Data/Stage/DA_StageCatalog.DA_StageCatalog.Stages(2).Stages.Description
@@ -650,6 +1448,13 @@ msgctxt ",1839557C41DF91B825F50FA4046110FA"
 msgid "강화 잔향전"
 msgstr "강화 잔향전"
 
+#. Key:	9C6A88D64B2B1FA51D6E568762A53719
+#. SourceLocation:	/Game/Knight/Data/Stage/DA_StageCatalog.DA_StageCatalog.Stages(2).Stages.RegionName
+#: /Game/Knight/Data/Stage/DA_StageCatalog.DA_StageCatalog.Stages(2).Stages.RegionName
+msgctxt ",9C6A88D64B2B1FA51D6E568762A53719"
+msgid "동부 협곡"
+msgstr "동부 협곡"
+
 #. Key:	D2B337E147607DC33264F3B8BA1EDB9C
 #. SourceLocation:	/Game/Knight/Data/Stage/DA_StageCatalog.DA_StageCatalog.Stages(3).Stages.Description
 #: /Game/Knight/Data/Stage/DA_StageCatalog.DA_StageCatalog.Stages(3).Stages.Description
@@ -663,6 +1468,13 @@ msgstr "개발 전용 레이드 흐름·저장 검증"
 msgctxt ",520228F843F9B86E9958C1BCA8DC28D1"
 msgid "코어 레이드 검증"
 msgstr "코어 레이드 검증"
+
+#. Key:	4CC13CCB498FF542BF13D4B0848912A8
+#. SourceLocation:	/Game/Knight/Data/Stage/DA_StageCatalog.DA_StageCatalog.Stages(3).Stages.RegionName
+#: /Game/Knight/Data/Stage/DA_StageCatalog.DA_StageCatalog.Stages(3).Stages.RegionName
+msgctxt ",4CC13CCB498FF542BF13D4B0848912A8"
+msgid "남부 시험장"
+msgstr "남부 시험장"
 
 #. Key:	45E941C0419EF2FEBE431291E2281A7F
 #. SourceLocation:	/Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PlayerMappableKeySettings_0.DisplayCategory
@@ -685,6 +1497,13 @@ msgctxt ",1C118EC64CCA2F72A9785A891DA4EF61"
 msgid "전투"
 msgstr "전투"
 
+#. Key:	733C1F0C4A049FECDF5CC7BFEC6A5FB1
+#. SourceLocation:	/Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PlayerMappableKeySettings_1.DisplayName
+#: /Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PlayerMappableKeySettings_1.DisplayName
+msgctxt ",733C1F0C4A049FECDF5CC7BFEC6A5FB1"
+msgid "수리 키트 사용"
+msgstr "수리 키트 사용"
+
 #. Key:	9403BE204A700D0DC6BE97994CABDD1B
 #. SourceLocation:	/Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PlayerMappableKeySettings_2.DisplayCategory
 #: /Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PlayerMappableKeySettings_2.DisplayCategory
@@ -706,12 +1525,110 @@ msgctxt ",6B0700584D23271E24E00998EDEC9A83"
 msgid "전투"
 msgstr "전투"
 
+#. Key:	AD53CBBD468578C4DA822A95AD6EF880
+#. SourceLocation:	/Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PlayerMappableKeySettings_3.DisplayName
+#: /Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PlayerMappableKeySettings_3.DisplayName
+msgctxt ",AD53CBBD468578C4DA822A95AD6EF880"
+msgid "스탠스 전환"
+msgstr "스탠스 전환"
+
+#. Key:	180D6FF24AF14C7AFA0B2C802A67A0FE
+#. SourceLocation:	/Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PMKS_AttackPrimary.DisplayCategory
+#: /Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PMKS_AttackPrimary.DisplayCategory
+msgctxt ",180D6FF24AF14C7AFA0B2C802A67A0FE"
+msgid "전투"
+msgstr "전투"
+
+#. Key:	0DC6EE844937CC926EF9D3A775EBDA0D
+#. SourceLocation:	/Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PMKS_AttackPrimary.DisplayName
+#: /Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PMKS_AttackPrimary.DisplayName
+msgctxt ",0DC6EE844937CC926EF9D3A775EBDA0D"
+msgid "기본 공격"
+msgstr "기본 공격"
+
+#. Key:	F762FB894E9B3BAD3D7B6DB9F9671F50
+#. SourceLocation:	/Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PMKS_AttackSecondary.DisplayCategory
+#: /Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PMKS_AttackSecondary.DisplayCategory
+msgctxt ",F762FB894E9B3BAD3D7B6DB9F9671F50"
+msgid "전투"
+msgstr "전투"
+
+#. Key:	EA6409604D7FF8C1BFC3429381D2A3DE
+#. SourceLocation:	/Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PMKS_AttackSecondary.DisplayName
+#: /Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PMKS_AttackSecondary.DisplayName
+msgctxt ",EA6409604D7FF8C1BFC3429381D2A3DE"
+msgid "강공격"
+msgstr "강공격"
+
+#. Key:	A8D2C739422F4CA078A4EE99D8C7EDFE
+#. SourceLocation:	/Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PMKS_Boost.DisplayCategory
+#: /Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PMKS_Boost.DisplayCategory
+msgctxt ",A8D2C739422F4CA078A4EE99D8C7EDFE"
+msgid "전투"
+msgstr "전투"
+
 #. Key:	96E1BB6D470FDA434F99108D2D41E6D9
 #. SourceLocation:	/Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PMKS_Boost.DisplayName
 #: /Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PMKS_Boost.DisplayName
 msgctxt ",96E1BB6D470FDA434F99108D2D41E6D9"
 msgid "회피"
 msgstr "회피"
+
+#. Key:	DEB0072E48216E3D3B4EC6B882A4775C
+#. SourceLocation:	/Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PMKS_Guard.DisplayCategory
+#: /Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PMKS_Guard.DisplayCategory
+msgctxt ",DEB0072E48216E3D3B4EC6B882A4775C"
+msgid "전투"
+msgstr "전투"
+
+#. Key:	BBFEE0AA42CE3E977AEBD189089FC094
+#. SourceLocation:	/Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PMKS_Guard.DisplayName
+#: /Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PMKS_Guard.DisplayName
+msgctxt ",BBFEE0AA42CE3E977AEBD189089FC094"
+msgid "가드"
+msgstr "가드"
+
+#. Key:	6AE50E844493C00DA943ECA0A33A5DAF
+#. SourceLocation:	/Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PMKS_LockOn.DisplayCategory
+#: /Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PMKS_LockOn.DisplayCategory
+msgctxt ",6AE50E844493C00DA943ECA0A33A5DAF"
+msgid "전투"
+msgstr "전투"
+
+#. Key:	88EDD44845910FC57AC22A82B18BF94A
+#. SourceLocation:	/Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PMKS_LockOn.DisplayName
+#: /Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PMKS_LockOn.DisplayName
+msgctxt ",88EDD44845910FC57AC22A82B18BF94A"
+msgid "락온"
+msgstr "락온"
+
+#. Key:	F4326FE94F33D04317FDE09AF2084077
+#. SourceLocation:	/Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PMKS_LockOnLeft.DisplayCategory
+#: /Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PMKS_LockOnLeft.DisplayCategory
+msgctxt ",F4326FE94F33D04317FDE09AF2084077"
+msgid "전투"
+msgstr "전투"
+
+#. Key:	0D07945E463534BC9CD006AEF08A10B6
+#. SourceLocation:	/Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PMKS_LockOnLeft.DisplayName
+#: /Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PMKS_LockOnLeft.DisplayName
+msgctxt ",0D07945E463534BC9CD006AEF08A10B6"
+msgid "락온 대상 왼쪽"
+msgstr "락온 대상 왼쪽"
+
+#. Key:	7BF6B1E345CDE195BAD73CBEF01B69B4
+#. SourceLocation:	/Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PMKS_LockOnRight.DisplayCategory
+#: /Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PMKS_LockOnRight.DisplayCategory
+msgctxt ",7BF6B1E345CDE195BAD73CBEF01B69B4"
+msgid "전투"
+msgstr "전투"
+
+#. Key:	4E00D84F43F35A7A0470DD85E83A6263
+#. SourceLocation:	/Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PMKS_LockOnRight.DisplayName
+#: /Game/Knight/Input/IMC_Knight_Combat.IMC_Knight_Combat:PMKS_LockOnRight.DisplayName
+msgctxt ",4E00D84F43F35A7A0470DD85E83A6263"
+msgid "락온 대상 오른쪽"
+msgstr "락온 대상 오른쪽"
 
 #. Key:	85EF54A54F83418DEC105094C9FCF455
 #. SourceLocation:	/Game/Knight/Items/Dev/DA_CoreTestMaterial.DA_CoreTestMaterial.Description
@@ -1203,6 +2120,97 @@ msgctxt ",B38DC4BD4A5048A4E8E3FEBD890BC2EE"
 msgid "시험용 몸통"
 msgstr "시험용 몸통"
 
+#. Key:	6BB83CEC48B97EAE36677FBABA473783
+#. SourceLocation:	/Game/Knight/Items/Sockets/DA_Socket_AttackEfficiency.DA_Socket_AttackEfficiency.Description
+#: /Game/Knight/Items/Sockets/DA_Socket_AttackEfficiency.DA_Socket_AttackEfficiency.Description
+msgctxt ",6BB83CEC48B97EAE36677FBABA473783"
+msgid "공격 스태미너 소모량이 10% 감소합니다."
+msgstr "공격 스태미너 소모량이 10% 감소합니다."
+
+#. Key:	D5D4420140C1BDF23AE214A369282E4E
+#. SourceLocation:	/Game/Knight/Items/Sockets/DA_Socket_AttackEfficiency.DA_Socket_AttackEfficiency.DisplayName
+#: /Game/Knight/Items/Sockets/DA_Socket_AttackEfficiency.DA_Socket_AttackEfficiency.DisplayName
+msgctxt ",D5D4420140C1BDF23AE214A369282E4E"
+msgid "공격 효율 모듈"
+msgstr "공격 효율 모듈"
+
+#. Key:	9749AE3041272215B6B352BD90F7212A
+#. SourceLocation:	/Game/Knight/Items/Sockets/DA_Socket_ChargeAssist.DA_Socket_ChargeAssist.Description
+#: /Game/Knight/Items/Sockets/DA_Socket_ChargeAssist.DA_Socket_ChargeAssist.Description
+msgctxt ",9749AE3041272215B6B352BD90F7212A"
+msgid "퍼펙트 가드로 수리키트를 채우는 데 필요한 횟수가 1번 줄어듭니다."
+msgstr "퍼펙트 가드로 수리키트를 채우는 데 필요한 횟수가 1번 줄어듭니다."
+
+#. Key:	CDEB01F94A6EC490F630449F5D159518
+#. SourceLocation:	/Game/Knight/Items/Sockets/DA_Socket_ChargeAssist.DA_Socket_ChargeAssist.DisplayName
+#: /Game/Knight/Items/Sockets/DA_Socket_ChargeAssist.DA_Socket_ChargeAssist.DisplayName
+msgctxt ",CDEB01F94A6EC490F630449F5D159518"
+msgid "충전 보조 모듈"
+msgstr "충전 보조 모듈"
+
+#. Key:	9980D3614C39D3FBFB62C6BEB74CAEAD
+#. SourceLocation:	/Game/Knight/Items/Sockets/DA_Socket_CoolantCycle.DA_Socket_CoolantCycle.Description
+#: /Game/Knight/Items/Sockets/DA_Socket_CoolantCycle.DA_Socket_CoolantCycle.Description
+msgctxt ",9980D3614C39D3FBFB62C6BEB74CAEAD"
+msgid "스태미너 회복량이 10% 증가합니다."
+msgstr "스태미너 회복량이 10% 증가합니다."
+
+#. Key:	0418B7CC4C66EEDE5364419C915B081F
+#. SourceLocation:	/Game/Knight/Items/Sockets/DA_Socket_CoolantCycle.DA_Socket_CoolantCycle.DisplayName
+#: /Game/Knight/Items/Sockets/DA_Socket_CoolantCycle.DA_Socket_CoolantCycle.DisplayName
+msgctxt ",0418B7CC4C66EEDE5364419C915B081F"
+msgid "냉각 순환 모듈"
+msgstr "냉각 순환 모듈"
+
+#. Key:	23CC328645BE83D337906D8F59E0CE4A
+#. SourceLocation:	/Game/Knight/Items/Sockets/DA_Socket_FullPower.DA_Socket_FullPower.Description
+#: /Game/Knight/Items/Sockets/DA_Socket_FullPower.DA_Socket_FullPower.Description
+msgctxt ",23CC328645BE83D337906D8F59E0CE4A"
+msgid "체력이 가득 찼을 때 공격력이 10% 증가합니다."
+msgstr "체력이 가득 찼을 때 공격력이 10% 증가합니다."
+
+#. Key:	68C07F7840197AC09B98F38853C8C5D4
+#. SourceLocation:	/Game/Knight/Items/Sockets/DA_Socket_FullPower.DA_Socket_FullPower.DisplayName
+#: /Game/Knight/Items/Sockets/DA_Socket_FullPower.DA_Socket_FullPower.DisplayName
+msgctxt ",68C07F7840197AC09B98F38853C8C5D4"
+msgid "완전 출력 모듈"
+msgstr "완전 출력 모듈"
+
+#. Key:	3689233C43AFB42A02034B8BF1DB2C05
+#. SourceLocation:	/Game/Knight/Items/Sockets/DA_Socket_LoadReinforce.DA_Socket_LoadReinforce.Description
+#: /Game/Knight/Items/Sockets/DA_Socket_LoadReinforce.DA_Socket_LoadReinforce.Description
+msgctxt ",3689233C43AFB42A02034B8BF1DB2C05"
+msgid "장비 중량 한계가 20% 증가합니다."
+msgstr "장비 중량 한계가 20% 증가합니다."
+
+#. Key:	ED1C81DD437AF72EAC0558A9F97B5441
+#. SourceLocation:	/Game/Knight/Items/Sockets/DA_Socket_LoadReinforce.DA_Socket_LoadReinforce.DisplayName
+#: /Game/Knight/Items/Sockets/DA_Socket_LoadReinforce.DA_Socket_LoadReinforce.DisplayName
+msgctxt ",ED1C81DD437AF72EAC0558A9F97B5441"
+msgid "적재 보강 모듈"
+msgstr "적재 보강 모듈"
+
+#. Key:	2631C69F4803D25BC3FFA499AD611AAA
+#. SourceLocation:	/Game/Knight/Items/Sockets/DA_Socket_RepairExpansion.DA_Socket_RepairExpansion.Description
+#: /Game/Knight/Items/Sockets/DA_Socket_RepairExpansion.DA_Socket_RepairExpansion.Description
+msgctxt ",2631C69F4803D25BC3FFA499AD611AAA"
+msgid "수리키트 최대 보유량이 1 증가합니다."
+msgstr "수리키트 최대 보유량이 1 증가합니다."
+
+#. Key:	022247A44DB75D67310A20AE32A13219
+#. SourceLocation:	/Game/Knight/Items/Sockets/DA_Socket_RepairExpansion.DA_Socket_RepairExpansion.DisplayName
+#: /Game/Knight/Items/Sockets/DA_Socket_RepairExpansion.DA_Socket_RepairExpansion.DisplayName
+msgctxt ",022247A44DB75D67310A20AE32A13219"
+msgid "수리 확장 모듈"
+msgstr "수리 확장 모듈"
+
+#. Key:	EDA316CA4D259AAB233EF49FBD7B30F1
+#. SourceLocation:	/Game/Knight/UI/Common/WBP_KnightButton.Default__WBP_KnightButton_C.ButtonText
+#: /Game/Knight/UI/Common/WBP_KnightButton.Default__WBP_KnightButton_C.ButtonText
+msgctxt ",EDA316CA4D259AAB233EF49FBD7B30F1"
+msgid "버튼"
+msgstr "버튼"
+
 #. Key:	ButtonPlaceholder
 #. SourceLocation:	/Game/Knight/UI/Common/WBP_KnightButton.WBP_KnightButton_C:WidgetTree.Txt_Label.Text
 #: /Game/Knight/UI/Common/WBP_KnightButton.WBP_KnightButton_C:WidgetTree.Txt_Label.Text
@@ -1251,6 +2259,153 @@ msgstr "공격 직전에 가드하면 퍼펙트 가드"
 msgctxt "knightUI,ObjectivePlaceholder"
 msgid "잔열 토벌"
 msgstr "잔열 토벌"
+
+#. Key:	B9ACF98141AFBB966EFCF59132ACF6F6
+#. SourceLocation:	/Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Label_ArchiveSubtitle.Text
+#: /Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Label_ArchiveSubtitle.Text
+msgctxt ",B9ACF98141AFBB966EFCF59132ACF6F6"
+msgid "기체 내 기록 보관소"
+msgstr "기체 내 기록 보관소"
+
+#. Key:	94E6DEF14D4BA4C3E9BD9D91F88F7EEB
+#. SourceLocation:	/Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Label_Button_Close.Text
+#: /Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Label_Button_Close.Text
+msgctxt ",94E6DEF14D4BA4C3E9BD9D91F88F7EEB"
+msgid "닫기"
+msgstr "닫기"
+
+#. Key:	779E2342477929A8DD0750A07199CF57
+#. SourceLocation:	/Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Label_Button_Mech.Text
+#: /Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Label_Button_Mech.Text
+msgctxt ",779E2342477929A8DD0750A07199CF57"
+msgid "기체 설명"
+msgstr "기체 설명"
+
+#. Key:	EF6884524925002E24A4C682F8CBF657
+#. SourceLocation:	/Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Label_Button_Monster.Text
+#: /Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Label_Button_Monster.Text
+msgctxt ",EF6884524925002E24A4C682F8CBF657"
+msgid "몬스터"
+msgstr "몬스터"
+
+#. Key:	4F1E6471469FED0E1A2D87947C4E3056
+#. SourceLocation:	/Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Label_Button_World.Text
+#: /Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Label_Button_World.Text
+msgctxt ",4F1E6471469FED0E1A2D87947C4E3056"
+msgid "세계관"
+msgstr "세계관"
+
+#. Key:	BD10309B48D55863B4B8BA97A20A2700
+#. SourceLocation:	/Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Label_Codex.Text
+#: /Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Label_Codex.Text
+msgctxt ",BD10309B48D55863B4B8BA97A20A2700"
+msgid "도감"
+msgstr "도감"
+
+#. Key:	4A00E9354BA6D37071763B9B259B3BE2
+#. SourceLocation:	/Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Label_CodexControls.Text
+#: /Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Label_CodexControls.Text
+msgctxt ",4A00E9354BA6D37071763B9B259B3BE2"
+msgid "마우스 휠  스크롤     Esc  뒤로"
+msgstr "마우스 휠  스크롤     Esc  뒤로"
+
+#. Key:	B7815A19407EFEE0D52BB08188D0B74A
+#. SourceLocation:	/Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Label_CodexEntries.Text
+#: /Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Label_CodexEntries.Text
+msgctxt ",B7815A19407EFEE0D52BB08188D0B74A"
+msgid "세계관 기록"
+msgstr "세계관 기록"
+
+#. Key:	11EF2E4E4F4CEDEBA03502A1B25DAE63
+#. SourceLocation:	/Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Label_CodexHints.Text
+#: /Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Label_CodexHints.Text
+msgctxt ",11EF2E4E4F4CEDEBA03502A1B25DAE63"
+msgid "항목을 선택하여 기록을 열람하세요."
+msgstr "항목을 선택하여 기록을 열람하세요."
+
+#. Key:	1141CDE546015BABE6E8869D7B143235
+#. SourceLocation:	/Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Label_Drops.Text
+#: /Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Label_Drops.Text
+msgctxt ",1141CDE546015BABE6E8869D7B143235"
+msgid "드랍 아이템"
+msgstr "드랍 아이템"
+
+#. Key:	1BEE17D8474D478A6801A5A69F0E5633
+#. SourceLocation:	/Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Text_BossDescription.Text
+#: /Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Text_BossDescription.Text
+msgctxt ",1BEE17D8474D478A6801A5A69F0E5633"
+msgid "설명 준비 중"
+msgstr "설명 준비 중"
+
+#. Key:	EB88D38C423C7EB7BD07D9A3C7C02CF9
+#. SourceLocation:	/Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Text_BossName.Text
+#: /Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Text_BossName.Text
+msgctxt ",EB88D38C423C7EB7BD07D9A3C7C02CF9"
+msgid "몬스터 기록"
+msgstr "몬스터 기록"
+
+#. Key:	88247FE84E94516E9FE8AA888E97DE7A
+#. SourceLocation:	/Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Text_MechBody.Text
+#: /Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Text_MechBody.Text
+msgctxt ",88247FE84E94516E9FE8AA888E97DE7A"
+msgid "설명 준비 중"
+msgstr "설명 준비 중"
+
+#. Key:	67F685704179956FE397278EDA236837
+#. SourceLocation:	/Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Text_MechTitle.Text
+#: /Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Text_MechTitle.Text
+msgctxt ",67F685704179956FE397278EDA236837"
+msgid "기체 설명"
+msgstr "기체 설명"
+
+#. Key:	471E9690421FF82B760F94BA7A4770E8
+#. SourceLocation:	/Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Text_NoBosses.Text
+#: /Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Text_NoBosses.Text
+msgctxt ",471E9690421FF82B760F94BA7A4770E8"
+msgid "등록된 몬스터가 없습니다."
+msgstr "등록된 몬스터가 없습니다."
+
+#. Key:	A5AF98EC4A909BBDC624BAB328C8CCA8
+#. SourceLocation:	/Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Text_NoDrops.Text
+#: /Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Text_NoDrops.Text
+msgctxt ",A5AF98EC4A909BBDC624BAB328C8CCA8"
+msgid "등록된 드랍 정보가 없습니다."
+msgstr "등록된 드랍 정보가 없습니다."
+
+#. Key:	CCAE2E524EFD1584011F0AA3E30BBC5E
+#. SourceLocation:	/Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Text_WorldBody.Text
+#: /Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Text_WorldBody.Text
+msgctxt ",CCAE2E524EFD1584011F0AA3E30BBC5E"
+msgid "설명 준비 중"
+msgstr "설명 준비 중"
+
+#. Key:	E786210342DCD9AABFFE67A13DA3A3A0
+#. SourceLocation:	/Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Text_WorldTitle.Text
+#: /Game/Knight/UI/Menu/Codex/WBP_KnightCodex.WBP_KnightCodex_C:WidgetTree.Text_WorldTitle.Text
+msgctxt ",E786210342DCD9AABFFE67A13DA3A3A0"
+msgid "세계관"
+msgstr "세계관"
+
+#. Key:	B8836CCF4044B2D29A1A20B3F995A048
+#. SourceLocation:	/Game/Knight/UI/Menu/Codex/WBP_KnightCodexBossEntry.WBP_KnightCodexBossEntry_C:WidgetTree.Text_LockState.Text
+#: /Game/Knight/UI/Menu/Codex/WBP_KnightCodexBossEntry.WBP_KnightCodexBossEntry_C:WidgetTree.Text_LockState.Text
+msgctxt ",B8836CCF4044B2D29A1A20B3F995A048"
+msgid "미해금"
+msgstr "미해금"
+
+#. Key:	E45F08E14BB94E62B61289BD6CC35156
+#. SourceLocation:	/Game/Knight/UI/Menu/Codex/WBP_KnightCodexBossEntry.WBP_KnightCodexBossEntry_C:WidgetTree.Text_Name.Text
+#: /Game/Knight/UI/Menu/Codex/WBP_KnightCodexBossEntry.WBP_KnightCodexBossEntry_C:WidgetTree.Text_Name.Text
+msgctxt ",E45F08E14BB94E62B61289BD6CC35156"
+msgid "몬스터"
+msgstr "몬스터"
+
+#. Key:	126788C94ADAE41CDE66E7B2DB75AC1A
+#. SourceLocation:	/Game/Knight/UI/Menu/Codex/WBP_KnightCodexDropEntry.WBP_KnightCodexDropEntry_C:WidgetTree.Text_Name.Text
+#: /Game/Knight/UI/Menu/Codex/WBP_KnightCodexDropEntry.WBP_KnightCodexDropEntry_C:WidgetTree.Text_Name.Text
+msgctxt ",126788C94ADAE41CDE66E7B2DB75AC1A"
+msgid "아이템"
+msgstr "아이템"
 
 #. Key:	MaintenanceArmor
 #. SourceLocation:	/Game/Knight/UI/Menu/Maintenance/WBP_KnightMaintenance.WBP_KnightMaintenance_C:WidgetTree.Btn_Armor.ButtonText
@@ -1524,6 +2679,13 @@ msgstr "드래그"
 msgctxt "knightUI,KeyClick"
 msgid "클릭"
 msgstr "클릭"
+
+#. Key:	5CF2525B4B53A3F96AEA228D1A8874C9
+#. SourceLocation:	/Game/Knight/UI/Menu/WBP_KnightMainMenu.WBP_KnightMainMenu_C:WidgetTree.Panel_StageHints_Label0.Text
+#: /Game/Knight/UI/Menu/WBP_KnightMainMenu.WBP_KnightMainMenu_C:WidgetTree.Panel_StageHints_Label0.Text
+msgctxt ",5CF2525B4B53A3F96AEA228D1A8874C9"
+msgid "이동"
+msgstr "이동"
 
 #. Key:	HintSelectRegion
 #. SourceLocation:	/Game/Knight/UI/Menu/WBP_KnightMainMenu.WBP_KnightMainMenu_C:WidgetTree.Panel_StageHints_Label1.Text
@@ -5306,568 +6468,568 @@ msgid "그래픽 설정을 저장하지 못했습니다. 저장 위치를 확인
 msgstr "그래픽 설정을 저장하지 못했습니다. 저장 위치를 확인해 주세요."
 
 #. Key:	TabGraphics
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(157)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(157)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(169)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(169)
 msgctxt "KnightSettingsScreen,TabGraphics"
 msgid "그래픽"
 msgstr "그래픽"
 
 #. Key:	TabControls
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(158)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(158)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(170)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(170)
 msgctxt "KnightSettingsScreen,TabControls"
 msgid "조작"
 msgstr "조작"
 
 #. Key:	TabAudio
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(159)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(159)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(171)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(171)
 msgctxt "KnightSettingsScreen,TabAudio"
 msgid "소리"
 msgstr "소리"
 
 #. Key:	TabCalibration
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(160)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(160)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(172)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(172)
 msgctxt "KnightSettingsScreen,TabCalibration"
 msgid "화면 보정"
 msgstr "화면 보정"
 
 #. Key:	Unavailable
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(183)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(183)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(195)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(195)
 msgctxt "KnightSettingsScreen,Unavailable"
 msgid "설정을 불러오지 못했습니다."
 msgstr "설정을 불러오지 못했습니다."
 
 #. Key:	WindowMode
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(307)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(307)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(319)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(319)
 msgctxt "KnightSettingsScreen,WindowMode"
 msgid "화면 모드"
 msgstr "화면 모드"
 
 #. Key:	WindowModeDesc
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(308)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(308)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(320)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(320)
 msgctxt "KnightSettingsScreen,WindowModeDesc"
 msgid "전체 화면: 화면을 독점해 지연이 가장 적습니다.\n창 모드: 다른 창과 함께 씁니다.\n테두리 없는 창: 데스크톱 해상도로 전환이 빠릅니다."
 msgstr "전체 화면: 화면을 독점해 지연이 가장 적습니다.\n창 모드: 다른 창과 함께 씁니다.\n테두리 없는 창: 데스크톱 해상도로 전환이 빠릅니다."
 
 #. Key:	Display
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(314)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(314)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(326)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(326)
 msgctxt "KnightSettingsScreen,Display"
 msgid "표시 모니터"
 msgstr "표시 모니터"
 
 #. Key:	DisplayDesc
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(315)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(315)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(327)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(327)
 msgctxt "KnightSettingsScreen,DisplayDesc"
 msgid "게임 창을 표시할 모니터입니다. 적용 후 화면이 보이지 않으면 자동으로 이전 모니터로 돌아갑니다."
 msgstr "게임 창을 표시할 모니터입니다. 적용 후 화면이 보이지 않으면 자동으로 이전 모니터로 돌아갑니다."
 
 #. Key:	Resolution
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(323)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(323)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(335)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(335)
 msgctxt "KnightSettingsScreen,Resolution"
 msgid "해상도"
 msgstr "해상도"
 
 #. Key:	ResolutionDesc
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(324)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(324)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(336)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(336)
 msgctxt "KnightSettingsScreen,ResolutionDesc"
 msgid "화면을 그리는 해상도입니다. 테두리 없는 창에서는 데스크톱 해상도를 씁니다."
 msgstr "화면을 그리는 해상도입니다. 테두리 없는 창에서는 데스크톱 해상도를 씁니다."
 
 #. Key:	FPS
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(326)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(326)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(338)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(338)
 msgctxt "KnightSettingsScreen,FPS"
 msgid "FPS 제한"
 msgstr "FPS 제한"
 
 #. Key:	FPSDesc
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(326)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(326)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(338)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(338)
 msgctxt "KnightSettingsScreen,FPSDesc"
 msgid "초당 프레임 상한입니다. 모니터 주사율에 맞추면 안정적입니다."
 msgstr "초당 프레임 상한입니다. 모니터 주사율에 맞추면 안정적입니다."
 
 #. Key:	VSyncDesc
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(328)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(328)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(340)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(340)
 msgctxt "KnightSettingsScreen,VSyncDesc"
 msgid "화면 찢어짐을 막습니다. 입력 지연이 조금 늘어납니다."
 msgstr "화면 찢어짐을 막습니다. 입력 지연이 조금 늘어납니다."
 
 #. Key:	Preset
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(331)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(331)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(343)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(343)
 msgctxt "KnightSettingsScreen,Preset"
 msgid "전체 품질"
 msgstr "전체 품질"
 
 #. Key:	PresetDesc
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(331)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(331)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(343)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(343)
 msgctxt "KnightSettingsScreen,PresetDesc"
 msgid "아래 품질 항목을 한 번에 바꿉니다."
 msgstr "아래 품질 항목을 한 번에 바꿉니다."
 
 #. Key:	DLSSDesc
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(341)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(341)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(353)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(353)
 msgctxt "KnightSettingsScreen,DLSSDesc"
 msgid "Super Resolution입니다. 적용하면 렌더 해상도와 동적 해상도를 DLSS가 제어합니다. 끄면 이전 설정으로 돌아갑니다."
 msgstr "Super Resolution입니다. 적용하면 렌더 해상도와 동적 해상도를 DLSS가 제어합니다. 끄면 이전 설정으로 돌아갑니다."
 
 #. Key:	DLSSUnavailable
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(342)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(342)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(354)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(354)
 msgctxt "KnightSettingsScreen,DLSSUnavailable"
 msgid "현재 환경에서 지원하지 않습니다."
 msgstr "현재 환경에서 지원하지 않습니다."
 
 #. Key:	AA
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(344)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(344)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(356)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(356)
 msgctxt "KnightSettingsScreen,AA"
 msgid "안티앨리어싱"
 msgstr "안티앨리어싱"
 
 #. Key:	AADLSSDesc
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(346)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(346)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(358)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(358)
 msgctxt "KnightSettingsScreen,AADLSSDesc"
 msgid "DLSS 사용 중에는 DLSS가 화면의 계단 현상을 처리합니다. 끄면 이전 품질 설정이 복원됩니다."
 msgstr "DLSS 사용 중에는 DLSS가 화면의 계단 현상을 처리합니다. 끄면 이전 품질 설정이 복원됩니다."
 
 #. Key:	AADesc
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(347)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(347)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(359)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(359)
 msgctxt "KnightSettingsScreen,AADesc"
 msgid "물체 가장자리의 계단 현상을 줄입니다."
 msgstr "물체 가장자리의 계단 현상을 줄입니다."
 
 #. Key:	Shadows
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(350)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(350)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(362)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(362)
 msgctxt "KnightSettingsScreen,Shadows"
 msgid "그림자"
 msgstr "그림자"
 
 #. Key:	ShadowsDesc
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(350)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(350)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(362)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(362)
 msgctxt "KnightSettingsScreen,ShadowsDesc"
 msgid "그림자의 선명도와 거리입니다. 성능 영향이 큽니다."
 msgstr "그림자의 선명도와 거리입니다. 성능 영향이 큽니다."
 
 #. Key:	Textures
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(351)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(351)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(363)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(363)
 msgctxt "KnightSettingsScreen,Textures"
 msgid "텍스처"
 msgstr "텍스처"
 
 #. Key:	TexturesDesc
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(351)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(351)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(363)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(363)
 msgctxt "KnightSettingsScreen,TexturesDesc"
 msgid "표면 이미지의 해상도입니다. 그래픽 메모리를 씁니다."
 msgstr "표면 이미지의 해상도입니다. 그래픽 메모리를 씁니다."
 
 #. Key:	Effects
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(352)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(352)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(364)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(364)
 msgctxt "KnightSettingsScreen,Effects"
 msgid "이펙트"
 msgstr "이펙트"
 
 #. Key:	Post
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(353)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(353)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(365)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(365)
 msgctxt "KnightSettingsScreen,Post"
 msgid "후처리"
 msgstr "후처리"
 
 #. Key:	PostDesc
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(353)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(353)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(365)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(365)
 msgctxt "KnightSettingsScreen,PostDesc"
 msgid "블룸, 피사계 심도 같은 화면 효과의 품질입니다."
 msgstr "블룸, 피사계 심도 같은 화면 효과의 품질입니다."
 
 #. Key:	View
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(354)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(354)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(366)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(366)
 msgctxt "KnightSettingsScreen,View"
 msgid "시야 거리"
 msgstr "시야 거리"
 
 #. Key:	Motion
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(355)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(355)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(367)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(367)
 msgctxt "KnightSettingsScreen,Motion"
 msgid "모션 블러"
 msgstr "모션 블러"
 
 #. Key:	MotionDesc
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(355)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(355)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(367)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(367)
 msgctxt "KnightSettingsScreen,MotionDesc"
 msgid "빠르게 움직일 때 화면을 흐리게 합니다."
 msgstr "빠르게 움직일 때 화면을 흐리게 합니다."
 
 #. Key:	DisplayNote
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(356)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(356)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(368)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(368)
 msgctxt "KnightSettingsScreen,DisplayNote"
 msgid "화면 모드·표시 모니터·해상도는 적용 후 {0}초 안에 유지를 고르지 않으면 이전 값으로 돌아갑니다."
 msgstr "화면 모드·표시 모니터·해상도는 적용 후 {0}초 안에 유지를 고르지 않으면 이전 값으로 돌아갑니다."
 
 #. Key:	Sensitivity
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(362)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(362)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(374)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(374)
 msgctxt "KnightSettingsScreen,Sensitivity"
 msgid "마우스 감도"
 msgstr "마우스 감도"
 
 #. Key:	SensitivityDesc
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(362)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(362)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(374)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(374)
 msgctxt "KnightSettingsScreen,SensitivityDesc"
 msgid "시점이 도는 속도입니다. 100이 기본값입니다."
 msgstr "시점이 도는 속도입니다. 100이 기본값입니다."
 
 #. Key:	Acceleration
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(363)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(363)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(375)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(375)
 msgctxt "KnightSettingsScreen,Acceleration"
 msgid "마우스 가속"
 msgstr "마우스 가속"
 
 #. Key:	AccelerationDesc
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(363)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(363)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(375)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(375)
 msgctxt "KnightSettingsScreen,AccelerationDesc"
 msgid "마우스를 빠르게 움직일수록 시점이 더 많이 돕니다."
 msgstr "마우스를 빠르게 움직일수록 시점이 더 많이 돕니다."
 
 #. Key:	KeyDesc
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(374)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(374)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(386)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(386)
 msgctxt "KnightSettingsScreen,KeyDesc"
 msgid "Enter 또는 클릭 후 새 키를 누르세요. Esc를 누르면 취소합니다."
 msgstr "Enter 또는 클릭 후 새 키를 누르세요. Esc를 누르면 취소합니다."
 
 #. Key:	NoMappings
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(379)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(379)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(391)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(391)
 msgctxt "KnightSettingsScreen,NoMappings"
 msgid "변경 가능한 입력이 없습니다. Input Mapping Context의 Player Mappable 설정을 확인해 주세요."
 msgstr "변경 가능한 입력이 없습니다. Input Mapping Context의 Player Mappable 설정을 확인해 주세요."
 
 #. Key:	ReservedEscape
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(380)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(380)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(392)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(392)
 msgctxt "KnightSettingsScreen,ReservedEscape"
 msgid "Esc는 메뉴 열기와 닫기에 예약되어 있습니다."
 msgstr "Esc는 메뉴 열기와 닫기에 예약되어 있습니다."
 
 #. Key:	Master
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(385)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(385)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(397)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(397)
 msgctxt "KnightSettingsScreen,Master"
 msgid "마스터"
 msgstr "마스터"
 
 #. Key:	SFX
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(387)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(387)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(399)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(399)
 msgctxt "KnightSettingsScreen,SFX"
 msgid "효과음"
 msgstr "효과음"
 
 #. Key:	Voice
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(388)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(388)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(400)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(400)
 msgctxt "KnightSettingsScreen,Voice"
 msgid "음성"
 msgstr "음성"
 
 #. Key:	VolumeNote
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(389)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(389)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(401)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(401)
 msgctxt "KnightSettingsScreen,VolumeNote"
 msgid "조절하는 동안 바로 들립니다. 적용을 눌러야 저장됩니다."
 msgstr "조절하는 동안 바로 들립니다. 적용을 눌러야 저장됩니다."
 
 #. Key:	Subtitles
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(392)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(392)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(404)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(404)
 msgctxt "KnightSettingsScreen,Subtitles"
 msgid "자막"
 msgstr "자막"
 
 #. Key:	SubtitlesDesc
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(392)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(392)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(404)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(404)
 msgctxt "KnightSettingsScreen,SubtitlesDesc"
 msgid "AI 음성 대사를 화면 아래 대화창에 글자로 표시합니다. 부위 파손 알림은 항상 표시됩니다."
 msgstr "AI 음성 대사를 화면 아래 대화창에 글자로 표시합니다. 부위 파손 알림은 항상 표시됩니다."
 
 #. Key:	Language
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(397)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(397)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(409)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(409)
 msgctxt "KnightSettingsScreen,Language"
 msgid "언어"
 msgstr "언어"
 
 #. Key:	LanguageDesc
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(397)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(397)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(409)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(409)
 msgctxt "KnightSettingsScreen,LanguageDesc"
 msgid "화면에 보이는 글자의 언어입니다. 적용하면 바로 바뀝니다."
 msgstr "화면에 보이는 글자의 언어입니다. 적용하면 바로 바뀝니다."
 
 #. Key:	FOV
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(402)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(402)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(414)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(414)
 msgctxt "KnightSettingsScreen,FOV"
 msgid "시야각"
 msgstr "시야각"
 
 #. Key:	FOVDesc
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(402)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(402)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(414)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(414)
 msgctxt "KnightSettingsScreen,FOVDesc"
 msgid "카메라가 보여 주는 범위입니다. 넓을수록 주변이 잘 보이지만 멀미가 날 수 있습니다."
 msgstr "카메라가 보여 주는 범위입니다. 넓을수록 주변이 잘 보이지만 멀미가 날 수 있습니다."
 
 #. Key:	Gamma
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(405)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(405)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(417)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(417)
 msgctxt "KnightSettingsScreen,Gamma"
 msgid "감마"
 msgstr "감마"
 
 #. Key:	GammaDesc
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(405)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(405)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(417)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(417)
 msgctxt "KnightSettingsScreen,GammaDesc"
 msgid "게임 장면의 중간 밝기를 조절합니다. 100이 기본값입니다."
 msgstr "게임 장면의 중간 밝기를 조절합니다. 100이 기본값입니다."
 
 #. Key:	Brightness
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(406)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(406)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(418)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(418)
 msgctxt "KnightSettingsScreen,Brightness"
 msgid "밝기"
 msgstr "밝기"
 
 #. Key:	BrightnessDesc
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(406)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(406)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(418)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(418)
 msgctxt "KnightSettingsScreen,BrightnessDesc"
 msgid "기존 장면에 밝기 보정을 적용합니다. 조명과 자동 노출 설정은 유지됩니다."
 msgstr "기존 장면에 밝기 보정을 적용합니다. 조명과 자동 노출 설정은 유지됩니다."
 
 #. Key:	CalibrationNote
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(407)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(407)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(419)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(419)
 msgctxt "KnightSettingsScreen,CalibrationNote"
 msgid "장면에 즉시 미리 적용됩니다. 적용하면 저장하고, 되돌리면 이전 값으로 복원합니다. UI와 타이틀 영상은 보정 대상이 아닙니다."
 msgstr "장면에 즉시 미리 적용됩니다. 적용하면 저장하고, 되돌리면 이전 값으로 복원합니다. UI와 타이틀 영상은 보정 대상이 아닙니다."
 
 #. Key:	InvalidKey
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(581)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(581)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(593)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(593)
 msgctxt "KnightSettingsScreen,InvalidKey"
 msgid "이 키는 지정할 수 없습니다. Esc는 예약되어 있습니다."
 msgstr "이 키는 지정할 수 없습니다. Esc는 예약되어 있습니다."
 
 #. Key:	KeyConflict
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(589)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(589)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(601)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(601)
 msgctxt "KnightSettingsScreen,KeyConflict"
 msgid "{0}에 이미 지정된 키입니다."
 msgstr "{0}에 이미 지정된 키입니다."
 
 #. Key:	LoadFailed
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(622)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(622)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(634)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(634)
 msgctxt "KnightSettingsScreen,LoadFailed"
 msgid "설정 저장소를 사용할 수 없습니다."
 msgstr "설정 저장소를 사용할 수 없습니다."
 
 #. Key:	SaveFailed
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(632)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(632)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(644)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(644)
 msgctxt "KnightSettingsScreen,SaveFailed"
 msgid "설정을 저장하지 못했습니다. 변경 값을 확인해 주세요."
 msgstr "설정을 저장하지 못했습니다. 변경 값을 확인해 주세요."
 
 #. Key:	KeyStoreMissing
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(642)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(642)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(654)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(654)
 msgctxt "KnightSettingsScreen,KeyStoreMissing"
 msgid "키 설정 저장소를 사용할 수 없습니다."
 msgstr "키 설정 저장소를 사용할 수 없습니다."
 
 #. Key:	KeySaveFailed
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(654)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(654)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(666)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(666)
 msgctxt "KnightSettingsScreen,KeySaveFailed"
 msgid "키를 변경하지 못했습니다. 입력 에셋의 매핑을 확인해 주세요."
 msgstr "키를 변경하지 못했습니다. 입력 에셋의 매핑을 확인해 주세요."
 
 #. Key:	LanguageFailed
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(667)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(667)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(690)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(690)
 msgctxt "KnightSettingsScreen,LanguageFailed"
 msgid "언어를 바꾸지 못했습니다."
 msgstr "언어를 바꾸지 못했습니다."
 
 #. Key:	Saved
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(688)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(688)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(711)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(711)
 msgctxt "KnightSettingsScreen,Saved"
 msgid "설정을 저장했습니다."
 msgstr "설정을 저장했습니다."
 
 #. Key:	DisplayCountdown
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(727)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(727)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(750)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(750)
 msgctxt "KnightSettingsScreen,DisplayCountdown"
 msgid "이 화면 설정을 유지할까요? {0}초 후 이전 설정으로 돌아갑니다."
 msgstr "이 화면 설정을 유지할까요? {0}초 후 이전 설정으로 돌아갑니다."
 
 #. Key:	DisplayKept
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(736)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(736)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(759)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(759)
 msgctxt "KnightSettingsScreen,DisplayKept"
 msgid "화면 설정을 저장했습니다."
 msgstr "화면 설정을 저장했습니다."
 
 #. Key:	DisplayReverted
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(765)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(765)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(788)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(788)
 msgctxt "KnightSettingsScreen,DisplayReverted"
 msgid "이전 화면 설정으로 되돌렸습니다."
 msgstr "이전 화면 설정으로 되돌렸습니다."
 
 #. Key:	Discarded
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(780)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(780)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(803)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(803)
 msgctxt "KnightSettingsScreen,Discarded"
 msgid "편집한 내용을 버렸습니다."
 msgstr "편집한 내용을 버렸습니다."
 
-#. Key:	DefaultsStaged
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(800)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(800)
-msgctxt "KnightSettingsScreen,DefaultsStaged"
-msgid "기본값을 불러왔습니다. 적용을 누르면 저장됩니다."
-msgstr "기본값을 불러왔습니다. 적용을 누르면 저장됩니다."
-
-#. Key:	Unsaved
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(809)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(809)
-msgctxt "KnightSettingsScreen,Unsaved"
-msgid "적용하지 않은 변경 사항이 있습니다."
-msgstr "적용하지 않은 변경 사항이 있습니다."
-
 #. Key:	OptionOn
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(81)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(81)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(82)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(82)
 msgctxt "KnightSettingsScreen,OptionOn"
 msgid "켜기"
 msgstr "켜기"
 
+#. Key:	DefaultsStaged
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(823)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(823)
+msgctxt "KnightSettingsScreen,DefaultsStaged"
+msgid "기본값을 불러왔습니다. 적용을 누르면 저장됩니다."
+msgstr "기본값을 불러왔습니다. 적용을 누르면 저장됩니다."
+
 #. Key:	OptionOff
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(82)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(82)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(83)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(83)
 msgctxt "KnightSettingsScreen,OptionOff"
 msgid "끄기"
 msgstr "끄기"
 
+#. Key:	Unsaved
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(832)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(832)
+msgctxt "KnightSettingsScreen,Unsaved"
+msgid "적용하지 않은 변경 사항이 있습니다."
+msgstr "적용하지 않은 변경 사항이 있습니다."
+
 #. Key:	QualityLow
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(83)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(83)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(84)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(84)
 msgctxt "KnightSettingsScreen,QualityLow"
 msgid "낮음"
 msgstr "낮음"
 
 #. Key:	QualityMedium
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(84)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(84)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(85)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(85)
 msgctxt "KnightSettingsScreen,QualityMedium"
 msgid "중간"
 msgstr "중간"
 
 #. Key:	QualityHigh
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(85)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(85)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(86)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(86)
 msgctxt "KnightSettingsScreen,QualityHigh"
 msgid "높음"
 msgstr "높음"
 
 #. Key:	QualityEpic
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(86)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(86)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(87)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(87)
 msgctxt "KnightSettingsScreen,QualityEpic"
 msgid "매우 높음"
 msgstr "매우 높음"
 
 #. Key:	QualityCustom
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(87)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(87)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(88)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(88)
 msgctxt "KnightSettingsScreen,QualityCustom"
 msgid "사용자 지정"
 msgstr "사용자 지정"
 
 #. Key:	WindowFullscreen
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(88)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(88)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(89)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(89)
 msgctxt "KnightSettingsScreen,WindowFullscreen"
 msgid "전체 화면"
 msgstr "전체 화면"
 
 #. Key:	WindowWindowed
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(89)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(89)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(90)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(90)
 msgctxt "KnightSettingsScreen,WindowWindowed"
 msgid "창 모드"
 msgstr "창 모드"
 
 #. Key:	WindowBorderless
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(90)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(90)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(91)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(91)
 msgctxt "KnightSettingsScreen,WindowBorderless"
 msgid "테두리 없는 창"
 msgstr "테두리 없는 창"
 
 #. Key:	DLSSQuality
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(91)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(91)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(92)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(92)
 msgctxt "KnightSettingsScreen,DLSSQuality"
 msgid "품질"
 msgstr "품질"
 
 #. Key:	DLSSBalanced
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(92)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(92)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(93)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(93)
 msgctxt "KnightSettingsScreen,DLSSBalanced"
 msgid "균형"
 msgstr "균형"
 
 #. Key:	DLSSPerformance
-#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(93)
-#: Source/knight/Settings/KnightSettingsWidget.cpp(93)
+#. SourceLocation:	Source/knight/Settings/KnightSettingsWidget.cpp(94)
+#: Source/knight/Settings/KnightSettingsWidget.cpp(94)
 msgctxt "KnightSettingsScreen,DLSSPerformance"
 msgid "성능"
 msgstr "성능"

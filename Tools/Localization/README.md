@@ -77,8 +77,11 @@
 
 ## 개발자 참고
 - 화면에 보이는 문구는 `LOCTEXT` / `NSLOCTEXT` 또는 에셋의 `FText` 칸으로 만들어야 수집됩니다. `FText::FromString`, `INVTEXT`는 수집되지 않습니다.
+- **스크립트·MCP·에디터 도구로 에셋에 넣은 텍스트도 빠집니다.** Python에서 문자열을 FText 칸에 넣거나, 위젯 생성 도구가 `INVTEXT`를 쓰면 '번역 안 함'으로 저장됩니다. 에디터에서 직접 입력한 텍스트는 괜찮습니다.
+  - 찾기·고치기: 에디터 콘솔 `py`에서 `unreal.knightLocalizationEditorLibrary.find_unlocalizable_texts(에셋, False)`로 목록을 보고, `True`로 고친 뒤 저장(위젯 블루프린트는 컴파일 후 저장)합니다. 한글이 든 텍스트에만 번역 키를 붙이고 글자는 바꾸지 않습니다.
+  - 게임에서 한국어 그대로 나오는 곳이 있으면 먼저 이 도구로 그 에셋을 확인하세요.
 - 숫자·이름이 들어가는 문장은 이어 붙이지 말고 `FText::Format(LOCTEXT("Key", "{0} 피해"), ...)`를 쓰세요. 언어마다 어순이 다릅니다.
 - 같은 네임스페이스·키에 다른 문장을 쓰면 `gather` 때 "Text conflict" 경고가 납니다. 키를 다르게 지어 주세요.
 - 수집 범위는 `Config/DefaultEditor.ini`의 `[/Script/Localization.LocalizationSettings]`(에디터 Localization Dashboard)와 `Config/Localization/Game_*.ini`에 있습니다. Dashboard에서 설정을 바꾸면 `Game_*.ini`가 다시 만들어집니다.
   - 코드: `Source/knight`, `Source/knightUI`, `Plugins/knightInventory/Source` (`Tests` 폴더 제외)
-  - 에셋: `Content/Knight` (`Content/Knight/Dev` 제외)
+  - 에셋: `Content/Knight`, `Content/Input` (`Content/Knight/Dev` 제외)
