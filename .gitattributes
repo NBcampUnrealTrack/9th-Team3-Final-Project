@@ -45,3 +45,12 @@ SourceArt/UI/**/*.png filter=lfs diff=lfs merge=lfs -text
 Plugins/DLSS/Binaries/ThirdParty/Win64/*.dll filter=lfs diff=lfs merge=lfs -text
 
 # Existing plugin PNG icons are ordinary Git blobs; do not switch all PNG files to LFS here.
+
+# Localization: UTF-16 and compiled files from the Unreal localization pipeline, and the translation sheet.
+*.archive binary
+*.manifest binary
+*.locres binary
+*.locmeta binary
+Content/Localization/**/*_Conflicts.txt binary
+*.xlsx binary
+*.po text eol=lf
