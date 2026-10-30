@@ -8,59 +8,120 @@
 #include "knightAudioSubsystem.h"
 #include "Settings/knightSettingsSubsystem.h"
 #include "Settings/knightSharedSettings.h"
+#include "Internationalization/Culture.h"
+#include "Internationalization/TextLocalizationManager.h"
+#include "Kismet/KismetInternationalizationLibrary.h"
 #include "UserSettings/EnhancedInputUserSettings.h"
 
 #define LOCTEXT_NAMESPACE "KnightSettingsScreen"
 
-const FString UKnightSettingsWidget::OnText(TEXT("켜기"));
-const FString UKnightSettingsWidget::OffText(TEXT("끄기"));
+// 선택지 값은 언어와 상관없는 키다. 화면에 보이는 이름은 OptionLabel()에서 번역된 글자로 바꾼다.
+const FString UKnightSettingsWidget::OnText(TEXT("On"));
+const FString UKnightSettingsWidget::OffText(TEXT("Off"));
 
 namespace
 {
 	const TCHAR* const SettingsWidgetPath = TEXT("/Game/Knight/UI/Screens/Settings/WBP_KnightSettings.WBP_KnightSettings_C");
 
+	/** 언어 항목에 보여 줄 언어. 이름은 그 언어로 쓴 이름이라 번역하지 않는다.
+	 *  Config/Localization/Game_*.ini 의 언어 목록과 같아야 한다. */
+	const TPair<const TCHAR*, const TCHAR*> GameCultures[] = {
+		{TEXT("ko"), TEXT("한국어")}, {TEXT("en"), TEXT("English")}, {TEXT("ja"), TEXT("日本語")},
+		{TEXT("zh-Hans"), TEXT("简体中文")}, {TEXT("zh-Hant"), TEXT("繁體中文")}};
+
 	FString OnOff(bool bValue) { return bValue ? UKnightSettingsWidget::OnText : UKnightSettingsWidget::OffText; }
 	FString Number(float Value) { return FString::SanitizeFloat(FMath::RoundToFloat(Value)); }
 
+	const TCHAR* const QualityKeys[] = {TEXT("Low"), TEXT("Medium"), TEXT("High"), TEXT("Epic")};
+	const TCHAR* const CustomQualityKey = TEXT("Custom");
+
 	int32 QualityFromText(const FString& Text)
 	{
-		if (Text == TEXT("낮음")) return 0;
-		if (Text == TEXT("중간")) return 1;
-		if (Text == TEXT("높음")) return 2;
-		if (Text == TEXT("매우 높음")) return 3;
+		for (int32 Index = 0; Index < UE_ARRAY_COUNT(QualityKeys); ++Index)
+		{
+			if (Text == QualityKeys[Index]) return Index;
+		}
 		return 4;
 	}
 	FString QualityText(int32 Quality)
 	{
-		const TCHAR* Names[] = {TEXT("낮음"), TEXT("중간"), TEXT("높음"), TEXT("매우 높음")};
-		return Quality >= 0 && Quality < 4 ? Names[Quality] : TEXT("사용자 지정");
+		return Quality >= 0 && Quality < UE_ARRAY_COUNT(QualityKeys) ? QualityKeys[Quality] : CustomQualityKey;
 	}
 	TArray<FString> QualityOptions(bool bPreset = false)
 	{
-		TArray<FString> Values = {TEXT("낮음"), TEXT("중간"), TEXT("높음"), TEXT("매우 높음")};
-		if (bPreset) Values.Add(TEXT("사용자 지정"));
+		TArray<FString> Values;
+		for (const TCHAR* const Key : QualityKeys) Values.Add(Key);
+		if (bPreset) Values.Add(CustomQualityKey);
 		return Values;
 	}
 	FString WindowModeText(EWindowMode::Type Mode)
 	{
-		return Mode == EWindowMode::Fullscreen ? TEXT("전체 화면") : Mode == EWindowMode::Windowed ? TEXT("창 모드") : TEXT("테두리 없는 창");
+		return Mode == EWindowMode::Fullscreen ? TEXT("Fullscreen") : Mode == EWindowMode::Windowed ? TEXT("Windowed") : TEXT("Borderless");
 	}
 	FString DLSSModeText(EknightDLSSMode Mode)
 	{
 		switch (Mode)
 		{
-		case EknightDLSSMode::Quality: return TEXT("품질");
-		case EknightDLSSMode::Balanced: return TEXT("균형");
-		case EknightDLSSMode::Performance: return TEXT("성능");
-		default: return TEXT("꺼짐");
+		case EknightDLSSMode::Quality: return TEXT("Quality");
+		case EknightDLSSMode::Balanced: return TEXT("Balanced");
+		case EknightDLSSMode::Performance: return TEXT("Performance");
+		default: return TEXT("Off");
 		}
 	}
 	EknightDLSSMode DLSSModeFromText(const FString& Text)
 	{
-		if (Text == TEXT("품질")) return EknightDLSSMode::Quality;
-		if (Text == TEXT("균형")) return EknightDLSSMode::Balanced;
-		if (Text == TEXT("성능")) return EknightDLSSMode::Performance;
+		if (Text == TEXT("Quality")) return EknightDLSSMode::Quality;
+		if (Text == TEXT("Balanced")) return EknightDLSSMode::Balanced;
+		if (Text == TEXT("Performance")) return EknightDLSSMode::Performance;
 		return EknightDLSSMode::Off;
+	}
+
+	/** 선택지 키 → 화면에 보이는 이름. 모르는 키(해상도·FPS 숫자, 언어 이름)는 그대로 보여 준다. */
+	FText OptionLabel(const FString& Key)
+	{
+		if (Key == UKnightSettingsWidget::OnText) return LOCTEXT("OptionOn", "켜기");
+		if (Key == UKnightSettingsWidget::OffText) return LOCTEXT("OptionOff", "끄기");
+		if (Key == TEXT("Low")) return LOCTEXT("QualityLow", "낮음");
+		if (Key == TEXT("Medium")) return LOCTEXT("QualityMedium", "중간");
+		if (Key == TEXT("High")) return LOCTEXT("QualityHigh", "높음");
+		if (Key == TEXT("Epic")) return LOCTEXT("QualityEpic", "매우 높음");
+		if (Key == CustomQualityKey) return LOCTEXT("QualityCustom", "사용자 지정");
+		if (Key == TEXT("Fullscreen")) return LOCTEXT("WindowFullscreen", "전체 화면");
+		if (Key == TEXT("Windowed")) return LOCTEXT("WindowWindowed", "창 모드");
+		if (Key == TEXT("Borderless")) return LOCTEXT("WindowBorderless", "테두리 없는 창");
+		if (Key == TEXT("Quality")) return LOCTEXT("DLSSQuality", "품질");
+		if (Key == TEXT("Balanced")) return LOCTEXT("DLSSBalanced", "균형");
+		if (Key == TEXT("Performance")) return LOCTEXT("DLSSPerformance", "성능");
+		for (const TPair<const TCHAR*, const TCHAR*>& Culture : GameCultures)
+		{
+			if (Key == Culture.Key) return FText::AsCultureInvariant(Culture.Value);
+		}
+		return FText::AsCultureInvariant(Key);
+	}
+
+	/** 에디터(PIE)에서 언어 항목으로 고른 미리보기 언어. 에디터 화면 언어와 따로 기억한다. */
+	FString EditorPreviewCulture;
+
+	/** 지금 게임 언어 중 GameCultures에 있는 것. 없으면(예: 시스템 언어가 프랑스어) 원문 언어인 한국어. */
+	FString CurrentGameCulture()
+	{
+		FString Name = FInternationalization::Get().GetCurrentLanguage()->GetName();
+		if (GIsEditor)
+		{
+			// 에디터에서 게임 글자는 미리보기를 켰을 때만 번역된다. 끄면 원문(한국어)
+			FTextLocalizationManager& Loc = FTextLocalizationManager::Get();
+			Name = !Loc.IsGameLocalizationPreviewEnabled() ? FString(GameCultures[0].Key)
+				: !EditorPreviewCulture.IsEmpty() ? EditorPreviewCulture : Loc.GetConfiguredGameLocalizationPreviewLanguage();
+		}
+		const TArray<FString> Prioritized = FInternationalization::Get().GetPrioritizedCultureNames(Name);
+		for (const FString& Candidate : Prioritized)
+		{
+			for (const TPair<const TCHAR*, const TCHAR*>& Culture : GameCultures)
+			{
+				if (Candidate == Culture.Key) return Candidate;
+			}
+		}
+		return GameCultures[0].Key;
 	}
 	bool IsUniformQuality(const FKnightGraphicsChoice& Graphics)
 	{
@@ -76,6 +137,7 @@ namespace
 		Item.Description = Description;
 		Item.Type = EKnightSettingControl::Rotator;
 		Item.Options = Options;
+		for (const FString& Option : Options) Item.OptionLabels.Add(OptionLabel(Option));
 		return Item;
 	}
 	FKnightSettingItem Toggle(FName Id, const FText& Label, const FText& Description)
@@ -168,6 +230,8 @@ void UKnightSettingsWidget::Open()
 			}
 		}
 	}
+	SavedCulture = CurrentGameCulture();
+	DraftCulture = SavedCulture;
 	CurrentTab = 0;
 	HandleTabChanged();
 	SetStatus(FText::GetEmpty());
@@ -199,9 +263,11 @@ FString UKnightSettingsWidget::GetValue(FName Id, bool bSaved) const
 	if (Id == TEXT("WindowMode")) return WindowModeText(G.WindowMode);
 	if (Id == TEXT("Display"))
 	{
+		// 모니터 선택지 값은 모니터 번호(Index)다. 이름은 OptionLabels에 있다.
 		FKnightDisplayInfo Display;
-		return UknightGameUserSettings::ResolveDisplay(G.DisplayID, G.DisplayIndex, Display) ? Display.Label : FString();
+		return UknightGameUserSettings::ResolveDisplay(G.DisplayID, G.DisplayIndex, Display) ? FString::FromInt(Display.Index) : FString();
 	}
+	if (Id == TEXT("Language")) return bSaved ? SavedCulture : DraftCulture;
 	if (Id == TEXT("Resolution")) return FString::Printf(TEXT("%dx%d"), G.Resolution.X, G.Resolution.Y);
 	if (Id == TEXT("FPS")) return FString::FromInt(G.FrameRateLimit);
 	if (Id == TEXT("VSync")) return OnOff(G.bVSync);
@@ -252,13 +318,15 @@ void UKnightSettingsWidget::GetTabSections(int32 Tab, TArray<FKnightSettingSecti
 		FKnightSettingSection& Display = AddSection(INVTEXT("DISPLAY"));
 		Display.Items.Add(Rotator(TEXT("WindowMode"), LOCTEXT("WindowMode", "화면 모드"),
 			LOCTEXT("WindowModeDesc", "전체 화면: 화면을 독점해 지연이 가장 적습니다.\n창 모드: 다른 창과 함께 씁니다.\n테두리 없는 창: 데스크톱 해상도로 전환이 빠릅니다."),
-			{TEXT("전체 화면"), TEXT("창 모드"), TEXT("테두리 없는 창")}));
+			{WindowModeText(EWindowMode::Fullscreen), WindowModeText(EWindowMode::Windowed), WindowModeText(EWindowMode::WindowedFullscreen)}));
 		TArray<FKnightDisplayInfo> Displays;
 		UknightGameUserSettings::GetConnectedDisplays(Displays);
 		TArray<FString> DisplayOptions;
-		for (const FKnightDisplayInfo& Monitor : Displays) DisplayOptions.Add(Monitor.Label);
+		for (const FKnightDisplayInfo& Monitor : Displays) DisplayOptions.Add(FString::FromInt(Monitor.Index));
 		FKnightSettingItem& MonitorRow = Display.Items.Add_GetRef(Rotator(TEXT("Display"), LOCTEXT("Display", "표시 모니터"),
 			LOCTEXT("DisplayDesc", "게임 창을 표시할 모니터입니다. 적용 후 화면이 보이지 않으면 자동으로 이전 모니터로 돌아갑니다."), DisplayOptions));
+		MonitorRow.OptionLabels.Reset();
+		for (const FKnightDisplayInfo& Monitor : Displays) MonitorRow.OptionLabels.Add(Monitor.Label);
 		MonitorRow.bEnabled = Displays.Num() > 1;
 		TArray<FIntPoint> Resolutions;
 		UknightGameUserSettings::GetSupportedResolutions(DraftGraphics, Resolutions);
@@ -273,7 +341,7 @@ void UKnightSettingsWidget::GetTabSections(int32 Tab, TArray<FKnightSettingSecti
 
 		FKnightSettingSection& Quality = AddSection(INVTEXT("QUALITY"));
 		Quality.Items.Add(Rotator(TEXT("Preset"), LOCTEXT("Preset", "전체 품질"), LOCTEXT("PresetDesc", "아래 품질 항목을 한 번에 바꿉니다."), QualityOptions(true)));
-		TArray<FString> DLSSOptions = {TEXT("꺼짐")};
+		TArray<FString> DLSSOptions = {DLSSModeText(EknightDLSSMode::Off)};
 		for (const EknightDLSSMode Mode : {EknightDLSSMode::Quality, EknightDLSSMode::Balanced, EknightDLSSMode::Performance})
 		{
 			if (UknightGameUserSettings::IsDLSSModeSupported(Mode, DraftGraphics.Resolution))
@@ -334,6 +402,11 @@ void UKnightSettingsWidget::GetTabSections(int32 Tab, TArray<FKnightSettingSecti
 
 		FKnightSettingSection& Subtitle = AddSection(INVTEXT("SUBTITLE"));
 		Subtitle.Items.Add(Toggle(TEXT("Subtitles"), LOCTEXT("Subtitles", "자막"), LOCTEXT("SubtitlesDesc", "AI 음성 대사를 화면 아래 대화창에 글자로 표시합니다. 부위 파손 알림은 항상 표시됩니다.")));
+
+		FKnightSettingSection& Language = AddSection(INVTEXT("LANGUAGE"));
+		TArray<FString> CultureOptions;
+		for (const TPair<const TCHAR*, const TCHAR*>& Culture : GameCultures) CultureOptions.Add(Culture.Key);
+		Language.Items.Add(Rotator(TEXT("Language"), LOCTEXT("Language", "언어"), LOCTEXT("LanguageDesc", "화면에 보이는 글자의 언어입니다. 적용하면 바로 바뀝니다."), CultureOptions));
 	}
 	else
 	{
@@ -364,7 +437,7 @@ int32 UKnightSettingsWidget::GetDirtyCount() const
 		TEXT("WindowMode"), TEXT("Display"), TEXT("Resolution"), TEXT("FPS"), TEXT("VSync"), TEXT("DLSS"), TEXT("AA"), TEXT("Shadows"), TEXT("Textures"),
 		TEXT("Effects"), TEXT("PostProcess"), TEXT("ViewDistance"), TEXT("MotionBlur"), TEXT("MouseSensitivity"),
 		TEXT("MouseAcceleration"), TEXT("Master"), TEXT("Music"), TEXT("SFX"), TEXT("Voice"), TEXT("Subtitles"),
-		TEXT("FOV"), TEXT("Gamma"), TEXT("Brightness") };
+		TEXT("FOV"), TEXT("Gamma"), TEXT("Brightness"), TEXT("Language") };
 	int32 Count = 0;
 	for (const FName Id : Ids)
 	{
@@ -395,7 +468,7 @@ bool UKnightSettingsWidget::IsKeyDirty() const
 	return false;
 }
 
-bool UKnightSettingsWidget::IsDirty() const { return DraftGraphics != SavedGraphics || IsPersonalDirty() || IsKeyDirty(); }
+bool UKnightSettingsWidget::IsDirty() const { return DraftGraphics != SavedGraphics || IsPersonalDirty() || IsKeyDirty() || DraftCulture != SavedCulture; }
 
 void UKnightSettingsWidget::SetStatus(const FText& Text) { HandleStatusChanged(Text); }
 void UKnightSettingsWidget::FocusSettings() { HandleFocusRequested(); }
@@ -455,14 +528,15 @@ void UKnightSettingsWidget::OptionEdited(FName Id, const FString& Value)
 	const bool bOn = Value == OnText;
 	if (Id == TEXT("WindowMode"))
 	{
-		DraftGraphics.WindowMode = Value == TEXT("전체 화면") ? EWindowMode::Fullscreen
-			: Value == TEXT("창 모드") ? EWindowMode::Windowed : EWindowMode::WindowedFullscreen;
+		DraftGraphics.WindowMode = Value == WindowModeText(EWindowMode::Fullscreen) ? EWindowMode::Fullscreen
+			: Value == WindowModeText(EWindowMode::Windowed) ? EWindowMode::Windowed : EWindowMode::WindowedFullscreen;
 	}
 	else if (Id == TEXT("Display"))
 	{
 		TArray<FKnightDisplayInfo> Displays;
 		UknightGameUserSettings::GetConnectedDisplays(Displays);
-		if (const FKnightDisplayInfo* Selected = Displays.FindByPredicate([&Value](const FKnightDisplayInfo& Display) { return Display.Label == Value; }))
+		const int32 Index = FCString::Atoi(*Value);
+		if (const FKnightDisplayInfo* Selected = Displays.FindByPredicate([Index](const FKnightDisplayInfo& Display) { return Display.Index == Index; }))
 		{
 			DraftGraphics.DisplayID = Selected->ID;
 			DraftGraphics.DisplayIndex = Selected->Index;
@@ -510,6 +584,7 @@ void UKnightSettingsWidget::OptionEdited(FName Id, const FString& Value)
 	else if (Id == TEXT("FOV")) DraftPersonal->FieldOfViewOffset = FMath::Clamp(FCString::Atof(*Value) - 80.f, -20.f, 30.f);
 	else if (Id == TEXT("Gamma")) DraftPersonal->Gamma = FMath::Clamp(FCString::Atof(*Value) / 100.f, 0.8f, 1.2f);
 	else if (Id == TEXT("Brightness")) DraftPersonal->Brightness = FMath::Clamp(FCString::Atof(*Value) / 100.f, 0.8f, 1.2f);
+	else if (Id == TEXT("Language")) DraftCulture = Value;
 	else if (DraftKeys.Contains(Id))
 	{
 		const FKey NewKey(*Value);
@@ -595,6 +670,29 @@ void UKnightSettingsWidget::Apply()
 		Keys->ApplySettings();
 		Keys->SaveSettings();
 		SavedKeys = DraftKeys;
+	}
+	if (DraftCulture != SavedCulture)
+	{
+		bool bChanged = true;
+		if (GIsEditor)
+		{
+			// 에디터(PIE)에서는 에디터 화면 언어는 그대로 두고 게임 글자만 바꾼다(툴바 Preview Game Language와 같음). 저장하지 않는다.
+			EditorPreviewCulture = DraftCulture;
+			FTextLocalizationManager::Get().EnableGameLocalizationPreview(DraftCulture);
+		}
+		else
+		{
+			// 두 번째 인자 true = GameUserSettings.ini [Internationalization] Culture 에 저장해 다음 실행에도 쓴다
+			bChanged = UKismetInternationalizationLibrary::SetCurrentCulture(DraftCulture, true);
+		}
+		if (!bChanged)
+		{
+			SetStatus(LOCTEXT("LanguageFailed", "언어를 바꾸지 못했습니다."));
+			return;
+		}
+		SavedCulture = DraftCulture;
+		// 새 언어로 줄 이름·선택지를 다시 만든다
+		HandleTabChanged();
 	}
 	if (DraftGraphics != SavedGraphics)
 	{
@@ -697,6 +795,7 @@ void UKnightSettingsWidget::Revert()
 	DraftGraphics = SavedGraphics;
 	CopyPersonal(DraftPersonal, SavedPersonal);
 	DraftKeys = SavedKeys;
+	DraftCulture = SavedCulture;
 	PreviewAudio(SavedPersonal);
 	EndDisplayPreview();
 	HandleTabChanged();

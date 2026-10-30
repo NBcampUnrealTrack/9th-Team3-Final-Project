@@ -84,8 +84,12 @@ void UknightSettingRow::RefreshValueText()
 		Txt_Value->SetText(FKey(*Item.Value).GetDisplayName(false));
 		break;
 	default:
-		Txt_Value->SetText(FText::FromString(Item.Value));
+	{
+		// 값은 언어와 상관없는 키라서, 같은 순서의 OptionLabels에서 보여 줄 이름을 찾는다
+		const int32 Index = Item.Options.IndexOfByKey(Item.Value);
+		Txt_Value->SetText(Item.OptionLabels.IsValidIndex(Index) ? Item.OptionLabels[Index] : FText::AsCultureInvariant(Item.Value));
 		break;
+	}
 	}
 }
 
