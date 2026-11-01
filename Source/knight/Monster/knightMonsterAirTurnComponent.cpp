@@ -79,7 +79,7 @@ void UknightMonsterAirTurnComponent::TickComponent(float DeltaTime, ELevelTick T
 		{
 			GroundTime += DeltaTime;
 		}
-		if (GroundTime >= GroundTurnTime && CanChangeTurn())
+		if (GroundTime >= GetGroundTurnTime() && CanChangeTurn())
 		{
 			TakeOff();
 		}
@@ -87,7 +87,9 @@ void UknightMonsterAirTurnComponent::TickComponent(float DeltaTime, ELevelTick T
 	}
 
 	AirTime += DeltaTime;
-	if ((AirAttacksUsed >= AirAttacksPerTurn || AirTime >= AirTurnMaxTime) && CanChangeTurn())
+	// 분노 마무리 공격(물 회오리)을 기다리는 동안은 내리지 않는다. 그 공격이 공중 턴을 끝낸다.
+	if ((AirAttacksUsed >= GetAirAttacksPerTurn() || AirTime >= GetAirTurnMaxTime()) && CanChangeTurn()
+		&& !ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_EnrageFinale))
 	{
 		Land();
 		return;
@@ -211,10 +213,15 @@ void UknightMonsterAirTurnComponent::EndAirTurn(float BlendTime, bool bSendLandE
 
 void UknightMonsterAirTurnComponent::HandleAbilityEnded(const FAbilityEndedData& Data)
 {
-	if (bAirborne && Cast<UknightGameplayAbility_MonsterAttack>(Data.AbilityThatEnded))
+	if (const UknightGameplayAbility_MonsterAttack* const Attack = Cast<UknightGameplayAbility_MonsterAttack>(Data.AbilityThatEnded))
 	{
-		++AirAttacksUsed;
-		UpdateLastAttackTag();
+		LastAttackEndTime = GetWorld()->GetTimeSeconds();
+		// 공격 사이의 탐색 비행 같은 이동 행동은 공중 공격 횟수에 넣지 않는다.
+		if (bAirborne && Attack->CountsAsAttack())
+		{
+			++AirAttacksUsed;
+			UpdateLastAttackTag();
+		}
 	}
 }
 
@@ -251,7 +258,7 @@ void UknightMonsterAirTurnComponent::UpdateLastAttackTag()
 {
 	if (ASC.IsValid())
 	{
-		const bool bLast = bAirborne && AirAttacksUsed == AirAttacksPerTurn - 1;
+		const bool bLast = bAirborne && AirAttacksUsed == GetAirAttacksPerTurn() - 1;
 		ASC->SetLooseGameplayTagCount(knightGameplayTags::State_Monster_LastAirAttack, bLast ? 1 : 0);
 	}
 }
@@ -268,10 +275,32 @@ bool UknightMonsterAirTurnComponent::IsAttacking() const
 	return false;
 }
 
+bool UknightMonsterAirTurnComponent::IsEnraged() const
+{
+	return ASC.IsValid() && ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Enraged);
+}
+
+float UknightMonsterAirTurnComponent::GetGroundTurnTime() const
+{
+	return IsEnraged() && EnragedGroundTurnTime > 0.f ? EnragedGroundTurnTime : GroundTurnTime;
+}
+
+int32 UknightMonsterAirTurnComponent::GetAirAttacksPerTurn() const
+{
+	return IsEnraged() && EnragedAirAttacksPerTurn > 0 ? EnragedAirAttacksPerTurn : AirAttacksPerTurn;
+}
+
+float UknightMonsterAirTurnComponent::GetAirTurnMaxTime() const
+{
+	return IsEnraged() && EnragedAirTurnMaxTime > 0.f ? EnragedAirTurnMaxTime : AirTurnMaxTime;
+}
+
 bool UknightMonsterAirTurnComponent::CanChangeTurn() const
 {
 	// 공격과 반응(포효·다운)이 끝난 뒤에 바꾼다. 공격 도중에 뜨거나 내리면 판정 위치가 어긋난다.
-	return !IsAttacking() && !ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Reacting);
+	// 공격이 막 끝났으면 조금 기다린다. 그 사이에 연계 공격(FollowUpAttacks)이 이어질 수 있다.
+	return !IsAttacking() && !ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Reacting)
+		&& GetWorld()->GetTimeSeconds() - LastAttackEndTime >= FollowUpGraceTime;
 }
 
 void UknightMonsterAirTurnComponent::SendEvent(const FGameplayTag& EventTag) const

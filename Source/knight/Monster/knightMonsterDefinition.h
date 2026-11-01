@@ -6,12 +6,74 @@
 #include "knightMonsterDefinition.generated.h"
 
 class UAnimMontage;
+class UAnimSequence;
 class UGameplayEffect;
 class UknightAbilitySet;
 class UknightAbilityTagRelationshipMapping;
+class UknightGameplayAbility_MonsterAttack;
 class UknightMonsterPartData;
 class UNiagaraSystem;
 class USoundBase;
+
+/** 몬스터 기준으로 공격이 들어온 쪽. */
+UENUM(BlueprintType)
+enum class EknightHitSide : uint8
+{
+	Front,
+	Back,
+	Left,
+	Right
+};
+
+/**
+ * 맞을 때마다 지금 동작 위에 덧셈으로 얹는 움찔(Knight Hit Flinch 애님 노드). 공격이 들어온 쪽마다 피격 애니메이션 하나.
+ * 공격을 끊지 않는 연출이다. 애니메이션이 비어 있는 쪽은 움찔하지 않는다.
+ */
+USTRUCT(BlueprintType)
+struct KNIGHT_API FknightMonsterHitFlinch
+{
+	GENERATED_BODY()
+
+	/** 정면에서 맞았을 때(몸이 뒤로 젖혀지는 애니메이션). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hit Flinch")
+	TObjectPtr<UAnimSequence> Front;
+
+	/** 뒤에서 맞았을 때(몸이 앞으로 쏠리는 애니메이션). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hit Flinch")
+	TObjectPtr<UAnimSequence> Back;
+
+	/** 왼쪽에서 맞았을 때(몸이 오른쪽으로 밀리는 애니메이션). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hit Flinch")
+	TObjectPtr<UAnimSequence> Left;
+
+	/** 오른쪽에서 맞았을 때(몸이 왼쪽으로 밀리는 애니메이션). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hit Flinch")
+	TObjectPtr<UAnimSequence> Right;
+
+	/** 피해가 0이면 MinStrength, FullDamage 이상이면 MaxStrength(피격 애니메이션을 얼마나 얹을지, 1 = 그대로). 그 사이는 비례. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hit Flinch", meta=(ClampMin=1))
+	float FullDamage = 60.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hit Flinch", meta=(ClampMin=0, ClampMax=1))
+	float MinStrength = 0.06f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hit Flinch", meta=(ClampMin=0, ClampMax=1))
+	float MaxStrength = 0.15f;
+
+	/** 피격 애니메이션 재생 속도. 큰 몬스터는 짧고 날카롭게 움찔하도록 빠르게 돌린다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hit Flinch", meta=(ClampMin=0.1))
+	float PlayRate = 2.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hit Flinch", meta=(ClampMin=0, Units="s"))
+	float BlendIn = 0.05f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hit Flinch", meta=(ClampMin=0, Units="s"))
+	float BlendOut = 0.3f;
+
+	/** 이 시간 안에 다시 맞으면 더 센 타격일 때만 처음부터 다시 움찔한다(연타에 자세가 계속 튀지 않게). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hit Flinch", meta=(ClampMin=0, Units="s"))
+	float MinInterval = 0.15f;
+};
 
 /** 몬스터가 살아 있는 동안 몸에 붙여 계속 트는 소리 하나. */
 USTRUCT(BlueprintType)
@@ -37,6 +99,17 @@ struct KNIGHT_API FknightMonsterLoopSound
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Sound", meta=(ClampMin=0, Units="s"))
 	float FadeTime = 0.5f;
+
+	/**
+	 * 0보다 크면 내내 들리게 두지 않고 이 시간만큼만 들린 뒤 RestTime 동안 줄여 둔다(가끔 그르렁거리는 소리).
+	 * 짧은 반복음이 계속 깔리면 같은 소리가 되풀이되는 게 귀에 띄어서 쓴다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Sound", meta=(ClampMin=0, Units="s"))
+	float BurstTime = 0.f;
+
+	/** BurstTime을 쓸 때 다시 들릴 때까지 쉬는 시간. 매번 이 범위에서 무작위로 고른다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Sound", meta=(EditCondition="BurstTime > 0"))
+	FFloatInterval RestTime = FFloatInterval(6.f, 10.f);
 };
 
 /**
@@ -72,6 +145,17 @@ public:
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="States", meta=(ClampMin=0, ClampMax=1))
 	float RageFullDamageRatio = 0.f;
+
+	/**
+	 * 분노(EnrageEffect)가 끝나기 전 마지막으로 반드시 쓰는 공격(잔향: 공명해방 끝의 강화 물 회오리).
+	 * 남은 시간이 EnrageFinaleLeadTime 이하가 되면 다른 공격을 고르지 않고, 지금 공격이 끝나는 대로 쓴다(공중 공격이면 먼저 이륙).
+	 * 이 공격이 끝나거나 지쳐 내려앉을 때(State.Monster.Collapsed)까지 분노를 유지한다. 비우면 쓰지 않는다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="States")
+	TSubclassOf<UknightGameplayAbility_MonsterAttack> EnrageFinaleAttack;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="States", meta=(EditCondition="EnrageFinaleAttack != nullptr", ClampMin=0, Units="s"))
+	float EnrageFinaleLeadTime = 8.f;
 
 	/** Applied when Stamina runs out: grants State.Monster.Exhausted for a duration and restores Stamina. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="States")
@@ -174,6 +258,10 @@ public:
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation")
 	TArray<TObjectPtr<UNiagaraSystem>> PrewarmEffects;
+
+	/** 맞을 때마다 맞은 쪽에서 움찔하는 덧셈 피격. 애님 그래프에 Knight Hit Flinch 노드가 있어야 보인다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation")
+	FknightMonsterHitFlinch HitFlinch;
 
 	/** 살아 있는 동안 몸에 붙여 계속 트는 소리(몸 열기, 그르렁). 죽으면 잦아든다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation")

@@ -467,6 +467,7 @@ namespace knightRecipe
 		SetValue(CDO, TEXT("HitParams"), Attack.HitParams, Log);
 		SetObject(CDO, TEXT("Montage"), Montage, Log);
 		SetValue<float>(CDO, TEXT("StartTurnYaw"), Attack.StartTurnYaw, Log);
+		SetValue<bool>(CDO, TEXT("bStartTurnToTarget"), Attack.bStartTurnToTarget, Log);
 		SetValue<float>(CDO, TEXT("StartTurnRate"), Attack.StartTurnRate, Log);
 		SetValue<float>(CDO, TEXT("StartTurnMaxTime"), Attack.StartTurnMaxTime, Log);
 		if (Attack.Type == EknightRecipeAttackType::Area)
@@ -1853,6 +1854,7 @@ UknightMonsterRecipe* UknightMonsterRecipeLibrary::CreateRecipeFromMonster(TSubc
 				Attack.Selection.BlockedOwnerTags.RemoveTag(AirborneTag);
 				GetValue(CDO, TEXT("HitParams"), Attack.HitParams);
 				GetValue(CDO, TEXT("StartTurnYaw"), Attack.StartTurnYaw);
+				GetValue(CDO, TEXT("bStartTurnToTarget"), Attack.bStartTurnToTarget);
 				GetValue(CDO, TEXT("StartTurnRate"), Attack.StartTurnRate);
 				GetValue(CDO, TEXT("StartTurnMaxTime"), Attack.StartTurnMaxTime);
 				if (Attack.Type == EknightRecipeAttackType::Area)
@@ -2071,6 +2073,64 @@ int32 UknightMonsterRecipeLibrary::SetMontageSoundTime(UAnimMontage* Montage, co
 	return Moved;
 }
 
+bool UknightMonsterRecipeLibrary::AddHitFlinchNode(UAnimBlueprint* AnimBlueprint)
+{
+	UClass* const FlinchClass = FindObject<UClass>(nullptr, TEXT("/Script/knightAnimGraph.AnimGraphNode_knightHitFlinch"));
+	if (!AnimBlueprint || !FlinchClass)
+	{
+		return false;
+	}
+	TArray<UEdGraph*> Graphs;
+	AnimBlueprint->GetAllGraphs(Graphs);
+	UEdGraphNode* SlotNode = nullptr;
+	for (UEdGraph* const Graph : Graphs)
+	{
+		for (UEdGraphNode* const Node : Graph->Nodes)
+		{
+			if (Node && Node->GetClass() == FlinchClass)
+			{
+				return true;
+			}
+			if (Node && Node->GetClass()->GetFName() == TEXT("AnimGraphNode_Slot"))
+			{
+				SlotNode = Node;
+			}
+		}
+	}
+	UEdGraphPin* const SlotOut = SlotNode ? SlotNode->FindPin(TEXT("Pose"), EGPD_Output) : nullptr;
+	if (!SlotOut)
+	{
+		UE_LOG(LogTemp, Error, TEXT("AddHitFlinchNode %s: Slot 노드를 찾지 못했습니다."), *GetNameSafe(AnimBlueprint));
+		return false;
+	}
+	UEdGraph* const Graph = SlotNode->GetGraph();
+	Graph->Modify();
+	UEdGraphNode* const FlinchNode = NewObject<UEdGraphNode>(Graph, FlinchClass, NAME_None, RF_Transactional);
+	Graph->AddNode(FlinchNode, false, false);
+	FlinchNode->CreateNewGuid();
+	FlinchNode->PostPlacedNewNode();
+	FlinchNode->AllocateDefaultPins();
+	FlinchNode->NodePosX = SlotNode->NodePosX + 280;
+	FlinchNode->NodePosY = SlotNode->NodePosY + 160;
+	UEdGraphPin* const FlinchIn = FlinchNode->FindPin(TEXT("Source"), EGPD_Input);
+	UEdGraphPin* const FlinchOut = FlinchNode->FindPin(TEXT("Pose"), EGPD_Output);
+	if (!FlinchIn || !FlinchOut)
+	{
+		Graph->RemoveNode(FlinchNode);
+		return false;
+	}
+	const TArray<UEdGraphPin*> Targets = SlotOut->LinkedTo;
+	SlotOut->BreakAllPinLinks();
+	SlotOut->MakeLinkTo(FlinchIn);
+	for (UEdGraphPin* const Target : Targets)
+	{
+		FlinchOut->MakeLinkTo(Target);
+	}
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(AnimBlueprint);
+	FKismetEditorUtilities::CompileBlueprint(AnimBlueprint, EBlueprintCompileOptions::SkipGarbageCollection);
+	return true;
+}
+
 USoundCue* UknightMonsterRecipeLibrary::CreateRandomSoundCue(const FString& PackagePath, const TArray<USoundWave*>& Waves, USoundClass* SoundClass,
 	USoundAttenuation* Attenuation)
 {
@@ -2141,6 +2201,74 @@ bool UknightMonsterRecipeLibrary::SetMontagePlayRateWindow(UAnimMontage* Montage
 	Montage->PostEditChange();
 	Montage->MarkPackageDirty();
 	return true;
+}
+
+int32 UknightMonsterRecipeLibrary::CopyMontageNotifies(const UAnimMontage* Source, float SourceStart, float SourceEnd, UAnimMontage* Target,
+	float TargetStart, TSubclassOf<UObject> OnlyClass)
+{
+	if (!Source || !Target || Source == Target || SourceEnd < SourceStart || TargetStart < 0.f)
+	{
+		UE_LOG(LogTemp, Error, TEXT("CopyMontageNotifies %s -> %s: 몽타주가 없거나 구간 %.3f~%.3f가 잘못됐습니다."),
+			*GetNameSafe(Source), *GetNameSafe(Target), SourceStart, SourceEnd);
+		return 0;
+	}
+	const float TargetLength = Target->GetPlayLength();
+	Target->Modify();
+	int32 Copied = 0;
+	for (const FAnimNotifyEvent& Event : Source->Notifies)
+	{
+		UObject* const Object = Event.Notify ? static_cast<UObject*>(Event.Notify) : static_cast<UObject*>(Event.NotifyStateClass);
+		const float Time = Event.GetTime();
+		if (!Object || Time < SourceStart || Time > SourceEnd || (OnlyClass && !Object->IsA(OnlyClass)))
+		{
+			continue;
+		}
+		const float Start = TargetStart + (Time - SourceStart);
+		if (Start > TargetLength)
+		{
+			continue;
+		}
+		// 노티파이 객체는 몽타주 안에 사는 인스턴스라 Target을 Outer로 복제해야 Source와 값을 공유하지 않는다.
+		UObject* const Copy = DuplicateObject(Object, Target);
+		const FName TrackName = Source->AnimNotifyTracks.IsValidIndex(Event.TrackIndex) ? Source->AnimNotifyTracks[Event.TrackIndex].TrackName : FName(TEXT("Copied"));
+		const int32 TrackIndex = knightRecipe::FindOrAddNotifyTrack(Target, TrackName);
+		if (UAnimNotifyState* const State = Cast<UAnimNotifyState>(Copy))
+		{
+			knightRecipe::AddNotifyState(Target, State, Start, FMath::Min(Start + Event.GetDuration(), TargetLength), TrackIndex);
+			Target->Notifies.Last().NotifyName = Event.NotifyName;
+		}
+		else
+		{
+			FAnimNotifyEvent& NewEvent = Target->Notifies.AddDefaulted_GetRef();
+			NewEvent.NotifyName = Event.NotifyName;
+			NewEvent.Notify = CastChecked<UAnimNotify>(Copy);
+			NewEvent.Link(Target, Start);
+			NewEvent.TriggerTimeOffset = GetTriggerTimeOffsetForType(Target->CalculateOffsetForNotify(Start));
+			NewEvent.TrackIndex = TrackIndex;
+			NewEvent.Guid = FGuid::NewGuid();
+		}
+		++Copied;
+	}
+	Target->SortNotifies();
+	Target->RefreshCacheData();
+	Target->PostEditChange();
+	Target->MarkPackageDirty();
+	return Copied;
+}
+
+int32 UknightMonsterRecipeLibrary::ClearMontageNotifies(UAnimMontage* Montage)
+{
+	if (!Montage)
+	{
+		return 0;
+	}
+	Montage->Modify();
+	const int32 Removed = Montage->Notifies.Num();
+	Montage->Notifies.Reset();
+	Montage->RefreshCacheData();
+	Montage->PostEditChange();
+	Montage->MarkPackageDirty();
+	return Removed;
 }
 
 UPhysicsAsset* UknightMonsterRecipeLibrary::CreateMonsterPhysicsAsset(USkeletalMesh* Mesh, const FString& PackagePath,
