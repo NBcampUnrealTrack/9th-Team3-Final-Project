@@ -5,7 +5,12 @@
 #include "Abilities/Tasks/AbilityTask_Repeat.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
 #include "Engine/World.h"
+#include "Components/CapsuleComponent.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/PlayerController.h"
 #include "Monster/knightMonsterCharacterBase.h"
+#include "Monster/knightMonsterDefinition.h"
+#include "Monster/knightMonsterNearMissSubsystem.h"
 #include "Monster/knightMonsterMovementComponent.h"
 #include "Monster/knightMonsterTargetingComponent.h"
 #include "System/knightGameplayTags.h"
@@ -166,7 +171,51 @@ bool UknightGameplayAbility_MonsterAttack::CanActivateAbility(const FGameplayAbi
 
 bool UknightGameplayAbility_MonsterAttack::HandleGuardPush(AActor& Target, EknightHitOutcome Outcome, float ExistingPushDistance) const
 {
+	// 몬스터 공격의 타격 결과는 모두 여기를 지나므로 스친 바람 소리도 여기서 정한다.
+	const AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetAvatarActorFromActorInfo());
+	UknightMonsterNearMissSubsystem* const NearMiss = GetWorld() ? GetWorld()->GetSubsystem<UknightMonsterNearMissSubsystem>() : nullptr;
+	if (Monster && NearMiss)
+	{
+		if (Outcome == EknightHitOutcome::Evaded)
+		{
+			NearMiss->ReportNearMiss(*Monster, Target, Target.GetActorLocation(), true);
+		}
+		else if (Outcome != EknightHitOutcome::Ignored)
+		{
+			NearMiss->ReportContact(Target);
+		}
+	}
 	return UknightMonsterGuardPushComponent::HandleHit(GetAvatarActorFromActorInfo(), Target, Outcome, GuardReaction, ExistingPushDistance);
+}
+
+void UknightGameplayAbility_MonsterAttack::CheckNearMiss(const FVector& Center, float Radius, const TSet<TWeakObjectPtr<AActor>>& HitActors) const
+{
+	const AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetAvatarActorFromActorInfo());
+	const UknightMonsterDefinition* const Definition = Monster ? Monster->GetMonsterDefinition() : nullptr;
+	UWorld* const World = GetWorld();
+	UknightMonsterNearMissSubsystem* const NearMiss = World ? World->GetSubsystem<UknightMonsterNearMissSubsystem>() : nullptr;
+	if (!Definition || !Definition->NearMissSound || !NearMiss)
+	{
+		return;
+	}
+	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+	{
+		ACharacter* const Player = It->Get() ? Cast<ACharacter>(It->Get()->GetPawn()) : nullptr;
+		if (!Player || HitActors.Contains(Player))
+		{
+			continue;
+		}
+		// 판정 구체 겉면에서 플레이어 캡슐 겉면까지의 거리. 겹쳤으면(0 이하) 이번 틱 판정이 맞히거나 무적으로 흘렸다.
+		const UCapsuleComponent* const Capsule = Player->GetCapsuleComponent();
+		const FVector Up = Capsule->GetUpVector() * Capsule->GetScaledCapsuleHalfHeight_WithoutHemisphere();
+		const FVector Closest = FMath::ClosestPointOnSegment(Center, Player->GetActorLocation() - Up, Player->GetActorLocation() + Up);
+		const float Gap = FVector::Dist(Center, Closest) - Capsule->GetScaledCapsuleRadius() - Radius;
+		if (Gap > 0.f && Gap <= Definition->NearMissMargin)
+		{
+			// 스친 쪽(판정 겉면에서 플레이어를 향한 점)에서 소리가 나야 어느 쪽으로 지나갔는지 들린다.
+			NearMiss->ReportNearMiss(*Monster, *Player, Center + (Closest - Center).GetSafeNormal() * Radius, false);
+		}
+	}
 }
 
 float UknightGameplayAbility_MonsterAttack::GetMonsterTimeStep(float Interval) const

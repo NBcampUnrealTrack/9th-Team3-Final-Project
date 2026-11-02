@@ -216,6 +216,7 @@ void UknightGameplayAbility_MonsterChargeAttack::ApplyHits()
 				Knockback.Start(*Avatar, Target, KnockbackSpeed * (Outcome == EknightHitOutcome::Guarded ? GuardKnockbackScale : 1.f), KnockbackTime);
 			}
 		});
+	CheckNearMiss(Center, HitRadius, HitActors);
 
 #if ENABLE_DRAW_DEBUG
 	if (knightMonsterDebug::ShouldDrawAttacks())

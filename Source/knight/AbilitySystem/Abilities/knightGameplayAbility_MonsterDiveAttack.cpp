@@ -246,6 +246,7 @@ void UknightGameplayAbility_MonsterDiveAttack::ApplyHits()
 			SpawnContactSplash(Target, Outcome);
 			HandleGuardPush(Target, Outcome);
 		});
+	CheckNearMiss(Center, HitRadius, HitActors);
 #if ENABLE_DRAW_DEBUG
 	if (knightMonsterDebug::ShouldDrawAttacks())
 	{
