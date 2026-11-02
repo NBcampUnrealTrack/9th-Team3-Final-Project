@@ -100,6 +100,69 @@ void UknightGameplayAbility_BoostLunge::ActivateAbility(const FGameplayAbilitySp
 	bStrikeStarted = false;
 	Character->SetActorRotation(FRotator(0.f, FaceRotation.Yaw, 0.f));
 
+	UAbilityTask_WaitGameplayEvent* const HitTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, knightGameplayTags::Event_Melee_Hit, nullptr, false, true);
+	HitTask->EventReceived.AddDynamic(this, &ThisClass::OnMeleeHitEvent);
+	HitTask->ReadyForActivation();
+
+	// (2026-10-29 사용자 요청) 선딜레이: 대상 쪽으로 돌아 돌진 자세로 멈춘 채 등 부스터를 먼저 켜고(예열), StartupDelay초 뒤에 돌진한다.
+	// 달리던 속도는 버리고 이동 입력도 막는다. 돌진 방향·거리는 예열이 끝날 때 다시 잰다(StartLunge).
+	UWorld* const World = GetWorld();
+	if (StartupDelay > 0.f && !bAirLunge && World)
+	{
+		Movement->StopMovementImmediately();
+		SetStartupMoveLocked(true);
+		ActiveDashMontage = PickStanceMontage(DashMontage, OneHandedDashMontage);
+		if (UAnimInstance* const Anim = ActiveDashMontage && Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr)
+		{
+			Anim->Montage_Play(ActiveDashMontage, DashPlayRate * GetAttackSpeed());
+			Anim->Montage_Pause(ActiveDashMontage);
+		}
+		StartBackThrusters(*Character);
+		World->GetTimerManager().SetTimer(StartupDelayTimer, this, &ThisClass::StartLunge, StartupDelay, false);
+		UE_LOG(LogknightAbility, Log, TEXT("%s: startup delay %.2fs before the lunge"), *GetName(), StartupDelay);
+		return;
+	}
+	StartLunge();
+}
+
+void UknightGameplayAbility_BoostLunge::SetStartupMoveLocked(const bool bLock)
+{
+	if (bStartupMoveLocked == bLock)
+	{
+		return;
+	}
+	const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	AController* const Controller = Character ? Character->GetController() : nullptr;
+	if (!Controller)
+	{
+		return;
+	}
+	// SetIgnoreMoveInput은 횟수를 센다. 다른 곳에서 건 잠금은 건드리지 않고 내가 건 만큼만 푼다.
+	Controller->SetIgnoreMoveInput(bLock);
+	bStartupMoveLocked = bLock;
+}
+
+void UknightGameplayAbility_BoostLunge::StartLunge()
+{
+	ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	UCharacterMovementComponent* const Movement = Character ? Character->GetCharacterMovement() : nullptr;
+	if (!IsActive() || !Character || !Movement)
+	{
+		return;
+	}
+	SetStartupMoveLocked(false);
+
+	// 락온 대상 앞 도착 지점. 예열하는 동안 대상이 움직였을 수 있어 다시 잰다. 그사이 락온이 풀렸으면 그 자리에서 벤다.
+	FVector Destination;
+	FRotator FaceRotation;
+	float Travel = 0.f;
+	if (!UknightCombatLibrary::ComputeAttackWarp(Character, MaxLungeDistance, StopDistance, false, 0.f, 0.f, Destination, FaceRotation, Travel))
+	{
+		OnLungeFinished();
+		return;
+	}
+	Character->SetActorRotation(FRotator(0.f, FaceRotation.Yaw, 0.f));
+
 	FVector ToDestination = Destination - Character->GetActorLocation();
 	ToDestination.Z = 0.f;
 	if (bAirLunge)
@@ -115,10 +178,6 @@ void UknightGameplayAbility_BoostLunge::ActivateAbility(const FGameplayAbilitySp
 	const float Distance = ToDestination.Size();
 	LungeDirection = Distance > KINDA_SMALL_NUMBER ? ToDestination / Distance : Character->GetActorForwardVector().GetSafeNormal2D();
 
-	UAbilityTask_WaitGameplayEvent* const HitTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, knightGameplayTags::Event_Melee_Hit, nullptr, false, true);
-	HitTask->EventReceived.AddDynamic(this, &ThisClass::OnMeleeHitEvent);
-	HitTask->ReadyForActivation();
-
 	// 이미 가까우면(락온 태그 갱신 직후 등) 돌진 없이 바로 벤다.
 	if (Distance < 50.f)
 	{
@@ -131,7 +190,15 @@ void UknightGameplayAbility_BoostLunge::ActivateAbility(const FGameplayAbilitySp
 	{
 		if (UAnimInstance* const Anim = Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr)
 		{
-			Anim->Montage_Play(Dash, DashPlayRate * GetAttackSpeed());
+			// (2026-10-29) 예열 중 멈춰 둔 돌진 자세면 이어서 재생한다.
+			if (Anim->GetActiveInstanceForMontage(Dash))
+			{
+				Anim->Montage_Resume(Dash);
+			}
+			else
+			{
+				Anim->Montage_Play(Dash, DashPlayRate * GetAttackSpeed());
+			}
 			// 돌진 자세는 베기가 시작될 때까지 반복한다. 공중 돌진 자세(Plunge_Hold)는 0.33초짜리라
 			// 돌진(최대 0.6초)보다 먼저 끝나서 중간에 기본 공중 자세로 끊겼다. (2026-10-13)
 			const FName DashSection = Dash->GetSectionName(0);
@@ -157,7 +224,11 @@ void UknightGameplayAbility_BoostLunge::ActivateAbility(const FGameplayAbilitySp
 			GetStanceScaledHitParams(HitParams), Destination, Duration);
 	}
 
-	StartBackThrusters(*Character);
+	// (2026-10-29) 예열에서 이미 켰으면 그대로 이어서 뿜는다.
+	if (BackThrusters.IsEmpty())
+	{
+		StartBackThrusters(*Character);
+	}
 	if (bAirLunge)
 	{
 		StartFootThrusters(*Character);
@@ -438,6 +509,12 @@ void UknightGameplayAbility_BoostLunge::EndAbility(const FGameplayAbilitySpecHan
 			Feedback->EndPredictionForAttack(this);
 		}
 	}
+	// (2026-10-29) 예열 도중 끊기면(피격 등) 돌진을 시작하지 않고 이동 잠금을 푼다.
+	if (UWorld* const World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(StartupDelayTimer);
+	}
+	SetStartupMoveLocked(false);
 	StopBackThrusters();
 	StopFootThrusters();
 	StopGhostTrail();

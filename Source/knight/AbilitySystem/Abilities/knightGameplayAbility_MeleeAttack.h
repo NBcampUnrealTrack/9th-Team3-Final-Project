@@ -9,6 +9,7 @@
 
 class ACharacter;
 class UAnimMontage;
+class UNiagaraSystem;
 
 /**
  * One melee attack: plays a montage, and turns every Event.Melee.Hit from the weapon trace into a
@@ -150,11 +151,64 @@ protected:
 	FknightGhostTrailSettings LungeGhostTrailSettings;
 
 	/**
+	 * (2026-10-29 사용자 요청) 락온 중일 때만 선딜레이(초, 실제 시간). 0이면 예전처럼 바로 공격.
+	 * 대상 쪽으로 돌아 공격 몽타주의 첫 자세로 멈춘 채(달리던 속도는 버리고 이동 입력은 막음) StartupDelayEffect를 켜고(예열),
+	 * 이 시간이 지나면 워프 대상을 다시 잡고 공격한다. 대쉬공격(GA_Knight_RunAttack)은 0.4로 넣었다가 같은 날 0(락온 대쉬를 뺌). 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Startup", meta=(ClampMin=0, Units="s"))
+	float LockOnStartupDelay = 0.f;
+
+	/**
+	 * (2026-10-29 사용자 결정) 켜면 스탠스가 공격을 느리게 할 때(양손, 스탠스 공격 속도 < 1) 느리게 재생하지 않고,
+	 * 그만큼(몽타주 전체 기준으로 늘어나던 시간)을 선딜레이로 바꾼다: 첫 자세로 멈춰 예열(StartupDelayEffect)한 뒤 감속 없이 휘두른다.
+	 * 공격 전체 시간은 예전과 같다. 대쉬공격(GA_Knight_RunAttack)이 켠다(양손 약 0.29초). 한손(빠르게 하는 쪽)은 그대로.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Startup")
+	bool bStanceSlowdownAsStartupDelay = false;
+
+	/**
+	 * (2026-10-29 사용자 요청) 선딜레이 동안 재생할 자세 몽타주. 비우면 공격 몽타주의 첫 자세로 멈춘다.
+	 * 대쉬공격은 차지 유지 자세(AM_Knight_Charge_Loop, 두 다리를 벌리고 버팀). 차지 시작 자세(Charge_Start)는 빠르게 돌아 움찔거려서 바꿨다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Startup")
+	TObjectPtr<UAnimMontage> StartupDelayPoseMontage;
+
+	/**
+	 * (2026-10-29) 자세 몽타주 배속. 0이면 선딜레이 길이에 맞춰 끝까지 재생되도록 맞춘다(0.5~3배, 자세를 잡는 동작용).
+	 * 반복 자세(차지 유지 등)는 1처럼 고정 배속으로 둔다. 대쉬공격 1. 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Startup", meta=(ClampMin=0))
+	float StartupDelayPoseRate = 0.f;
+
+	/**
+	 * (2026-10-29 사용자 요청) 자세 몽타주로 들어가는 블렌드 시간(초). 0이면 몽타주에 정한 블렌드(보통 0.1초 직선).
+	 * 0보다 크면 천천히 시작해 천천히 끝나는 블렌드(HermiteCubic)로 이 시간 동안 자세를 잡는다. 대쉬공격 0.25(선딜 약 0.29초). 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Startup", meta=(ClampMin=0, Units="s"))
+	float StartupDelayPoseBlendIn = 0.f;
+
+	/** (2026-10-29) 선딜레이 동안 켜는 예열 이펙트(예: NS_Knight_Thruster). 비우면 이펙트 없이 멈추기만 한다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Startup")
+	TObjectPtr<UNiagaraSystem> StartupDelayEffect;
+
+	/** (2026-10-29) 예열 이펙트를 붙일 소켓(나이트 메시). 기본은 등 추진기 두 개. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Startup")
+	TArray<FName> StartupDelayEffectSockets = { TEXT("thruster_l"), TEXT("thruster_r") };
+
+	/**
 	 * (2026-10-14) 공격 중 애니 루트 모션 이동 거리 배율(ACharacter::AnimRootMotionTranslationScale).
 	 * 1 = 애니 그대로, 0.5 = 절반만 나아간다. 공격이 끝나면 1로 되돌린다.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Motion Warping", meta=(ClampMin=0, ClampMax=2))
 	float RootMotionTranslationScale = 1.f;
+
+	/**
+	 * (2026-10-29 사용자 결정) 0보다 크면 락온 대상으로 끌려가지 않고, 바라보는 방향으로 이 거리(cm)만큼 나간다.
+	 * 앞에 적(다른 폰)이 있으면 그 표면에서 WarpStopDistance 앞에서, 벽이면 벽 앞에서 멈춘다(락온 여부와 상관없음).
+	 * 대쉬공격(GA_Knight_RunAttack)이 400(10-29 200 → 400). 0이면 예전처럼 락온 대상 쪽으로 MaxWarpDistance까지. 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Motion Warping", meta=(ClampMin=0, Units="cm"))
+	float ForwardLungeDistance = 0.f;
 
 	/** The warp stops this far in front of the target's surface (or part point), so the blade lands instead of the body. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Motion Warping", meta=(ClampMin=0, Units="cm"))
@@ -242,6 +296,8 @@ private:
 	void OnDrawInterrupted();
 
 	void StartAttack();
+	/** (2026-10-29) ForwardLungeDistance: 바라보는 방향 앞 지점(적·벽이 있으면 그 앞)으로 워프 대상을 잡는다. */
+	bool SetForwardLungeWarpTarget(FVector& OutLocation, FRotator& OutRotation, float& OutTravel) const;
 	/** (2026-10-20) bWarpToParriedAttacker이고 락온이 아닐 때 돌진할 패링한 적. 없거나 죽었으면 null. */
 	AActor* GetParriedWarpTarget() const;
 	/** 지금 스탠스에 맞는 공격 몽타주. */
@@ -256,6 +312,20 @@ private:
 	FTimerHandle MoveCancelTimer;
 	FTimerHandle DrawTimer;
 	bool bAttackStarted = false;
+
+	/** (2026-10-29) 선딜레이(LockOnStartupDelay + 스탠스 감속분): 첫 자세로 멈춰 예열하고, 끝나면 StartAttack을 다시 부른다. */
+	void BeginStartupDelay(float Delay);
+	/** (2026-10-29) bStanceSlowdownAsStartupDelay일 때 양손 감속 대신 넣을 선딜레이(초). 아니면 0. */
+	float GetStanceStartupDelay() const;
+	/** (2026-10-29) bStanceSlowdownAsStartupDelay일 때 공격 배속에서 스탠스 감속을 빼는 배율(1 ÷ 스탠스 공격 속도). 아니면 1. */
+	float GetStanceRateCompensation() const;
+	void OnStartupDelayFinished();
+	void StopStartupDelay();
+	FTimerHandle StartupDelayTimer;
+	bool bStartupDelayDone = false;
+	/** 예열 동안 멈춰 둔 몽타주(공격이 시작되면 같은 몽타주를 처음부터 다시 튼다). 끊기면 EndAbility에서 내린다. */
+	TWeakObjectPtr<UAnimMontage> StartupDelayMontage;
+	TArray<TWeakObjectPtr<class UNiagaraComponent>> StartupDelayEffects;
 
 	/**
 	 * (2026-10-20 사용자 결정) 패링 반격 추적: bWarpToParriedAttacker 공격은 몽타주의 모션 워핑 구간이 끝날 때(휘두르기 직전)까지
