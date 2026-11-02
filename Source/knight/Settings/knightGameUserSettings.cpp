@@ -115,11 +115,14 @@ void UknightGameUserSettings::GetConnectedDisplays(TArray<FKnightDisplayInfo>& O
 			Monitor.WorkArea.Bottom - Monitor.WorkArea.Top);
 		Display.DPI = Monitor.DPI;
 		Display.bPrimary = Monitor.bIsPrimary;
-		Display.Label = FString::Printf(TEXT("모니터 %d%s"), Index + 1,
-			Monitor.bIsPrimary ? TEXT(" (주 모니터)") : TEXT(""));
+		Display.Label = FText::Format(Monitor.bIsPrimary
+				? NSLOCTEXT("KnightSettings", "PrimaryMonitorName", "모니터 {0} (주 모니터)")
+				: NSLOCTEXT("KnightSettings", "MonitorName", "모니터 {0}"), FText::AsNumber(Index + 1));
 		if (!Monitor.FriendlyName.IsEmpty())
 		{
-			Display.Label += FString::Printf(TEXT(" · %s"), *Monitor.FriendlyName);
+			// 모니터 제품 이름은 번역하지 않는다
+			Display.Label = FText::Format(NSLOCTEXT("KnightSettings", "MonitorWithProduct", "{0} · {1}"),
+				Display.Label, FText::AsCultureInvariant(Monitor.FriendlyName));
 		}
 	}
 }
