@@ -266,4 +266,26 @@ public:
 	/** 살아 있는 동안 몸에 붙여 계속 트는 소리(몸 열기, 그르렁). 죽으면 잦아든다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation")
 	TArray<FknightMonsterLoopSound> LoopSounds;
+
+	/**
+	 * 공격이 플레이어 바로 옆을 스쳤지만 맞지 않았을 때(회피 무적으로 흘린 공격 포함) 스친 자리에서 트는 묵직한 바람 소리.
+	 * 비어 있으면 내지 않는다. 몬스터 공격 어빌리티의 구체 판정과 타격 결과에서 정한다(UknightMonsterNearMissSubsystem).
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation|Near Miss")
+	TObjectPtr<USoundBase> NearMissSound;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation|Near Miss", meta=(ClampMin=0))
+	float NearMissVolume = 1.f;
+
+	/** 1보다 낮으면 같은 바람 소리도 무겁게 들린다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation|Near Miss", meta=(ClampMin=0.1))
+	float NearMissPitch = 1.f;
+
+	/** 판정 겉면이 플레이어 몸에서 이 거리(cm) 안으로 지나가면 스친 것으로 본다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation|Near Miss", meta=(ClampMin=0, Units="cm"))
+	float NearMissMargin = 250.f;
+
+	/** 같은 플레이어에게 다시 내기까지 최소 간격. 연속 공격마다 나면 시끄럽다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation|Near Miss", meta=(ClampMin=0, Units="s"))
+	float NearMissInterval = 1.5f;
 };

@@ -241,6 +241,7 @@ void UknightGameplayAbility_MonsterDiveAttack::ApplyHits()
 			bParried |= Outcome == EknightHitOutcome::Parried;
 			HandleGuardPush(Target, Outcome);
 		});
+	CheckNearMiss(Center, HitRadius, HitActors);
 #if ENABLE_DRAW_DEBUG
 	if (knightMonsterDebug::ShouldDrawAttacks())
 	{

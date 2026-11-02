@@ -214,6 +214,12 @@ protected:
 	bool HandleGuardPush(AActor& Target, EknightHitOutcome Outcome, float ExistingPushDistance = 0.f) const;
 
 	/**
+	 * 구체 판정(Center, Radius)이 이번 공격에 맞지 않은 플레이어 몸 가까이(몬스터 정의 NearMissMargin)를 지나가면 바람 소리를 예약한다.
+	 * 범위 판정(ApplyAreaMeleeHits) 바로 뒤에 부른다. 회피 무적으로 흘린 타격은 HandleGuardPush에서 따로 처리한다.
+	 */
+	void CheckNearMiss(const FVector& Center, float Radius, const TSet<TWeakObjectPtr<AActor>>& HitActors) const;
+
+	/**
 	 * 월드 시간 Interval을 몬스터 시간으로 바꾼다. 히트스톱은 몬스터의 CustomTimeDilation만 낮춰 몸(몽타주·이동)을 멈추고
 	 * 월드 타이머·AbilityTask_Repeat는 그대로 흐른다. 공격 시계와 회전을 이 값으로 세야 히트스톱 동안 몸과 같이 멈춘다.
 	 */
