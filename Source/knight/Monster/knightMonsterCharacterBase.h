@@ -224,6 +224,8 @@ private:
 	void TriggerHitFlinch(AActor* DamageInstigator, const FGameplayEffectSpec* EffectSpec, float Damage);
 	FknightHitFlinchState HitFlinchState;
 	double LastHitFlinchTime = -1.e9;
+	/** 강공격 움찔이 끝나는 시각. 그 전에는 더 센 타격만 움찔을 다시 시작한다. */
+	double HeavyFlinchEndTime = -1.e9;
 	/** LoopSounds와 같은 순서. BurstTime을 쓰는 소리가 지금 쉬는 중인지. */
 	TArray<bool> LoopResting;
 	TArray<FTimerHandle> LoopBurstTimers;

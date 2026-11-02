@@ -487,21 +487,39 @@ void AknightMonsterCharacterBase::TriggerHitFlinch(AActor* DamageInstigator, con
 	{
 		return;
 	}
-	const float Strength = FMath::Lerp(Settings.MinStrength, Settings.MaxStrength, FMath::Clamp(Damage / Settings.FullDamage, 0.f, 1.f));
+	const UGameplayAbility* const SourceAbility = EffectSpec ? EffectSpec->GetContext().GetAbility() : nullptr;
+	const bool bHeavy = SourceAbility && !Settings.HeavyAttackTags.IsEmpty() && SourceAbility->GetAssetTags().HasAny(Settings.HeavyAttackTags);
+	float Strength = FMath::Lerp(Settings.MinStrength, Settings.MaxStrength, FMath::Clamp(Damage / Settings.FullDamage, 0.f, 1.f));
+	float PlayRate = Settings.PlayRate;
+	if (bHeavy)
+	{
+		Strength = FMath::Min(Strength * Settings.HeavyStrengthScale, 1.f);
+		PlayRate *= Settings.HeavyPlayRateScale;
+	}
+	const bool bWeak = !Settings.WeakTags.IsEmpty() && AbilitySystemComponent->HasAnyMatchingGameplayTags(Settings.WeakTags);
+	if (bWeak)
+	{
+		Strength *= Settings.WeakStrengthScale;
+	}
 	const double Now = GetWorld()->GetTimeSeconds();
-	if (Now - LastHitFlinchTime < Settings.MinInterval && Strength <= HitFlinchState.Strength)
+	// 강공격은 항상 새로 움찔한다. 강공격 움찔은 길게 이어져야 하므로, 끝나기 전에 들어온 약한 타격이
+	// 처음부터 다시 틀어 짧게 끊지 못하게 한다.
+	const double KeepUntil = FMath::Max(LastHitFlinchTime + Settings.MinInterval, HeavyFlinchEndTime);
+	if (!bHeavy && Now < KeepUntil && Strength <= HitFlinchState.Strength)
 	{
 		return;
 	}
 	LastHitFlinchTime = Now;
+	HeavyFlinchEndTime = bHeavy ? Now + Sequence->GetPlayLength() / PlayRate : -1.e9;
 	HitFlinchState.Sequence = Sequence;
 	HitFlinchState.Strength = Strength;
-	HitFlinchState.PlayRate = Settings.PlayRate;
+	HitFlinchState.PlayRate = PlayRate;
 	HitFlinchState.BlendIn = Settings.BlendIn;
 	HitFlinchState.BlendOut = Settings.BlendOut;
 	++HitFlinchState.Count;
-	UE_LOG(LogknightAI, Verbose, TEXT("%s: hit flinch %s (%s, damage %.0f, strength %.2f)."), *GetName(), *GetNameSafe(Sequence),
-		*StaticEnum<EknightHitSide>()->GetNameStringByValue(static_cast<int64>(Side)), Damage, Strength);
+	UE_LOG(LogknightAI, Verbose, TEXT("%s: hit flinch %s (%s, %s%s, damage %.0f, strength %.2f, %.2fs)."), *GetName(), *GetNameSafe(Sequence),
+		*StaticEnum<EknightHitSide>()->GetNameStringByValue(static_cast<int64>(Side)), bHeavy ? TEXT("heavy") : TEXT("light"),
+		bWeak ? TEXT(" weak") : TEXT(""), Damage, Strength, Sequence->GetPlayLength() / PlayRate);
 }
 
 void AknightMonsterCharacterBase::HandleReactingChanged(const FGameplayTag Tag, int32 NewCount)

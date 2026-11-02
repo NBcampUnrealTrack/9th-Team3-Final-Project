@@ -73,6 +73,28 @@ struct KNIGHT_API FknightMonsterHitFlinch
 	/** 이 시간 안에 다시 맞으면 더 센 타격일 때만 처음부터 다시 움찔한다(연타에 자세가 계속 튀지 않게). */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hit Flinch", meta=(ClampMin=0, Units="s"))
 	float MinInterval = 0.15f;
+
+	/**
+	 * 이 태그를 가진 공격 어빌리티로 맞으면 강공격 움찔을 쓴다(플레이어 강공격은 Ability.Attack.Heavy).
+	 * 비어 있으면 공격 종류를 나누지 않는다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hit Flinch|Heavy", meta=(Categories="Ability"))
+	FGameplayTagContainer HeavyAttackTags;
+
+	/** 강공격 움찔 세기 배율(피해량으로 정한 세기에 곱한다, 최대 1). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hit Flinch|Heavy", meta=(ClampMin=1))
+	float HeavyStrengthScale = 1.5f;
+
+	/** 강공격 움찔 재생 속도 배율. 0.5면 두 배 길게 움찔한다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hit Flinch|Heavy", meta=(ClampMin=0.1, ClampMax=1))
+	float HeavyPlayRateScale = 0.5f;
+
+	/** 이 태그 중에는 움찔 세기에 WeakStrengthScale을 곱한다(잔열 다운: 쓰러진 몸이 크게 튀지 않게). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hit Flinch|Weak", meta=(Categories="State"))
+	FGameplayTagContainer WeakTags;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hit Flinch|Weak", meta=(ClampMin=0, ClampMax=1))
+	float WeakStrengthScale = 0.5f;
 };
 
 /** 몬스터가 살아 있는 동안 몸에 붙여 계속 트는 소리 하나. */
