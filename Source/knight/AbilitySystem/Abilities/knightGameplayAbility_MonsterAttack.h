@@ -202,6 +202,12 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack|FollowUp")
 	TArray<TSubclassOf<UknightGameplayAbility_MonsterAttack>> AfterAttackMoves;
 
+	/**
+	 * 월드 시간 Interval을 몬스터 시간으로 바꾼다. 히트스톱은 몬스터의 CustomTimeDilation만 낮춰 몸(몽타주·이동)을 멈추고
+	 * 월드 타이머·AbilityTask_Repeat는 그대로 흐른다. 공격 시계와 회전을 이 값으로 세야 히트스톱 동안 몸과 같이 멈춘다.
+	 */
+	float GetMonsterTimeStep(float Interval) const;
+
 private:
 	float GetSelectionWeightInternal(const FknightMonsterAttackContext& Context, bool bCheckCooldown) const;
 
