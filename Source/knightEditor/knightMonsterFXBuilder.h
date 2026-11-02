@@ -168,10 +168,11 @@ public:
 	/**
 	 * 회오리 물 한 번(월드에 스폰, 스스로 끝남). bCollapse가 아니면 다 만들어지는 순간 밑동에서 크게 솟구치는 물,
 	 * bCollapse면 사라질 때 기둥 높이에서 쏟아져 내리는 물. 밑동(수면)에 스폰한다.
+	 * bSoftMist면 물안개가 고리로 퍼지지 않고 가운데부터 채워 퍼진다(바깥 테두리가 보이지 않음, 다이브 착수).
 	 */
 	UFUNCTION(BlueprintCallable, Category="Knight|FX")
 	static UNiagaraSystem* BuildTornadoBurstSystem(const FString& PackagePath, UMaterialInterface* SprayMaterial, UMaterialInterface* MistMaterial,
-		float Radius = 300.f, float Height = 1200.f, bool bCollapse = false, FLinearColor Tint = FLinearColor::White);
+		float Radius = 300.f, float Height = 1200.f, bool bCollapse = false, FLinearColor Tint = FLinearColor::White, bool bSoftMist = false);
 
 	/** 위로 솟구치는 불꽃 한 번(가시 발사). 월드에 스폰하는 용도라 cm 그대로다. */
 	UFUNCTION(BlueprintCallable, Category="Knight|FX")
