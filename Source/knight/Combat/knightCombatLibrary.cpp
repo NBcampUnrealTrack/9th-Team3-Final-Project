@@ -295,7 +295,8 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 	{
 		KnightSourceASC->PlayAttackImpactShake(Params.PoiseDamage, false);
 		// (2026-10-21) 나이트 전용 타격 이펙트·소리(몬스터 ASC는 비어 있어 아무것도 안 한다).
-		KnightSourceASC->PlayAttackImpactEffects(Hit, false, bWeakpointHit);
+		// (2026-10-29) 타격 종류별 소리(무거운 타격·장갑 부위)를 고르도록 그로기 피해와 부위 피해 배율도 넘긴다.
+		KnightSourceASC->PlayAttackImpactEffects(Hit, false, bWeakpointHit, Params.PoiseDamage, PartMultiplier);
 	}
 	// 전투는 소리가 난다. 아직 전투를 알아채지 못한 몬스터도 이 소리를 들을 수 있다.
 	UAISense_Hearing::ReportNoiseEvent(Attacker, Hit.ImpactPoint, 1.f, Attacker, 0.f, TEXT("Hit"));

@@ -175,7 +175,7 @@ public:
 	 * (2026-10-21) 내가 때린 곳에 나이트 전용 타격 이펙트·소리(AttackImpactEffect / AttackImpactSounds). ApplyMeleeHit이 맞힌·막힌 뒤 부른다.
 	 * 타격 큐(GCN_Hit_Melee)는 몬스터도 같이 쓰므로, 나이트만의 느낌은 여기서 겹친다. 비워 두면 아무것도 안 한다.
 	 */
-	void PlayAttackImpactEffects(const FHitResult& Hit, bool bGuarded, bool bWeakpoint = false) const;
+	void PlayAttackImpactEffects(const FHitResult& Hit, bool bGuarded, bool bWeakpoint = false, float PoiseDamage = 0.f, float PartMultiplier = 1.f) const;
 
 	/**
 	 * (2026-10-21) 나이트가 때린 일반 타격에서 공용 타격 큐(GCN_Hit_Melee: 반짝이 + SC_Hit_Cue + SC_Janyeol_Slam)를
@@ -408,6 +408,29 @@ protected:
 	/** 타격 소리 후보. 매번 하나를 무작위로. 비우면 없음(타격 큐의 기본 소리만 남). */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack Feel|Impact")
 	TArray<TObjectPtr<USoundBase>> AttackImpactSounds;
+
+	/**
+	 * (2026-10-29) 타격 종류별 소리. 비어 있으면 AttackImpactSounds를 쓴다. 우선순위: 약점 > 장갑 부위 > 무거운 타격 > 기본.
+	 * 무거운 타격 = 그로기 피해(스탠스·차지 배율까지 곱한 값)가 AttackImpactHeavyPoiseDamage 이상.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack Feel|Impact")
+	TArray<TObjectPtr<USoundBase>> AttackImpactHeavySounds;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack Feel|Impact", meta=(ClampMin=0))
+	float AttackImpactHeavyPoiseDamage = 25.f;
+
+	/** (2026-10-29) 약점 타격 소리(GCN_Hit_Weakpoint 대신). 전용 소리를 쓰면 AttackImpactWeakpointScale로 볼륨을 키우지 않는다. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack Feel|Impact")
+	TArray<TObjectPtr<USoundBase>> AttackImpactWeakpointSounds;
+
+	/** (2026-10-29) 장갑 부위 타격 소리. 맞은 부위의 피해 배율이 AttackImpactArmorPartMultiplier보다 작으면(단단한 부위) 쓴다. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack Feel|Impact")
+	TArray<TObjectPtr<USoundBase>> AttackImpactArmorSounds;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack Feel|Impact", meta=(ClampMin=0))
+	float AttackImpactArmorPartMultiplier = 1.f;
+
+	mutable int32 LastAttackImpactSoundIndex = INDEX_NONE;
 
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack Feel|Impact", meta=(ClampMin=0))
 	float AttackImpactSoundVolume = 1.f;
