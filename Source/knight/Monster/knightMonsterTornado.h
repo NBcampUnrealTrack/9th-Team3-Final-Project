@@ -45,6 +45,10 @@ struct KNIGHT_API FknightMonsterTornadoParams
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Tornado", meta=(ClampMin=0, Units="deg"))
 	float TurnRate = 90.f;
 
+	/** 다 만들어져 출발하는 순간 진행 방향을 타깃의 지금 위치로 다시 잡는다. 끄면 생길 때 겨눈 방향으로 출발한다. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Tornado")
+	bool bReaimOnLaunch = false;
+
 	/** 쫓기가 끝난 뒤 사라지는 시간. 판정은 없다. 깔때기가 있으면 기둥이 아래부터 풀려 올라가며 물이 쏟아지고(CollapseEffect), 없으면 줄어든다. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Tornado", meta=(ClampMin=0, Units="s"))
 	float FadeTime = 0.5f;

@@ -71,6 +71,17 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Tornado", meta=(ClampMin=0.1))
 	float EnragedLastScale = 1.f;
 
+	/**
+	 * 연사 회오리는 다 만들어져 출발하는 순간 타깃의 지금 위치로 다시 겨눈다(Tornado.bReaimOnLaunch).
+	 * 끄면 생길 때 겨눈 방향으로 나가서, 계속 움직이면 세 개가 모두 처음 위치 쪽으로 지나간다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Tornado", meta=(EditCondition="bEnragedVolley"))
+	bool bVolleyReaimOnLaunch = true;
+
+	/** 연사 회오리가 쫓으며 꺾는 속도(Tornado.TurnRate 대신). 0이면 Tornado.TurnRate를 쓴다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Tornado", meta=(EditCondition="bEnragedVolley", ClampMin=0, Units="deg"))
+	float VolleyTurnRate = 0.f;
+
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Tornado", meta=(ClampMin=0, Units="s"))
 	float SpawnInterval = 0.6f;
 

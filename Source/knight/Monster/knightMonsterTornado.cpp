@@ -144,6 +144,13 @@ void AknightMonsterTornado::Tick(float DeltaSeconds)
 		if (!bBurst)
 		{
 			Burst();
+			// 자라는 동안 타깃이 움직였으면 출발할 때 지금 위치로 다시 겨눈다.
+			const AActor* const Chased = Target.Get();
+			const FVector ToTarget = Chased ? (Chased->GetActorLocation() - GetActorLocation()).GetSafeNormal2D() : FVector::ZeroVector;
+			if (Params.bReaimOnLaunch && !ToTarget.IsNearlyZero())
+			{
+				MoveDirection = ToTarget;
+			}
 		}
 		// 타깃 쪽으로 TurnRate만큼만 꺾으며 바닥을 따라 나아간다.
 		if (const AActor* const Chased = Target.Get())
