@@ -306,7 +306,9 @@ void UknightGameplayAbility_MonsterAreaAttack::HitArea(const FVector& Center, fl
 		[this, Avatar](const AActor& Target) { return IsInsideCone(*Avatar, Target.GetActorLocation()); },
 		[this, Avatar](AActor& Target, EknightHitOutcome Outcome)
 		{
-			if (KnockbackSpeed > 0.f && (Outcome == EknightHitOutcome::Hit || Outcome == EknightHitOutcome::Guarded))
+			// 가드로 막혔으면 가드 밀림(GuardReaction)과 이 공격의 가드 넉백 중 더 먼 쪽 하나만 쓴다.
+			const bool bGuardPushed = HandleGuardPush(Target, Outcome, KnockbackSpeed * GuardKnockbackScale * KnockbackTime);
+			if (KnockbackSpeed > 0.f && !bGuardPushed && (Outcome == EknightHitOutcome::Hit || Outcome == EknightHitOutcome::Guarded))
 			{
 				const float Speed = KnockbackSpeed * (Outcome == EknightHitOutcome::Guarded ? GuardKnockbackScale : 1.f);
 				if (bKnockbackAway)

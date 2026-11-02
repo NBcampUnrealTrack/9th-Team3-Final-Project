@@ -52,8 +52,10 @@ void UknightGameplayAbility_MonsterGlideAttack::ActivateAbility(const FGameplayA
 		return;
 	}
 	const UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();
-	StrikesLeft = !Strikes.IsEmpty() ? Strikes.Num()
-		: FMath::Max(1, ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Enraged) ? EnragedStrikeCount : StrikeCount);
+	const bool bEnraged = ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Enraged);
+	bUseEnragedStrikes = bEnraged && !EnragedStrikes.IsEmpty();
+	const TArray<FknightMonsterGlideStrike>& StrikeList = bUseEnragedStrikes ? EnragedStrikes : Strikes;
+	StrikesLeft = !StrikeList.IsEmpty() ? StrikeList.Num() : FMath::Max(1, bEnraged ? EnragedStrikeCount : StrikeCount);
 	StrikeIndex = 0;
 	Phase = EPhase::Roar;
 	PhaseTime = 0.f;
@@ -290,9 +292,10 @@ void UknightGameplayAbility_MonsterGlideAttack::StartRise()
 
 FknightMonsterGlideStrike UknightGameplayAbility_MonsterGlideAttack::GetStrike(int32 Index) const
 {
-	if (!Strikes.IsEmpty())
+	const TArray<FknightMonsterGlideStrike>& StrikeList = bUseEnragedStrikes ? EnragedStrikes : Strikes;
+	if (!StrikeList.IsEmpty())
 	{
-		return Strikes[FMath::Clamp(Index, 0, Strikes.Num() - 1)];
+		return StrikeList[FMath::Clamp(Index, 0, StrikeList.Num() - 1)];
 	}
 	FknightMonsterGlideStrike Strike;
 	Strike.Montage = StrikeMontage;
@@ -329,7 +332,9 @@ void UknightGameplayAbility_MonsterGlideAttack::ApplyHits()
 		return;
 	}
 	const FVector Center = Mesh && Mesh->DoesSocketExist(CurrentStrike.HitSocket) ? Mesh->GetSocketLocation(CurrentStrike.HitSocket) : Avatar->GetActorLocation();
-	const int32 NewHits = UknightCombatLibrary::ApplyAreaMeleeHits(Avatar, Center, FCollisionShape::MakeSphere(CurrentStrike.HitRadius), HitParams, HitActors);
+	const int32 NewHits = UknightCombatLibrary::ApplyAreaMeleeHits(Avatar, Center, FCollisionShape::MakeSphere(CurrentStrike.HitRadius), HitParams, HitActors,
+		[](const AActor&) { return true; },
+		[this](AActor& Target, EknightHitOutcome Outcome) { HandleGuardPush(Target, Outcome); });
 #if ENABLE_DRAW_DEBUG
 	if (knightMonsterDebug::ShouldDrawAttacks())
 	{

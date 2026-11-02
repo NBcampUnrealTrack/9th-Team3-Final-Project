@@ -164,6 +164,11 @@ void UknightGameplayAbility_MonsterTornadoAttack::SpawnTornado(int32 Index, int3
 	if (AknightMonsterTornado* const Spawn = World->SpawnActor<AknightMonsterTornado>(Location, Direction.Rotation(), SpawnParams))
 	{
 		FknightMonsterTornadoParams Params = Tornado;
+		if (bVolley)
+		{
+			Params.bReaimOnLaunch |= bVolleyReaimOnLaunch;
+			Params.TurnRate = VolleyTurnRate > 0.f ? VolleyTurnRate : Params.TurnRate;
+		}
 		if (bEnraged && Index == Count - 1 && !FMath::IsNearlyEqual(EnragedLastScale, 1.f))
 		{
 			const float Scale = EnragedLastScale;
@@ -174,6 +179,7 @@ void UknightGameplayAbility_MonsterTornadoAttack::SpawnTornado(int32 Index, int3
 			Params.WaterRippleRadius *= Scale;
 			Params.WaterSplashScale *= Scale;
 		}
+		Spawn->SetGuardReaction(GuardReaction);
 		Spawn->Launch(Monster, Target, HitParams, Params, Direction);
 	}
 	UE_LOG(LogknightAI, Log, TEXT("%s: tornado %d/%d spawned."), *GetNameSafe(Monster), Index + 1, Count);

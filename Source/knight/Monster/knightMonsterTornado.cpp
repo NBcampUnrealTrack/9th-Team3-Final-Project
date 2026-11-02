@@ -144,6 +144,13 @@ void AknightMonsterTornado::Tick(float DeltaSeconds)
 		if (!bBurst)
 		{
 			Burst();
+			// 자라는 동안 타깃이 움직였으면 출발할 때 지금 위치로 다시 겨눈다.
+			const AActor* const Chased = Target.Get();
+			const FVector ToTarget = Chased ? (Chased->GetActorLocation() - GetActorLocation()).GetSafeNormal2D() : FVector::ZeroVector;
+			if (Params.bReaimOnLaunch && !ToTarget.IsNearlyZero())
+			{
+				MoveDirection = ToTarget;
+			}
 		}
 		// 타깃 쪽으로 TurnRate만큼만 꺾으며 바닥을 따라 나아간다.
 		if (const AActor* const Chased = Target.Get())
@@ -267,8 +274,9 @@ void AknightMonsterTornado::ApplyHits(float RadiusScale, float HeightScale)
 	TSet<TWeakObjectPtr<AActor>>& Hits = HitActors;
 	const int32 NewHits = UknightCombatLibrary::ApplyAreaMeleeHits(Source, Center, FCollisionShape::MakeCapsule(Radius, HalfHeight), HitParams, HitActors,
 		[](const AActor&) { return true; },
-		[&Hits](AActor& HitActor, EknightHitOutcome Outcome)
+		[this, Source, &Hits](AActor& HitActor, EknightHitOutcome Outcome)
 		{
+			UknightMonsterGuardPushComponent::HandleHit(Source, HitActor, Outcome, GuardReaction);
 			// 구르기 무적으로 피했으면 다시 맞을 수 있다. 무적이 끝나고도 안에 있으면 맞는다.
 			if (Outcome == EknightHitOutcome::Evaded)
 			{
