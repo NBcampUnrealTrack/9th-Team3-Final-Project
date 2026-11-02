@@ -1868,7 +1868,7 @@ UNiagaraSystem* UknightMonsterFXBuilder::BuildTornadoFormSystem(const FString& P
 }
 
 UNiagaraSystem* UknightMonsterFXBuilder::BuildTornadoBurstSystem(const FString& PackagePath, UMaterialInterface* SprayMaterial,
-	UMaterialInterface* MistMaterial, float Radius, float Height, bool bCollapse, FLinearColor Tint)
+	UMaterialInterface* MistMaterial, float Radius, float Height, bool bCollapse, FLinearColor Tint, bool bSoftMist)
 {
 	using namespace knightMonsterFX;
 	if (!SprayMaterial || !MistMaterial)
@@ -1917,6 +1917,12 @@ UNiagaraSystem* UknightMonsterFXBuilder::BuildTornadoBurstSystem(const FString& 
 	Mist.AlphaKeys = { {0.f, 0.f}, {0.15f, 0.25f}, {1.f, 0.f} };
 	Mist.SizeKeys = { {0.f, 0.6f}, {1.f, 2.f} };
 	Mist.SortOrder = 0;
+	if (bSoftMist)
+	{
+		// 가운데부터 채우면 느린 입자가 가운데에 겹쳐 하얀 덩어리가 되므로 양과 진하기를 낮춘다.
+		Mist.Rate *= 0.4f;
+		Mist.AlphaKeys = { {0.f, 0.f}, {0.15f, 0.12f}, {1.f, 0.f} };
+	}
 
 	const FSpriteLayer Layers[] = { Mist, Sheet, Drops };
 	const float Margin = Radius * 5.f;
@@ -1935,8 +1941,17 @@ UNiagaraSystem* UknightMonsterFXBuilder::BuildTornadoBurstSystem(const FString& 
 		}
 		if (Index == 0)
 		{
-			SetRingFromPoint(*Emitter, FVector2f(Radius * 0.5f, Radius * 1.2f), FRotator3f::ZeroRotator, FVector3f(0.f, 0.f, -Radius * 0.3f),
-				FVector2f(500.f, 900.f), FVector3f(0.f, 0.f, 60.f));
+			// 고리는 모두 같은 속도로 밖으로 밀려 바깥 가장자리가 선명한 원이 된다. 부드럽게 하려면 가운데부터 속도를 넓게 흩는다.
+			if (bSoftMist)
+			{
+				SetRingFromPoint(*Emitter, FVector2f(Radius * 0.2f, Radius * 0.9f), FRotator3f::ZeroRotator, FVector3f(0.f, 0.f, -Radius * 0.3f),
+					FVector2f(150.f, 900.f), FVector3f(0.f, 0.f, 60.f));
+			}
+			else
+			{
+				SetRingFromPoint(*Emitter, FVector2f(Radius * 0.5f, Radius * 1.2f), FRotator3f::ZeroRotator, FVector3f(0.f, 0.f, -Radius * 0.3f),
+					FVector2f(500.f, 900.f), FVector3f(0.f, 0.f, 60.f));
+			}
 		}
 		else if (!bCollapse)
 		{
