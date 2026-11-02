@@ -81,8 +81,9 @@ void AknightMonsterSonicProjectile::Tick(float DeltaSeconds)
 	{
 		UknightCombatLibrary::ApplyAreaMeleeHits(Source, Center, FCollisionShape::MakeSphere(Radius), HitParams, HitActors,
 			[](const AActor&) { return true; },
-			[this, &bHit, &Impact, &ImpactAt, &ImpactTarget](AActor& Target, EknightHitOutcome Outcome)
+			[this, Source, &bHit, &Impact, &ImpactAt, &ImpactTarget](AActor& Target, EknightHitOutcome Outcome)
 			{
+				UknightMonsterGuardPushComponent::HandleHit(Source, Target, Outcome, GuardReaction);
 				if (Outcome == EknightHitOutcome::Evaded || Outcome == EknightHitOutcome::Ignored)
 				{
 					return;

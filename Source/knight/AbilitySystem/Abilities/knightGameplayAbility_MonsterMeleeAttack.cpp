@@ -49,5 +49,9 @@ void UknightGameplayAbility_MonsterMeleeAttack::HandleMeleeHit(FGameplayEventDat
 		const EknightHitOutcome Outcome = UknightCombatLibrary::ApplyMeleeHit(GetAvatarActorFromActorInfo(), *Hit, HitParams);
 		UE_LOG(LogknightAI, Verbose, TEXT("%s: %s melee hit %s (outcome %d)."), *GetNameSafe(GetAvatarActorFromActorInfo()), *GetName(),
 			*GetNameSafe(Hit->GetActor()), static_cast<int32>(Outcome));
+		if (AActor* const Target = Hit->GetActor())
+		{
+			HandleGuardPush(*Target, Outcome);
+		}
 	}
 }

@@ -58,6 +58,7 @@ namespace
 	{
 		TWeakObjectPtr<AActor> Monster;
 		FknightMeleeHitParams HitParams;
+		EknightMonsterGuardReaction GuardReaction = EknightMonsterGuardReaction::Light;
 		FknightSpikeLook Look;
 		float FallHeight = 0.f;
 		float FallTime = 0.f;
@@ -120,6 +121,7 @@ namespace
 				Impact.Landing + FVector::UpVector * Volley.FallHeight, FRotator::ZeroRotator, FallParams))
 			{
 				Down->SetLook(Volley.Look);
+				Down->SetGuardReaction(Volley.GuardReaction);
 				Down->LaunchDown(Volley.Monster.Get(), Volley.HitParams, Impact, Fall, Volley.Hits);
 			}
 		});
@@ -154,6 +156,7 @@ void UknightGameplayAbility_MonsterSpikeRain::HandleFire()
 	FSpikeVolley Volley;
 	Volley.Monster = Monster;
 	Volley.HitParams = HitParams;
+	Volley.GuardReaction = GuardReaction;
 	Volley.Look.Mesh = SpikeMesh;
 	Volley.Look.Material = SpikeMaterial;
 	Volley.Look.Scale = SpikeScale;

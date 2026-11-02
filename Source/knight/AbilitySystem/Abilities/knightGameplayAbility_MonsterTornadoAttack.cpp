@@ -174,6 +174,7 @@ void UknightGameplayAbility_MonsterTornadoAttack::SpawnTornado(int32 Index, int3
 			Params.WaterRippleRadius *= Scale;
 			Params.WaterSplashScale *= Scale;
 		}
+		Spawn->SetGuardReaction(GuardReaction);
 		Spawn->Launch(Monster, Target, HitParams, Params, Direction);
 	}
 	UE_LOG(LogknightAI, Log, TEXT("%s: tornado %d/%d spawned."), *GetNameSafe(Monster), Index + 1, Count);
