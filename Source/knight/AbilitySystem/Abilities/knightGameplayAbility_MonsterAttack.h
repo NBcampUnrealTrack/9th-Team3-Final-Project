@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "AbilitySystem/Abilities/knightGameplayAbility.h"
+#include "Monster/knightMonsterGuardPushComponent.h"
 #include "knightGameplayAbility_MonsterAttack.generated.h"
 
 class UAbilityTask_Repeat;
@@ -201,6 +202,16 @@ protected:
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|FollowUp")
 	TArray<TSubclassOf<UknightGameplayAbility_MonsterAttack>> AfterAttackMoves;
+
+	/**
+	 * 이 공격을 가드로 막았을 때의 반응(밀리는 거리, 가드 브레이크). 거리는 몬스터의 UknightMonsterGuardPushComponent에서 정한다.
+	 * 공격 무게 단계(히트스톱)와 맞춘다: 지속형 0.04 / 약 0.06 / 중 0.08 / 강 0.10 / 최강 0.12.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Guard")
+	EknightMonsterGuardReaction GuardReaction = EknightMonsterGuardReaction::Light;
+
+	/** 가드로 막힌 타격이면 GuardReaction만큼 밀어낸다. ExistingPushDistance보다 멀게 밀었으면 true(부른 쪽은 자기 가드 넉백을 걸지 않는다). */
+	bool HandleGuardPush(AActor& Target, EknightHitOutcome Outcome, float ExistingPushDistance = 0.f) const;
 
 	/**
 	 * 월드 시간 Interval을 몬스터 시간으로 바꾼다. 히트스톱은 몬스터의 CustomTimeDilation만 낮춰 몸(몽타주·이동)을 멈추고

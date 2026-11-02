@@ -526,7 +526,9 @@ void UknightGameplayAbility_MonsterFlybyAttack::ApplyHits()
 	}
 	FVector Chest, Center;
 	GetBeam(Chest, Center);
-	const int32 NewHits = UknightCombatLibrary::ApplyAreaMeleeHits(Monster, Center, FCollisionShape::MakeSphere(HalfWidth), HitParams, HitActors);
+	const int32 NewHits = UknightCombatLibrary::ApplyAreaMeleeHits(Monster, Center, FCollisionShape::MakeSphere(HalfWidth), HitParams, HitActors,
+		[](const AActor&) { return true; },
+		[this](AActor& Target, EknightHitOutcome Outcome) { HandleGuardPush(Target, Outcome); });
 #if ENABLE_DRAW_DEBUG
 	if (knightMonsterDebug::ShouldDrawAttacks())
 	{

@@ -164,6 +164,11 @@ bool UknightGameplayAbility_MonsterAttack::CanActivateAbility(const FGameplayAbi
 	return Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags);
 }
 
+bool UknightGameplayAbility_MonsterAttack::HandleGuardPush(AActor& Target, EknightHitOutcome Outcome, float ExistingPushDistance) const
+{
+	return UknightMonsterGuardPushComponent::HandleHit(GetAvatarActorFromActorInfo(), Target, Outcome, GuardReaction, ExistingPushDistance);
+}
+
 float UknightGameplayAbility_MonsterAttack::GetMonsterTimeStep(float Interval) const
 {
 	const AActor* const Avatar = GetAvatarActorFromActorInfo();

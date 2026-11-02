@@ -157,7 +157,9 @@ void AknightMonsterSpikeProjectile::Land()
 	}
 	TSet<TWeakObjectPtr<AActor>> Hit = Skip;
 	const int32 NewHits = UknightCombatLibrary::ApplyAreaMeleeHits(AttackerActor, PathCenter, FCollisionShape::MakeCapsule(Impact.HitRadius, HalfHeight),
-		HitParams, Hit, [](const AActor&) { return true; }, [](AActor&, EknightHitOutcome) {}, FVector::UpVector);
+		HitParams, Hit, [](const AActor&) { return true; },
+		[this, AttackerActor](AActor& Target, EknightHitOutcome Outcome) { UknightMonsterGuardPushComponent::HandleHit(AttackerActor, Target, Outcome, GuardReaction); },
+		FVector::UpVector);
 	for (const TWeakObjectPtr<AActor>& Actor : Hit)
 	{
 		if (!Skip.Contains(Actor))

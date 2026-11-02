@@ -84,6 +84,7 @@ void AknightMonsterSonicProjectile::Tick(float DeltaSeconds)
 			[](const AActor&) { return true; },
 			[this, Source, &bHit, &Impact, &ImpactAt, &ImpactDirection, &ImpactTarget](AActor& Target, EknightHitOutcome Outcome)
 			{
+				UknightMonsterGuardPushComponent::HandleHit(Source, Target, Outcome, GuardReaction);
 				if (Outcome == EknightHitOutcome::Evaded || Outcome == EknightHitOutcome::Ignored)
 				{
 					return;

@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Combat/knightCombatTypes.h"
+#include "Monster/knightMonsterGuardPushComponent.h"
 #include "GameFramework/Actor.h"
 #include "knightMonsterSonicProjectile.generated.h"
 
@@ -77,6 +78,9 @@ public:
 	/** Launch 전에 부른다. 0이면 끈다. */
 	void SetDeafenTime(float Seconds) { DeafenTime = Seconds; }
 
+	/** Launch 전에 부른다. 가드로 막혔을 때의 밀림 단계(쏜 공격의 GuardReaction). */
+	void SetGuardReaction(EknightMonsterGuardReaction Reaction) { GuardReaction = Reaction; }
+
 	/** Launch 전에 부른다. */
 	void SetImpactEffects(const FknightSonicImpactEffects& Effects) { ImpactEffects = Effects; }
 
@@ -99,6 +103,7 @@ private:
 
 	TWeakObjectPtr<AActor> Attacker;
 	FknightMeleeHitParams HitParams;
+	EknightMonsterGuardReaction GuardReaction = EknightMonsterGuardReaction::Light;
 	TSet<TWeakObjectPtr<AActor>> HitActors;
 	FVector Velocity = FVector::ZeroVector;
 	float Radius = 100.f;

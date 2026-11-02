@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Combat/knightCombatTypes.h"
+#include "Monster/knightMonsterGuardPushComponent.h"
 #include "GameFramework/Actor.h"
 #include "knightMonsterTornado.generated.h"
 
@@ -182,6 +183,9 @@ class KNIGHT_API AknightMonsterTornado : public AActor
 public:
 	AknightMonsterTornado();
 
+	/** Launch 전에 부른다. 가드로 막혔을 때의 밀림 단계(쏜 공격의 GuardReaction). */
+	void SetGuardReaction(EknightMonsterGuardReaction Reaction) { GuardReaction = Reaction; }
+
 	/** Direction은 쫓기 시작할 때의 진행 방향(수평). */
 	void Launch(AActor* InAttacker, AActor* InTarget, const FknightMeleeHitParams& InHitParams, const FknightMonsterTornadoParams& InParams,
 		const FVector& Direction);
@@ -233,6 +237,7 @@ private:
 	TWeakObjectPtr<AActor> Attacker;
 	TWeakObjectPtr<AActor> Target;
 	FknightMeleeHitParams HitParams;
+	EknightMonsterGuardReaction GuardReaction = EknightMonsterGuardReaction::Light;
 	FknightMonsterTornadoParams Params;
 	TSet<TWeakObjectPtr<AActor>> HitActors;
 	FVector MoveDirection = FVector::ForwardVector;

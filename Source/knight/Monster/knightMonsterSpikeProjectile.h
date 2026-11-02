@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Combat/knightCombatTypes.h"
+#include "Monster/knightMonsterGuardPushComponent.h"
 #include "GameFramework/Actor.h"
 #include "knightMonsterSpikeProjectile.generated.h"
 
@@ -66,6 +67,8 @@ public:
 
 	void SetLook(const FknightSpikeLook& Look);
 	void LaunchUp(float Speed, float Duration);
+	/** Launch 전에 부른다. 가드로 막혔을 때의 밀림 단계(쏜 공격의 GuardReaction). */
+	void SetGuardReaction(EknightMonsterGuardReaction Reaction) { GuardReaction = Reaction; }
 	void LaunchDown(AActor* InAttacker, const FknightMeleeHitParams& InHitParams, const FknightSpikeImpact& InImpact, float FallTime,
 		const TSharedPtr<FknightSpikeVolleyHits>& InVolleyHits);
 
@@ -87,6 +90,7 @@ private:
 
 	TWeakObjectPtr<AActor> Attacker;
 	FknightMeleeHitParams HitParams;
+	EknightMonsterGuardReaction GuardReaction = EknightMonsterGuardReaction::Light;
 	FknightSpikeImpact Impact;
 	TObjectPtr<UNiagaraSystem> SpikeEffect;
 	TSharedPtr<FknightSpikeVolleyHits> VolleyHits;

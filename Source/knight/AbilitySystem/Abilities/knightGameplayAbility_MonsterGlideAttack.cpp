@@ -332,7 +332,9 @@ void UknightGameplayAbility_MonsterGlideAttack::ApplyHits()
 		return;
 	}
 	const FVector Center = Mesh && Mesh->DoesSocketExist(CurrentStrike.HitSocket) ? Mesh->GetSocketLocation(CurrentStrike.HitSocket) : Avatar->GetActorLocation();
-	const int32 NewHits = UknightCombatLibrary::ApplyAreaMeleeHits(Avatar, Center, FCollisionShape::MakeSphere(CurrentStrike.HitRadius), HitParams, HitActors);
+	const int32 NewHits = UknightCombatLibrary::ApplyAreaMeleeHits(Avatar, Center, FCollisionShape::MakeSphere(CurrentStrike.HitRadius), HitParams, HitActors,
+		[](const AActor&) { return true; },
+		[this](AActor& Target, EknightHitOutcome Outcome) { HandleGuardPush(Target, Outcome); });
 #if ENABLE_DRAW_DEBUG
 	if (knightMonsterDebug::ShouldDrawAttacks())
 	{

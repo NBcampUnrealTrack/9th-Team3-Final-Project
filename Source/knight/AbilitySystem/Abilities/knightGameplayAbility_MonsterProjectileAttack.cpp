@@ -119,6 +119,7 @@ void UknightGameplayAbility_MonsterProjectileAttack::Fire()
 		{
 			Projectile->SetDeafenTime(DeafenTime);
 			Projectile->SetImpactEffects(ImpactEffects);
+			Projectile->SetGuardReaction(GuardReaction);
 			Projectile->Launch(Monster, HitParams, Direction, ProjectileSpeed, ProjectileRadius, MaxDistance, ShotEffect);
 		}
 	}

@@ -274,8 +274,9 @@ void AknightMonsterTornado::ApplyHits(float RadiusScale, float HeightScale)
 	TSet<TWeakObjectPtr<AActor>>& Hits = HitActors;
 	const int32 NewHits = UknightCombatLibrary::ApplyAreaMeleeHits(Source, Center, FCollisionShape::MakeCapsule(Radius, HalfHeight), HitParams, HitActors,
 		[](const AActor&) { return true; },
-		[&Hits](AActor& HitActor, EknightHitOutcome Outcome)
+		[this, Source, &Hits](AActor& HitActor, EknightHitOutcome Outcome)
 		{
+			UknightMonsterGuardPushComponent::HandleHit(Source, HitActor, Outcome, GuardReaction);
 			// 구르기 무적으로 피했으면 다시 맞을 수 있다. 무적이 끝나고도 안에 있으면 맞는다.
 			if (Outcome == EknightHitOutcome::Evaded)
 			{
