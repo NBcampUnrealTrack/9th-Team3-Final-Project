@@ -15,7 +15,7 @@ struct KNIGHT_API FknightEquipmentStats
 	TMap<FGameplayAttribute, float> Values;
 	TMap<FGameplayTag, int32> SetCounts;
 	bool bComplete = true;
-	FString IncompleteReason;
+	FText IncompleteReason;
 };
 
 /** Isolated item modifiers, including its saved weapon upgrade and statically evaluable AbilitySet effects.
@@ -24,7 +24,7 @@ struct KNIGHT_API FknightItemContribution
 {
 	TMap<FGameplayAttribute, float> Values;
 	bool bComplete = true;
-	FString IncompleteReason;
+	FText IncompleteReason;
 };
 
 /** Each tier is listed once. Set is a catalog asset; the tier lives in Set->TwoPiece/FourPiece. */
@@ -42,7 +42,7 @@ struct KNIGHT_API FknightEquipmentComparison
 	TMap<FGameplayAttribute, float> Deltas;
 	bool bValidReplacement = false;
 	bool bExact = false;
-	FString IncompleteReason;
+	FText IncompleteReason;
 };
 
 namespace knightEquipmentStats

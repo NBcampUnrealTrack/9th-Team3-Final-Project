@@ -74,7 +74,9 @@ void UknightGameplayAbility_MonsterGlideAttack::ActivateAbility(const FGameplayA
 
 void UknightGameplayAbility_MonsterGlideAttack::HandleTick(int32 ActionNumber)
 {
-	PhaseTime += knightMonsterGlide::TickInterval;
+	// 몬스터 시간으로 센다. 찌르기가 맞아 히트스톱으로 몸이 멈춘 동안 시계만 흐르면 찌르기가 덜 날아간 채 내려앉는다.
+	const float DeltaTime = GetMonsterTimeStep(knightMonsterGlide::TickInterval);
+	PhaseTime += DeltaTime;
 	AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetAvatarActorFromActorInfo());
 	if (!Monster)
 	{
@@ -95,7 +97,7 @@ void UknightGameplayAbility_MonsterGlideAttack::HandleTick(int32 ActionNumber)
 	{
 		if (Movement && Target)
 		{
-			Movement->TurnTowards(Target->GetActorLocation(), knightMonsterGlide::TickInterval, TurnRate, 2.f);
+			Movement->TurnTowards(Target->GetActorLocation(), DeltaTime, TurnRate, 2.f);
 		}
 		const float HoldTime = Phase == EPhase::Roar ? (bDarkenView ? FMath::Max(RoarTime, DarknessHoldTime) : RoarTime) : TurnTime;
 		// 포효 중에는 어둠이 다 덮인 뒤(CircleStartTime)부터, 찌르기 사이에는 바로 돈다.
@@ -129,7 +131,7 @@ void UknightGameplayAbility_MonsterGlideAttack::HandleTick(int32 ActionNumber)
 			const FVector Aim = Target->GetActorLocation() + TargetVelocity * FMath::Min(Remaining, HomingLockTime);
 			const FVector ToAim = Aim - Monster->GetActorLocation();
 			const FRotator Heading = FMath::RInterpConstantTo(GlideDirection.Rotation(), ToAim.GetSafeNormal2D(UE_SMALL_NUMBER, GlideDirection).Rotation(),
-				knightMonsterGlide::TickInterval, HomingTurnRate);
+				DeltaTime, HomingTurnRate);
 			GlideDirection = Heading.Vector();
 			Monster->SetActorRotation(Heading);
 			if (HomingMaxSpeed > 0.f)
@@ -401,12 +403,13 @@ void UknightGameplayAbility_MonsterGlideAttack::UpdateCircle(AknightMonsterChara
 	const FVector Center = Target.GetActorLocation();
 	const FVector From = Monster.GetActorLocation() - Center;
 	const FVector To = GetBehindLocation(Monster, Target) - Center;
-	const float Step = FMath::Min(1.f, knightMonsterGlide::TickInterval / Remaining);
+	const float DeltaTime = FMath::Max(GetMonsterTimeStep(knightMonsterGlide::TickInterval), UE_KINDA_SMALL_NUMBER);
+	const float Step = FMath::Min(1.f, DeltaTime / Remaining);
 	const float FromAngle = FMath::Atan2(From.Y, From.X);
 	const float Angle = FromAngle + FMath::FindDeltaAngleRadians(FromAngle, FMath::Atan2(To.Y, To.X)) * Step;
 	const float Radius = FMath::Lerp(static_cast<float>(From.Size2D()), static_cast<float>(To.Size2D()), Step);
 	const FVector Next = Center + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.f) * Radius;
-	FVector Velocity = (Next - Monster.GetActorLocation()) / knightMonsterGlide::TickInterval;
+	FVector Velocity = (Next - Monster.GetActorLocation()) / DeltaTime;
 	Velocity.Z = 0.f;
 	Velocity = Velocity.GetClampedToMaxSize(CircleMaxSpeed);
 	if (!bCircling)

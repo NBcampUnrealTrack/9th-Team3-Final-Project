@@ -1544,7 +1544,7 @@ void UKnightMaintenanceWidget::RefreshEquipmentPickerPreview()
 			Detail = FText::Format(LOCTEXT("EquipmentPickerComparison", "{0}\n교체 후 변화: {1}"), PartName(Candidate),
 				Comparison.bExact ? (Changes.IsEmpty() ? LOCTEXT("EquipmentPickerNoChange", "표시 스탯 변화 없음")
 					: FText::Join(FText::FromString(TEXT(" · ")), Changes))
-					: FText::Format(LOCTEXT("EquipmentPickerUnknown", "정확한 계산 불가: {0}"), FText::FromString(Comparison.IncompleteReason)));
+					: FText::Format(LOCTEXT("EquipmentPickerUnknown", "정확한 계산 불가: {0}"), Comparison.IncompleteReason));
 		}
 		Txt_ConfirmBody->SetText(Detail);
 	}
@@ -2163,7 +2163,7 @@ void UKnightMaintenanceWidget::RequestWeaponUpgrade()
 		|| Saves->GetActiveSlotId() != EnhancementTargetProfileId || Quote.CurrentLevel != EnhancementQuotedLevel
 		|| Quote.Availability != EKnightWeaponUpgradeAvailability::Ready)
 	{
-		UpgradeResultMessage = LOCTEXT("UpgradeRejected", "강화 요청 불가: 대상, 보유량 또는 저장 상태를 확인하세요.");
+		UpgradeResultMessage = LOCTEXT("UpgradePreconditionFailed", "강화 요청 불가: 대상, 보유량 또는 저장 상태를 확인하세요.");
 		RefreshEnhancementDetails();
 		return;
 	}
@@ -2318,9 +2318,9 @@ void UKnightMaintenanceWidget::RefreshDetails()
 	{
 		FText Status;
 		if (Category == 0 && !bCraftingSelectionMissing && !Current.bComplete)
-			Status = FText::Format(LOCTEXT("CurrentCalculationIncomplete", "현재 스탯 계산 불가: {0}"), FText::FromString(Current.IncompleteReason));
+			Status = FText::Format(LOCTEXT("CurrentCalculationIncomplete", "현재 스탯 계산 불가: {0}"), Current.IncompleteReason);
 		else if (Category == 0 && bWantPrediction && !Comparison.bExact)
-			Status = FText::Format(LOCTEXT("ReplacementCalculationIncomplete", "교체 예상치 계산 불가: {0}"), FText::FromString(Comparison.IncompleteReason));
+			Status = FText::Format(LOCTEXT("ReplacementCalculationIncomplete", "교체 예상치 계산 불가: {0}"), Comparison.IncompleteReason);
 		PreviewStatusText->SetText(Status);
 		PreviewStatusText->SetVisibility(Status.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
 	}
@@ -2341,7 +2341,7 @@ void UKnightMaintenanceWidget::RefreshDetails()
 			StatCurrentTexts[Index]->SetText(Category == 0 ? LOCTEXT("StatUnknown", "—") : FText::GetEmpty());
 			StatArrowTexts[Index]->SetVisibility(ESlateVisibility::Hidden);
 			StatAfterTexts[Index]->SetText(FText::GetEmpty());
-			StatDeltaTexts[Index]->SetText(Category != 0 && Index == 0 ? FText::Format(LOCTEXT("StatsUnavailable", "계산 불가: {0}"), FText::FromString(Current.IncompleteReason)) : FText::GetEmpty());
+			StatDeltaTexts[Index]->SetText(Category != 0 && Index == 0 ? FText::Format(LOCTEXT("StatsUnavailable", "계산 불가: {0}"), Current.IncompleteReason) : FText::GetEmpty());
 			continue;
 		}
 		const int32 Now = DisplayNumber(Current.Values.FindRef(Stat.Attribute), Stat.bPercent);
@@ -2474,9 +2474,9 @@ void UKnightMaintenanceWidget::RefreshEquipmentDetails()
 		FText Warning;
 		if (!bSlotsComplete) Warning = LOCTEXT("EquipmentIncompleteLoadout", "장착 정보가 불완전합니다. 일부 정의 또는 세이브 슬롯을 확인하세요.");
 		else if (bIndividual && Part && !Individual.bComplete)
-			Warning = FText::Format(LOCTEXT("EquipmentIncompleteItem", "개별 효과 계산 불가: {0}"), FText::FromString(Individual.IncompleteReason));
+			Warning = FText::Format(LOCTEXT("EquipmentIncompleteItem", "개별 효과 계산 불가: {0}"), Individual.IncompleteReason);
 		else if (!bIndividual && !Overall.bComplete)
-			Warning = FText::Format(LOCTEXT("EquipmentIncompleteOverall", "전체 스탯 계산 불가: {0}"), FText::FromString(Overall.IncompleteReason));
+			Warning = FText::Format(LOCTEXT("EquipmentIncompleteOverall", "전체 스탯 계산 불가: {0}"), Overall.IncompleteReason);
 		PreviewStatusText->SetText(Warning);
 		PreviewStatusText->SetVisibility(Warning.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
 	}

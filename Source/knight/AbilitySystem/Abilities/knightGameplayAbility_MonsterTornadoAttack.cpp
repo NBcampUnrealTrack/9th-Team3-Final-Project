@@ -59,7 +59,7 @@ void UknightGameplayAbility_MonsterTornadoAttack::ActivateAbility(const FGamepla
 
 void UknightGameplayAbility_MonsterTornadoAttack::HandleTick(int32 ActionNumber)
 {
-	PhaseTime += knightMonsterTornadoAttack::TickInterval;
+	PhaseTime += GetMonsterTimeStep(knightMonsterTornadoAttack::TickInterval);
 	const AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetAvatarActorFromActorInfo());
 	if (!Monster)
 	{
@@ -74,7 +74,7 @@ void UknightGameplayAbility_MonsterTornadoAttack::HandleTick(int32 ActionNumber)
 		UknightMonsterMovementComponent* const Movement = Monster->GetMonsterMovementComponent();
 		if (Movement && Target)
 		{
-			Movement->TurnTowards(Target->GetActorLocation(), knightMonsterTornadoAttack::TickInterval, TurnRate, 2.f);
+			Movement->TurnTowards(Target->GetActorLocation(), GetMonsterTimeStep(knightMonsterTornadoAttack::TickInterval), TurnRate, 2.f);
 		}
 		while (Spawned < SpawnCount && PhaseTime >= SpawnTime + Spawned * SpawnInterval)
 		{

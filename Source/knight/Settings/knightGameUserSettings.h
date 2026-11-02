@@ -8,7 +8,8 @@
 struct FKnightDisplayInfo
 {
 	FString ID;
-	FString Label;
+	/** 화면에 보이는 이름("모니터 1 (주 모니터) · 이름"). 설정 값으로는 Index를 쓴다. */
+	FText Label;
 	int32 Index = INDEX_NONE;
 	FIntPoint DesktopResolution = FIntPoint::ZeroValue;
 	FIntPoint WorkAreaSize = FIntPoint::ZeroValue;

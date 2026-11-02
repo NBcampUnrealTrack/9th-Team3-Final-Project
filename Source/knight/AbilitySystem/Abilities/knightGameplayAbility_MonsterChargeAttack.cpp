@@ -92,7 +92,7 @@ void UknightGameplayAbility_MonsterChargeAttack::HandleTick(int32 ActionNumber)
 		return;
 	}
 
-	const float DeltaTime = knightMonsterCharge::TickInterval;
+	const float DeltaTime = GetMonsterTimeStep(knightMonsterCharge::TickInterval);
 	Knockback.Tick(DeltaTime);
 	const FName Section = AnimInstance->Montage_GetCurrentSection(Montage);
 	const float Position = AnimInstance->Montage_GetPosition(Montage);
@@ -138,7 +138,7 @@ void UknightGameplayAbility_MonsterChargeAttack::HandleTick(int32 ActionNumber)
 	RushEffects.Tick(*Monster, DeltaTime, Monster->GetCharacterMovement()->IsMovingOnGround());
 
 	const FVector Location = Monster->GetActorLocation();
-	const float Speed = FVector::Dist2D(Location, LastLocation) / DeltaTime;
+	const float Speed = FVector::Dist2D(Location, LastLocation) / FMath::Max(DeltaTime, UE_KINDA_SMALL_NUMBER);
 	LastLocation = Location;
 
 	if (Section != LoopSection || bStopping)
