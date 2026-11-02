@@ -8,7 +8,6 @@
 #include "AbilitySystem/knightAbilitySystemComponent.h"
 #include "Abilities/GameplayAbilityTypes.h"
 #include "Combat/knightHitReactionComponent.h"
-#include "Combat/knightHitStopComponent.h"
 #include "Combat/knightMeleeTraceComponent.h"
 #include "Components/AudioComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -22,6 +21,7 @@
 #include "Monster/knightMonsterMovementComponent.h"
 #include "Monster/knightMonsterPartComponent.h"
 #include "Monster/knightMonsterAirTurnComponent.h"
+#include "Monster/knightMonsterHitStopComponent.h"
 #include "Monster/knightMonsterHoverComponent.h"
 #include "Monster/knightMonsterPushOutComponent.h"
 #include "Monster/knightMonsterTargetingComponent.h"
@@ -58,7 +58,7 @@ AknightMonsterCharacterBase::AknightMonsterCharacterBase(const FObjectInitialize
 	PartComponent = CreateDefaultSubobject<UknightMonsterPartComponent>(TEXT("PartComponent"));
 	TargetingComponent = CreateDefaultSubobject<UknightMonsterTargetingComponent>(TEXT("TargetingComponent"));
 	MeleeTrace = CreateDefaultSubobject<UknightMeleeTraceComponent>(TEXT("MeleeTrace"));
-	HitStop = CreateDefaultSubobject<UknightHitStopComponent>(TEXT("HitStop"));
+	HitStop = CreateDefaultSubobject<UknightMonsterHitStopComponent>(TEXT("HitStop"));
 	HitReaction = CreateDefaultSubobject<UknightHitReactionComponent>(TEXT("HitReaction"));
 	MotionWarping = CreateDefaultSubobject<UMotionWarpingComponent>(TEXT("MotionWarping"));
 	PushOut = CreateDefaultSubobject<UknightMonsterPushOutComponent>(TEXT("PushOut"));
