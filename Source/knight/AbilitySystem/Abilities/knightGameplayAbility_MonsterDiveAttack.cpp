@@ -239,6 +239,7 @@ void UknightGameplayAbility_MonsterDiveAttack::ApplyHits()
 		{
 			bConnected |= Outcome == EknightHitOutcome::Hit || Outcome == EknightHitOutcome::Guarded;
 			bParried |= Outcome == EknightHitOutcome::Parried;
+			HandleGuardPush(Target, Outcome);
 		});
 #if ENABLE_DRAW_DEBUG
 	if (knightMonsterDebug::ShouldDrawAttacks())

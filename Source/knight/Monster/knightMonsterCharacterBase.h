@@ -19,6 +19,7 @@ class UknightHitStopComponent;
 class UknightMeleeTraceComponent;
 class UknightMonsterAttributeSet;
 class UknightMonsterDefinition;
+class UknightMonsterGuardPushComponent;
 class UknightMonsterHoverComponent;
 class UknightMonsterAirTurnComponent;
 class UknightMonsterMovementComponent;
@@ -164,6 +165,10 @@ private:
 	/** 몸(몸 아래 차단 상자, 설정하면 메시 바디)과 겹친 플레이어를 밀어낸다. 검사할 몸이 없는 몬스터에서는 쉰다. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UknightMonsterPushOutComponent> PushOut;
+
+	/** 공격을 가드로 막은 대상을 공격 무게만큼 밀어내고 밀림·가드 브레이크 이벤트를 보낸다. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UknightMonsterGuardPushComponent> GuardPush;
 
 	/** 떠 있게 만든 애니메이션을 바닥 가까이 내린다(날짐승). HoverDrop이 0인 몬스터에서는 쉰다. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))

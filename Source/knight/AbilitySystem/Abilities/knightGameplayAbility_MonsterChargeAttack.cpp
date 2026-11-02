@@ -209,7 +209,9 @@ void UknightGameplayAbility_MonsterChargeAttack::ApplyHits()
 		[this, Avatar, Targeting](AActor& Target, EknightHitOutcome Outcome)
 		{
 			bHitTarget |= Targeting && Targeting->GetCurrentTarget() == &Target;
-			if (Outcome == EknightHitOutcome::Hit || Outcome == EknightHitOutcome::Guarded)
+			// 가드로 막혔으면 가드 밀림(GuardReaction)과 이 공격의 가드 넉백 중 더 먼 쪽 하나만 쓴다.
+			const bool bGuardPushed = HandleGuardPush(Target, Outcome, KnockbackSpeed * GuardKnockbackScale * KnockbackTime);
+			if (!bGuardPushed && (Outcome == EknightHitOutcome::Hit || Outcome == EknightHitOutcome::Guarded))
 			{
 				Knockback.Start(*Avatar, Target, KnockbackSpeed * (Outcome == EknightHitOutcome::Guarded ? GuardKnockbackScale : 1.f), KnockbackTime);
 			}
