@@ -2,9 +2,17 @@
 
 #include "CoreMinimal.h"
 #include "Camera/PlayerCameraManager.h"
+#include "ActiveGameplayEffectHandle.h"
+#include "GameplayTagContainer.h"
 #include "knightPlayerCameraManager.generated.h"
 
+class UAbilitySystemComponent;
 class UCameraShakeBase;
+class UknightCameraImpactSettings;
+class UknightCameraModifier_Impact;
+struct FGameplayEffectSpec;
+struct FGameplayEventData;
+struct FknightCameraImpactReaction;
 class UknightCameraModifier_Darkness;
 class UknightCameraModifier_Deafen;
 class UknightCameraModifier_RoarShockwave;
@@ -24,6 +32,7 @@ class KNIGHT_API AknightPlayerCameraManager : public APlayerCameraManager
 public:
 	AknightPlayerCameraManager();
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void UpdateCamera(float DeltaTime) override;
 
 	/** Applies the player's CameraShakeScale setting to every shake. */
@@ -78,6 +87,13 @@ public:
 
 	/** The player's CameraShakeScale setting. Screen effects that move or distort the view scale with it too. */
 	float GetShakeScale() const;
+
+	/**
+	 * 카메라 반응 표(ImpactSettings)의 항목 하나를 바로 재생한다. Moment는 항목 이름(PlayerHeavyHit 등), Strength가 0 이하면
+	 * 그 항목의 최대 세기로 재생한다. 켜짐 여부와 쿨다운은 보지 않는다(튜닝 탭의 미리보기용).
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|Camera")
+	void PreviewImpactReaction(FName Moment, float Strength = 0.f);
 	void SetRadialPullSource(UknightGroggyFeedbackComponent* Source);
 
 protected:
@@ -98,6 +114,16 @@ protected:
 	TSubclassOf<UknightCameraModifier_Deafen> DeafenClass;
 
 	/**
+	 * 전투 순간별 카메라 반응 표. 보고 있는 플레이어의 전투 이벤트(때림, 맞음, 가드, 패링 …)와 몬스터 착지 셰이크를 듣고 재생한다.
+	 * 비워 두면 반응하지 않는다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Camera|Impact")
+	TSoftObjectPtr<UknightCameraImpactSettings> ImpactSettings;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Camera|Impact")
+	TSubclassOf<UknightCameraModifier_Impact> ImpactModifierClass;
+
+	/**
 	 * 그로기 예측 슬로우 중 캐릭터 전신과 검 궤적이 한눈에 들어오도록 카메라를 뒤로 살짝 물리는 거리(cm).
 	 * 밀착된 기본 카메라(ArmLength 340~380)에서 FOV가 줄어들 때 머리만 확대되는 현상을 막고 역동적인 구도를 만든다.
 	 */
@@ -114,6 +140,24 @@ protected:
 
 private:
 	void SetLockOnBlocked(bool bBlocked) const;
+
+	/** 보고 있는 폰이 바뀌었으면 이전 ASC 구독을 풀고 새 ASC의 전투 이벤트를 듣는다. */
+	void RefreshImpactBinding();
+	void UnbindImpactEvents();
+	void HandleImpactEffectApplied(UAbilitySystemComponent* Target, const FGameplayEffectSpec& Spec, FActiveGameplayEffectHandle Handle);
+	void HandleImpactEvent(const FGameplayEventData* Payload);
+	/** 켜짐, 최소 세기, 쿨다운을 보고 재생한다. Direction은 Push 방향. */
+	void PlayImpactReaction(FName Moment, const FknightCameraImpactReaction& Reaction, float Strength, const FVector& Direction, bool bIgnoreGates = false);
+	FVector GetDirectionFrom(const AActor* Source) const;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UknightCameraImpactSettings> LoadedImpactSettings;
+
+	TWeakObjectPtr<UAbilitySystemComponent> ImpactASC;
+	FDelegateHandle ImpactEffectHandle;
+	TArray<TPair<FGameplayTag, FDelegateHandle>> ImpactEventHandles;
+	TMap<FName, double> LastImpactTimes;
+	double LastDefenseEventTime = -UE_BIG_NUMBER;
 
 	/** Keeps the preloaded screen effect assets in memory while this camera lives. */
 	TSharedPtr<FStreamableHandle> PreloadHandle;
