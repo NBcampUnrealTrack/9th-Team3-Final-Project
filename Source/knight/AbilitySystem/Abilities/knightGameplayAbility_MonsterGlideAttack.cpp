@@ -335,6 +335,7 @@ void UknightGameplayAbility_MonsterGlideAttack::ApplyHits()
 	const int32 NewHits = UknightCombatLibrary::ApplyAreaMeleeHits(Avatar, Center, FCollisionShape::MakeSphere(CurrentStrike.HitRadius), HitParams, HitActors,
 		[](const AActor&) { return true; },
 		[this](AActor& Target, EknightHitOutcome Outcome) { HandleGuardPush(Target, Outcome); });
+	CheckNearMiss(Center, CurrentStrike.HitRadius, HitActors);
 #if ENABLE_DRAW_DEBUG
 	if (knightMonsterDebug::ShouldDrawAttacks())
 	{

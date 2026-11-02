@@ -345,6 +345,7 @@ void UknightGameplayAbility_MonsterAreaAttack::HitArea(const FVector& Center, fl
 				SourceASC->ApplyGameplayEffectSpecToTarget(*Spec.Data.Get(), TargetASC);
 			}
 		});
+	CheckNearMiss(Center, Radius, HitActors);
 
 #if ENABLE_DRAW_DEBUG
 	if (knightMonsterDebug::ShouldDrawAttacks())
