@@ -76,12 +76,13 @@ void AknightMonsterSonicProjectile::Tick(float DeltaSeconds)
 	bool bHit = false;
 	EknightHitOutcome Impact = EknightHitOutcome::Ignored;
 	FVector ImpactAt = End;
+	FVector ImpactDirection = Velocity.GetSafeNormal();
 	const AActor* ImpactTarget = nullptr;
 	for (const FVector& Center : { FMath::Lerp(Start, End, 0.5f), End })
 	{
 		UknightCombatLibrary::ApplyAreaMeleeHits(Source, Center, FCollisionShape::MakeSphere(Radius), HitParams, HitActors,
 			[](const AActor&) { return true; },
-			[this, Source, &bHit, &Impact, &ImpactAt, &ImpactTarget](AActor& Target, EknightHitOutcome Outcome)
+			[this, Source, &bHit, &Impact, &ImpactAt, &ImpactDirection, &ImpactTarget](AActor& Target, EknightHitOutcome Outcome)
 			{
 				UknightMonsterGuardPushComponent::HandleHit(Source, Target, Outcome, GuardReaction);
 				if (Outcome == EknightHitOutcome::Evaded || Outcome == EknightHitOutcome::Ignored)
@@ -91,8 +92,14 @@ void AknightMonsterSonicProjectile::Tick(float DeltaSeconds)
 				bHit = true;
 				Impact = Outcome;
 				ImpactTarget = &Target;
+				// 패링은 몬스터와 대상을 잇는 방향을 기준으로 튕겨 낸다. 진행 방향을 쓰면 공중에서 비스듬히 쏜 음파나
+				// 옆으로 벌려 쏜 음파에서 이펙트가 몬스터 쪽을 보지 않아 화면에 따라 어색하다.
+				if (Outcome == EknightHitOutcome::Parried)
+				{
+					ImpactDirection = (Target.GetActorLocation() - Source->GetActorLocation()).GetSafeNormal(UE_SMALL_NUMBER, ImpactDirection);
+				}
 				// 대상 몸 앞(음파가 온 쪽)에서 부서지게 한다.
-				ImpactAt = Target.GetActorLocation() - Velocity.GetSafeNormal() * 60.f;
+				ImpactAt = Target.GetActorLocation() - ImpactDirection * 60.f;
 				if (Outcome == EknightHitOutcome::Hit)
 				{
 					DeafenTarget(Target);
@@ -116,7 +123,7 @@ void AknightMonsterSonicProjectile::Tick(float DeltaSeconds)
 	if (bHit)
 	{
 		CheckNearMiss(Start, End, ImpactTarget, true);
-		SpawnImpact(Impact, ImpactAt);
+		SpawnImpact(Impact, ImpactAt, ImpactDirection);
 		Destroy();
 		return;
 	}
@@ -130,7 +137,7 @@ void AknightMonsterSonicProjectile::Tick(float DeltaSeconds)
 		const FVector Location = bWater ? FMath::Lerp(Start, End, FMath::Clamp((Start.Z - SurfaceZ) / FMath::Max(Start.Z - End.Z, 1.f), 0.f, 1.f))
 			: bBlocked ? WorldHit.ImpactPoint : End;
 		SpawnWaterImpact(Location);
-		SpawnImpact(EknightHitOutcome::Ignored, Location);
+		SpawnImpact(EknightHitOutcome::Ignored, Location, Velocity.GetSafeNormal());
 		Destroy();
 		return;
 	}
@@ -147,7 +154,7 @@ void AknightMonsterSonicProjectile::DeafenTarget(AActor& Target) const
 	}
 }
 
-void AknightMonsterSonicProjectile::SpawnImpact(EknightHitOutcome Outcome, const FVector& Location) const
+void AknightMonsterSonicProjectile::SpawnImpact(EknightHitOutcome Outcome, const FVector& Location, const FVector& Direction) const
 {
 	UNiagaraSystem* const System = Outcome == EknightHitOutcome::Hit ? ImpactEffects.Hit.Get()
 		: Outcome == EknightHitOutcome::Guarded ? ImpactEffects.Guarded.Get()
@@ -156,7 +163,7 @@ void AknightMonsterSonicProjectile::SpawnImpact(EknightHitOutcome Outcome, const
 	UE_LOG(LogknightAI, Log, TEXT("%s: sonic ends (%s)."), *GetNameSafe(Attacker.Get()), *UEnum::GetValueAsString(Outcome));
 	if (System)
 	{
-		UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), System, Location, Velocity.Rotation(), FVector::OneVector, true, true, ENCPoolMethod::AutoRelease);
+		UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), System, Location, Direction.Rotation(), FVector::OneVector, true, true, ENCPoolMethod::AutoRelease);
 	}
 }
 

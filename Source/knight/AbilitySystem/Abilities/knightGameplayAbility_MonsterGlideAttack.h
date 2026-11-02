@@ -66,7 +66,7 @@ struct FknightMonsterGlideStrike
  *         타깃이 움직이던 방향으로 고정 시간만큼 앞을 겨눈다. 그 뒤로는 고정이라 그 순간 구르거나 패링해야 피한다.
  *   어둠이 없으면 두 동작 모두 하지 않는다(정면에서 일직선).
  *
- * Strikes가 있으면 찌르기마다 몽타주·판정을 따로 쓰고, 그 수만큼 찌른다(분노 연속 횟수는 쓰지 않음). 비어 있으면 위 값으로 StrikeCount번,
+ * Strikes가 있으면 찌르기마다 몽타주·판정을 따로 쓰고, 그 수만큼 찌른다(분노 연속 횟수는 쓰지 않음). 분노 중이고 EnragedStrikes가 있으면 그쪽을 쓴다. 비어 있으면 위 값으로 StrikeCount번,
  * 첫 찌르기만 등 뒤에서 한다. 찌르기 사이에 등 뒤로 돌 때는 공중 높이로 올라가 TurnTime 동안 어둠 밖을 돈다(잔향 어둠 기습).
  * bLand를 끄면 마지막 찌르기 뒤 착지하지 않고 RiseTime 동안 공중 높이로 돌아가 공중 턴을 이어 간다.
  *
@@ -153,6 +153,10 @@ protected:
 	/** 비어 있지 않으면 StrikeMontage·StabTime·TailReach·Hit 값 대신 이 순서대로 찌른다. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Glide")
 	TArray<FknightMonsterGlideStrike> Strikes;
+
+	/** State.Monster.Enraged일 때 Strikes 대신 쓴다(잔향 공명해방 어둠 기습 3타). 비우면 분노 중에도 Strikes. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Glide")
+	TArray<FknightMonsterGlideStrike> EnragedStrikes;
 
 	/** 마지막 찌르기 뒤 탈진 착지로 공중 턴을 끝낸다. 끄면 다시 날아올라 공중 턴을 이어 간다. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Land")
@@ -297,6 +301,8 @@ private:
 	EPhase Phase = EPhase::Roar;
 	float PhaseTime = 0.f;
 	int32 StrikesLeft = 0;
+	/** 이번 발동이 EnragedStrikes를 쓰는지. 발동할 때 정한다(도중에 분노가 풀려도 바꾸지 않음). */
+	bool bUseEnragedStrikes = false;
 	/** 지금(Strike) 또는 다음(Roar·Turn) 찌르기 번호. */
 	int32 StrikeIndex = 0;
 	FknightMonsterGlideStrike CurrentStrike;
