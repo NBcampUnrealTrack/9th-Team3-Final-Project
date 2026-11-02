@@ -40,7 +40,8 @@ UknightAttributeSet::UknightAttributeSet()
 	InitActionSpeed(1.f);
 	InitJumpSpeed(1.f);
 	InitDodgeSpeed(1.f);
-	InitDodgeCooldown(0.3f);
+	// 구르기는 0: 다음 구르기는 몸이 다 일어선 시점부터 나가므로 따로 쿨타임을 두지 않는다. 파츠로 늘리면 그만큼 걸린다.
+	InitDodgeCooldown(0.f);
 
 	// 퍼펙트 가드 판정 시간 0.25초 (2026-10-08).
 	InitPerfectGuardWindow(0.25f);

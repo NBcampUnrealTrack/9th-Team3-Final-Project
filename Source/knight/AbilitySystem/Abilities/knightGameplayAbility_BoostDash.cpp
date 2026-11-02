@@ -90,8 +90,8 @@ bool UknightGameplayAbility_BoostDash::CanActivateAbility(const FGameplayAbility
 			return false;
 		}
 	}
-	// 이미 대시 중이면 경직 중일 때만 다시 발동(새 대시로 다시 시작)을 허용한다. 이동 도중에는 끊지 않는다.
-	if (IsActive() && !bInRecovery)
+	// 이미 구르는 중이면 몸이 다 일어선 뒤(bStoodUp)에만 다시 발동(새 구르기로 다시 시작)을 허용한다. 구르거나 일어나는 도중에는 끊지 않는다.
+	if (IsActive() && !(bInRecovery && bStoodUp))
 	{
 		return false;
 	}
@@ -115,6 +115,8 @@ void UknightGameplayAbility_BoostDash::ActivateAbility(const FGameplayAbilitySpe
 void UknightGameplayAbility_BoostDash::StartDash(ACharacter& Character)
 {
 	bCooldownPending = true;
+	bStoodUp = false;
+	bRollQueued = false;
 
 	FVector Direction = Character.GetCharacterMovement()->GetLastInputVector().GetSafeNormal2D();
 	const bool bHasInput = !Direction.IsNearlyZero();
@@ -178,10 +180,18 @@ void UknightGameplayAbility_BoostDash::StartDash(ACharacter& Character)
 
 	if (Montage)
 	{
+		DashBasePlayRate = GetMontagePlayRate(Montage);
 		UAbilityTask_PlayMontageAndWait* const Task = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
-			this, NAME_None, Montage, GetMontagePlayRate(Montage), NAME_None, true, 0.f);
+			this, NAME_None, Montage, DashBasePlayRate, NAME_None, true, 0.f);
 		Task->ReadyForActivation();
 		PlayingDashMontage = Montage;
+
+		// 등이 닿는 구간에서만 느리게 재생한다. 몽타주 위치를 매 프레임 보고 배속을 바꾼다(UpdateContactPlayRate).
+		bContactSlowApplied = false;
+		if (UWorld* const World = GetWorld(); World && GetContactSlowLength() > 0.f)
+		{
+			World->GetTimerManager().SetTimer(ContactRateTimer, this, &ThisClass::UpdateContactPlayRate, 1.f / 60.f, true);
+		}
 	}
 
 	// 거리 = 기본 거리 x 퀵스텝 속도 배율 x 중량 계수. 시간은 고정이라 거리가 늘면 속도도 빨라진다.
@@ -228,12 +238,49 @@ float UknightGameplayAbility_BoostDash::GetMontagePlayRate(const UAnimMontage* M
 {
 	// (2026-10-29) MontageMoveEndTime이 있으면 몽타주의 이동 구간(0 ~ MontageMoveEndTime)을 DashDuration에 맞춘다.
 	// 나머지(일어나는 동작)는 경직이 시작될 때 OnDashFinished가 RecoveryDuration에 맞춰 배속을 바꾼다.
+	// 등이 닿는 구간은 배속 x ContactPlayRateScale로 재생하므로 그 구간이 그만큼 길어진다. 나머지를 빠르게 해서 이동 구간 전체를 DashDuration에 맞춘다.
 	if (MontageMoveEndTime > 0.f && DashDuration > 0.f)
 	{
-		return MontageMoveEndTime / DashDuration;
+		const float SlowLength = GetContactSlowLength();
+		const float PlayedLength = MontageMoveEndTime - SlowLength + SlowLength / FMath::Max(ContactPlayRateScale, 0.1f);
+		return PlayedLength / DashDuration;
 	}
 	// 그 밖의 규칙: 고정 배속(MontagePlayRate). 헤더 주석 참고 — 바뀔 수 있는 항목.
 	return MontagePlayRate;
+}
+
+float UknightGameplayAbility_BoostDash::GetContactSlowLength() const
+{
+	if (MontageMoveEndTime <= 0.f || ContactPlayRateScale >= 1.f)
+	{
+		return 0.f;
+	}
+	const float Start = FMath::Clamp(ContactSlowStartTime, 0.f, MontageMoveEndTime);
+	const float End = FMath::Clamp(ContactSlowEndTime, 0.f, MontageMoveEndTime);
+	return FMath::Max(End - Start, 0.f);
+}
+
+void UknightGameplayAbility_BoostDash::UpdateContactPlayRate()
+{
+	const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	UAnimInstance* const AnimInstance = Character && Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr;
+	UAnimMontage* const Montage = PlayingDashMontage.Get();
+	// 일어나는 구간은 OnDashFinished가 배속을 정한다.
+	if (bInRecovery || !AnimInstance || !Montage || !AnimInstance->Montage_IsPlaying(Montage))
+	{
+		if (UWorld* const World = GetWorld())
+		{
+			World->GetTimerManager().ClearTimer(ContactRateTimer);
+		}
+		return;
+	}
+	const float Position = AnimInstance->Montage_GetPosition(Montage);
+	const bool bInContact = Position >= ContactSlowStartTime && Position < ContactSlowEndTime;
+	if (bInContact != bContactSlowApplied)
+	{
+		bContactSlowApplied = bInContact;
+		AnimInstance->Montage_SetPlayRate(Montage, DashBasePlayRate * (bInContact ? ContactPlayRateScale : 1.f));
+	}
 }
 
 UAnimMontage* UknightGameplayAbility_BoostDash::SelectDashMontage(const ACharacter& Character, const FVector& Direction, float* OutMontageYaw) const
@@ -306,6 +353,11 @@ void UknightGameplayAbility_BoostDash::OnDashFinished()
 
 	// 경직: 공격·가드가 대시를 대신할 수 있게 캔슬 창을 열고, 이동 입력으로는 가속하지 못하게 한다(미끄러지며 정지).
 	bInRecovery = true;
+	if (UWorld* const World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(ContactRateTimer);
+	}
+	bool bStandUpTimerSet = false;
 
 	// (2026-10-29) 몽타주의 나머지(일어나는 동작)를 경직 시간에 맞춰 재생한다. 남은 길이를 재서 정확히 경직 끝에 맞춘다.
 	if (MontageMoveEndTime > 0.f)
@@ -331,6 +383,7 @@ void UknightGameplayAbility_BoostDash::OnDashFinished()
 				{
 					const float Delay = FMath::Max((StandUpTime - Position) / StandUpRate, KINDA_SMALL_NUMBER);
 					World->GetTimerManager().SetTimer(StandUpMoveTimer, this, &ThisClass::CheckStandUpMove, 0.02f, true, Delay);
+					bStandUpTimerSet = true;
 				}
 			}
 		}
@@ -361,6 +414,42 @@ void UknightGameplayAbility_BoostDash::OnDashFinished()
 	UAbilityTask_WaitDelay* const Task = UAbilityTask_WaitDelay::WaitDelay(this, RecoveryDuration);
 	Task->OnFinish.AddDynamic(this, &ThisClass::OnRecoveryFinished);
 	Task->ReadyForActivation();
+
+	// 일어선 시각을 모르면(몽타주 없음 등) 경직이 시작될 때부터 다음 구르기를 받는다. 맨 끝에서 해야 한다:
+	// 기억해 둔 구르기가 나가면 이 구르기는 여기서 끝나고 새로 시작한다.
+	if (!bStandUpTimerSet)
+	{
+		bStoodUp = true;
+		const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+		const UCharacterMovementComponent* const Movement = Character ? Character->GetCharacterMovement() : nullptr;
+		if (Movement && !Movement->GetLastInputVector().IsNearlyZero())
+		{
+			TryQueuedRoll();
+		}
+	}
+}
+
+bool UknightGameplayAbility_BoostDash::TryQueuedRoll()
+{
+	if (!bRollQueued)
+	{
+		return false;
+	}
+	bRollQueued = false;
+	// 재발동(bRetriggerInstancedAbility): 성공하면 엔진이 이 구르기를 끝내고 같은 인스턴스로 새 구르기를 시작한다.
+	UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();
+	return ASC && ASC->TryActivateAbility(GetCurrentAbilitySpecHandle());
+}
+
+void UknightGameplayAbility_BoostDash::InputPressed(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayAbilityActivationInfo ActivationInfo)
+{
+	Super::InputPressed(Handle, ActorInfo, ActivationInfo);
+	// 다 일어선 뒤에 누른 키는 기억하지 않아도 입력 처리(ProcessAbilityInput)가 이어서 바로 재발동을 시도한다.
+	if (bQueueRollDuringRoll && IsActive() && !bStoodUp)
+	{
+		bRollQueued = true;
+	}
 }
 
 void UknightGameplayAbility_BoostDash::OnRecoveryFinished()
@@ -387,11 +476,23 @@ void UknightGameplayAbility_BoostDash::CheckStandUpMove()
 {
 	const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
 	const UCharacterMovementComponent* const Movement = Character ? Character->GetCharacterMovement() : nullptr;
-	// 이동 잠금은 가속만 막고 입력 방향은 남기므로, 경직 중에도 방향키를 읽을 수 있다.
-	if (bInRecovery && Movement && !Movement->GetLastInputVector().IsNearlyZero())
+	if (!bInRecovery || !Movement)
 	{
-		OnRecoveryFinished();
+		return;
 	}
+	// 몸이 다 일어섰다: 이제부터 다음 구르기를 받는다(CanActivateAbility).
+	bStoodUp = true;
+	// 이동 잠금은 가속만 막고 입력 방향은 남기므로, 경직 중에도 방향키를 읽을 수 있다.
+	if (Movement->GetLastInputVector().IsNearlyZero())
+	{
+		return;
+	}
+	// 구르는 도중 눌러 둔 구르기가 있으면 다음 구르기로 잇는다. 나가면 이 구르기는 이미 끝나고 새로 시작했으므로 더 하지 않는다.
+	if (TryQueuedRoll())
+	{
+		return;
+	}
+	OnRecoveryFinished();
 }
 
 void UknightGameplayAbility_BoostDash::ReleaseRecoveryState()
@@ -399,8 +500,12 @@ void UknightGameplayAbility_BoostDash::ReleaseRecoveryState()
 	if (UWorld* const World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(StandUpMoveTimer);
+		World->GetTimerManager().ClearTimer(ContactRateTimer);
 	}
 	bInRecovery = false;
+	bStoodUp = false;
+	bRollQueued = false;
+	bContactSlowApplied = false;
 	if (bCancelWindowApplied)
 	{
 		bCancelWindowApplied = false;

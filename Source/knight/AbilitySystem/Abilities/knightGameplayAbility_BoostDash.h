@@ -28,6 +28,10 @@ class USoundBase;
  *   몽타주 배속은 MontageMoveEndTime 기준으로 구르는 부분 = DashDuration, 일어나는 부분 = RecoveryDuration에 맞춘다.
  *   땅에서만 구른다. 구르는 내내 방향키로 몸이 돌지 않고(이동 잠금), 다 일어나는 순간 방향키를 누르고 있으면 바로 그 속도로 출발한다.
  *   State.Boosting 대신 State.Rolling을 단다: Boost 카메라(축소)로 바뀌지 않고, 카메라가 뒤따라오는 거리도 그대로 둔다.
+ *   등이 바닥에 닿는 구간(ContactSlowStartTime ~ ContactSlowEndTime)은 ContactPlayRateScale배로 느리게 재생해 무게감을 준다.
+ *   닿는 순간의 흙먼지·쿵 소리·화면 흔들림은 구르기 몽타주의 노티파이(Knight Ground Impact, Play Sound)가 낸다.
+ *   공격·가드는 구르기 이동이 끝나는 순간부터 끊을 수 있다(경직의 Window.Cancel).
+ *   다음 구르기는 몸이 다 일어선 시점부터 나간다. 구르는 도중 누른 구르기 키는 기억했다가 그 시점에 바로 다음 구르기로 잇는다(bQueueRollDuringRoll).
  *
  * 스탯 연결 (2026-10-06):
  *   대시 거리 = DashDistance x DodgeSpeed(메카 속성, 배율) x 중량 계수(무브먼트 컴포넌트)
@@ -48,6 +52,7 @@ class USoundBase;
  *       (2026-10-29) 쿨타임 0.3초가 경직(0.1초)보다 길어서, 다음 대시는 경직 캔슬이 아니라 쿨타임이 끝날 때 버퍼에서 나간다.
  *       (2026-10-29 구르기) 경직이 0.48초로 길어져, 다음 구르기는 이동이 끝나고 0.3초 뒤(경직 도중)에 경직을 끊고 나간다(간격 0.9초).
  *       같은 날 이동 0.72초·경직 0.3초로 바꿔, 쿨타임과 경직이 같이 끝난다(간격 1.02초 = 구르기 전체 길이).
+ *       구르기 쿨타임은 기본 0이고, 대신 몸이 다 일어선 시점부터 다음 구르기를 받는다(CanActivateAbility의 bStoodUp).
  *
  * 입력 (2026-10-08): 퀵스텝 키(기본 LeftControl, IA_Boost → InputTag.Boost)를 한 번 누르면 대시. 달리기는 LeftShift(InputTag.Run)로 분리했다.
  * (전에는 Shift를 누르고 있으면 달리기, 두 번 탭하면 knightGameplayAbility_Sprint가 태그로 대시를 발동했다)
@@ -66,6 +71,9 @@ public:
 		const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData) override;
 	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 		const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
+	/** 구르는 도중 구르기 키를 다시 누르면 기억해 둔다(bQueueRollDuringRoll). */
+	virtual void InputPressed(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+		const FGameplayAbilityActivationInfo ActivationInfo) override;
 
 protected:
 	/**
@@ -77,29 +85,47 @@ protected:
 	bool bQuickstepEnabled = true;
 
 	/**
-	 * 배율·중량 계수가 1일 때의 대시 거리. (2026-10-07 900 → 750, 2026-10-16 750 → 375 절반으로 조정)
-	 * (2026-10-29 사용자 결정, 구르기 '살짝만 줄이기') 375 → 330, 같은 날 다시 375로 되돌림. 바뀔 수 있는 값.
+	 * 배율·중량 계수가 1일 때의 구르기 거리. 4.5m: 무거운 기체가 한 번에 크게 빠지는 느낌. 바뀔 수 있는 값.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Dash", meta=(ClampMin=0, Units="cm"))
-	float DashDistance = 375.f;
+	float DashDistance = 450.f;
 
 	/**
-	 * 대시 이동 시간. (2026-10-29 구르기 0.35 → 0.6: 구르기 몽타주(1.08초)에서 몸이 실제로 나가는 구간이 0 ~ 0.6초)
-	 * 바뀔 수 있는 값. 몽타주를 바꾸면 이 값과 RecoveryDuration을 새 몽타주에 맞춘다.
-	 * (2026-10-29 사용자 결정, 같은 날) 0.6 → 0.72: 총 시간(1.08초)은 그대로 두고 일어나는 동작을 빠르게 한 만큼 구르는 부분을 늘림.
+	 * 구르기 이동 시간. 몽타주에서 몸이 실제로 나가는 구간(0 ~ MontageMoveEndTime)을 이 시간에 맞춰 재생한다.
+	 * 0.8초: 등이 닿는 구간을 느리게 재생하는 몫까지 포함한 시간. 바뀔 수 있는 값. 몽타주를 바꾸면 RecoveryDuration과 같이 맞춘다.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Dash", meta=(ClampMin=0.05, Units="s"))
-	float DashDuration = 0.72f;
+	float DashDuration = 0.8f;
 
 	/**
-	 * 대시 이동이 끝난 뒤의 경직 시간. 이 동안 공격·가드·(쿨타임이 끝난) 대시로 캔슬할 수 있다. 0이면 경직 없이 바로 끝난다.
-	 * (2026-10-07 0.25 → 0.1, 플레이해 보니 경직이 길게 느껴져 줄임)
-	 * (2026-10-29 구르기 0.1 → 0.48: 구르기 몽타주의 일어나는 동작(0.6 ~ 1.08초)을 끝까지 보여 준다. 이동 + 경직 = 몽타주 길이)
-	 * (2026-10-29 사용자 결정, 같은 날) 0.48 → 0.36: 일어나는 동작을 약 1.34배속으로 빠르게(MontageMoveEndTime 참고).
-	 * (2026-10-29 사용자 결정, 같은 날) 0.36 → 0.3: 일어나는 후딜을 조금 더 줄임(약 1.6배속).
+	 * 구르기 이동이 끝난 뒤의 경직(일어나는 동작) 시간. 이 동안 공격·가드로 캔슬할 수 있다. 0이면 경직 없이 바로 끝난다.
+	 * 몽타주의 나머지(일어나는 동작, 구르기 몽타주 0.48초)를 이 시간에 맞춰 재생한다. 0.4초 = 약 1.2배속.
+	 * 더 줄이면 일어나는 동작이 빨리 감긴 것처럼 보인다. 바뀔 수 있는 값.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Dash", meta=(ClampMin=0, Units="s"))
-	float RecoveryDuration = 0.3f;
+	float RecoveryDuration = 0.4f;
+
+	/**
+	 * 몽타주에서 등이 바닥에 닿아 있는 구간의 시작·끝(몽타주 기준 초). 이 구간은 배속 x ContactPlayRateScale로 느리게 재생하고,
+	 * 그만큼 나머지 이동 구간을 빠르게 해서 이동 구간 전체는 DashDuration 그대로다.
+	 * 구르기 10방향 모두 가슴이 바닥 45cm 아래로 내려오는 구간이 약 0.33 ~ 0.47초라 그 구간으로 둔다. 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Dash|Contact", meta=(ClampMin=0, Units="s"))
+	float ContactSlowStartTime = 0.33f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Dash|Contact", meta=(ClampMin=0, Units="s"))
+	float ContactSlowEndTime = 0.47f;
+
+	/** 등이 닿는 구간의 재생 배율. 0.5면 그 구간만 절반 속도. 1이면 느리게 하지 않는다. 바뀔 수 있는 값. */
+	UPROPERTY(EditDefaultsOnly, Category="Dash|Contact", meta=(ClampMin=0.1, ClampMax=1))
+	float ContactPlayRateScale = 0.5f;
+
+	/**
+	 * 켜면 구르는 도중(다 일어서기 전)에 누른 구르기 키를 기억했다가, 몸이 다 일어선 순간 바로 다음 구르기로 잇는다.
+	 * 입력 버퍼(0.5초)는 구르기 한 번(약 1초)보다 짧아 일찍 누른 키가 사라지므로 따로 기억한다. 끄면 입력 버퍼만 쓴다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Dash")
+	bool bQueueRollDuringRoll = true;
 
 	/**
 	 * (2026-10-29) 몽타주에서 몸이 실제로 나가는 구간이 끝나는 시각(몽타주 기준 초). 구르기 몽타주는 0.6초(그 뒤는 일어나는 동작).
@@ -114,6 +140,7 @@ protected:
 	 * (2026-10-29 사용자 결정) 몽타주에서 몸이 다 일어선 시각(몽타주 기준 초). 그 뒤의 정리 동작은 방향키를 누르면 건너뛴다:
 	 * 경직 중 이 시각이 지나고 방향키를 누르고 있으면 경직을 끝내고 바로 출발한다(일어나는 동작은 항상 끝까지 보인다).
 	 * 방향키를 안 누르면 몽타주 끝까지 재생한다. 0이면 건너뛰지 않는다.
+	 * 다음 구르기도 이 시각부터 받는다(0이면 경직이 시작될 때부터).
 	 * MontageStandUpTimes에 없는 몽타주가 이 값을 쓴다(앞 구르기 기준 0.9초). 바뀔 수 있는 값.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Dash", meta=(ClampMin=0, Units="s"))
@@ -313,6 +340,12 @@ private:
 	 */
 	float GetMontagePlayRate(const UAnimMontage* Montage) const;
 
+	/** 이동 구간(0 ~ MontageMoveEndTime) 안에서 느리게 재생하는 등이 닿는 구간의 길이(몽타주 기준 초). 느리게 하지 않으면 0. */
+	float GetContactSlowLength() const;
+
+	/** 구르는 동안 몽타주 위치를 보고, 등이 닿는 구간에 들어가면 느리게, 나오면 원래 배속으로 바꾼다. */
+	void UpdateContactPlayRate();
+
 	/** 메카 속성 값을 읽는다. 해당 속성 세트가 없으면 Fallback. */
 	float GetMechAttributeValue(const FGameplayAttribute& Attribute, float Fallback) const;
 
@@ -325,8 +358,14 @@ private:
 	UFUNCTION()
 	void OnRecoveryFinished();
 
-	/** (2026-10-29) 몸이 다 일어선 뒤 경직 동안 매 프레임 부른다. 방향키를 누르고 있으면 경직을 끝내고 바로 출발한다. */
+	/**
+	 * 몸이 다 일어선 뒤 경직 동안 매 프레임 부른다. 처음 부를 때 다음 구르기를 받기 시작하고, 기억해 둔 구르기 키가 있으면 바로 다음 구르기로 잇는다.
+	 * 그 밖에는 방향키를 누르고 있으면 경직을 끝내고 바로 출발한다.
+	 */
 	void CheckStandUpMove();
+
+	/** 기억해 둔 구르기 키가 있으면 지우고 다음 구르기(재발동)를 시도한다. 나갔으면 true(이 구르기는 이미 끝나고 새로 시작함). */
+	bool TryQueuedRoll();
 
 	/** 경직 상태(Window.Cancel, 이동 잠금)를 푼다. */
 	void ReleaseRecoveryState();
@@ -347,6 +386,19 @@ private:
 	FTimerHandle BackThrusterStopTimer;
 	FTimerHandle GhostTrailTimer;
 	FTimerHandle StandUpMoveTimer;
+	FTimerHandle ContactRateTimer;
+
+	/** 이동 구간의 기본 배속(등이 닿는 구간 밖). */
+	float DashBasePlayRate = 1.f;
+
+	/** 지금 등이 닿는 구간의 느린 배속을 걸어 두었는지. */
+	bool bContactSlowApplied = false;
+
+	/** 몸이 다 일어선 시점이 지났는지. 이때부터 다음 구르기를 받는다. */
+	bool bStoodUp = false;
+
+	/** 구르는 도중 누른 구르기 키가 있는지(bQueueRollDuringRoll). */
+	bool bRollQueued = false;
 
 	bool bInvulnerableApplied = false;
 	bool bCancelWindowApplied = false;
