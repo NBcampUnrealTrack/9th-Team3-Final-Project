@@ -152,7 +152,7 @@ void UknightGameplayAbility_MonsterLeapAttack::HandleTick(int32 ActionNumber)
 		return;
 	}
 
-	const float DeltaTime = knightMonsterLeap::TickInterval;
+	const float DeltaTime = GetMonsterTimeStep(knightMonsterLeap::TickInterval);
 	const float Position = AnimInstance->Montage_GetPosition(Montage);
 	const UknightMonsterTargetingComponent* const Targeting = Monster->GetTargetingComponent();
 	const AActor* const Target = Targeting ? Targeting->GetCurrentTarget() : nullptr;
