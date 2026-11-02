@@ -56,4 +56,15 @@ UknightAnimDebugSettings::UknightAnimDebugSettings()
 	PlayRateNotifyClass = TSoftClassPtr<UAnimNotifyState>(FSoftObjectPath(TEXT("/Script/knight.knightAnimNotifyState_PlayRate")));
 	PlayRateProperty = TEXT("PlayRate");
 	HitMarkerNotifyKeywords = { TEXT("GroundImpact") };
+
+	FeedbackPropertyKeywords = {
+		TEXT("HitStop"), TEXT("Shake"), TEXT("Knockback"), TEXT("SlowMo"), TEXT("Poise"), TEXT("Groggy"),
+		TEXT("Flinch"), TEXT("Stagger"), TEXT("Push"), TEXT("TimeDilation"), TEXT("ForceFeedback"), TEXT("Dust"), TEXT("Splash"), TEXT("Parried")
+	};
+	FeedbackAllPropertyClasses = { TSoftClassPtr<UObject>(FSoftObjectPath(TEXT("/Script/Engine.CameraShakePattern"))) };
+	FeedbackLockedPathPrefixes = { TEXT("/Game/Knight/Blueprints/"), TEXT("/Game/Knight/Abilities/"), TEXT("/Game/Knight/Camera/CM_") };
+	FeedbackImpactSettingsClass = TSoftClassPtr<UObject>(FSoftObjectPath(TEXT("/Script/knight.knightCameraImpactSettings")));
+	FeedbackImpactPreviewFunction = TEXT("PreviewImpactReaction");
+	// 카메라 모드는 카메라 컴포넌트가 실제로 만든 인스턴스만 잡는다(쓰지 않는 모드의 값이 섞이지 않게).
+	FeedbackCameraClasses = { TSoftClassPtr<UObject>(FSoftObjectPath(TEXT("/Script/Engine.CameraModifier"))) };
 }

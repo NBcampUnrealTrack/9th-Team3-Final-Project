@@ -4,6 +4,8 @@
 #include "Modules/ModuleManager.h"
 #include "SknightAnimCoverageBoard.h"
 #include "SknightAttackPreview.h"
+#include "SknightFeedbackTuning.h"
+#include "knightFeedbackTuningModel.h"
 #include "ToolMenus.h"
 #include "Widgets/Docking/SDockTab.h"
 #include "knightAttackSelectionSimulator.h"
@@ -12,6 +14,7 @@ namespace knightAnimDebugEditor
 {
 	static const FName CoverageTabName(TEXT("knightMonsterAnimCoverage"));
 	static const FName PreviewTabName(TEXT("knightMonsterAttackPreview"));
+	static const FName TuningTabName(TEXT("knightCombatFeedbackTuning"));
 
 	/** 열려 있는 미리보기 탭의 내용. 커버리지 보드에서 열 때 선택을 넘긴다. */
 	static TWeakPtr<SknightAttackPreview> LivePreview;
@@ -44,6 +47,10 @@ namespace knightAnimDebugEditor
 		return SimulatorSlot();
 	}
 
+	static FAutoConsoleCommand OpenTuningCmd(TEXT("knight.FeedbackTuning.Open"),
+		TEXT("knight.FeedbackTuning.Open. Opens the Combat Feedback Tuning tab."),
+		FConsoleCommandDelegate::CreateLambda([]() { FGlobalTabmanager::Get()->TryInvokeTab(TuningTabName); }));
+
 	void OpenAttackPreview(const UClass* MonsterClass, const UClass* AbilityClass)
 	{
 		FGlobalTabmanager::Get()->TryInvokeTab(PreviewTabName);
@@ -54,7 +61,7 @@ namespace knightAnimDebugEditor
 	}
 }
 
-/** 커버리지 보드와 공격 미리보기 탭을 등록하고 레벨 에디터의 도구 메뉴에 넣는다. */
+/** 커버리지 보드, 공격 미리보기, 전투 피드백 튜닝 탭을 등록하고 레벨 에디터의 도구 메뉴에 넣는다. */
 class FknightMonsterAnimDebugEditorModule : public IModuleInterface
 {
 public:
@@ -72,17 +79,25 @@ public:
 			.SetTooltipText(FText::FromString(TEXT("게임을 실행하지 않고 공격 몽타주의 판정 궤적과 범위를 본다.")))
 			.SetMenuType(ETabSpawnerMenuType::Hidden);
 
+		FGlobalTabmanager::Get()->RegisterNomadTabSpawner(knightAnimDebugEditor::TuningTabName,
+			FOnSpawnTab::CreateStatic(&FknightMonsterAnimDebugEditorModule::SpawnTuningTab))
+			.SetDisplayName(FText::FromString(TEXT("Combat Feedback Tuning")))
+			.SetTooltipText(FText::FromString(TEXT("PIE 중에 전투 피드백 수치를 바꾸고 같은 공격을 다시 실행해 비교한 뒤 저장한다.")))
+			.SetMenuType(ETabSpawnerMenuType::Hidden);
+
 		UToolMenus::RegisterStartupCallback(FSimpleMulticastDelegate::FDelegate::CreateRaw(this, &FknightMonsterAnimDebugEditorModule::RegisterMenus));
 	}
 
 	virtual void ShutdownModule() override
 	{
+		FknightFeedbackTuningModel::Shutdown();
 		UToolMenus::UnRegisterStartupCallback(this);
 		UToolMenus::UnregisterOwner(this);
 		if (FSlateApplication::IsInitialized())
 		{
 			FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(knightAnimDebugEditor::CoverageTabName);
 			FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(knightAnimDebugEditor::PreviewTabName);
+			FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(knightAnimDebugEditor::TuningTabName);
 		}
 	}
 
@@ -107,6 +122,15 @@ private:
 			];
 	}
 
+	static TSharedRef<SDockTab> SpawnTuningTab(const FSpawnTabArgs& Args)
+	{
+		return SNew(SDockTab)
+			.TabRole(ETabRole::NomadTab)
+			[
+				SNew(SknightFeedbackTuning)
+			];
+	}
+
 	void RegisterMenus()
 	{
 		FToolMenuOwnerScoped OwnerScoped(this);
@@ -122,6 +146,11 @@ private:
 			FText::FromString(TEXT("게임을 실행하지 않고 공격 몽타주의 판정 궤적과 범위를 본다.")),
 			FSlateIcon(),
 			FUIAction(FExecuteAction::CreateLambda([]() { FGlobalTabmanager::Get()->TryInvokeTab(knightAnimDebugEditor::PreviewTabName); })));
+		Section.AddMenuEntry(TEXT("OpenCombatFeedbackTuning"),
+			FText::FromString(TEXT("Combat Feedback Tuning")),
+			FText::FromString(TEXT("PIE 중에 전투 피드백 수치를 바꾸고 같은 공격을 다시 실행해 비교한 뒤 저장한다.")),
+			FSlateIcon(),
+			FUIAction(FExecuteAction::CreateLambda([]() { FGlobalTabmanager::Get()->TryInvokeTab(knightAnimDebugEditor::TuningTabName); })));
 	}
 };
 
