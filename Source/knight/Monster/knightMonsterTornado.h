@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Combat/knightCombatTypes.h"
+#include "Monster/knightMonsterGuardPushComponent.h"
 #include "GameFramework/Actor.h"
 #include "knightMonsterTornado.generated.h"
 
@@ -44,6 +45,10 @@ struct KNIGHT_API FknightMonsterTornadoParams
 	 * 잔향 20: 달리기만으로는 따라잡히고, 달리다 퀵 대시를 섞으면 피한다(25면 대시로도 판정 경계에 걸린다). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Tornado", meta=(ClampMin=0, Units="deg"))
 	float TurnRate = 90.f;
+
+	/** 다 만들어져 출발하는 순간 진행 방향을 타깃의 지금 위치로 다시 잡는다. 끄면 생길 때 겨눈 방향으로 출발한다. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Tornado")
+	bool bReaimOnLaunch = false;
 
 	/** 쫓기가 끝난 뒤 사라지는 시간. 판정은 없다. 깔때기가 있으면 기둥이 아래부터 풀려 올라가며 물이 쏟아지고(CollapseEffect), 없으면 줄어든다. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Tornado", meta=(ClampMin=0, Units="s"))
@@ -178,6 +183,9 @@ class KNIGHT_API AknightMonsterTornado : public AActor
 public:
 	AknightMonsterTornado();
 
+	/** Launch 전에 부른다. 가드로 막혔을 때의 밀림 단계(쏜 공격의 GuardReaction). */
+	void SetGuardReaction(EknightMonsterGuardReaction Reaction) { GuardReaction = Reaction; }
+
 	/** Direction은 쫓기 시작할 때의 진행 방향(수평). */
 	void Launch(AActor* InAttacker, AActor* InTarget, const FknightMeleeHitParams& InHitParams, const FknightMonsterTornadoParams& InParams,
 		const FVector& Direction);
@@ -229,6 +237,7 @@ private:
 	TWeakObjectPtr<AActor> Attacker;
 	TWeakObjectPtr<AActor> Target;
 	FknightMeleeHitParams HitParams;
+	EknightMonsterGuardReaction GuardReaction = EknightMonsterGuardReaction::Light;
 	FknightMonsterTornadoParams Params;
 	TSet<TWeakObjectPtr<AActor>> HitActors;
 	FVector MoveDirection = FVector::ForwardVector;

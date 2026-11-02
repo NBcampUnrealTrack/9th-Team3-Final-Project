@@ -106,7 +106,25 @@ UAnimSequence* UknightAnimSpliceLibrary::BakeAlignedSplicedSequence(UAnimSequenc
 
 		// 보이는 루트는 맞춘 자리, 실제로 쓰는 루트는 맞추지 않은 자리에서 맞춘 자리로 끝까지 천천히 옮겨 간다.
 		// 그 차이만큼 루트 바로 아래 뼈를 되돌려 놓아 몸은 맞춘 자리에 그대로 보인다.
-		const FTransform VisualRoot = BlendLocal(0, SecondOffset);
+		FTransform VisualRoot = BlendLocal(0, SecondOffset);
+		if (!bAligned && Alpha > 0.f && Alpha < 1.f && Key > 0)
+		{
+			// 블렌드 구간에서 위치를 섞으면 빠른 앞 애니에서 느린 뒤 애니로 넘어갈 때 루트가 뒤로 끌려 순간 멈춘다(달리다 멈추기).
+			// 프레임마다 두 애니의 이동량을 섞어 쌓아 속도가 매끄럽게 바뀌게 한다. 블렌드가 끝나면 뒤 애니 궤적을 그 자리부터 따른다.
+			const double PrevSinceSeam = FrameRate.AsSeconds(FFrameNumber(Key - 1)) - FirstEndTime;
+			const FVector FirstStep = ReadLocal(FirstModel, 0, FirstTime).GetTranslation()
+				- ReadLocal(FirstModel, 0, FMath::Min(FirstEndTime + PrevSinceSeam, FirstLength)).GetTranslation();
+			const FVector SecondStep = SeamRoot.TransformVector(SecondStartRoot.InverseTransformVector(
+				ReadLocal(SecondModel, 0, SecondTime).GetTranslation() - ReadLocal(SecondModel, 0, FMath::Clamp(SecondStartTime + PrevSinceSeam, SecondStartTime, SecondLength)).GetTranslation()));
+			VisualRoot.SetTranslation(Positions[0].Last() + FMath::Lerp(FirstStep, SecondStep, Alpha));
+		}
+		else if (!bAligned && Alpha >= 1.f && Key > 0)
+		{
+			const double PrevSinceSeam = FrameRate.AsSeconds(FFrameNumber(Key - 1)) - FirstEndTime;
+			const FVector SecondStep = SeamRoot.TransformVector(SecondStartRoot.InverseTransformVector(
+				ReadLocal(SecondModel, 0, SecondTime).GetTranslation() - ReadLocal(SecondModel, 0, FMath::Clamp(SecondStartTime + PrevSinceSeam, SecondStartTime, SecondLength)).GetTranslation()));
+			VisualRoot.SetTranslation(Positions[0].Last() + SecondStep);
+		}
 		FTransform Root = VisualRoot;
 		if (bAligned && SinceSeam > 0.0)
 		{
@@ -146,6 +164,75 @@ UAnimSequence* UknightAnimSpliceLibrary::BakeAlignedSplicedSequence(UAnimSequenc
 	UE_LOG(LogTemp, Display, TEXT("BakeSplicedSequence %s: %.3f초 (앞 0~%.3f + 뒤 %.3f~%.3f, 블렌드 %.2f)"), *PackagePath, Length,
 		FirstEndTime, SecondStartTime, SecondLength, BlendTime);
 	return Target;
+}
+
+bool UknightAnimSpliceLibrary::BakeBoneYawOffset(UAnimSequence* Sequence, FName Bone, float FadeInStart, float HoldStart, float HoldEnd,
+	float FadeOutEnd, float YawDegrees)
+{
+	const USkeleton* const Skeleton = Sequence ? Sequence->GetSkeleton() : nullptr;
+	const IAnimationDataModel* const Model = Sequence ? Sequence->GetDataModel() : nullptr;
+	const FReferenceSkeleton* const RefSkeleton = Skeleton ? &Skeleton->GetReferenceSkeleton() : nullptr;
+	const int32 BoneIndex = RefSkeleton ? RefSkeleton->FindBoneIndex(Bone) : INDEX_NONE;
+	if (BoneIndex <= 0 || !Model->IsValidBoneTrackName(Bone) || !(FadeInStart <= HoldStart && HoldStart <= HoldEnd && HoldEnd <= FadeOutEnd))
+	{
+		UE_LOG(LogTemp, Error, TEXT("BakeBoneYawOffset %s: 뼈 %s가 없거나(루트 제외) 구간 %.3f/%.3f/%.3f/%.3f가 잘못됐습니다."),
+			*GetNameSafe(Sequence), *Bone.ToString(), FadeInStart, HoldStart, HoldEnd, FadeOutEnd);
+		return false;
+	}
+	auto ReadLocal = [Model, RefSkeleton](int32 Index, const FFrameNumber Frame)
+	{
+		const FName Name = RefSkeleton->GetBoneName(Index);
+		return Model->IsValidBoneTrackName(Name) ? Model->GetBoneTrackTransform(Name, Frame) : RefSkeleton->GetRefBonePose()[Index];
+	};
+	auto Weight = [=](double Time)
+	{
+		if (Time < HoldStart)
+		{
+			return HoldStart > FadeInStart ? FMath::SmoothStep(FadeInStart, HoldStart, static_cast<float>(Time)) : (Time >= FadeInStart ? 1.f : 0.f);
+		}
+		if (Time > HoldEnd)
+		{
+			return FadeOutEnd > HoldEnd ? 1.f - FMath::SmoothStep(HoldEnd, FadeOutEnd, static_cast<float>(Time)) : 0.f;
+		}
+		return 1.f;
+	};
+
+	const FFrameRate FrameRate = Model->GetFrameRate();
+	const int32 NumKeys = Model->GetNumberOfKeys();
+	TArray<FVector> Positions;
+	TArray<FQuat> Rotations;
+	TArray<FVector> Scales;
+	for (int32 Key = 0; Key < NumKeys; ++Key)
+	{
+		const FFrameNumber Frame(Key);
+		FTransform Local = ReadLocal(BoneIndex, Frame);
+		const float Alpha = Weight(FrameRate.AsSeconds(Frame));
+		if (Alpha > 0.f)
+		{
+			// 부모의 컴포넌트 공간 회전 P에 대해, 컴포넌트 공간에서 R만큼 돌린 로컬 회전 = P⁻¹·R·P·로컬.
+			FQuat Parent = FQuat::Identity;
+			for (int32 Index = RefSkeleton->GetParentIndex(BoneIndex); Index != INDEX_NONE; Index = RefSkeleton->GetParentIndex(Index))
+			{
+				Parent = ReadLocal(Index, Frame).GetRotation() * Parent;
+			}
+			const FQuat Yaw(FVector::UpVector, FMath::DegreesToRadians(YawDegrees * Alpha));
+			Local.SetRotation((Parent.Inverse() * Yaw * Parent * Local.GetRotation()).GetNormalized());
+		}
+		Positions.Add(Local.GetTranslation());
+		Rotations.Add(Local.GetRotation());
+		Scales.Add(Local.GetScale3D());
+	}
+
+	Sequence->Modify();
+	IAnimationDataController& Controller = Sequence->GetController();
+	Controller.OpenBracket(LOCTEXT("BakeBoneYaw", "뼈 회전 굽기"), false);
+	Controller.SetBoneTrackKeys(Bone, Positions, Rotations, Scales, false);
+	Controller.CloseBracket(false);
+	Sequence->PostEditChange();
+	Sequence->MarkPackageDirty();
+	UE_LOG(LogTemp, Display, TEXT("BakeBoneYawOffset %s: %s %.1f도 (%.3f~%.3f~%.3f~%.3f)"), *GetNameSafe(Sequence), *Bone.ToString(), YawDegrees,
+		FadeInStart, HoldStart, HoldEnd, FadeOutEnd);
+	return true;
 }
 
 #undef LOCTEXT_NAMESPACE

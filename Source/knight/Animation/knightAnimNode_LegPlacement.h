@@ -136,6 +136,13 @@ struct KNIGHT_API FAnimNode_knightLegPlacement : public FAnimNode_SkeletalContro
 	UPROPERTY(EditAnywhere, Category="Foot Lock|Auto Step")
 	bool bEnableAutoStep = true;
 
+	/**
+	 * 몸이 이보다 빠르면 딛지 않는다. 달리기는 애니메이션이 스스로 발을 옮기므로, 디딘 발이 조금 끌려도 옮겨 디디면
+	 * 걸음 사이에 가짜 걸음이 끼어 발이 튄다. 그때는 MaxFootLockStretch까지 버티다 풀린다.
+	 */
+	UPROPERTY(EditAnywhere, Category="Foot Lock|Auto Step", meta=(ClampMin=0, Units="cm/s"))
+	float MaxAutoStepSpeed = 800.f;
+
 	/** 고정 위치와 애니메이션 발 위치가 다리 길이의 이 비율만큼 벌어지면 딛기를 시작한다. */
 	UPROPERTY(EditAnywhere, Category="Foot Lock|Auto Step", meta=(ClampMin=0))
 	float StepTriggerRatio = 0.3f;

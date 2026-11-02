@@ -17,7 +17,7 @@ public:
 	UknightHitStopComponent();
 
 	UFUNCTION(BlueprintCallable, Category="Knight|Combat")
-	void ApplyHitStop(float Duration);
+	virtual void ApplyHitStop(float Duration);
 
 	UFUNCTION(BlueprintCallable, Category="Knight|Combat")
 	void StopHitStop();

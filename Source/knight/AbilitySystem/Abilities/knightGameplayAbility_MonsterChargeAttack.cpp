@@ -92,7 +92,7 @@ void UknightGameplayAbility_MonsterChargeAttack::HandleTick(int32 ActionNumber)
 		return;
 	}
 
-	const float DeltaTime = knightMonsterCharge::TickInterval;
+	const float DeltaTime = GetMonsterTimeStep(knightMonsterCharge::TickInterval);
 	Knockback.Tick(DeltaTime);
 	const FName Section = AnimInstance->Montage_GetCurrentSection(Montage);
 	const float Position = AnimInstance->Montage_GetPosition(Montage);
@@ -138,7 +138,7 @@ void UknightGameplayAbility_MonsterChargeAttack::HandleTick(int32 ActionNumber)
 	RushEffects.Tick(*Monster, DeltaTime, Monster->GetCharacterMovement()->IsMovingOnGround());
 
 	const FVector Location = Monster->GetActorLocation();
-	const float Speed = FVector::Dist2D(Location, LastLocation) / DeltaTime;
+	const float Speed = FVector::Dist2D(Location, LastLocation) / FMath::Max(DeltaTime, UE_KINDA_SMALL_NUMBER);
 	LastLocation = Location;
 
 	if (Section != LoopSection || bStopping)
@@ -209,7 +209,9 @@ void UknightGameplayAbility_MonsterChargeAttack::ApplyHits()
 		[this, Avatar, Targeting](AActor& Target, EknightHitOutcome Outcome)
 		{
 			bHitTarget |= Targeting && Targeting->GetCurrentTarget() == &Target;
-			if (Outcome == EknightHitOutcome::Hit || Outcome == EknightHitOutcome::Guarded)
+			// 가드로 막혔으면 가드 밀림(GuardReaction)과 이 공격의 가드 넉백 중 더 먼 쪽 하나만 쓴다.
+			const bool bGuardPushed = HandleGuardPush(Target, Outcome, KnockbackSpeed * GuardKnockbackScale * KnockbackTime);
+			if (!bGuardPushed && (Outcome == EknightHitOutcome::Hit || Outcome == EknightHitOutcome::Guarded))
 			{
 				Knockback.Start(*Avatar, Target, KnockbackSpeed * (Outcome == EknightHitOutcome::Guarded ? GuardKnockbackScale : 1.f), KnockbackTime);
 			}

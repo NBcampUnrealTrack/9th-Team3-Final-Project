@@ -65,7 +65,8 @@ void UknightGameplayAbility_MonsterRushAttack::ActivateAbility(const FGameplayAb
 
 void UknightGameplayAbility_MonsterRushAttack::HandleTick(int32 ActionNumber)
 {
-	PhaseTime += knightMonsterRush::TickInterval;
+	// 몬스터 시간으로 센다. 타격 히트스톱으로 몽타주가 멈춘 동안 시계만 흐르면 다음 걸음이 몸보다 먼저 나간다.
+	PhaseTime += GetMonsterTimeStep(knightMonsterRush::TickInterval);
 	AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetAvatarActorFromActorInfo());
 	if (!Monster || !Steps.IsValidIndex(StepIndex))
 	{
@@ -86,6 +87,11 @@ void UknightGameplayAbility_MonsterRushAttack::HandleTick(int32 ActionNumber)
 		break;
 	}
 	case EPhase::Step:
+		if (StepTurnYaw != 0.f && Step.ContactTime > 0.f && PhaseTime <= Step.ContactTime + knightMonsterRush::TickInterval)
+		{
+			const float Alpha = FMath::Clamp(PhaseTime / Step.ContactTime, 0.f, 1.f);
+			Monster->SetActorRotation(FRotator(0.f, StepStartYaw + StepTurnYaw * FMath::SmoothStep(0.f, 1.f, Alpha), 0.f));
+		}
 		if (PhaseTime >= Step.HitStartTime && PhaseTime <= Step.HitEndTime)
 		{
 			ApplyHits(Step);
@@ -134,6 +140,13 @@ void UknightGameplayAbility_MonsterRushAttack::StartReposition()
 	FVector Destination = TargetLocation - ToTarget * Reach;
 	Destination.Z = Current.Z;
 	TargetYaw = ToTarget.Rotation().Yaw - ContactYaw;
+	StepTurnYaw = 0.f;
+	if (Step.bFaceTargetAtStart)
+	{
+		// 자리는 같고(타깃에서 Reach 거리), 접촉 각도만큼은 동작 중에 돈다.
+		TargetYaw = ToTarget.Rotation().Yaw;
+		StepTurnYaw = -ContactYaw;
+	}
 
 	const FVector Move = Destination - Current;
 	const float Distance = Move.Size2D();
@@ -155,6 +168,8 @@ void UknightGameplayAbility_MonsterRushAttack::StartStep()
 	Phase = EPhase::Step;
 	PhaseTime = 0.f;
 	HitActors.Reset();
+	const AActor* const Avatar = GetAvatarActorFromActorInfo();
+	StepStartYaw = Avatar ? Avatar->GetActorRotation().Yaw : 0.f;
 	const float Length = Step.Montage ? Step.Montage->GetPlayLength() : Step.HitEndTime;
 	PhaseDuration = Step.EndTime > 0.f ? FMath::Min(Step.EndTime, Length) : Length;
 	if (Step.Montage)
@@ -173,7 +188,9 @@ void UknightGameplayAbility_MonsterRushAttack::ApplyHits(const FknightMonsterRus
 		return;
 	}
 	const FVector Center = Mesh && Mesh->DoesSocketExist(Step.HitBone) ? Mesh->GetSocketLocation(Step.HitBone) : Avatar->GetActorLocation();
-	const int32 NewHits = UknightCombatLibrary::ApplyAreaMeleeHits(Avatar, Center, FCollisionShape::MakeSphere(Step.HitRadius), HitParams, HitActors);
+	const int32 NewHits = UknightCombatLibrary::ApplyAreaMeleeHits(Avatar, Center, FCollisionShape::MakeSphere(Step.HitRadius), HitParams, HitActors,
+		[](const AActor&) { return true; },
+		[this](AActor& Target, EknightHitOutcome Outcome) { HandleGuardPush(Target, Outcome); });
 #if ENABLE_DRAW_DEBUG
 	if (knightMonsterDebug::ShouldDrawAttacks())
 	{

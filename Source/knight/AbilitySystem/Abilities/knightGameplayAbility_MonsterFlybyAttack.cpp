@@ -134,7 +134,8 @@ void UknightGameplayAbility_MonsterFlybyAttack::ActivateAbility(const FGameplayA
 
 void UknightGameplayAbility_MonsterFlybyAttack::HandleTick(int32 ActionNumber)
 {
-	PhaseTime += knightMonsterFlyby::TickInterval;
+	// 몬스터 시간으로 센다. 히트스톱으로 몸이 멈춘 동안 시계만 흐르면 지나가기가 덜 간 채 끝난다.
+	PhaseTime += GetMonsterTimeStep(knightMonsterFlyby::TickInterval);
 	const AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetAvatarActorFromActorInfo());
 	if (!Monster)
 	{
@@ -147,7 +148,7 @@ void UknightGameplayAbility_MonsterFlybyAttack::HandleTick(int32 ActionNumber)
 		UknightMonsterMovementComponent* const Movement = Monster->GetMonsterMovementComponent();
 		if (Movement && Target)
 		{
-			Movement->TurnTowards(Target->GetActorLocation(), knightMonsterFlyby::TickInterval, TurnRate, 2.f);
+			Movement->TurnTowards(Target->GetActorLocation(), GetMonsterTimeStep(knightMonsterFlyby::TickInterval), TurnRate, 2.f);
 		}
 #if ENABLE_DRAW_DEBUG
 		if (knightMonsterDebug::ShouldDrawAttacks() && Target)
@@ -525,7 +526,9 @@ void UknightGameplayAbility_MonsterFlybyAttack::ApplyHits()
 	}
 	FVector Chest, Center;
 	GetBeam(Chest, Center);
-	const int32 NewHits = UknightCombatLibrary::ApplyAreaMeleeHits(Monster, Center, FCollisionShape::MakeSphere(HalfWidth), HitParams, HitActors);
+	const int32 NewHits = UknightCombatLibrary::ApplyAreaMeleeHits(Monster, Center, FCollisionShape::MakeSphere(HalfWidth), HitParams, HitActors,
+		[](const AActor&) { return true; },
+		[this](AActor& Target, EknightHitOutcome Outcome) { HandleGuardPush(Target, Outcome); });
 #if ENABLE_DRAW_DEBUG
 	if (knightMonsterDebug::ShouldDrawAttacks())
 	{

@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Combat/knightCombatTypes.h"
+#include "Monster/knightMonsterGuardPushComponent.h"
 #include "GameFramework/Actor.h"
 #include "knightMonsterSonicProjectile.generated.h"
 
@@ -77,6 +78,9 @@ public:
 	/** Launch 전에 부른다. 0이면 끈다. */
 	void SetDeafenTime(float Seconds) { DeafenTime = Seconds; }
 
+	/** Launch 전에 부른다. 가드로 막혔을 때의 밀림 단계(쏜 공격의 GuardReaction). */
+	void SetGuardReaction(EknightMonsterGuardReaction Reaction) { GuardReaction = Reaction; }
+
 	/** Launch 전에 부른다. */
 	void SetImpactEffects(const FknightSonicImpactEffects& Effects) { ImpactEffects = Effects; }
 
@@ -84,7 +88,8 @@ public:
 
 private:
 	void DeafenTarget(AActor& Target) const;
-	void SpawnImpact(EknightHitOutcome Outcome, const FVector& Location) const;
+	/** Direction은 이펙트 방향(이펙트는 이 방향에 수직으로 퍼진다). */
+	void SpawnImpact(EknightHitOutcome Outcome, const FVector& Location, const FVector& Direction) const;
 	/** Location이 수면에 닿았으면 물보라와 물결을 내고 true. */
 	bool SpawnWaterImpact(const FVector& Location) const;
 	/** 이번 틱에 지나간 구간(Start→End)이 맞히지 않은 플레이어 곁을 스쳤으면 그 화면에 알린다. bEnding이면 이번 틱에 사라진다. */
@@ -98,6 +103,7 @@ private:
 
 	TWeakObjectPtr<AActor> Attacker;
 	FknightMeleeHitParams HitParams;
+	EknightMonsterGuardReaction GuardReaction = EknightMonsterGuardReaction::Light;
 	TSet<TWeakObjectPtr<AActor>> HitActors;
 	FVector Velocity = FVector::ZeroVector;
 	float Radius = 100.f;

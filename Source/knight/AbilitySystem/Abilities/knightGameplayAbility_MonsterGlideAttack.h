@@ -66,7 +66,7 @@ struct FknightMonsterGlideStrike
  *         타깃이 움직이던 방향으로 고정 시간만큼 앞을 겨눈다. 그 뒤로는 고정이라 그 순간 구르거나 패링해야 피한다.
  *   어둠이 없으면 두 동작 모두 하지 않는다(정면에서 일직선).
  *
- * Strikes가 있으면 찌르기마다 몽타주·판정을 따로 쓰고, 그 수만큼 찌른다(분노 연속 횟수는 쓰지 않음). 비어 있으면 위 값으로 StrikeCount번,
+ * Strikes가 있으면 찌르기마다 몽타주·판정을 따로 쓰고, 그 수만큼 찌른다(분노 연속 횟수는 쓰지 않음). 분노 중이고 EnragedStrikes가 있으면 그쪽을 쓴다. 비어 있으면 위 값으로 StrikeCount번,
  * 첫 찌르기만 등 뒤에서 한다. 찌르기 사이에 등 뒤로 돌 때는 공중 높이로 올라가 TurnTime 동안 어둠 밖을 돈다(잔향 어둠 기습).
  * bLand를 끄면 마지막 찌르기 뒤 착지하지 않고 RiseTime 동안 공중 높이로 돌아가 공중 턴을 이어 간다.
  *
@@ -154,6 +154,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Glide")
 	TArray<FknightMonsterGlideStrike> Strikes;
 
+	/** State.Monster.Enraged일 때 Strikes 대신 쓴다(잔향 공명해방 어둠 기습 3타). 비우면 분노 중에도 Strikes. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Glide")
+	TArray<FknightMonsterGlideStrike> EnragedStrikes;
+
 	/** 마지막 찌르기 뒤 탈진 착지로 공중 턴을 끝낸다. 끄면 다시 날아올라 공중 턴을 이어 간다. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Land")
 	bool bLand = true;
@@ -217,6 +221,28 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Darkness", meta=(EditCondition="bDarkenView", ClampMin=0.05, Units="s"))
 	float CircleFlapInterval = 0.5f;
 
+	/**
+	 * 어둠이 덮여 있는 동안 타깃 둘레 아무 곳에서나 되풀이해 트는 초음파 소리. 여러 개가 겹쳐 사방에서 들리므로 소리만으로는
+	 * 몬스터 위치를 알 수 없다(위치 단서는 CircleFlapSound). 비우면 틀지 않는다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Darkness", meta=(EditCondition="bDarkenView"))
+	TObjectPtr<USoundBase> DarkEchoSound;
+
+	/** 다음 초음파까지의 간격. 매번 이 범위에서 무작위로 고른다. 소리 길이보다 짧으면 겹친다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Darkness", meta=(EditCondition="bDarkenView"))
+	FFloatInterval DarkEchoInterval = FFloatInterval(0.4f, 0.9f);
+
+	/** 초음파를 틀 위치: 타깃에서 아무 방향으로 이 거리(cm) 범위. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Darkness", meta=(EditCondition="bDarkenView"))
+	FFloatInterval DarkEchoDistance = FFloatInterval(800.f, 2000.f);
+
+	/** 초음파마다 무작위로 고르는 피치 범위. 같은 소리가 겹쳐도 하나로 뭉쳐 들리지 않게 한다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Darkness", meta=(EditCondition="bDarkenView"))
+	FFloatInterval DarkEchoPitch = FFloatInterval(0.9f, 1.3f);
+
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Darkness", meta=(EditCondition="bDarkenView", ClampMin=0))
+	float DarkEchoVolume = 0.4f;
+
 	/** 어둠 속 찌르기가 타깃 쪽으로 방향을 꺾는 최대 속도. 0이면 일직선. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Darkness", meta=(EditCondition="bDarkenView", ClampMin=0, Units="deg"))
 	float HomingTurnRate = 90.f;
@@ -261,6 +287,8 @@ private:
 	void SetWarning(float Strength);
 	void SetGettingUp(bool bOn);
 	void UpdateCircle(AknightMonsterCharacterBase& Monster, const AActor& Target, float HoldTime);
+	/** 어둠이 덮인 동안 DarkEchoInterval마다 타깃 둘레 아무 곳에 초음파를 하나 튼다. */
+	void UpdateDarkEcho(const AActor& Target);
 	FVector GetBehindLocation(const AknightMonsterCharacterBase& Monster, const AActor& Target) const;
 	void StartGlideForce(const FVector& Velocity, float Duration);
 	void SetGlideVelocity(const FVector& Velocity);
@@ -273,6 +301,8 @@ private:
 	EPhase Phase = EPhase::Roar;
 	float PhaseTime = 0.f;
 	int32 StrikesLeft = 0;
+	/** 이번 발동이 EnragedStrikes를 쓰는지. 발동할 때 정한다(도중에 분노가 풀려도 바꾸지 않음). */
+	bool bUseEnragedStrikes = false;
 	/** 지금(Strike) 또는 다음(Roar·Turn) 찌르기 번호. */
 	int32 StrikeIndex = 0;
 	FknightMonsterGlideStrike CurrentStrike;
@@ -285,6 +315,7 @@ private:
 	FVector GlideDirection = FVector::ForwardVector;
 	float GlideSpeed = 0.f;
 	float CircleFlapTime = 0.f;
+	float DarkEchoTime = 0.f;
 	bool bCircling = false;
 	bool bNoFlinchApplied = false;
 	bool bLanded = false;

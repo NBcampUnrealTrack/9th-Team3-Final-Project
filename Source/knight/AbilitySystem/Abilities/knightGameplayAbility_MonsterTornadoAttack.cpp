@@ -59,7 +59,7 @@ void UknightGameplayAbility_MonsterTornadoAttack::ActivateAbility(const FGamepla
 
 void UknightGameplayAbility_MonsterTornadoAttack::HandleTick(int32 ActionNumber)
 {
-	PhaseTime += knightMonsterTornadoAttack::TickInterval;
+	PhaseTime += GetMonsterTimeStep(knightMonsterTornadoAttack::TickInterval);
 	const AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetAvatarActorFromActorInfo());
 	if (!Monster)
 	{
@@ -74,7 +74,7 @@ void UknightGameplayAbility_MonsterTornadoAttack::HandleTick(int32 ActionNumber)
 		UknightMonsterMovementComponent* const Movement = Monster->GetMonsterMovementComponent();
 		if (Movement && Target)
 		{
-			Movement->TurnTowards(Target->GetActorLocation(), knightMonsterTornadoAttack::TickInterval, TurnRate, 2.f);
+			Movement->TurnTowards(Target->GetActorLocation(), GetMonsterTimeStep(knightMonsterTornadoAttack::TickInterval), TurnRate, 2.f);
 		}
 		while (Spawned < SpawnCount && PhaseTime >= SpawnTime + Spawned * SpawnInterval)
 		{
@@ -164,6 +164,11 @@ void UknightGameplayAbility_MonsterTornadoAttack::SpawnTornado(int32 Index, int3
 	if (AknightMonsterTornado* const Spawn = World->SpawnActor<AknightMonsterTornado>(Location, Direction.Rotation(), SpawnParams))
 	{
 		FknightMonsterTornadoParams Params = Tornado;
+		if (bVolley)
+		{
+			Params.bReaimOnLaunch |= bVolleyReaimOnLaunch;
+			Params.TurnRate = VolleyTurnRate > 0.f ? VolleyTurnRate : Params.TurnRate;
+		}
 		if (bEnraged && Index == Count - 1 && !FMath::IsNearlyEqual(EnragedLastScale, 1.f))
 		{
 			const float Scale = EnragedLastScale;
@@ -174,6 +179,7 @@ void UknightGameplayAbility_MonsterTornadoAttack::SpawnTornado(int32 Index, int3
 			Params.WaterRippleRadius *= Scale;
 			Params.WaterSplashScale *= Scale;
 		}
+		Spawn->SetGuardReaction(GuardReaction);
 		Spawn->Launch(Monster, Target, HitParams, Params, Direction);
 	}
 	UE_LOG(LogknightAI, Log, TEXT("%s: tornado %d/%d spawned."), *GetNameSafe(Monster), Index + 1, Count);

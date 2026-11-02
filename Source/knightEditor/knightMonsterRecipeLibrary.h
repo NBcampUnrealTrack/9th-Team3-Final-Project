@@ -98,6 +98,13 @@ public:
 	 * Waves를 번갈아(이미 나온 것은 빼고 무작위로) 재생하는 SoundCue를 PackagePath(/Game/...)에 만든다. 같은 소리가 연달아 나지 않는다.
 	 * 이미 있으면 노드를 새로 짠다. 저장은 호출한 쪽.
 	 */
+	/**
+	 * 애님 Blueprint의 Slot 노드 바로 뒤에 Knight Hit Flinch 노드(맞을 때 덧셈 움찔)를 끼우고 컴파일한다. 이미 있으면 아무것도 하지 않는다.
+	 * 공용 ABP_Monster_Base에 넣어 두면 레시피로 새로 만드는 몬스터는 따라온다. 저장은 호출한 쪽.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
+	static bool AddHitFlinchNode(UAnimBlueprint* AnimBlueprint);
+
 	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
 	static USoundCue* CreateRandomSoundCue(const FString& PackagePath, const TArray<USoundWave*>& Waves, USoundClass* SoundClass, USoundAttenuation* Attenuation);
 
@@ -107,6 +114,19 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
 	static bool SetMontagePlayRateWindow(UAnimMontage* Montage, float Start, float End, float PlayRate);
+
+	/**
+	 * Source 몽타주에서 시작 시간이 SourceStart~SourceEnd(Source 몽타주 시간)인 노티파이를 복제해 Target의 TargetStart부터 같은 간격으로 넣는다.
+	 * 노티파이 상태는 길이를 유지하되 Target 끝을 넘으면 자른다. 트랙은 이름으로 찾거나 만든다. OnlyClass가 있으면 그 클래스 노티파이만 복사한다.
+	 * 단독 공격 몽타주들을 이어 붙인 연계 공격을 만들 때, 이미 맞춘 판정·소리·속도 구간을 그대로 옮기려고 쓴다. 복사한 개수를 돌려준다. 저장은 호출한 쪽.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
+	static int32 CopyMontageNotifies(const UAnimMontage* Source, float SourceStart, float SourceEnd, UAnimMontage* Target, float TargetStart,
+		TSubclassOf<UObject> OnlyClass = nullptr);
+
+	/** 몽타주의 노티파이를 모두 지운다(트랙은 남긴다). 애니를 통째로 바꾼 뒤 CopyMontageNotifies로 다시 채우기 전에 쓴다. 저장은 호출한 쪽. */
+	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
+	static int32 ClearMontageNotifies(UAnimMontage* Montage);
 
 	/**
 	 * 피격용 피직스 에셋을 만들거나 다시 만들고 메시에 연결한다. CapsuleBones·BoxBones의 뼈마다 바디 하나를 만들고, 그 뼈와

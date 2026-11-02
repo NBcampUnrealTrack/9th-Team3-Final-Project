@@ -28,6 +28,13 @@ struct KNIGHT_API FknightMonsterRushStep
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rush")
 	FVector2D ContactPoint = FVector2D(100.f, 0.f);
 
+	/**
+	 * 켜면 자리 잡기 동안 타깃을 정면으로 바라보고, 동작을 시작한 뒤 ContactTime까지 접촉 지점 각도만큼 마저 돈다.
+	 * 회전 공격처럼 접촉 지점이 정면에서 크게 벗어난 동작이 옆을 보고 시작하지 않게 한다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rush")
+	bool bFaceTargetAtStart = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rush")
 	FName HitBone = TEXT("spine_02");
 
@@ -110,6 +117,9 @@ private:
 	float PhaseTime = 0.f;
 	float PhaseDuration = 0.f;
 	int32 StepIndex = 0;
+	/** bFaceTargetAtStart인 동작에서 시작 뒤 ContactTime까지 더 도는 각도와 그 기준 방향. */
+	float StepTurnYaw = 0.f;
+	float StepStartYaw = 0.f;
 	float StartYaw = 0.f;
 	float TargetYaw = 0.f;
 	bool bNoFlinchApplied = false;

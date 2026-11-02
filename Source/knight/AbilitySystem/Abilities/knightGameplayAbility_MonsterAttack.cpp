@@ -3,6 +3,7 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "Abilities/Tasks/AbilityTask_Repeat.h"
+#include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
 #include "Engine/World.h"
 #include "Monster/knightMonsterCharacterBase.h"
 #include "Monster/knightMonsterMovementComponent.h"
@@ -20,6 +21,10 @@ FknightMonsterAttackContext FknightMonsterAttackContext::Make(const AActor* Mons
 	FknightMonsterAttackContext Context;
 	Context.MonsterASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Monster);
 	Context.WorldTime = Monster && Monster->GetWorld() ? Monster->GetWorld()->GetTimeSeconds() : 0.0;
+	if (const UknightCoreAttributeSet* const CoreSet = Context.MonsterASC ? Context.MonsterASC->GetSet<UknightCoreAttributeSet>() : nullptr)
+	{
+		Context.TimeSinceHit = static_cast<float>(Context.WorldTime - CoreSet->GetLastHitTime());
+	}
 	if (Monster && Target)
 	{
 		const FVector ToTarget = Target->GetActorLocation() - Monster->GetActorLocation();
@@ -47,12 +52,70 @@ UknightGameplayAbility_MonsterAttack::UknightGameplayAbility_MonsterAttack(const
 
 float UknightGameplayAbility_MonsterAttack::GetSelectionWeight(const FknightMonsterAttackContext& Context) const
 {
-	if (Selection.Weight <= 0.f || GetCooldownRemaining(Context.WorldTime) > 0.f)
+	// 연계 전용은 PickFollowUp(GetSelectionWeightInternal 직접 호출)에서만 고른다.
+	if (Selection.bOnlyAsFollowUp)
+	{
+		return 0.f;
+	}
+	return GetSelectionWeightInternal(Context, true);
+}
+
+FGameplayAbilitySpecHandle UknightGameplayAbility_MonsterAttack::PickFollowUp(UAbilitySystemComponent& ASC, const FknightMonsterAttackContext& Context) const
+{
+	if (!FollowUpAttacks.IsEmpty() && ASC.HasAllMatchingGameplayTags(FollowUpRequiredTags) && FMath::FRand() <= FollowUpChance)
+	{
+		const FGameplayAbilitySpecHandle FollowUp = PickWeighted(ASC, Context, FollowUpAttacks);
+		if (FollowUp.IsValid())
+		{
+			return FollowUp;
+		}
+	}
+	// 연계가 없으면 공격 후 이동(물러나기 등)을 본다. 각자 Selection 조건(맞지 않은 시간 등)으로 걸러진다.
+	return PickWeighted(ASC, Context, AfterAttackMoves);
+}
+
+FGameplayAbilitySpecHandle UknightGameplayAbility_MonsterAttack::PickWeighted(UAbilitySystemComponent& ASC, const FknightMonsterAttackContext& Context,
+	const TArray<TSubclassOf<UknightGameplayAbility_MonsterAttack>>& Classes) const
+{
+	TArray<TPair<FGameplayAbilitySpecHandle, float>> Candidates;
+	float TotalWeight = 0.f;
+	for (const TSubclassOf<UknightGameplayAbility_MonsterAttack>& AttackClass : Classes)
+	{
+		const FGameplayAbilitySpec* const Spec = AttackClass ? ASC.FindAbilitySpecFromClass(AttackClass) : nullptr;
+		const UknightGameplayAbility_MonsterAttack* const Attack = Spec && !Spec->IsActive()
+			? Cast<UknightGameplayAbility_MonsterAttack>(Spec->GetPrimaryInstance() ? Spec->GetPrimaryInstance() : Spec->Ability.Get()) : nullptr;
+		const float Weight = Attack ? Attack->GetSelectionWeightInternal(Context, false) : 0.f;
+		if (Weight > 0.f)
+		{
+			Candidates.Emplace(Spec->Handle, Weight);
+			TotalWeight += Weight;
+		}
+	}
+	float Roll = FMath::FRandRange(0.f, TotalWeight);
+	for (const TPair<FGameplayAbilitySpecHandle, float>& Candidate : Candidates)
+	{
+		Roll -= Candidate.Value;
+		if (Roll <= 0.f)
+		{
+			return Candidate.Key;
+		}
+	}
+	return Candidates.IsEmpty() ? FGameplayAbilitySpecHandle() : Candidates.Last().Key;
+}
+
+float UknightGameplayAbility_MonsterAttack::GetSelectionWeightInternal(const FknightMonsterAttackContext& Context, bool bCheckCooldown) const
+{
+	if (Selection.Weight <= 0.f || (bCheckCooldown && GetCooldownRemaining(Context.WorldTime) > 0.f))
 	{
 		return 0.f;
 	}
 	if (Context.MonsterASC)
 	{
+		// 분노 마무리 공격은 몬스터가 직접 쓴다. 그동안 AI는 다른 공격을 고르지 않는다.
+		if (Context.MonsterASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_EnrageFinale))
+		{
+			return 0.f;
+		}
 		if (!Context.MonsterASC->HasAllMatchingGameplayTags(Selection.RequiredOwnerTags)
 			|| Context.MonsterASC->HasAnyMatchingGameplayTags(Selection.BlockedOwnerTags))
 		{
@@ -83,6 +146,10 @@ float UknightGameplayAbility_MonsterAttack::GetSelectionWeight(const FknightMons
 	{
 		return 0.f;
 	}
+	if (Selection.MinTimeSinceHit > 0.f && Context.TimeSinceHit < Selection.MinTimeSinceHit)
+	{
+		return 0.f;
+	}
 	return Selection.Weight;
 }
 
@@ -95,6 +162,17 @@ bool UknightGameplayAbility_MonsterAttack::CanActivateAbility(const FGameplayAbi
 		return false;
 	}
 	return Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags);
+}
+
+bool UknightGameplayAbility_MonsterAttack::HandleGuardPush(AActor& Target, EknightHitOutcome Outcome, float ExistingPushDistance) const
+{
+	return UknightMonsterGuardPushComponent::HandleHit(GetAvatarActorFromActorInfo(), Target, Outcome, GuardReaction, ExistingPushDistance);
+}
+
+float UknightGameplayAbility_MonsterAttack::GetMonsterTimeStep(float Interval) const
+{
+	const AActor* const Avatar = GetAvatarActorFromActorInfo();
+	return Avatar ? Interval * FMath::Max(Avatar->CustomTimeDilation, 0.f) : Interval;
 }
 
 float UknightGameplayAbility_MonsterAttack::GetCooldownRemaining(double WorldTime) const
@@ -111,7 +189,7 @@ void UknightGameplayAbility_MonsterAttack::ActivateAbility(const FGameplayAbilit
 	}
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
 
-	if (!FMath::IsNearlyZero(StartTurnYaw) && StartTurnMaxTime > 0.f)
+	if ((bStartTurnToTarget || !FMath::IsNearlyZero(StartTurnYaw)) && StartTurnMaxTime > 0.f)
 	{
 		const int32 Steps = FMath::Max(1, FMath::CeilToInt(StartTurnMaxTime / knightMonsterAttack::StartTurnInterval));
 		UAbilityTask_Repeat* const TurnTask = UAbilityTask_Repeat::RepeatAction(this, knightMonsterAttack::StartTurnInterval, Steps);
@@ -133,7 +211,7 @@ void UknightGameplayAbility_MonsterAttack::HandleStartTurnTick(int32 ActionNumbe
 		// 타깃이 움직여도 따라가도록 매번 방향을 다시 잡는다.
 		const FVector ToTarget = (Target->GetActorLocation() - Monster->GetActorLocation()).GetSafeNormal2D();
 		const FVector Facing = Monster->GetActorLocation() + ToTarget.RotateAngleAxis(StartTurnYaw, FVector::UpVector) * 100.f;
-		bDone = Movement->TurnTowards(Facing, knightMonsterAttack::StartTurnInterval, StartTurnRate, knightMonsterAttack::StartTurnTolerance);
+		bDone = Movement->TurnTowards(Facing, GetMonsterTimeStep(knightMonsterAttack::StartTurnInterval), StartTurnRate, knightMonsterAttack::StartTurnTolerance);
 	}
 	if (bDone && StartTurnTask.IsValid())
 	{

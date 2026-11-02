@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "AbilitySystem/Abilities/knightGameplayAbility.h"
+#include "Monster/knightMonsterGuardPushComponent.h"
 #include "knightGameplayAbility_MonsterAttack.generated.h"
 
 class UAbilityTask_Repeat;
@@ -73,6 +74,14 @@ struct KNIGHT_API FknightMonsterAttackSelection
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Selection", meta=(ClampMin=0, Units="s"))
 	float MinTargetBehindTime = 0.f;
 
+	/** 몬스터가 마지막으로 맞은 뒤 이 시간(초)이 지나야 고를 수 있다. 0이면 보지 않는다. 공격하는 동안 맞지 않았을 때만 쓰는 행동(물러나기)에 쓴다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Selection", meta=(ClampMin=0, Units="s"))
+	float MinTimeSinceHit = 0.f;
+
+	/** 켜면 AI가 직접 고르지 않고 다른 공격의 연계(FollowUpAttacks)로만 나온다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Selection")
+	bool bOnlyAsFollowUp = false;
+
 	/** 몬스터에 이 태그가 모두 있어야 한다(분노 전용 기술이면 State.Monster.Enraged). */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Selection", meta=(Categories="State"))
 	FGameplayTagContainer RequiredOwnerTags;
@@ -95,6 +104,8 @@ struct KNIGHT_API FknightMonsterAttackContext
 	bool bTargetAirborne = false;
 	/** 타깃이 등 뒤에 계속 머문 시간(초). */
 	float TargetBehindTime = 0.f;
+	/** 몬스터가 마지막으로 맞은 뒤 지난 시간(초). 맞은 적이 없으면 아주 큰 값이다. */
+	float TimeSinceHit = UE_BIG_NUMBER;
 	double WorldTime = 0.0;
 
 	static FknightMonsterAttackContext Make(const AActor* Monster, const AActor* Target);
@@ -125,6 +136,16 @@ public:
 
 	const FknightMonsterAttackSelection& GetSelection() const { return Selection; }
 
+	/** 공격 판정이 없는 이동 행동(옆걸음, 물러나기)이면 false. 공중 턴의 공격 횟수에 세지 않는다. */
+	virtual bool CountsAsAttack() const { return true; }
+
+	/**
+	 * 이 공격이 끝난 뒤 쉬지 않고 바로 이어 쓸 공격을 FollowUpAttacks에서 고른다. Selection 조건(사거리·각도·태그)은 보되
+	 * 쿨다운은 보지 않는다. 연계가 없으면 AfterAttackMoves에서 고른다. 이어 쓸 게 없으면 무효 핸들.
+	 */
+	FGameplayAbilitySpecHandle PickFollowUp(UAbilitySystemComponent& ASC, const FknightMonsterAttackContext& Context) const;
+	bool HasFollowUps() const { return !FollowUpAttacks.IsEmpty() || !AfterAttackMoves.IsEmpty(); }
+
 	/**
 	 * 탈진(State.Monster.Exhausted) 중에는 어떤 공격도 시작하지 않는다. 이미 시작한 공격은 끝까지 한다.
 	 * ActivationBlockedTags는 BP와 몬스터 생성기가 부위 파괴 태그로 통째로 덮어쓰므로 여기서 검사한다.
@@ -148,13 +169,63 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Turn", meta=(ClampMin=-180, ClampMax=180, Units="deg"))
 	float StartTurnYaw = 0.f;
 
-	UPROPERTY(EditDefaultsOnly, Category="Attack|Turn", meta=(ClampMin=1, EditCondition="StartTurnYaw != 0"))
+	/**
+	 * 켜면 StartTurnYaw가 0이어도 발동할 때 타깃 쪽으로 돈다. AI가 공격 전에 몸을 돌려 주지 않는 연계(FollowUpAttacks)로
+	 * 나오는 공격이 옆을 보고 발동하지 않게 한다. 이미 타깃을 보고 있으면 바로 끝난다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Turn")
+	bool bStartTurnToTarget = false;
+
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Turn", meta=(ClampMin=1, EditCondition="StartTurnYaw != 0 || bStartTurnToTarget"))
 	float StartTurnRate = 180.f;
 
-	UPROPERTY(EditDefaultsOnly, Category="Attack|Turn", meta=(ClampMin=0, Units="s", EditCondition="StartTurnYaw != 0"))
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Turn", meta=(ClampMin=0, Units="s", EditCondition="StartTurnYaw != 0 || bStartTurnToTarget"))
 	float StartTurnMaxTime = 0.5f;
 
+	/**
+	 * 이 공격이 끝나면 쉬는 시간 없이 바로 이어 쓸 공격 후보(연계). 지금 쓸 수 있는 것 중 Selection.Weight로 하나를 고른다.
+	 * 자기 자신을 넣으면 한 번 더 쓴다(연타). 이어서 쓴 공격의 연계는 다시 잇지 않는다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|FollowUp")
+	TArray<TSubclassOf<UknightGameplayAbility_MonsterAttack>> FollowUpAttacks;
+
+	/** 몬스터에 이 태그가 모두 있을 때만 잇는다(잔향은 공명해방 State.Monster.Enraged). 비우면 항상. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|FollowUp")
+	FGameplayTagContainer FollowUpRequiredTags;
+
+	UPROPERTY(EditDefaultsOnly, Category="Attack|FollowUp", meta=(ClampMin=0, ClampMax=1))
+	float FollowUpChance = 1.f;
+
+	/**
+	 * 연계가 나오지 않았을 때 이 공격 뒤에 바로 쓸 이동 행동 후보(물러나기 등). FollowUpRequiredTags·FollowUpChance를 보지 않고
+	 * 각자의 Selection 조건(예: MinTimeSinceHit)만 본다. 연계 전용으로 두려면 그쪽 Selection.bOnlyAsFollowUp을 켠다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|FollowUp")
+	TArray<TSubclassOf<UknightGameplayAbility_MonsterAttack>> AfterAttackMoves;
+
+	/**
+	 * 이 공격을 가드로 막았을 때의 반응(밀리는 거리, 가드 브레이크). 거리는 몬스터의 UknightMonsterGuardPushComponent에서 정한다.
+	 * 공격 무게 단계(히트스톱)와 맞춘다: 지속형 0.04 / 약 0.06 / 중 0.08 / 강 0.10 / 최강 0.12.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Guard")
+	EknightMonsterGuardReaction GuardReaction = EknightMonsterGuardReaction::Light;
+
+	/** 가드로 막힌 타격이면 GuardReaction만큼 밀어낸다. ExistingPushDistance보다 멀게 밀었으면 true(부른 쪽은 자기 가드 넉백을 걸지 않는다). */
+	bool HandleGuardPush(AActor& Target, EknightHitOutcome Outcome, float ExistingPushDistance = 0.f) const;
+
+	/**
+	 * 월드 시간 Interval을 몬스터 시간으로 바꾼다. 히트스톱은 몬스터의 CustomTimeDilation만 낮춰 몸(몽타주·이동)을 멈추고
+	 * 월드 타이머·AbilityTask_Repeat는 그대로 흐른다. 공격 시계와 회전을 이 값으로 세야 히트스톱 동안 몸과 같이 멈춘다.
+	 */
+	float GetMonsterTimeStep(float Interval) const;
+
 private:
+	float GetSelectionWeightInternal(const FknightMonsterAttackContext& Context, bool bCheckCooldown) const;
+
+	/** Classes 중 지금 쓸 수 있는 것(Selection 조건, 쿨다운 제외)을 가중치로 하나 고른다. */
+	FGameplayAbilitySpecHandle PickWeighted(UAbilitySystemComponent& ASC, const FknightMonsterAttackContext& Context,
+		const TArray<TSubclassOf<UknightGameplayAbility_MonsterAttack>>& Classes) const;
+
 	UFUNCTION()
 	void HandleStartTurnTick(int32 ActionNumber);
 

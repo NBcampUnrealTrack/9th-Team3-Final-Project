@@ -152,7 +152,7 @@ void UknightGameplayAbility_MonsterLeapAttack::HandleTick(int32 ActionNumber)
 		return;
 	}
 
-	const float DeltaTime = knightMonsterLeap::TickInterval;
+	const float DeltaTime = GetMonsterTimeStep(knightMonsterLeap::TickInterval);
 	const float Position = AnimInstance->Montage_GetPosition(Montage);
 	const UknightMonsterTargetingComponent* const Targeting = Monster->GetTargetingComponent();
 	const AActor* const Target = Targeting ? Targeting->GetCurrentTarget() : nullptr;
@@ -221,7 +221,9 @@ void UknightGameplayAbility_MonsterLeapAttack::ApplyHits()
 	const USkeletalMeshComponent* const Mesh = GetCurrentActorInfo() ? GetCurrentActorInfo()->SkeletalMeshComponent.Get() : nullptr;
 	const FVector Anchor = Mesh && !HitSocket.IsNone() && Mesh->DoesSocketExist(HitSocket) ? Mesh->GetSocketLocation(HitSocket) : Avatar->GetActorLocation();
 	const FVector Center = Anchor + Avatar->GetActorQuat().RotateVector(HitOffset);
-	const int32 NewHits = UknightCombatLibrary::ApplyAreaMeleeHits(Avatar, Center, FCollisionShape::MakeSphere(HitRadius), HitParams, HitActors);
+	const int32 NewHits = UknightCombatLibrary::ApplyAreaMeleeHits(Avatar, Center, FCollisionShape::MakeSphere(HitRadius), HitParams, HitActors,
+		[](const AActor&) { return true; },
+		[this](AActor& Target, EknightHitOutcome Outcome) { HandleGuardPush(Target, Outcome); });
 
 #if ENABLE_DRAW_DEBUG
 	if (knightMonsterDebug::ShouldDrawAttacks())
