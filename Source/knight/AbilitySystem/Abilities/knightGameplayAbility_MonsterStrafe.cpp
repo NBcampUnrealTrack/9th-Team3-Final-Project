@@ -17,6 +17,7 @@
 namespace knightMonsterStrafe
 {
 	constexpr float TickInterval = 1.f / 60.f;
+	constexpr int32 MaxTicks = 100000;
 }
 
 void UknightGameplayAbility_MonsterStrafe::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
@@ -41,8 +42,8 @@ void UknightGameplayAbility_MonsterStrafe::ActivateAbility(const FGameplayAbilit
 	MontageTask->OnCancelled.AddDynamic(this, &ThisClass::HandleMontageEnded);
 	MontageTask->ReadyForActivation();
 
-	const int32 Steps = FMath::CeilToInt(StrafeTime / knightMonsterStrafe::TickInterval) + 1;
-	UAbilityTask_Repeat* const TickTask = UAbilityTask_Repeat::RepeatAction(this, knightMonsterStrafe::TickInterval, Steps);
+	// 횟수가 아니라 Elapsed(몬스터 시간)로 끝낸다. 히트스톱 동안은 Elapsed가 거의 늘지 않는다.
+	UAbilityTask_Repeat* const TickTask = UAbilityTask_Repeat::RepeatAction(this, knightMonsterStrafe::TickInterval, knightMonsterStrafe::MaxTicks);
 	TickTask->OnPerformAction.AddDynamic(this, &ThisClass::HandleTick);
 	TickTask->ReadyForActivation();
 }
@@ -82,7 +83,8 @@ void UknightGameplayAbility_MonsterStrafe::HandleTick(int32 ActionNumber)
 	{
 		return;
 	}
-	Elapsed += knightMonsterStrafe::TickInterval;
+	const float DeltaTime = GetMonsterTimeStep(knightMonsterStrafe::TickInterval);
+	Elapsed += DeltaTime;
 	const UknightMonsterTargetingComponent* const Targeting = Monster->GetTargetingComponent();
 	const AActor* const Target = Targeting ? Targeting->GetCurrentTarget() : nullptr;
 	if (Target && !Movement->IsMovementLocked())
@@ -93,8 +95,8 @@ void UknightGameplayAbility_MonsterStrafe::HandleTick(int32 ActionNumber)
 		{
 			const float Yaw = Monster->GetActorRotation().Yaw;
 			const float Delta = FRotator::NormalizeAxis(ToTarget.Rotation().Yaw - Yaw);
-			const float MaxStep = FaceTurnRate * knightMonsterStrafe::TickInterval;
-			const float Step = FMath::Clamp(Delta * FaceTurnGain * knightMonsterStrafe::TickInterval, -MaxStep, MaxStep);
+			const float MaxStep = FaceTurnRate * DeltaTime;
+			const float Step = FMath::Clamp(Delta * FaceTurnGain * DeltaTime, -MaxStep, MaxStep);
 			Monster->SetActorRotation(FRotator(0.f, Yaw + Step, 0.f));
 		}
 	}

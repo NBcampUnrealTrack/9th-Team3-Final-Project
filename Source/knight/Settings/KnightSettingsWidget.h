@@ -32,6 +32,9 @@ struct KNIGHT_API FKnightSettingItem
 	UPROPERTY(BlueprintReadOnly, Category="Settings") EKnightSettingControl Type = EKnightSettingControl::Rotator;
 	/** Rotator choices, also the values passed to OptionEdited. */
 	UPROPERTY(BlueprintReadOnly, Category="Settings") TArray<FString> Options;
+	/** 화면에 보이는 선택지 이름. Options와 같은 순서. Options는 언어와 상관없는 키("Low", "On")라서 그대로 보여 주지 않는다.
+	 *  비어 있거나 칸이 모자라면 Options 값을 그대로 보여 준다(해상도·FPS 숫자). */
+	UPROPERTY(BlueprintReadOnly, Category="Settings") TArray<FText> OptionLabels;
 	/** Rotator: one of Options. Slider: number. Key: FKey name. */
 	UPROPERTY(BlueprintReadOnly, Category="Settings") FString Value;
 	UPROPERTY(BlueprintReadOnly, Category="Settings") float Min = 0.f;
@@ -173,6 +176,9 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UknightSharedSettings> DraftPersonal;
 	TMap<FName, FKey> SavedKeys;
 	TMap<FName, FKey> DraftKeys;
+	/** 게임 언어("ko", "en" ...). 적용할 때 바꾸고 GameUserSettings.ini에 저장한다. */
+	FString SavedCulture;
+	FString DraftCulture;
 	TMap<FName, FKey> DefaultKeys;
 	TMap<FName, FText> KeyLabels;
 };

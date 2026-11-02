@@ -164,6 +164,12 @@ bool UknightGameplayAbility_MonsterAttack::CanActivateAbility(const FGameplayAbi
 	return Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags);
 }
 
+float UknightGameplayAbility_MonsterAttack::GetMonsterTimeStep(float Interval) const
+{
+	const AActor* const Avatar = GetAvatarActorFromActorInfo();
+	return Avatar ? Interval * FMath::Max(Avatar->CustomTimeDilation, 0.f) : Interval;
+}
+
 float UknightGameplayAbility_MonsterAttack::GetCooldownRemaining(double WorldTime) const
 {
 	return FMath::Max(0.f, static_cast<float>(LastActivationTime + Selection.Cooldown - WorldTime));
@@ -200,7 +206,7 @@ void UknightGameplayAbility_MonsterAttack::HandleStartTurnTick(int32 ActionNumbe
 		// 타깃이 움직여도 따라가도록 매번 방향을 다시 잡는다.
 		const FVector ToTarget = (Target->GetActorLocation() - Monster->GetActorLocation()).GetSafeNormal2D();
 		const FVector Facing = Monster->GetActorLocation() + ToTarget.RotateAngleAxis(StartTurnYaw, FVector::UpVector) * 100.f;
-		bDone = Movement->TurnTowards(Facing, knightMonsterAttack::StartTurnInterval, StartTurnRate, knightMonsterAttack::StartTurnTolerance);
+		bDone = Movement->TurnTowards(Facing, GetMonsterTimeStep(knightMonsterAttack::StartTurnInterval), StartTurnRate, knightMonsterAttack::StartTurnTolerance);
 	}
 	if (bDone && StartTurnTask.IsValid())
 	{

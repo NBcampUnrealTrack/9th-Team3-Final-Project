@@ -61,7 +61,7 @@ void UknightGameplayAbility_MonsterProjectileAttack::ActivateAbility(const FGame
 
 void UknightGameplayAbility_MonsterProjectileAttack::HandleTick(int32 ActionNumber)
 {
-	Elapsed += knightMonsterProjectile::TickInterval;
+	Elapsed += GetMonsterTimeStep(knightMonsterProjectile::TickInterval);
 	const AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetAvatarActorFromActorInfo());
 	const UknightMonsterTargetingComponent* const Targeting = Monster ? Monster->GetTargetingComponent() : nullptr;
 	const AActor* const Target = Targeting ? Targeting->GetCurrentTarget() : nullptr;
@@ -69,7 +69,7 @@ void UknightGameplayAbility_MonsterProjectileAttack::HandleTick(int32 ActionNumb
 	{
 		if (UknightMonsterMovementComponent* const Movement = Monster->GetMonsterMovementComponent())
 		{
-			Movement->TurnTowards(Target->GetActorLocation(), knightMonsterProjectile::TickInterval, AimTurnRate, 2.f);
+			Movement->TurnTowards(Target->GetActorLocation(), GetMonsterTimeStep(knightMonsterProjectile::TickInterval), AimTurnRate, 2.f);
 		}
 	}
 	while (ShotsLeft > 0 && Elapsed >= NextShotTime)

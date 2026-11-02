@@ -358,7 +358,7 @@ bool UKnightGameFlowSubsystem::RequestOpenMenu(EKnightFlowState Destination)
 {
 	if (bTravelPending)
 	{
-		return RejectRequest(Destination, LOCTEXT("TravelAlreadyPending", "A menu level transition is already in progress."));
+		return RejectRequest(Destination, LOCTEXT("MenuTravelAlreadyPending", "A menu level transition is already in progress."));
 	}
 	if (CurrentFlowState == Destination)
 	{

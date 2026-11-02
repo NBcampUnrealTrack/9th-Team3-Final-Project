@@ -76,7 +76,7 @@ void UknightGameplayAbility_MonsterSwingAttack::HandleWindupTick(int32 ActionNum
 	if (!bDone)
 	{
 		const FVector Facing = Monster->GetActorLocation() + FRotator(0.f, WindupTargetYaw, 0.f).Vector() * 100.f;
-		bDone = Movement->TurnTowards(Facing, knightMonsterSwing::WindupInterval, WindupTurnRate, knightMonsterSwing::WindupTolerance);
+		bDone = Movement->TurnTowards(Facing, GetMonsterTimeStep(knightMonsterSwing::WindupInterval), WindupTurnRate, knightMonsterSwing::WindupTolerance);
 	}
 	if (bDone && WindupTask.IsValid())
 	{

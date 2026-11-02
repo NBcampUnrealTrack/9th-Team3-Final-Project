@@ -65,7 +65,8 @@ void UknightGameplayAbility_MonsterRushAttack::ActivateAbility(const FGameplayAb
 
 void UknightGameplayAbility_MonsterRushAttack::HandleTick(int32 ActionNumber)
 {
-	PhaseTime += knightMonsterRush::TickInterval;
+	// 몬스터 시간으로 센다. 타격 히트스톱으로 몽타주가 멈춘 동안 시계만 흐르면 다음 걸음이 몸보다 먼저 나간다.
+	PhaseTime += GetMonsterTimeStep(knightMonsterRush::TickInterval);
 	AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetAvatarActorFromActorInfo());
 	if (!Monster || !Steps.IsValidIndex(StepIndex))
 	{

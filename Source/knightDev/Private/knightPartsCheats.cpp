@@ -431,7 +431,7 @@ namespace knightPartsCheats
 		const FknightEquipmentStats Calculated = knightEquipmentStats::Calculate(Parts ? Live : Saved, Catalog, Progression);
 		if (!Calculated.bComplete)
 		{
-			UE_LOG(LogknightDev, Warning, TEXT("%s: calculation incomplete: %s"), CommandName, *Calculated.IncompleteReason);
+			UE_LOG(LogknightDev, Warning, TEXT("%s: calculation incomplete: %s"), CommandName, *Calculated.IncompleteReason.ToString());
 		}
 		FString SetText;
 		for (const TPair<FGameplayTag, int32>& Entry : Calculated.SetCounts)
