@@ -18,6 +18,7 @@
 #include "GameFramework/Actor.h"
 #include "GameplayEffect.h"
 #include "System/knightGameplayTags.h"
+#include "Monster/knightMonsterGuardPushComponent.h"
 #include "knight.h"
 
 UAnimMontage* FknightDirectionalMontages::Pick(const FVector& AvatarForward, const FVector& AvatarRight, const FVector& ToInstigator) const
@@ -55,7 +56,9 @@ UknightGameplayAbility_HitReact::UknightGameplayAbility_HitReact(const FObjectIn
 	CancelAbilitiesWithTag.AppendTags(Interrupted);
 	BlockAbilitiesWithTag.AppendTags(Interrupted);
 
-	for (const FGameplayTag& EventTag : { knightGameplayTags::Event_Damaged.GetTag(), knightGameplayTags::Event_PoiseBroken.GetTag(), knightGameplayTags::Event_Parried.GetTag() })
+	// (2026-11-02) Event.GuardBroken: 몬스터의 가드 브레이크 공격을 막았다(UknightMonsterGuardPushComponent).
+	for (const FGameplayTag& EventTag : { knightGameplayTags::Event_Damaged.GetTag(), knightGameplayTags::Event_PoiseBroken.GetTag(), knightGameplayTags::Event_Parried.GetTag(),
+		knightMonsterGuardPush::Event_GuardBroken.GetTag() })
 	{
 		FAbilityTriggerData Trigger;
 		Trigger.TriggerTag = EventTag;
@@ -106,6 +109,10 @@ EknightHitReactType UknightGameplayAbility_HitReact::ResolveType(const FGameplay
 	{
 		return EknightHitReactType::Stagger;
 	}
+	if (Payload.EventTag == knightMonsterGuardPush::Event_GuardBroken)
+	{
+		return EknightHitReactType::GuardBreak;
+	}
 	return EknightHitReactType::Flinch;
 }
 
@@ -117,6 +124,8 @@ const FknightDirectionalMontages& UknightGameplayAbility_HitReact::GetMontages(E
 		return StaggerMontages;
 	case EknightHitReactType::Knockdown:
 		return KnockdownMontages;
+	case EknightHitReactType::GuardBreak:
+		return GuardBreakMontages.Front ? GuardBreakMontages : StaggerMontages;
 	default:
 		return FlinchMontages;
 	}
@@ -127,6 +136,7 @@ FGameplayTag UknightGameplayAbility_HitReact::GetStateTag(EknightHitReactType Ty
 	switch (Type)
 	{
 	case EknightHitReactType::Stagger:
+	case EknightHitReactType::GuardBreak:
 		return knightGameplayTags::State_HitReact_Stagger;
 	case EknightHitReactType::Knockdown:
 		return knightGameplayTags::State_HitReact_Knockdown;
@@ -161,6 +171,10 @@ void UknightGameplayAbility_HitReact::ActivateAbility(const FGameplayAbilitySpec
 		StartGroggy();
 		return;
 	}
+	if (ActiveType == EknightHitReactType::GuardBreak)
+	{
+		StartGuardBreak(*Avatar);
+	}
 	const FVector ToInstigator = EventInstigator ? EventInstigator->GetActorLocation() - Avatar->GetActorLocation() : Avatar->GetActorForwardVector();
 	UAnimMontage* const Montage = GetMontages(ActiveType).Pick(Avatar->GetActorForwardVector(), Avatar->GetActorRightVector(), ToInstigator);
 	if (!Montage)
@@ -170,7 +184,8 @@ void UknightGameplayAbility_HitReact::ActivateAbility(const FGameplayAbilitySpec
 		return;
 	}
 
-	UAbilityTask_PlayMontageAndWait* const Task = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, Montage);
+	const float PlayRate = ActiveType == EknightHitReactType::GuardBreak ? GuardBreakPlayRate : 1.f;
+	UAbilityTask_PlayMontageAndWait* const Task = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, Montage, PlayRate);
 	Task->OnCompleted.AddDynamic(this, &ThisClass::OnMontageFinished);
 	Task->OnBlendOut.AddDynamic(this, &ThisClass::OnMontageFinished);
 	Task->OnInterrupted.AddDynamic(this, &ThisClass::OnMontageFinished);
@@ -187,9 +202,27 @@ const FknightHitImpactFeel& UknightGameplayAbility_HitReact::GetImpactFeel(Eknig
 		return StaggerImpact;
 	case EknightHitReactType::Knockdown:
 		return KnockdownImpact;
+	case EknightHitReactType::GuardBreak:
+		return GuardBreakImpact;
 	default:
 		return FlinchImpact;
 	}
+}
+
+void UknightGameplayAbility_HitReact::StartGuardBreak(AActor& Avatar)
+{
+	// 비틀거리는 동안 걸어 나가지 않게 이동 입력을 잠근다(그로기와 같은 잠금, EndAbility가 푼다).
+	const ACharacter* const Character = Cast<ACharacter>(&Avatar);
+	if (UknightMovementComponent* const Movement = Character ? Cast<UknightMovementComponent>(Character->GetCharacterMovement()) : nullptr)
+	{
+		Movement->SetMoveInputLocked(true);
+		bGroggyMoveLockApplied = true;
+	}
+	if (GuardBreakSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(&Avatar, GuardBreakSound, Avatar.GetActorLocation(), GuardBreakSoundVolume);
+	}
+	UE_LOG(LogknightCombat, Log, TEXT("%s: guard broken."), *Avatar.GetName());
 }
 
 void UknightGameplayAbility_HitReact::ApplyImpactFeel(AActor& Avatar, const AActor* EventInstigator)
@@ -360,7 +393,9 @@ void UknightGameplayAbility_HitReact::EndAbility(const FGameplayAbilitySpecHandl
 		if (UAbilitySystemComponent* const ASC = ActorInfo ? ActorInfo->AbilitySystemComponent.Get() : nullptr)
 		{
 			ASC->RemoveLooseGameplayTag(GetStateTag(ActiveType));
-			if (ActiveType != EknightHitReactType::Flinch && PoiseRecoveryEffect && !ASC->HasMatchingGameplayTag(knightGameplayTags::State_Dead))
+			// 가드 브레이크는 그로기가 무너진 게 아니라서 그로기를 채우지 않는다.
+			if (ActiveType != EknightHitReactType::Flinch && ActiveType != EknightHitReactType::GuardBreak
+				&& PoiseRecoveryEffect && !ASC->HasMatchingGameplayTag(knightGameplayTags::State_Dead))
 			{
 				ASC->ApplyGameplayEffectToSelf(PoiseRecoveryEffect->GetDefaultObject<UGameplayEffect>(), 1.f, ASC->MakeEffectContext());
 			}
