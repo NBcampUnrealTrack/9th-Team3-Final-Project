@@ -242,12 +242,13 @@ bool UknightMonsterPushOutComponent::IsShallowMeshPushOut() const
 
 bool UknightMonsterPushOutComponent::IsBonePassThrough() const
 {
-	if (PassThroughBodies.IsEmpty() || PassThroughBoneTags.IsEmpty())
+	if (PassThroughBodies.IsEmpty())
 	{
 		return false;
 	}
 	const UAbilitySystemComponent* const ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner());
-	return ASC && ASC->HasAnyMatchingGameplayTags(PassThroughBoneTags);
+	return ASC && ((bPassThroughBonesOnGround && !ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Airborne))
+		|| ASC->HasAnyMatchingGameplayTags(PassThroughBoneTags));
 }
 
 bool UknightMonsterPushOutComponent::IsOverlappingBody(const ACharacter* Character, float MeshPenetration) const

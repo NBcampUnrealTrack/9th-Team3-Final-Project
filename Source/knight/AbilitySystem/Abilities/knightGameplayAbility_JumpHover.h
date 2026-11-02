@@ -48,6 +48,13 @@ public:
 		const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
 
 protected:
+	/**
+	 * (2026-10-29 사용자 결정) 체공(호버링)을 끈다: 꺼져 있으면 공중에서 점프 키를 눌러도 떠 있지 않는다. 땅 위 점프는 그대로.
+	 * GA_Knight_JumpHover에서 켜면 다시 쓴다. 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Hover")
+	bool bHoverEnabled = false;
+
 	/** 체공 중 초당 부스트 게이지 소모량 (최대 게이지 100 기준 20이면 5초). */
 	UPROPERTY(EditDefaultsOnly, Category="Hover|Cost", meta=(ClampMin=0))
 	float HoverDrainPerSecond = 20.f;

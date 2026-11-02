@@ -3,6 +3,8 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystem/Attributes/knightAttributeSet.h"
 #include "Abilities/Tasks/AbilityTask_ApplyRootMotionConstantForce.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimMontage.h"
 #include "Character/knightMovementComponent.h"
 #include "Combat/knightGhostTrailActor.h"
 #include "Combat/knightTargetLockComponent.h"
@@ -30,7 +32,9 @@ UknightGameplayAbility_BoostDash::UknightGameplayAbility_BoostDash(const FObject
 	ActivationPolicy = EknightAbilityActivationPolicy::OnInputTriggered;
 	ActivationGroup = EknightAbilityActivationGroup::Exclusive_Replaceable;
 	SetAssetTags(FGameplayTagContainer(knightGameplayTags::Ability_Boost_Dash));
-	ActivationOwnedTags.AddTag(knightGameplayTags::State_Boosting);
+	// (2026-10-29 사용자 결정) 구르기로 바꾸며 State.Boosting 대신 State.Rolling을 단다.
+	// State.Boosting이면 카메라가 Boost 모드(축소)로 바뀐다. State.Rolling 동안은 카메라가 뒤따라오는 거리를 그대로 둔다(knightCameraMode_ThirdPerson).
+	ActivationOwnedTags.AddTag(knightGameplayTags::State_Rolling);
 	ActivationBlockedTags.AddTag(knightGameplayTags::State_Dead);
 	ActivationBlockedTags.AddTag(knightGameplayTags::State_HitReact);
 	ActivationBlockedTags.AddTag(knightGameplayTags::State_Overheated);
@@ -73,6 +77,15 @@ bool UknightGameplayAbility_BoostDash::CanActivateAbility(const FGameplayAbility
 		const ACharacter* const Character = ActorInfo ? Cast<ACharacter>(ActorInfo->AvatarActor.Get()) : nullptr;
 		const UCharacterMovementComponent* const Movement = Character ? Character->GetCharacterMovement() : nullptr;
 		if (!Movement || Movement->GetLastInputVector().IsNearlyZero())
+		{
+			return false;
+		}
+	}
+	// (2026-10-29 사용자 결정) 구르기는 땅에서만 나간다. 점프·낙하 중에는 눌러도 나가지 않는다.
+	{
+		const ACharacter* const Character = ActorInfo ? Cast<ACharacter>(ActorInfo->AvatarActor.Get()) : nullptr;
+		const UCharacterMovementComponent* const Movement = Character ? Character->GetCharacterMovement() : nullptr;
+		if (!Movement || !Movement->IsMovingOnGround())
 		{
 			return false;
 		}
@@ -132,7 +145,24 @@ void UknightGameplayAbility_BoostDash::StartDash(ACharacter& Character)
 	{
 		Character.SetActorRotation(FRotator(0.f, Direction.Rotation().Yaw, 0.f));
 	}
-	UAnimMontage* const Montage = SelectDashMontage(Character, Direction);
+	float MontageYaw = 0.f;
+	UAnimMontage* const Montage = SelectDashMontage(Character, Direction, &MontageYaw);
+
+	// (2026-10-29) 락온 중 대각선: 고른 구르기 방향(MontageYaw)이 실제 이동 방향과 맞도록 몸을 돌린다(대상 기준 최대 45°).
+	if (bLockedOn && bAlignRollToDirectionWhenLockedOn && bHasInput)
+	{
+		Character.SetActorRotation(FRotator(0.f, Direction.Rotation().Yaw - MontageYaw, 0.f));
+	}
+	// (2026-10-29 사용자 결정) 구르는 동안은 방향키를 받지 않는다(락온 여부와 상관없이 구르기 시작부터 끝까지).
+	// 이동 잠금으로 가속을 0으로 만들어, 비락온 중 방향키 쪽으로 몸이 도는 것(bOrientRotationToMovement)과
+	// 락온 회전(knightMovementComponent)을 모두 멈춘다. 그래서 구르는 도중 애니메이션 방향이 바뀌지 않는다.
+	// 잠금은 입력 방향은 남겨서, 경직 중 다시 구르기 입력은 그대로 받는다. 어빌리티가 끝나면 푼다.
+	UknightMovementComponent* const RollMovement = Cast<UknightMovementComponent>(Character.GetCharacterMovement());
+	if (RollMovement && !bFacingLockApplied)
+	{
+		RollMovement->SetMoveInputLocked(true);
+		bFacingLockApplied = true;
+	}
 
 	if (InvulnerableDuration > 0.f)
 	{
@@ -151,6 +181,7 @@ void UknightGameplayAbility_BoostDash::StartDash(ACharacter& Character)
 		UAbilityTask_PlayMontageAndWait* const Task = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
 			this, NAME_None, Montage, GetMontagePlayRate(Montage), NAME_None, true, 0.f);
 		Task->ReadyForActivation();
+		PlayingDashMontage = Montage;
 	}
 
 	// 거리 = 기본 거리 x 퀵스텝 속도 배율 x 중량 계수. 시간은 고정이라 거리가 늘면 속도도 빨라진다.
@@ -195,32 +226,60 @@ void UknightGameplayAbility_BoostDash::StartDash(ACharacter& Character)
 
 float UknightGameplayAbility_BoostDash::GetMontagePlayRate(const UAnimMontage* Montage) const
 {
-	// 지금 규칙: 고정 배속(MontagePlayRate). 헤더 주석 참고 — 바뀔 수 있는 항목.
+	// (2026-10-29) MontageMoveEndTime이 있으면 몽타주의 이동 구간(0 ~ MontageMoveEndTime)을 DashDuration에 맞춘다.
+	// 나머지(일어나는 동작)는 경직이 시작될 때 OnDashFinished가 RecoveryDuration에 맞춰 배속을 바꾼다.
+	if (MontageMoveEndTime > 0.f && DashDuration > 0.f)
+	{
+		return MontageMoveEndTime / DashDuration;
+	}
+	// 그 밖의 규칙: 고정 배속(MontagePlayRate). 헤더 주석 참고 — 바뀔 수 있는 항목.
 	return MontagePlayRate;
 }
 
-UAnimMontage* UknightGameplayAbility_BoostDash::SelectDashMontage(const ACharacter& Character, const FVector& Direction) const
+UAnimMontage* UknightGameplayAbility_BoostDash::SelectDashMontage(const ACharacter& Character, const FVector& Direction, float* OutMontageYaw) const
 {
 	const FVector Forward = Character.GetActorForwardVector().GetSafeNormal2D();
 	const FVector Right = Character.GetActorRightVector().GetSafeNormal2D();
 	const float ForwardDot = FVector::DotProduct(Direction, Forward);
 	const float RightDot = FVector::DotProduct(Direction, Right);
+	// 바라보는 방향 기준 대시 방향 각도(오른쪽 +, -180 ~ 180).
+	const float RelativeYaw = FMath::RadiansToDegrees(FMath::Atan2(RightDot, ForwardDot));
 
-	UAnimMontage* Picked = DashMontage;
-	if (FMath::Abs(ForwardDot) >= FMath::Abs(RightDot))
+	// (2026-10-29) 한손 스탠스면 한손 칸들을 쓴다. 한손 정면 칸이 비어 있으면 한손에서도 양손 칸을 쓴다.
+	const UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();
+	const bool bOneHanded = OneHandedDashMontage && !(ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_Stance_TwoHanded));
+	UAnimMontage* const Front = bOneHanded ? OneHandedDashMontage.Get() : DashMontage.Get();
+	UAnimMontage* const Back = bOneHanded ? OneHandedDashMontageBack.Get() : DashMontageBack.Get();
+	UAnimMontage* const BackRight = bOneHanded ? OneHandedDashMontageBackRight.Get() : DashMontageBackRight.Get();
+	UAnimMontage* const Left = bOneHanded ? OneHandedDashMontageLeft.Get() : DashMontageLeft.Get();
+	UAnimMontage* const RightMontage = bOneHanded ? OneHandedDashMontageRight.Get() : DashMontageRight.Get();
+
+	// 가장 가까운 방향: 앞 ±45° 안, 뒤 ±135° 밖, 그 사이는 옆. 정확한 대각선(45°·135°)은 앞·뒤로 친다.
+	// 방향 몽타주가 비어 있으면 정면(MontageYaw 0)을 쓴다.
+	UAnimMontage* Picked = Front;
+	float MontageYaw = 0.f;
+	if (FMath::Abs(RelativeYaw) >= 135.f)
 	{
-		if (ForwardDot < 0.f && DashMontageBack)
+		// (2026-10-29) 뒤: 오른쪽 뒤는 BackRight(BR, 오른쪽으로 몸을 틀며 뒤로), 왼쪽 뒤는 Back(BL).
+		UAnimMontage* const BackPick = RelativeYaw > 0.f && BackRight ? BackRight : Back;
+		if (BackPick)
 		{
-			Picked = DashMontageBack;
+			Picked = BackPick;
+			MontageYaw = RelativeYaw > 0.f ? 180.f : -180.f;
 		}
 	}
-	else if (RightDot > 0.f)
+	else if (FMath::Abs(RelativeYaw) > 45.f)
 	{
-		Picked = DashMontageRight ? DashMontageRight.Get() : DashMontage.Get();
+		UAnimMontage* const SidePick = RelativeYaw > 0.f ? RightMontage : Left;
+		if (SidePick)
+		{
+			Picked = SidePick;
+			MontageYaw = RelativeYaw > 0.f ? 90.f : -90.f;
+		}
 	}
-	else
+	if (OutMontageYaw)
 	{
-		Picked = DashMontageLeft ? DashMontageLeft.Get() : DashMontage.Get();
+		*OutMontageYaw = MontageYaw;
 	}
 	return Picked;
 }
@@ -247,6 +306,35 @@ void UknightGameplayAbility_BoostDash::OnDashFinished()
 
 	// 경직: 공격·가드가 대시를 대신할 수 있게 캔슬 창을 열고, 이동 입력으로는 가속하지 못하게 한다(미끄러지며 정지).
 	bInRecovery = true;
+
+	// (2026-10-29) 몽타주의 나머지(일어나는 동작)를 경직 시간에 맞춰 재생한다. 남은 길이를 재서 정확히 경직 끝에 맞춘다.
+	if (MontageMoveEndTime > 0.f)
+	{
+		const ACharacter* const AvatarCharacter = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+		UAnimInstance* const AnimInstance = AvatarCharacter && AvatarCharacter->GetMesh() ? AvatarCharacter->GetMesh()->GetAnimInstance() : nullptr;
+		UAnimMontage* const Montage = PlayingDashMontage.Get();
+		if (AnimInstance && Montage && AnimInstance->Montage_IsPlaying(Montage))
+		{
+			const float Position = AnimInstance->Montage_GetPosition(Montage);
+			const float Remaining = Montage->GetPlayLength() - Position;
+			if (Remaining > KINDA_SMALL_NUMBER)
+			{
+				const float StandUpRate = Remaining / RecoveryDuration;
+				AnimInstance->Montage_SetPlayRate(Montage, StandUpRate);
+
+				// (2026-10-29 사용자 결정) 끝까지 일어나되, 몸이 다 일어선 뒤에는 방향키를 누르면 바로 출발한다.
+				// 일어선 시각(몽타주 기준)이 될 때부터 매 프레임 방향키를 본다(CheckStandUpMove).
+				const float* const MontageStandUp = MontageStandUpTimes.Find(Montage);
+				const float StandUpTime = MontageStandUp ? *MontageStandUp : MontageStandUpTime;
+				UWorld* const World = GetWorld();
+				if (World && StandUpTime > 0.f && StandUpTime < Montage->GetPlayLength())
+				{
+					const float Delay = FMath::Max((StandUpTime - Position) / StandUpRate, KINDA_SMALL_NUMBER);
+					World->GetTimerManager().SetTimer(StandUpMoveTimer, this, &ThisClass::CheckStandUpMove, 0.02f, true, Delay);
+				}
+			}
+		}
+	}
 	if (UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo())
 	{
 		ASC->AddLooseGameplayTag(knightGameplayTags::Window_Cancel);
@@ -277,11 +365,41 @@ void UknightGameplayAbility_BoostDash::OnDashFinished()
 
 void UknightGameplayAbility_BoostDash::OnRecoveryFinished()
 {
+	ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
 	EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, false);
+
+	// (2026-10-29 사용자 결정) 다 일어나는 순간 방향키를 누르고 있으면 가속 구간 없이 바로 그 방향으로 걷기·달리기 속도로 출발한다.
+	// EndAbility가 이동 잠금을 푼 뒤라 GetMaxSpeed가 달리기 여부까지 반영한다.
+	// 구르기 몽타주는 자동 블렌드 아웃을 꺼서(bEnableAutoBlendOut) 끝까지 일어선 자세를 유지하다가, 여기서 이동과 함께
+	// BlendOut(0.2초)으로 빠진다. 켜 두면 끝나기 직전에 대기 자세가 먼저 섞여 '일어남 → 잠깐 섬 → 출발'로 끊겨 보인다.
+	UCharacterMovementComponent* const Movement = Character ? Character->GetCharacterMovement() : nullptr;
+	if (Movement && Movement->IsMovingOnGround())
+	{
+		const FVector HeldInput = Movement->GetLastInputVector().GetSafeNormal2D();
+		if (!HeldInput.IsNearlyZero())
+		{
+			Movement->Velocity = HeldInput * Movement->GetMaxSpeed();
+		}
+	}
+}
+
+void UknightGameplayAbility_BoostDash::CheckStandUpMove()
+{
+	const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	const UCharacterMovementComponent* const Movement = Character ? Character->GetCharacterMovement() : nullptr;
+	// 이동 잠금은 가속만 막고 입력 방향은 남기므로, 경직 중에도 방향키를 읽을 수 있다.
+	if (bInRecovery && Movement && !Movement->GetLastInputVector().IsNearlyZero())
+	{
+		OnRecoveryFinished();
+	}
 }
 
 void UknightGameplayAbility_BoostDash::ReleaseRecoveryState()
 {
+	if (UWorld* const World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(StandUpMoveTimer);
+	}
 	bInRecovery = false;
 	if (bCancelWindowApplied)
 	{
@@ -300,6 +418,17 @@ void UknightGameplayAbility_BoostDash::ReleaseRecoveryState()
 			KnightMovement->SetMoveInputLocked(false);
 		}
 	}
+	// (2026-10-29) 락온 중 구르기에 건 회전 고정용 이동 잠금. 풀면 락온 회전이 다시 몸을 대상 쪽으로 돌린다.
+	if (bFacingLockApplied)
+	{
+		bFacingLockApplied = false;
+		const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+		if (UknightMovementComponent* const KnightMovement = Character ? Cast<UknightMovementComponent>(Character->GetCharacterMovement()) : nullptr)
+		{
+			KnightMovement->SetMoveInputLocked(false);
+		}
+	}
+	PlayingDashMontage.Reset();
 }
 
 void UknightGameplayAbility_BoostDash::StartCooldown()

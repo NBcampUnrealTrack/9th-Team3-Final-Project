@@ -209,6 +209,12 @@ private:
 	void ToggleLoopBurst(int32 Index);
 
 	/** 분노 마무리 공격(MonsterDefinition::EnrageFinaleAttack) 진행 단계: 분노 중 대기 → 남은 시간이 짧아져 쓸 준비 → 쓰는 중. */
+	/** Rage가 찬 뒤 분노에 들어가기까지: 다운·탈진이 끝나기를 기다림 → (bEnrageTakeOffFirst) 이륙이 끝나기를 기다림. */
+	enum class EEnrageStart : uint8 { None, Waiting, TakingOff };
+	EEnrageStart EnrageStart = EEnrageStart::None;
+	FTimerHandle EnrageStartTimer;
+	void UpdateEnrageStart();
+
 	enum class EEnrageFinale : uint8 { None, Waiting, Pending, Running };
 	EEnrageFinale EnrageFinale = EEnrageFinale::None;
 	double EnrageFinaleGiveUpTime = 0.0;
@@ -224,6 +230,8 @@ private:
 	void TriggerHitFlinch(AActor* DamageInstigator, const FGameplayEffectSpec* EffectSpec, float Damage);
 	FknightHitFlinchState HitFlinchState;
 	double LastHitFlinchTime = -1.e9;
+	/** 강공격 움찔이 끝나는 시각. 그 전에는 더 센 타격만 움찔을 다시 시작한다. */
+	double HeavyFlinchEndTime = -1.e9;
 	/** LoopSounds와 같은 순서. BurstTime을 쓰는 소리가 지금 쉬는 중인지. */
 	TArray<bool> LoopResting;
 	TArray<FTimerHandle> LoopBurstTimers;
