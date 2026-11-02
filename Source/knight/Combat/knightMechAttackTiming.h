@@ -47,8 +47,12 @@ struct KNIGHT_API FknightMechTimingSettings
 	UPROPERTY(EditAnywhere, Category="Mech Timing", meta=(ClampMin=0, Units="s"))
 	float LockTime = 0.07f;
 
+	/**
+	 * 락 구간 배속(원래 배속에 곱함). (2026-10-29 사용자 결정) 0.06(BP_Knight는 0.1) → 0.3: 휘두르기 직전에 거의 멈췄다가
+	 * (BP_Knight 기준 양손 약 0.14초) 휘두르는 게 어색해서, 완전히 서지 않고 천천히 힘을 모으다 휘두르게 한다. BP_Knight도 0.3. 바뀔 수 있는 값.
+	 */
 	UPROPERTY(EditAnywhere, Category="Mech Timing", meta=(ClampMin=0.01, ClampMax=1))
-	float LockRate = 0.06f;
+	float LockRate = 0.3f;
 
 	/** 휘두르는 구간 배속. 한손 기준, 양손은 TwoHandedBurstScale을 곱한다. */
 	UPROPERTY(EditAnywhere, Category="Mech Timing", meta=(ClampMin=0.5, ClampMax=3))

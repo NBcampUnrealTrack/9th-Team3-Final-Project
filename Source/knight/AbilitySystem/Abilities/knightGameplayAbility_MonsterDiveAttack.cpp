@@ -7,9 +7,12 @@
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
 #include "Combat/knightCombatLibrary.h"
+#include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
+#include "Environment/knightWaterRippleSubsystem.h"
+#include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/RootMotionSource.h"
 #include "Monster/knightMonsterAirTurnComponent.h"
@@ -18,6 +21,7 @@
 #include "Monster/knightMonsterHoverComponent.h"
 #include "Monster/knightMonsterMovementComponent.h"
 #include "Monster/knightMonsterTargetingComponent.h"
+#include "NiagaraFunctionLibrary.h"
 #include "System/knightGameplayTags.h"
 #include "knight.h"
 
@@ -239,6 +243,7 @@ void UknightGameplayAbility_MonsterDiveAttack::ApplyHits()
 		{
 			bConnected |= Outcome == EknightHitOutcome::Hit || Outcome == EknightHitOutcome::Guarded;
 			bParried |= Outcome == EknightHitOutcome::Parried;
+			SpawnContactSplash(Target, Outcome);
 			HandleGuardPush(Target, Outcome);
 		});
 #if ENABLE_DRAW_DEBUG
@@ -247,6 +252,32 @@ void UknightGameplayAbility_MonsterDiveAttack::ApplyHits()
 		DrawDebugSphere(GetWorld(), Center, HitRadius, 16, NewHits == 0 ? FColor::Red : FColor::Magenta, false, knightMonsterDive::TickInterval, 0, 3.f);
 	}
 #endif
+}
+
+void UknightGameplayAbility_MonsterDiveAttack::SpawnContactSplash(const AActor& Target, EknightHitOutcome Outcome) const
+{
+	const float Scale = Outcome == EknightHitOutcome::Hit ? ContactSplashScaleHit
+		: Outcome == EknightHitOutcome::Guarded ? ContactSplashScaleGuard
+		: Outcome == EknightHitOutcome::Parried ? ContactSplashScaleParry : 0.f;
+	UWorld* const World = GetWorld();
+	if (!ContactWaterSplash || Scale <= 0.f || !World)
+	{
+		return;
+	}
+	// 대상 발밑이 물이어야 한다. 물 밖에서 맞으면 튈 물이 없다.
+	const ACharacter* const Character = Cast<ACharacter>(&Target);
+	const FVector Feet = Target.GetActorLocation() - FVector(0.f, 0.f, Character ? Character->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() : 0.f);
+	float SurfaceZ = 0.f;
+	if (!UknightWaterRippleSubsystem::FindWaterSurface(World, Feet, SurfaceZ) || Feet.Z > SurfaceZ + 100.f)
+	{
+		return;
+	}
+	const FVector Location(Feet.X, Feet.Y, SurfaceZ);
+	UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, ContactWaterSplash, Location, FRotator::ZeroRotator, FVector(Scale), true, true, ENCPoolMethod::AutoRelease);
+	if (UknightWaterRippleSubsystem* const Ripples = World->GetSubsystem<UknightWaterRippleSubsystem>())
+	{
+		Ripples->AddImpulse(Location, ContactRippleRadius, ContactRippleDepth);
+	}
 }
 
 void UknightGameplayAbility_MonsterDiveAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,

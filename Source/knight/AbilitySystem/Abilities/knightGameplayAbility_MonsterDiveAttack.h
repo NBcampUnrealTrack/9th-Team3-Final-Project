@@ -8,6 +8,7 @@
 class UAbilityTask_ApplyRootMotionConstantForce;
 class UAbilityTask_Repeat;
 class UAnimMontage;
+class UNiagaraSystem;
 
 /**
  * 공중 턴의 날짐승이 날개를 접고 타깃에게 일직선으로 내리꽂는 공격(잔향 송곳 다이브).
@@ -117,7 +118,33 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Hit", meta=(ClampMin=1, Units="cm"))
 	float HitRadius = 250.f;
 
+	/**
+	 * 맞히거나 가드·패링당한 순간 그 대상 발밑 수면에 터뜨리는 물보라(물 위일 때만). 몸이 물에 닿는 큰 물보라는 결과 몽타주가 따로 낸다.
+	 * 부딪힌 자리에서 물이 먼저 튀어야 내리꽂은 힘이 그 자리에 실린 것처럼 보인다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Water")
+	TObjectPtr<UNiagaraSystem> ContactWaterSplash;
+
+	/** 결과마다 다른 배율. 막은 쪽은 힘이 덜 실린다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Water", meta=(ClampMin=0))
+	float ContactSplashScaleHit = 0.35f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Water", meta=(ClampMin=0))
+	float ContactSplashScaleGuard = 0.25f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Water", meta=(ClampMin=0))
+	float ContactSplashScaleParry = 0.3f;
+
+	/** 부딪힌 자리 수면을 누르는 반지름(물결이 켜진 레벨에서만). */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Water", meta=(ClampMin=0, Units="cm"))
+	float ContactRippleRadius = 500.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Water", meta=(ClampMin=0, Units="cm"))
+	float ContactRippleDepth = 40.f;
+
 private:
+	void SpawnContactSplash(const AActor& Target, EknightHitOutcome Outcome) const;
+
 	UFUNCTION()
 	void HandleTick(int32 ActionNumber);
 

@@ -399,7 +399,8 @@ void UknightAbilitySystemComponent::AbilitySpecInputReleased(FGameplayAbilitySpe
 	}
 }
 
-bool UknightAbilitySystemComponent::IsActivationGroupBlocked(EknightAbilityActivationGroup Group, const FGameplayTagContainer& AbilityTags) const
+bool UknightAbilitySystemComponent::IsActivationGroupBlocked(EknightAbilityActivationGroup Group, const FGameplayTagContainer& AbilityTags,
+	const bool bIsComboStep) const
 {
 	const int32 BlockingCount = ActivationGroupCounts[static_cast<uint8>(EknightAbilityActivationGroup::Exclusive_Blocking)];
 	const int32 ReplaceableCount = ActivationGroupCounts[static_cast<uint8>(EknightAbilityActivationGroup::Exclusive_Replaceable)];
@@ -421,14 +422,18 @@ bool UknightAbilitySystemComponent::IsActivationGroupBlocked(EknightAbilityActiv
 		}
 		// (2026-10-14) 공격 후딜은 퀵스텝만 끊는다. 콤보 창이 같이 열려 있으면 아래 규칙으로 다음 공격은 이어진다.
 		// (2026-10-23) bAttacksCancelAttackRecovery면 후딜에도 다음 공격을 허용한다(콤보 창이 없는 공격용).
+		// (2026-10-29) 꺼져 있으면 후딜 동안에는 같은 콤보의 다음 단계(bIsComboStep)만 나간다.
 		if (HasMatchingGameplayTag(knightGameplayTags::Window_Cancel)
 			&& (!IsAttackRecoveryDashOnly() || AbilityTags.HasTag(knightGameplayTags::Ability_Boost_Dash)
-				|| (bAttacksCancelAttackRecovery && AbilityTags.HasTag(knightGameplayTags::Ability_Attack))))
+				|| (bAttacksCancelAttackRecovery && AbilityTags.HasTag(knightGameplayTags::Ability_Attack))
+				|| (bIsComboStep && AbilityTags.HasTag(knightGameplayTags::Ability_Attack))))
 		{
 			return false;
 		}
 		// 콤보 창: 공격만 이어서 쓸 수 있다. 나머지는 캔슬 창을 기다린다.
-		return !(HasMatchingGameplayTag(knightGameplayTags::Window_Combo) && AbilityTags.HasTag(knightGameplayTags::Ability_Attack));
+		// (2026-10-29 사용자 결정) bOnlyComboStepsInComboWindow면 같은 콤보의 다음 단계만. 다른 공격은 후딜이 끝난 뒤.
+		return !(HasMatchingGameplayTag(knightGameplayTags::Window_Combo) && AbilityTags.HasTag(knightGameplayTags::Ability_Attack)
+			&& (bIsComboStep || !bOnlyComboStepsInComboWindow));
 	default:
 		checkf(false, TEXT("Invalid activation group %d"), static_cast<int32>(Group));
 		return true;

@@ -86,6 +86,13 @@ public:
 
 protected:
 	/**
+	 * (2026-10-29 사용자 결정) 끄면 이 어빌리티는 발동하지 않는다(CanActivateAbility가 거절). 어빌리티 세트·입력은 그대로라 BP에서 켜기만 하면 다시 쓴다.
+	 * 지금 끈 것: GA_Knight_BoostLunge(락온 돌진), GA_Knight_JumpAttack(점프 공격). 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Knight|Ability")
+	bool bAbilityEnabled = true;
+
+	/**
 	 * 발동할 때(CommitAbility) 쓰는 행동 에너지(BoostGauge, 화면 이름 행동 에너지/스테미너). 0이면 소모 없음. (2026-10-09)
 	 * 어빌리티 BP에서 행동마다 조절한다. 행동 에너지가 없는 액터(몬스터)는 무시한다.
 	 */

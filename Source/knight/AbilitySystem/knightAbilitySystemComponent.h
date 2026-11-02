@@ -128,8 +128,10 @@ public:
 	 * 또는 새 어빌리티가 Ability.Attack일 때 Window.Combo 안에서만 교체될 수 있다.
 	 * (2026-10-14) 공격 후딜(공격 실행 중의 Window.Cancel)은 퀵스텝(Ability.Boost.Dash)만 끊을 수 있다(IsAttackRecoveryDashOnly).
 	 * 콤보 창이 함께 열려 있으면 다음 공격은 지금처럼 이어진다.
+	 * (2026-10-29) bIsComboStep = 같은 콤보의 다음 단계(발동에 앞 단계의 Combo.Greatsword 태그가 필요한 공격, 예: 2타).
+	 *   bOnlyComboStepsInComboWindow면 콤보 창·후딜에서는 이것만 이어지고, 다른 공격은 후딜이 끝난 뒤에 나간다.
 	 */
-	bool IsActivationGroupBlocked(EknightAbilityActivationGroup Group, const FGameplayTagContainer& AbilityTags) const;
+	bool IsActivationGroupBlocked(EknightAbilityActivationGroup Group, const FGameplayTagContainer& AbilityTags, bool bIsComboStep = false) const;
 
 	/**
 	 * (2026-10-14) 지금 공격 후딜이라 퀵스텝만 끊을 수 있는지: bOnlyDashCancelsAttackRecovery가 켜져 있고,
@@ -294,9 +296,20 @@ protected:
 	 * (2026-10-23 사용자 결정) 위 후딜 시간에 퀵스텝뿐 아니라 다음 공격(Ability.Attack)도 허용한다. 가드·이동·점프는 그대로 기다린다.
 	 * 1~3타는 콤보 창으로 이미 이어지지만, 콤보 창이 없는 공격(4타·대쉬공격·패링 반격·돌진 베기·점프 공격)은
 	 * 다음 공격까지 판정 끝에서 약 0.47초(양손)가 걸려 느렸다 → 퀵스텝과 같은 약 0.22초. 끄면 예전처럼 퀵스텝만. 바뀔 수 있는 값.
+	 * (2026-10-29 사용자 결정) true → false: 다른 종류의 공격으로 바로 이어지지 않게(4타→1타, 대쉬공격·차지·반격→일반 공격 등)
+	 *   후딜이 끝난 뒤에 나간다. 같은 콤보의 다음 단계는 계속 이어진다(bOnlyComboStepsInComboWindow).
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack", meta=(EditCondition="bOnlyDashCancelsAttackRecovery"))
-	bool bAttacksCancelAttackRecovery = true;
+	bool bAttacksCancelAttackRecovery = false;
+
+	/**
+	 * (2026-10-29 사용자 결정) 콤보 창(Window.Combo)과 위 후딜 시간에는 같은 콤보의 다음 단계만 나간다
+	 * (발동에 앞 단계의 Combo.Greatsword 태그가 필요한 공격: 1→2→3→4타, 강공격 1→2→3→4).
+	 * 일반 공격 콤보 창에서 강공격·대쉬공격으로 바로 넘어가거나, 4타·대쉬공격·차지·반격 뒤 1타가 바로 나가던 것을 막는다.
+	 * 그런 공격은 후딜이 끝난 뒤(캔슬 창 + AttackRecoveryDashOnlyTime)에 나간다. 끄면 예전처럼 콤보 창에서 어떤 공격이든 이어진다. 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack")
+	bool bOnlyComboStepsInComboWindow = true;
 
 	/** (2026-10-14) Window.Cancel 태그 수가 늘 때(창이 열릴 때) 시각을 기록한다. */
 	void HandleCancelWindowChanged(const FGameplayTag Tag, int32 NewCount);

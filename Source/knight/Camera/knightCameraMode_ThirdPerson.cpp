@@ -1,7 +1,26 @@
 #include "Camera/knightCameraMode_ThirdPerson.h"
 
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemGlobals.h"
 #include "Curves/CurveFloat.h"
 #include "GameFramework/Actor.h"
+#include "System/knightGameplayTags.h"
+
+UknightCameraMode_ThirdPerson::UknightCameraMode_ThirdPerson()
+{
+	// (2026-10-29) 구르는 동안은 카메라가 뒤처진 거리를 그대로 둔다(FreezeLagTags 주석 참고).
+	FreezeLagTags.AddTag(knightGameplayTags::State_Rolling);
+}
+
+bool UknightCameraMode_ThirdPerson::IsLagFrozen() const
+{
+	if (FreezeLagTags.IsEmpty())
+	{
+		return false;
+	}
+	const UAbilitySystemComponent* const ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetTargetActor());
+	return ASC && ASC->HasAnyMatchingGameplayTags(FreezeLagTags);
+}
 
 float UknightCameraMode_ThirdPerson::GetArmLength(const FRotator& ViewRotation) const
 {
@@ -31,10 +50,16 @@ void UknightCameraMode_ThirdPerson::UpdateView(float DeltaTime)
 		LaggedPivot = Pivot;
 		bHasLaggedPivot = true;
 	}
+	else if (IsLagFrozen())
+	{
+		// (2026-10-29) 구르기 등: 지금 뒤처진 거리를 그대로 두고 캐릭터가 움직인 만큼만 같이 옮긴다.
+		LaggedPivot += Pivot - LastPivot;
+	}
 	else
 	{
 		LaggedPivot = FMath::VInterpTo(LaggedPivot, Pivot, DeltaTime, PivotLagSpeed);
 	}
+	LastPivot = Pivot;
 
 	const FRotationMatrix ViewAxes(ViewRotation);
 	View.Location = LaggedPivot

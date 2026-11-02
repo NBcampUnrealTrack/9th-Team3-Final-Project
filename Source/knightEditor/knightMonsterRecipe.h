@@ -364,7 +364,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Body")
 	bool bPushOutOfMesh = true;
 
-	/** 다운·탈진 중에는 이 뼈와 그 아래 뼈의 메시 바디로 플레이어를 밀어내지 않는다(날개 어깨). 비우면 모든 바디로 민다. */
+	/** 지상에 있거나 다운·탈진 중에는 이 뼈와 그 아래 뼈의 메시 바디로 플레이어를 밀어내지 않는다(날개 어깨). 비우면 모든 바디로 민다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Body", meta=(EditCondition="bPushOutOfMesh"))
 	TArray<FName> PushOutPassThroughBones;
 
