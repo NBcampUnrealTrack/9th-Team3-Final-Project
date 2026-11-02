@@ -209,6 +209,12 @@ private:
 	void ToggleLoopBurst(int32 Index);
 
 	/** 분노 마무리 공격(MonsterDefinition::EnrageFinaleAttack) 진행 단계: 분노 중 대기 → 남은 시간이 짧아져 쓸 준비 → 쓰는 중. */
+	/** Rage가 찬 뒤 분노에 들어가기까지: 다운·탈진이 끝나기를 기다림 → (bEnrageTakeOffFirst) 이륙이 끝나기를 기다림. */
+	enum class EEnrageStart : uint8 { None, Waiting, TakingOff };
+	EEnrageStart EnrageStart = EEnrageStart::None;
+	FTimerHandle EnrageStartTimer;
+	void UpdateEnrageStart();
+
 	enum class EEnrageFinale : uint8 { None, Waiting, Pending, Running };
 	EEnrageFinale EnrageFinale = EEnrageFinale::None;
 	double EnrageFinaleGiveUpTime = 0.0;

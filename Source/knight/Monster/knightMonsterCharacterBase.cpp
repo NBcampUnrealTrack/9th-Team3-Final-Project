@@ -421,11 +421,48 @@ void AknightMonsterCharacterBase::HandleOutOfHealth(AActor* DamageInstigator, AA
 void AknightMonsterCharacterBase::HandleRageMaxed(AActor* EffectInstigator, AActor* EffectCauser, const FGameplayEffectSpec* EffectSpec,
 	float Magnitude, float OldValue, float NewValue)
 {
-	if (!IsDead() && MonsterDefinition && MonsterDefinition->EnrageEffect)
+	if (IsDead() || !MonsterDefinition || !MonsterDefinition->EnrageEffect || EnrageStart != EEnrageStart::None)
 	{
-		AbilitySystemComponent->ApplyGameplayEffectToSelf(MonsterDefinition->EnrageEffect->GetDefaultObject<UGameplayEffect>(), 1.f,
-			AbilitySystemComponent->MakeEffectContext());
+		return;
 	}
+	EnrageStart = EEnrageStart::Waiting;
+	UpdateEnrageStart();
+	if (EnrageStart != EEnrageStart::None)
+	{
+		GetWorldTimerManager().SetTimer(EnrageStartTimer, this, &ThisClass::UpdateEnrageStart, 0.1f, true);
+	}
+}
+
+void AknightMonsterCharacterBase::UpdateEnrageStart()
+{
+	if (IsDead() || !MonsterDefinition || !MonsterDefinition->EnrageEffect)
+	{
+		GetWorldTimerManager().ClearTimer(EnrageStartTimer);
+		EnrageStart = EEnrageStart::None;
+		return;
+	}
+	// 다운·탈진·다른 반응(이륙 포함)이 끝날 때까지 기다린다. Rage는 가득 찬 채로 남는다.
+	// 반응 중에 분노 포효가 끼어들면 다운·탈진이 끊겨 플레이어가 공격할 시간을 잃는다.
+	FGameplayTagContainer WaitTags;
+	WaitTags.AddTag(knightGameplayTags::State_Monster_Reacting);
+	WaitTags.AddTag(knightGameplayTags::State_Monster_Exhausted);
+	WaitTags.AddTag(knightGameplayTags::State_Monster_Collapsed);
+	if (AbilitySystemComponent->HasAnyMatchingGameplayTags(WaitTags))
+	{
+		return;
+	}
+	if (EnrageStart == EEnrageStart::Waiting && MonsterDefinition->bEnrageTakeOffFirst && AirTurn && !AirTurn->IsAirborne())
+	{
+		// 이륙 반응(Event.Monster.TakeOff)이 Reacting을 붙이므로 다음 확인에서 이륙이 끝나기를 기다린다.
+		EnrageStart = EEnrageStart::TakingOff;
+		AirTurn->TakeOff();
+		UE_LOG(LogknightAI, Log, TEXT("%s: take off before enrage."), *GetName());
+		return;
+	}
+	GetWorldTimerManager().ClearTimer(EnrageStartTimer);
+	EnrageStart = EEnrageStart::None;
+	AbilitySystemComponent->ApplyGameplayEffectToSelf(MonsterDefinition->EnrageEffect->GetDefaultObject<UGameplayEffect>(), 1.f,
+		AbilitySystemComponent->MakeEffectContext());
 }
 
 void AknightMonsterCharacterBase::HandleDamaged(AActor* DamageInstigator, AActor* DamageCauser, const FGameplayEffectSpec* EffectSpec,

@@ -179,6 +179,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="States", meta=(EditCondition="EnrageFinaleAttack != nullptr", ClampMin=0, Units="s"))
 	float EnrageFinaleLeadTime = 8.f;
 
+	/** 분노에 들어가기 전에 날아오른다(잔향: 공명해방 포효를 공중에서). 공중 턴(AirTurn)이 있는 몬스터만. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="States")
+	bool bEnrageTakeOffFirst = false;
+
 	/** Applied when Stamina runs out: grants State.Monster.Exhausted for a duration and restores Stamina. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="States")
 	TSubclassOf<UGameplayEffect> ExhaustEffect;

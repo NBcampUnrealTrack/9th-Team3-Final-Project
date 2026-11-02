@@ -81,7 +81,7 @@ protected:
 	FGameplayTagContainer PassThroughPawnTags;
 
 	/**
-	 * 이 뼈와 그 아래 뼈의 메시 바디는 PassThroughBoneTags 중에 밀어내지 않는다(잔향 날개 어깨).
+	 * 이 뼈와 그 아래 뼈의 메시 바디는 PassThroughBoneTags 중이나 지상(bPassThroughBonesOnGround)에서 밀어내지 않는다(잔향 날개 어깨).
 	 * 쓰러지거나 탈진해 엎드린 날짐승은 날갯짓이 땅을 쓸어, 다 밀어내면 몸에 붙어 때리지 못하고 계속 튕겨 나간다.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Push Out", meta=(EditCondition="bPushOutOfMesh"))
@@ -90,6 +90,13 @@ protected:
 	/** 기본값: 다운(State.HitReact.Knockdown), 그로기(State.HitReact.Groggy), 탈진(State.Monster.Exhausted), 탈진 착지(State.Monster.Collapsed). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Push Out", meta=(EditCondition="bPushOutOfMesh"))
 	FGameplayTagContainer PassThroughBoneTags;
+
+	/**
+	 * 날고 있지 않으면(State.Monster.Airborne 없음) 태그와 상관없이 PassThroughBones를 밀어내지 않는다.
+	 * 지상에서 날개를 펴거나 접기만 해도 바로 옆에서 때리던 플레이어가 밀려나 공격이 빗나갔다(잔향 PIE).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Push Out", meta=(EditCondition="bPushOutOfMesh"))
+	bool bPassThroughBonesOnGround = true;
 
 private:
 	/** MeshPenetration: 메시 바디에 이만큼 파고든 것까지는 겹침으로 보지 않는다. */
