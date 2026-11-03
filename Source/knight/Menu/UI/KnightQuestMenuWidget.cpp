@@ -118,7 +118,7 @@ FText UKnightQuestMenuWidget::GetAvailability(const UKnightQuestDefinition* Ques
 	if (!Quest->bContentEnabled) return LOCTEXT("QuestNotReady", "준비 중");
 	FText Reason;
 	bCanLaunch = Catalog->CanSelectQuest(Quest->QuestId, GetGameInstance(), Reason);
-	return bCanLaunch ? LOCTEXT("QuestReady", "출격 가능") :
+	return bCanLaunch ? (Quest->bMapExplorationOnly ? LOCTEXT("MapExplorationReady", "맵 탐색 가능") : LOCTEXT("QuestReady", "출격 가능")) :
 		(Reason.IsEmpty() ? LOCTEXT("QuestNotReady", "준비 중") : Reason);
 }
 
@@ -241,6 +241,21 @@ void UKnightQuestMenuWidget::RefreshDetails()
 	if (DetailBorder) DetailBorder->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 	if (DetailTitle) DetailTitle->SetText(Quest->DisplayName);
 	if (DetailDescription) DetailDescription->SetText(Quest->Description);
+	if (LaunchButton) SetButtonLabel(LaunchButton, Quest->bMapExplorationOnly
+		? LOCTEXT("ExploreMap", "맵 탐색") : LOCTEXT("Launch", "출격"));
+	if (Quest->bMapExplorationOnly)
+	{
+		if (DetailTarget) DetailTarget->SetVisibility(ESlateVisibility::Collapsed);
+		if (DetailRewards) DetailRewards->SetVisibility(ESlateVisibility::Collapsed);
+		bool bCanLaunch = false;
+		const FText Availability = GetAvailability(Quest, bCanLaunch);
+		if (DetailAvailability) DetailAvailability->SetText(Availability);
+		const UKnightGameFlowSubsystem* const Flow = GetGameInstance() ? GetGameInstance()->GetSubsystem<UKnightGameFlowSubsystem>() : nullptr;
+		if (LaunchButton) LaunchButton->SetIsEnabled(bCanLaunch && Flow && !Flow->IsTravelPending());
+		return;
+	}
+	if (DetailTarget) DetailTarget->SetVisibility(ESlateVisibility::HitTestInvisible);
+	if (DetailRewards) DetailRewards->SetVisibility(ESlateVisibility::HitTestInvisible);
 	FText BossName = FText::FromName(Quest->BossId);
 	if (const UKnightCodexData* const Codex = Catalog->CodexData.LoadSynchronous())
 	{

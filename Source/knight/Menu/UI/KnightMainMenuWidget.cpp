@@ -816,7 +816,8 @@ bool UKnightMainMenuWidget::RebuildMapMarkers()
 			FKnightMapQuestMarker& Pin = QuestMarkers.AddDefaulted_GetRef();
 			Pin.QuestId = Quest->QuestId;
 			Pin.RegionId = Placement.RegionId;
-			Pin.Label = Quest->Difficulty == EKnightQuestDifficulty::Hard ? LOCTEXT("MapHard", "어려움") : LOCTEXT("MapNormal", "일반");
+			Pin.Label = Quest->bMapExplorationOnly ? LOCTEXT("MapExplore", "일반 · 탐색")
+				: (Quest->Difficulty == EKnightQuestDifficulty::Hard ? LOCTEXT("MapHard", "어려움") : LOCTEXT("MapNormal", "일반"));
 			Pin.Location = Region->Location + Placement.MarkerOffset;
 			Pin.bLocked = !bCanLaunch;
 			QuestRegionById.Add(Quest->QuestId, Placement.RegionId);
@@ -1040,7 +1041,12 @@ void UKnightMainMenuWidget::HandleQuestLaunchRequested(FName QuestId)
 	FText Reason;
 	const bool bAccepted = Flow->RequestStartQuest(QuestId, Reason);
 	RefreshTravelControls();
-	if (bAccepted) SetStatusText(LOCTEXT("LaunchingQuest", "퀘스트 출격 준비 중입니다."));
+	if (bAccepted)
+	{
+		const UKnightQuestDefinition* const Quest = MapQuestCatalog ? MapQuestCatalog->FindQuest(QuestId) : nullptr;
+		SetStatusText(Quest && Quest->bMapExplorationOnly ? LOCTEXT("LaunchingExploration", "맵으로 이동 중입니다.")
+			: LOCTEXT("LaunchingQuest", "퀘스트 출격 준비 중입니다."));
+	}
 	else if (!Reason.IsEmpty()) SetStatusText(Reason);
 }
 

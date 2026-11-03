@@ -83,8 +83,8 @@ struct FRaid03Check
 		FText Reason;
 		const UKnightQuestCatalog* Catalog = UKnightQuestSettings::LoadCatalog();
 		Check(Catalog && Catalog->FindQuest(TEXT("Quest_0003"))
-			&& !Catalog->CanSelectQuest(TEXT("Quest_0003"), GI, Reason), TEXT("Raid03 quest unavailable through normal selection"));
-		Check(!Flow->CanLaunchStage(TEXT("Stage_0003"), Reason), TEXT("direct stage launch also rejects the missing target"));
+			&& !Catalog->CanSelectQuest(TEXT("Quest_0003"), GI, Reason), TEXT("Raid03 quest locked before Janhyang normal clear"));
+		Check(!Flow->CanLaunchStage(TEXT("Stage_0003"), Reason), TEXT("direct stage launch respects profile unlock"));
 	}
 	bool Tick(float)
 	{

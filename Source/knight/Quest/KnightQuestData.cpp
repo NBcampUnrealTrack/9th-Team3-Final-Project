@@ -105,6 +105,30 @@ bool UKnightQuestCatalog::CanSelectQuest(FName QuestId, UGameInstance* GameInsta
 		OutReason = LOCTEXT("DisabledQuest", "이 퀘스트의 전투 연결이 아직 준비되지 않았습니다.");
 		return false;
 	}
+	if (Quest->bMapExplorationOnly)
+	{
+		const UKnightGameFlowSubsystem* const Flow = GameInstance ? GameInstance->GetSubsystem<UKnightGameFlowSubsystem>() : nullptr;
+		const UknightProgressionSubsystem* const Progress = GameInstance ? GameInstance->GetSubsystem<UknightProgressionSubsystem>() : nullptr;
+		FKnightStageDefinition Stage;
+		const UknightRaidDefinition* Raid = Flow && Flow->FindStageDefinition(Quest->StageId, Stage)
+			? Stage.RaidDefinition.LoadSynchronous() : nullptr;
+		if (!Flow || !Progress || !Raid || Stage.bDevelopmentOnly || !Stage.bAllowMapExploration || Quest->Difficulty != EKnightQuestDifficulty::Normal
+			|| Quest->QuestId.IsNone() || Quest->StageId.IsNone() || Quest->DisplayName.IsEmpty()
+			|| !Quest->BossId.IsNone() || Quest->BossDefinition || !Quest->HardBossClass.IsNull()
+			|| Quest->MoneyReward != 0 || Quest->FirstBossSocketSlots != 0
+			|| !Quest->ClearRewards.IsEmpty() || !Quest->PartBreakRewards.IsEmpty()
+			|| !Raid->IsWaitingForTargetMonster() || Raid->RequiredCompletedQuestId != TEXT("Quest_0002"))
+		{
+			OutReason = LOCTEXT("ExplorationNotReady", "맵 탐색 설정을 확인할 수 없습니다.");
+			return false;
+		}
+		if (!Progress->IsQuestCompleted(Raid->RequiredCompletedQuestId))
+		{
+			OutReason = LOCTEXT("ExplorationLocked", "잔향 일반 퀘스트 클리어 후 맵 탐색 가능");
+			return false;
+		}
+		return Flow->CanLaunchStage(Quest->StageId, OutReason);
+	}
 	if (!Quest->HasValidConfiguration(OutReason)) return false;
 	const UKnightCodexData* const Codex = CodexData.LoadSynchronous();
 	const FKnightCodexBossEntry* const CodexBoss = Codex
