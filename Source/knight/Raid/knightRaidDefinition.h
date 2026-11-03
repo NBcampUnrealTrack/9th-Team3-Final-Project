@@ -85,6 +85,12 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Raid")
 	TObjectPtr<const UknightMonsterDefinition> TargetMonster;
 
+	/** An unfinished boss map stays in map-test mode until TargetMonster is assigned. Legacy objective raids may leave this off. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Raid")
+	bool bRequireTargetMonster = false;
+
+	bool IsWaitingForTargetMonster() const { return bRequireTargetMonster && !TargetMonster; }
+
 	/** Zero means no time limit. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Raid", meta=(ClampMin=0, Units="s"))
 	float TimeLimit = 1800.f;

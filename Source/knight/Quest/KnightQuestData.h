@@ -127,6 +127,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Quest|Unlock")
 	bool bContentEnabled = false;
 
+	/** Exposes an unfinished monster map as exploration only; never creates a quest reward run. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Quest|Unlock")
+	bool bMapExplorationOnly = false;
+
 	/** Temporary economy value. No currency is awarded in this phase. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Quest|Rewards", meta=(ClampMin=0))
 	int32 MoneyReward = 0;
