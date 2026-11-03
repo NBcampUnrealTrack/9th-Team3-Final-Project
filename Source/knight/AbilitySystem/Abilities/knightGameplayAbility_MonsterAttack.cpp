@@ -67,7 +67,8 @@ float UknightGameplayAbility_MonsterAttack::GetSelectionWeight(const FknightMons
 
 FGameplayAbilitySpecHandle UknightGameplayAbility_MonsterAttack::PickFollowUp(UAbilitySystemComponent& ASC, const FknightMonsterAttackContext& Context) const
 {
-	if (!FollowUpAttacks.IsEmpty() && ASC.HasAllMatchingGameplayTags(FollowUpRequiredTags) && FMath::FRand() <= FollowUpChance)
+	const float Chance = ASC.HasAllMatchingGameplayTags(FollowUpRequiredTags) ? FollowUpChance : FollowUpChanceWithoutTags;
+	if (!FollowUpAttacks.IsEmpty() && Chance > 0.f && FMath::FRand() <= Chance)
 	{
 		const FGameplayAbilitySpecHandle FollowUp = PickWeighted(ASC, Context, FollowUpAttacks);
 		if (FollowUp.IsValid())
@@ -76,6 +77,10 @@ FGameplayAbilitySpecHandle UknightGameplayAbility_MonsterAttack::PickFollowUp(UA
 		}
 	}
 	// 연계가 없으면 공격 후 이동(물러나기 등)을 본다. 각자 Selection 조건(맞지 않은 시간 등)으로 걸러진다.
+	if (AfterAttackMoves.IsEmpty() || FMath::FRand() > AfterAttackMoveChance)
+	{
+		return FGameplayAbilitySpecHandle();
+	}
 	return PickWeighted(ASC, Context, AfterAttackMoves);
 }
 

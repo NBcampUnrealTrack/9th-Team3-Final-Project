@@ -167,7 +167,7 @@ void UknightGameplayAbility_MonsterTornadoAttack::SpawnTornado(int32 Index, int3
 		if (bVolley)
 		{
 			Params.bReaimOnLaunch |= bVolleyReaimOnLaunch;
-			Params.TurnRate = VolleyTurnRate > 0.f ? VolleyTurnRate : Params.TurnRate;
+			Params.TurnRate = !bVolleyHoming ? 0.f : VolleyTurnRate > 0.f ? VolleyTurnRate : Params.TurnRate;
 		}
 		if (bEnraged && Index == Count - 1 && !FMath::IsNearlyEqual(EnragedLastScale, 1.f))
 		{

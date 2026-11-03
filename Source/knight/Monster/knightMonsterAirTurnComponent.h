@@ -15,7 +15,7 @@ struct FAbilityEndedData;
 /**
  * 지상 턴과 공중 턴을 번갈아 돌리는 날짐승 몬스터(잔향)의 턴 관리.
  *
- *   지상 턴: 타깃을 잡은 뒤 GroundTurnTime 동안 지상 공격 → 공격이 끝나면 이륙(Event.Monster.TakeOff)
+ *   지상 턴: 타깃을 잡은 뒤 지상 공격을 GroundAttacksPerTurn번 쓰거나 GroundTurnTime이 지나면, 공격이 끝난 뒤 이륙(Event.Monster.TakeOff)
  *   공중 턴: State.Monster.Airborne이 붙는다. 공중 공격을 AirAttacksPerTurn번 쓰거나 AirTurnMaxTime이 지나면,
  *            공격이 끝난 뒤 착지(Event.Monster.Land)
  *            다음 공격이 이 턴의 마지막이면 State.Monster.LastAirAttack을 붙인다. 공중 턴을 스스로 끝내는 공격(잔향 회오리)은
@@ -56,12 +56,19 @@ public:
 	void EndAirTurnNow(float BlendTime) { if (bAirborne) { EndAirTurn(BlendTime, false); } }
 
 	/** 지상 턴 시간을 처음부터 센다(탈진 착지 같은 딜 타임이 끝난 뒤). */
-	void RestartGroundTurn() { GroundTime = 0.f; }
+	void RestartGroundTurn() { GroundTime = 0.f; GroundAttacksUsed = 0; }
 
 protected:
-	/** 타깃을 잡은 뒤 지상 턴이 이어지는 시간. 반응(다운·포효) 중에는 흐르지 않는다. 0이면 공중 턴을 쓰지 않는다. */
+	/**
+	 * 타깃을 잡은 뒤 지상 턴이 이어지는 시간. 반응(다운·포효) 중에는 흐르지 않는다. 0이면 공중 턴을 쓰지 않는다.
+	 * GroundAttacksPerTurn을 쓰면 공격을 다 못 썼을 때(타깃이 멀리 도망감)의 최대 시간이 된다.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(ClampMin=0, Units="s"))
 	float GroundTurnTime = 0.f;
+
+	/** 지상 턴 한 번에 쓰는 지상 공격 수. 쉬는 시간이 길어도 지상 턴의 공격 수가 같게 유지된다. 0이면 GroundTurnTime만 본다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(ClampMin=0, EditCondition="GroundTurnTime > 0"))
+	int32 GroundAttacksPerTurn = 0;
 
 	/** 공중 턴 한 번에 쓰는 공중 공격 수. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(ClampMin=1, EditCondition="GroundTurnTime > 0"))
@@ -74,6 +81,10 @@ protected:
 	/** State.Monster.Enraged 동안 GroundTurnTime 대신 쓴다(공명해방은 공중 위주로). 0이면 평소 값. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn|Enraged", meta=(ClampMin=0, Units="s", EditCondition="GroundTurnTime > 0"))
 	float EnragedGroundTurnTime = 0.f;
+
+	/** State.Monster.Enraged 동안 GroundAttacksPerTurn 대신 쓴다. 0이면 평소 값. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn|Enraged", meta=(ClampMin=0, EditCondition="GroundTurnTime > 0"))
+	int32 EnragedGroundAttacksPerTurn = 0;
 
 	/** State.Monster.Enraged 동안 AirAttacksPerTurn 대신 쓴다. 0이면 평소 값. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn|Enraged", meta=(ClampMin=0, EditCondition="GroundTurnTime > 0"))
@@ -130,6 +141,7 @@ private:
 	bool IsAttacking() const;
 	bool IsEnraged() const;
 	float GetGroundTurnTime() const;
+	int32 GetGroundAttacksPerTurn() const;
 	int32 GetAirAttacksPerTurn() const;
 	float GetAirTurnMaxTime() const;
 	bool CanChangeTurn() const;
@@ -153,6 +165,7 @@ private:
 	float GroundTime = 0.f;
 	float AirTime = 0.f;
 	int32 AirAttacksUsed = 0;
+	int32 GroundAttacksUsed = 0;
 	double RetreatEndTime = 0.0;
 	TEnumAsByte<ECollisionResponse> SavedPawnResponse = ECR_Block;
 };

@@ -189,12 +189,16 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack|FollowUp")
 	TArray<TSubclassOf<UknightGameplayAbility_MonsterAttack>> FollowUpAttacks;
 
-	/** 몬스터에 이 태그가 모두 있을 때만 잇는다(잔향은 공명해방 State.Monster.Enraged). 비우면 항상. */
+	/** 몬스터에 이 태그가 모두 있으면 FollowUpChance로, 아니면 FollowUpChanceWithoutTags로 잇는다(잔향은 공명해방 State.Monster.Enraged). 비우면 항상 FollowUpChance. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|FollowUp")
 	FGameplayTagContainer FollowUpRequiredTags;
 
 	UPROPERTY(EditDefaultsOnly, Category="Attack|FollowUp", meta=(ClampMin=0, ClampMax=1))
 	float FollowUpChance = 1.f;
+
+	/** FollowUpRequiredTags가 모두 있지는 않을 때(잔향은 공명해방 전) 잇는 확률. 0이면 잇지 않는다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|FollowUp", meta=(ClampMin=0, ClampMax=1))
+	float FollowUpChanceWithoutTags = 0.f;
 
 	/**
 	 * 연계가 나오지 않았을 때 이 공격 뒤에 바로 쓸 이동 행동 후보(물러나기 등). FollowUpRequiredTags·FollowUpChance를 보지 않고
@@ -202,6 +206,10 @@ protected:
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|FollowUp")
 	TArray<TSubclassOf<UknightGameplayAbility_MonsterAttack>> AfterAttackMoves;
+
+	/** 연계가 나오지 않았을 때 AfterAttackMoves를 쓸 확률. 낮추면 공격 뒤 그 자리에 남아 반격할 틈이 생긴다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|FollowUp", meta=(ClampMin=0, ClampMax=1))
+	float AfterAttackMoveChance = 1.f;
 
 	/**
 	 * 이 공격을 가드로 막았을 때의 반응(밀리는 거리, 가드 브레이크). 거리는 몬스터의 UknightMonsterGuardPushComponent에서 정한다.
