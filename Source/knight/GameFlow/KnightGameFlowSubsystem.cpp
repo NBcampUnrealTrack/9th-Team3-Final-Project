@@ -195,6 +195,12 @@ bool UKnightGameFlowSubsystem::CanLaunchStage(FName StageId, FText& OutReason) c
 		OutReason = LOCTEXT("RaidDefinitionMissing", "The raid definition is missing.");
 		return false;
 	}
+	const UknightRaidDefinition* const Raid = Stage.RaidDefinition.LoadSynchronous();
+	if (Raid && Raid->IsWaitingForTargetMonster())
+	{
+		OutReason = LOCTEXT("RaidTargetNotReady", "이 레이드의 몬스터가 아직 준비되지 않았습니다.");
+		return false;
+	}
 	OutReason = FText::GetEmpty();
 	return true;
 }
@@ -475,6 +481,29 @@ void UKnightGameFlowSubsystem::RegisterEnteredGameplay(UWorld* EnteredWorld)
 	}
 	RegisteredWorld = EnteredWorld;
 	ActiveStageId = bWasPending ? PendingStageId : NAME_None;
+	if (!bWasPending)
+	{
+		// Direct PIE/OpenLevel must not inherit a selected quest or another world's run.
+		if (UknightRaidSubsystem* const Session = GameInstance->GetSubsystem<UknightRaidSubsystem>())
+		{
+			Session->EndRun();
+		}
+		const FString MapPackage = UWorld::RemovePIEPrefix(EnteredWorld->GetOutermost()->GetName());
+		if (const UKnightStageCatalog* const Catalog = GetStageCatalog())
+		{
+			for (const FKnightStageDefinition& Stage : Catalog->Stages)
+			{
+				if (Stage.StageId.IsNone() || Stage.GameplayMap.ToSoftObjectPath().GetLongPackageName() != MapPackage) continue;
+				if (!ActiveStageId.IsNone())
+				{
+					// Shared test maps are ambiguous; keep their GameMode's existing default-definition fallback.
+					ActiveStageId = NAME_None;
+					break;
+				}
+				ActiveStageId = KnightProgressionIds::Stage(Stage.StageId);
+			}
+		}
+	}
 	ConfirmEnteredWorld(EKnightFlowState::Gameplay);
 	if (bWasPending)
 	{
