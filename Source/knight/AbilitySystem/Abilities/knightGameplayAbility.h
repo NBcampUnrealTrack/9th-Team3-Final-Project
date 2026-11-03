@@ -157,6 +157,9 @@ protected:
 	void StartMechTiming(UAnimMontage* Montage, float BaseRate);
 	void StopMechTiming();
 
+	/** (2026-11-03) 이번 공격의 카메라 킥 세기. 기본은 CameraKickScale. 차지처럼 세기가 바뀌는 공격이 덮어쓴다. */
+	virtual float GetCameraKickScale() const { return CameraKickScale; }
+
 	/**
 	 * 락온 중이 아니고 이동 입력이 있으면 아바타를 그 방향으로 즉시 돌린다. 돌렸으면 true. (2026-10-08)
 	 * 퀵스텝과 같은 규칙으로, 방향키를 누른 채 공격·가드를 시작하면 그 방향을 보고 나가게 한다.
@@ -179,6 +182,14 @@ protected:
 	/** (2026-10-20) 공격 모션에 기계식 타이밍(ASC MechTiming)을 쓸지. 공격마다 끌 수 있다(StartMechTiming을 부르는 공격만 해당). */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Knight|Attack Feel")
 	bool bUseMechTiming = true;
+
+	/**
+	 * (2026-11-03 팀 피드백 '공격·강공격에 카메라 무빙') 이 공격의 카메라 킥 세기. 1 = 카메라 컴포넌트 값 그대로(시야각 조임 → 튀 + 앞으로 밀기),
+	 * 0 = 움직이지 않음. 약공격은 작게, 강공격·마무리는 크게 준다. 카메라 컴포넌트의 bAttackCameraKick이 켜져 있어야 보인다.
+	 * 기계식 타이밍을 쓰는 공격만 해당. 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Knight|Attack Feel", meta=(ClampMin=0, ClampMax=3))
+	float CameraKickScale = 1.f;
 
 	/**
 	 * (2026-10-28 사용자 결정) 끄면 이 공격은 스탠스 피해·그로기 보정(GetStanceScaledHitParams)을 받지 않는다. 속도·행동 에너지 보정은 그대로.

@@ -7,6 +7,7 @@
 class UAnimMontage;
 class UCameraShakeBase;
 class UGameplayEffect;
+class USoundBase;
 
 UENUM(BlueprintType)
 enum class EknightHitReactType : uint8
@@ -15,7 +16,9 @@ enum class EknightHitReactType : uint8
 	Stagger,
 	Knockdown,
 	/** (2026-10-16) 플레이어 그로기(기절): 시작 → 반복(GroggyDuration) → 끝. */
-	Groggy
+	Groggy,
+	/** (2026-11-02) 가드 브레이크: 몬스터의 가드 브레이크 공격(Event.GuardBroken)을 막았을 때. 가드가 풀리고 비틀거린다. */
+	GuardBreak
 };
 
 /** One reaction animated per hit direction. Missing directions fall back to Front. */
@@ -83,6 +86,11 @@ struct FknightHitImpactFeel
  *   그 동안 이동 입력이 잠기고(무브먼트 SetMoveInputLocked) 공격·가드·퀵스텝이 막힌다(State.HitReact).
  *   맞아도 피해만 받고 다른 피격 반응 없이 기절이 이어진다(State.HitReact.Groggy 동안 반응 이벤트 무시). 끝나면 PoiseRecoveryEffect로 그로기를 채운다.
  *   맞는 맛(넉백·흔들림·슬로)은 StaggerImpact를 쓴다. GroggyLoopMontage를 비우면 예전처럼 휘청·다운.
+ *
+ * (2026-11-02) 가드 브레이크: 몬스터 공격 무게 단계가 Break(잔열 몸통 낙하, 잔향 다이브 등)인 공격을 가드로 막으면
+ *   몬스터의 UknightMonsterGuardPushComponent가 Event.GuardBroken을 보낸다. 그때 가드를 풀고(Ability.Guard 취소) GuardBreakMontages를
+ *   재생한다. 그동안 이동 입력이 잠기고 공격·가드·퀵스텝이 막힌다(State.HitReact.Stagger). 밀려나는 거리는 몬스터 쪽이 맡는다.
+ *   소리는 GuardBreakSound, 흔들림·슬로는 GuardBreakImpact. 몽타주가 비어 있으면 StaggerMontages를 쓴다. 그로기는 채우지 않는다.
  */
 UCLASS()
 class KNIGHT_API UknightGameplayAbility_HitReact : public UknightGameplayAbility
@@ -150,6 +158,25 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Hit React|Groggy", meta=(ClampMin=0, Units="s"))
 	float GroggyDuration = 2.5f;
 
+	/** (2026-11-02) 가드 브레이크 때 비틀거리는 동작(방향별). 비어 있으면 StaggerMontages를 쓴다. */
+	UPROPERTY(EditDefaultsOnly, Category="Hit React|Guard Break")
+	FknightDirectionalMontages GuardBreakMontages;
+
+	/** 가드 브레이크 몽타주 재생 속도. 1보다 작으면 더 오래 비틀거린다. 바뀔 수 있는 값. */
+	UPROPERTY(EditDefaultsOnly, Category="Hit React|Guard Break", meta=(ClampMin=0.1))
+	float GuardBreakPlayRate = 0.85f;
+
+	/** 가드 브레이크 소리(가드가 깨지는 금속음). 비우면 나지 않는다. */
+	UPROPERTY(EditDefaultsOnly, Category="Hit React|Guard Break")
+	TObjectPtr<USoundBase> GuardBreakSound;
+
+	UPROPERTY(EditDefaultsOnly, Category="Hit React|Guard Break", meta=(ClampMin=0))
+	float GuardBreakSoundVolume = 1.f;
+
+	/** 가드 브레이크 흔들림·슬로. 넉백은 몬스터의 가드 밀림이 이미 걸므로 보통 0으로 둔다. */
+	UPROPERTY(EditDefaultsOnly, Category="Hit React|Guard Break")
+	FknightHitImpactFeel GuardBreakImpact;
+
 private:
 	/** 그로기 단계: 시작 → 반복 → 끝. 몽타주가 끝날 때(블렌드 아웃) 다음 단계로 넘어간다. */
 	enum class EGroggyPhase : uint8 { None, Start, Loop, End };
@@ -169,6 +196,9 @@ private:
 	double GroggyLoopStartTime = 0.0;
 	TWeakObjectPtr<class UAbilityTask_PlayMontageAndWait> GroggyMontageTask;
 	bool bGroggyMoveLockApplied = false;
+
+	/** (2026-11-02) 가드 브레이크 시작: 이동 잠금 + 소리. 몽타주는 다른 반응처럼 ActivateAbility가 재생한다. */
+	void StartGuardBreak(AActor& Avatar);
 
 	void ApplyImpactFeel(AActor& Avatar, const AActor* EventInstigator);
 	const FknightHitImpactFeel& GetImpactFeel(EknightHitReactType Type) const;
