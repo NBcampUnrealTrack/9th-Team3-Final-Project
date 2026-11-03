@@ -307,6 +307,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation|Near Miss", meta=(ClampMin=0.1))
 	float NearMissPitch = 1.f;
 
+	/** 소리를 이 위치(초, 음원 기준)부터 튼다. 서서히 커지는 바람 소리는 앞부분을 건너뛰어야 스친 순간과 맞는다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation|Near Miss", meta=(ClampMin=0, Units="s"))
+	float NearMissStartTime = 0.f;
+
 	/** 판정 겉면이 플레이어 몸에서 이 거리(cm) 안으로 지나가면 스친 것으로 본다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation|Near Miss", meta=(ClampMin=0, Units="cm"))
 	float NearMissMargin = 250.f;

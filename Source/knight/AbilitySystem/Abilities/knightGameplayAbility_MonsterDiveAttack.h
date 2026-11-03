@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "AbilitySystem/Abilities/knightGameplayAbility_MonsterAttack.h"
 #include "Combat/knightCombatTypes.h"
+#include "Monster/knightMonsterDiveEffects.h"
 #include "knightGameplayAbility_MonsterDiveAttack.generated.h"
 
 class UAbilityTask_ApplyRootMotionConstantForce;
@@ -143,6 +144,10 @@ protected:
 	float ContactRippleDepth = 40.f;
 
 private:
+	/** 접기 예고, 출발 소닉붐, 돌진 중 파면·바람 줄기·궤적·수면 물보라, 끝의 충격파. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Effects")
+	FknightMonsterDiveEffects DiveEffects;
+
 	void SpawnContactSplash(const AActor& Target, EknightHitOutcome Outcome) const;
 
 	UFUNCTION()

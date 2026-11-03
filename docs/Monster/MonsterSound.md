@@ -81,6 +81,7 @@
 | S_Janhyang_Chest_Core_Break | DA_Janhyang_Parts, DA_Recipe_Janhyang (BreakSound) |
 | SC_Janhyang_DarkEcho | GA_Janhyang_DarkAmbush, GA_Janhyang_Glide (DarkEchoSound) |
 | S_Janhyang_Sonic_Tinnitus | 코드에서 경로로 불러옴(청각 마비). 이름을 바꾸면 `knightCameraModifier_Deafen.cpp`도 바꿔야 함 |
+| S_Janhyang_Glide_Dive_Whoosh, SC_Janyeol_Swipe_Whoosh | DA_Janhyang, DA_Janyeol (NearMissSound, 공격이 스쳤을 때). 잔향 소리는 서서히 커지는 소리라 NearMissStartTime 0.42초부터 틀어 스친 순간에 가장 크게 들리게 함. 음원을 바꾸면 이 값도 다시 맞춘다 |
 
 ## 5. 잔향 어둠 초음파 (SC_Janhyang_DarkEcho)
 
