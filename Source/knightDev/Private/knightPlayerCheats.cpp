@@ -14,6 +14,13 @@
 //   knight.Player.MoveLog [1|0]            출발·가속·정지에 걸린 시간과 거리를 화면과 로그에 찍는다. 인자가 없으면 켜고 끈다
 //   knight.Player.AttackSpeed [배율]        (2026-10-14) 공격 몽타주 재생 속도 배율을 바꾼다 (예: 0.9). 인자가 없으면 지금 값 출력.
 //                                          행동 속도(ActionSpeed)에 곱하며 발도·가드는 그대로. 새로 시작하는 공격부터 적용
+//   knight.Player.RollBackThrust [1|0]     구를 때 등 부스터를 켜고 끈다 (기본 끔). 인자가 없으면 켜고 끄기를 뒤집는다
+//   knight.Player.RollFootThrust [1|0]     구를 때 두 발 부스터를 켜고 끈다 (기본 켬). 인자가 없으면 켜고 끄기를 뒤집는다
+//   knight.Player.RollThrustScale [Back|Foot <크기>]
+//                                          구를 때 등·발 부스터 크기를 바꾼다 (예: knight.Player.RollThrustScale Foot 0.6).
+//                                          인자가 없으면 지금 상태만 출력. 구르기 부스터 명령은 다음 구르기부터 적용
+//
+// 구르기 부스터 명령으로 바꾼 값도 지금 PIE의 플레이어에게만 적용된다. 정한 값은 GA_Knight_BoostDash의 Dash|Booster 칸에 넣는다.
 //
 // Easing으로 바꾼 값은 지금 PIE의 플레이어에게만 적용되고 PIE를 끝내면 사라진다.
 // 마음에 드는 값은 BP_Knight의 CharacterMovement 컴포넌트(Knight|Movement|Easing)에 넣거나 C++ 기본값으로 옮긴다.
@@ -25,6 +32,7 @@
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
+#include "AbilitySystem/Abilities/knightGameplayAbility_BoostDash.h"
 #include "AbilitySystem/knightAbilitySystemComponent.h"
 #include "AbilitySystem/Attributes/knightAttributeSet.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
@@ -263,6 +271,112 @@ namespace knightPlayerCheats
 		}
 		UE_LOG(LogknightDev, Log, TEXT("%s: attack animation speed x%.2f -> x%.2f (multiplied with ActionSpeed; draw and guard unchanged)."),
 			CommandName, Before, ASC->GetAttackAnimationSpeed());
+	}
+
+	// 플레이어 구르기 어빌리티 인스턴스(구르기 부스터 명령용). 없으면 경고를 남기고 null.
+	static UGameplayAbility* GetRollAbility(UWorld* World, const TCHAR* CommandName)
+	{
+		if (const UAbilitySystemComponent* const ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetPlayerPawn(World, CommandName)))
+		{
+			for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+			{
+				if (Spec.Ability && Spec.Ability->IsA<UknightGameplayAbility_BoostDash>())
+				{
+					if (UGameplayAbility* const Instance = Spec.GetPrimaryInstance())
+					{
+						return Instance;
+					}
+				}
+			}
+		}
+		UE_LOG(LogknightDev, Warning, TEXT("%s: the player has no roll ability instance."), CommandName);
+		return nullptr;
+	}
+
+	// 구르기 부스터 칸은 보호된 칸이라 이름으로 찾아 바꾼다(게임 코드에 치트용 공개 함수를 늘리지 않으려고).
+	// Part는 "Back" 또는 "Foot": bUseRoll<Part>Thrust(켬 여부), Roll<Part>Thrust.Scale(크기).
+	static const FBoolProperty* FindRollThrustToggle(const UGameplayAbility* Ability, const TCHAR* Part)
+	{
+		return FindFProperty<FBoolProperty>(Ability->GetClass(), *FString::Printf(TEXT("bUseRoll%sThrust"), Part));
+	}
+
+	static float* FindRollThrustScale(UGameplayAbility* Ability, const TCHAR* Part)
+	{
+		const FStructProperty* const Settings = FindFProperty<FStructProperty>(Ability->GetClass(), *FString::Printf(TEXT("Roll%sThrust"), Part));
+		const FFloatProperty* const Scale = Settings ? FindFProperty<FFloatProperty>(Settings->Struct, TEXT("Scale")) : nullptr;
+		return Scale ? Scale->ContainerPtrToValuePtr<float>(Settings->ContainerPtrToValuePtr<void>(Ability)) : nullptr;
+	}
+
+	// 지금 등·발 부스터 상태를 한 줄로 찍는다.
+	static void LogRollThrust(UGameplayAbility* Ability, const TCHAR* CommandName)
+	{
+		static const TCHAR* const Parts[] = { TEXT("Back"), TEXT("Foot") };
+		FString Text;
+		for (const TCHAR* const Part : Parts)
+		{
+			const FBoolProperty* const Toggle = FindRollThrustToggle(Ability, Part);
+			const float* const Scale = FindRollThrustScale(Ability, Part);
+			if (!Toggle || !Scale)
+			{
+				UE_LOG(LogknightDev, Warning, TEXT("%s: the roll ability has no %s thrust settings."), CommandName, Part);
+				return;
+			}
+			Text += FString::Printf(TEXT("%s%s %s (scale %.2f)"), Text.IsEmpty() ? TEXT("") : TEXT(", "), Part,
+				Toggle->GetPropertyValue_InContainer(Ability) ? TEXT("on") : TEXT("off"), *Scale);
+		}
+		UE_LOG(LogknightDev, Log, TEXT("%s: roll thrust %s. Applies from the next roll, this PIE only."), CommandName, *Text);
+	}
+
+	// knight.Player.RollBackThrust / RollFootThrust [1|0]. 인자가 없으면 켜고 끄기를 뒤집는다.
+	static void SetRollThrustToggle(const TArray<FString>& Args, UWorld* World, const TCHAR* Part, const TCHAR* CommandName)
+	{
+		UGameplayAbility* const Ability = GetRollAbility(World, CommandName);
+		const FBoolProperty* const Toggle = Ability ? FindRollThrustToggle(Ability, Part) : nullptr;
+		if (!Toggle)
+		{
+			if (Ability)
+			{
+				UE_LOG(LogknightDev, Warning, TEXT("%s: the roll ability has no %s thrust toggle."), CommandName, Part);
+			}
+			return;
+		}
+		const bool bOn = Args.IsValidIndex(0) ? FCString::Atoi(*Args[0]) != 0 : !Toggle->GetPropertyValue_InContainer(Ability);
+		Toggle->SetPropertyValue_InContainer(Ability, bOn);
+		LogRollThrust(Ability, CommandName);
+	}
+
+	static void RollBackThrustCommand(const TArray<FString>& Args, UWorld* World)
+	{
+		SetRollThrustToggle(Args, World, TEXT("Back"), TEXT("knight.Player.RollBackThrust"));
+	}
+
+	static void RollFootThrustCommand(const TArray<FString>& Args, UWorld* World)
+	{
+		SetRollThrustToggle(Args, World, TEXT("Foot"), TEXT("knight.Player.RollFootThrust"));
+	}
+
+	// knight.Player.RollThrustScale [Back|Foot <크기>]. 인자가 없으면 지금 상태만 찍는다.
+	static void RollThrustScaleCommand(const TArray<FString>& Args, UWorld* World)
+	{
+		const TCHAR* const CommandName = TEXT("knight.Player.RollThrustScale");
+		UGameplayAbility* const Ability = GetRollAbility(World, CommandName);
+		if (!Ability)
+		{
+			return;
+		}
+		if (!Args.IsEmpty())
+		{
+			const TCHAR* const Part = Args[0].Equals(TEXT("Back"), ESearchCase::IgnoreCase) ? TEXT("Back")
+				: Args[0].Equals(TEXT("Foot"), ESearchCase::IgnoreCase) ? TEXT("Foot") : nullptr;
+			float* const Scale = Part && Args.IsValidIndex(1) ? FindRollThrustScale(Ability, Part) : nullptr;
+			if (!Scale)
+			{
+				UE_LOG(LogknightDev, Warning, TEXT("%s Back|Foot <Scale> (e.g. %s Foot 0.6)."), CommandName, CommandName);
+				return;
+			}
+			*Scale = FMath::Max(0.f, FCString::Atof(*Args[1]));
+		}
+		LogRollThrust(Ability, CommandName);
 	}
 
 	// knight.Player.Status. 그로기 회복을 확인할 때 피격 후 몇 번 입력해 Poise가 오르는지 본다.
@@ -618,6 +732,24 @@ namespace knightPlayerCheats
 		TEXT("knight.Player.AttackSpeed"),
 		TEXT("knight.Player.AttackSpeed [Multiplier]. Sets the attack montage play rate multiplier (e.g. 0.9) for this PIE. No argument logs the current value."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&AttackSpeedCommand),
+		ECVF_Cheat);
+
+	static FAutoConsoleCommandWithWorldAndArgs RollBackThrustCmd(
+		TEXT("knight.Player.RollBackThrust"),
+		TEXT("knight.Player.RollBackThrust [1|0]. Turns the back booster on roll start on or off for this PIE. No argument toggles."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&RollBackThrustCommand),
+		ECVF_Cheat);
+
+	static FAutoConsoleCommandWithWorldAndArgs RollFootThrustCmd(
+		TEXT("knight.Player.RollFootThrust"),
+		TEXT("knight.Player.RollFootThrust [1|0]. Turns the foot boosters on roll start on or off for this PIE. No argument toggles."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&RollFootThrustCommand),
+		ECVF_Cheat);
+
+	static FAutoConsoleCommandWithWorldAndArgs RollThrustScaleCmd(
+		TEXT("knight.Player.RollThrustScale"),
+		TEXT("knight.Player.RollThrustScale [Back|Foot <Scale>]. Sets the roll back or foot booster size for this PIE (e.g. Foot 0.6). No argument logs both."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&RollThrustScaleCommand),
 		ECVF_Cheat);
 
 	static FAutoConsoleCommandWithWorldAndArgs StatusCmd(

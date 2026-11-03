@@ -2,14 +2,13 @@
 
 #include "CoreMinimal.h"
 #include "AbilitySystem/Abilities/knightGameplayAbility.h"
+#include "Character/knightThrusterComponent.h"
 #include "knightGameplayAbility_BoostDash.generated.h"
 
 class ACharacter;
 class UAnimMontage;
 class UCurveFloat;
 class UMaterialInterface;
-class UNiagaraComponent;
-class UNiagaraSystem;
 class USoundBase;
 
 /**
@@ -23,7 +22,10 @@ class USoundBase;
  * 락온 중(State.LockedOn)이거나 입력 없는 백스텝이면 바라보는 방향을 유지하고, 그 방향 기준의 대시 방향으로
  * 몽타주를 고른다(앞 / 뒤 / 왼쪽 / 오른쪽). 지정하지 않은 방향 몽타주는 DashMontage를 쓴다.
  * (2026-10-29 사용자 결정) 퀵스텝 → 구르기: 몽타주를 구르기(양손 2H-A_Roll, 한손 1H-B_Roll)로 바꾸고 1배속으로 끝까지 재생한다.
- *   한손 스탠스는 OneHandedDashMontage 칸들을 쓴다. 등 부스터 이펙트와 잔상은 끄고 부스터 소리는 남겼다(GA_Knight_BoostDash).
+ *   한손 스탠스는 OneHandedDashMontage 칸들을 쓴다. 잔상은 끄고 부스터 소리는 남겼다(GA_Knight_BoostDash).
+ *   부스터는 구르기를 시작하는 순간 구르는 반대쪽으로 짧게 뿜는다(나이트의 부스터 컴포넌트 노즐).
+ *   등(RollBackThrust)과 발(RollFootThrust)을 따로 켜고 끄며, 기본은 발만 살짝 켠다.
+ *   PIE에서는 knight.Player.RollBackThrust / RollFootThrust / RollThrustScale로 바꿔 볼 수 있다.
  *   락온 중 대각선은 가장 가까운 구르기에 맞춰 몸을 최대 45° 돌려 구르고(bAlignRollToDirectionWhenLockedOn), 뒤는 왼쪽 BL·오른쪽 BR.
  *   몽타주 배속은 MontageMoveEndTime 기준으로 구르는 부분 = DashDuration, 일어나는 부분 = RecoveryDuration에 맞춘다.
  *   땅에서만 구른다. 구르는 내내 방향키로 몸이 돌지 않고(이동 잠금), 다 일어나는 순간 방향키를 누르고 있으면 바로 그 속도로 출발한다.
@@ -260,33 +262,25 @@ protected:
 	float DashSoundVolume = 1.f;
 
 	/**
-	 * 등 부스터 (2026-10-12). 대시 이동 동안 등에서 대시 반대 방향으로 뿜는다. 이펙트는 로컬 -Z로 뿜는 시스템(NS_Knight_Thruster).
-	 * 위치는 BackThrusterBone 위치에 BackThrusterOffsets(액터 기준: X 앞, Y 오른쪽, Z 위)를 더한 곳이고 매 프레임 따라간다.
-	 * 비워 두면 나오지 않는다.
+	 * 구르기를 시작할 때 등 부스터를 뿜을지. 기본은 끔(발만 켠다). 바뀔 수 있는 값.
+	 * 등·발 부스터 노즐은 나이트의 부스터 컴포넌트(BP_Knight → Thrusters)에서 이름으로 고른다.
+	 * 둘 다 구르는 반대쪽으로 조금 아래로 짧게 뿜고(구르는 쪽으로 밀어 주는 느낌), 구르기 이동이 끝나면 시간이 남아 있어도 끈다.
+	 * 이펙트나 노즐을 비우면 뿜지 않는다.
 	 */
-	UPROPERTY(EditDefaultsOnly, Category="Dash|Back Booster")
-	TObjectPtr<UNiagaraSystem> BackThrusterEffect;
+	UPROPERTY(EditDefaultsOnly, Category="Dash|Booster", meta=(InlineEditConditionToggle))
+	bool bUseRollBackThrust = false;
 
-	UPROPERTY(EditDefaultsOnly, Category="Dash|Back Booster")
-	FName BackThrusterBone = TEXT("spine_03");
+	/** 등 부스터. 기본: 등 가운데 한 줄(Back_C), 크기 0.9, 0.2초. 바뀔 수 있는 값. */
+	UPROPERTY(EditDefaultsOnly, Category="Dash|Booster", meta=(EditCondition="bUseRollBackThrust"))
+	FknightThrustSettings RollBackThrust;
 
-	UPROPERTY(EditDefaultsOnly, Category="Dash|Back Booster")
-	TArray<FVector> BackThrusterOffsets;
+	/** 구르기를 시작할 때 두 발 부스터를 뿜을지. 기본은 켬. 바뀔 수 있는 값. */
+	UPROPERTY(EditDefaultsOnly, Category="Dash|Booster", meta=(InlineEditConditionToggle))
+	bool bUseRollFootThrust = true;
 
-	UPROPERTY(EditDefaultsOnly, Category="Dash|Back Booster", meta=(ClampMin=0.1))
-	float BackThrusterScale = 1.4f;
-
-	/** 뿜는 방향을 아래로 기울이는 각도. 0이면 대시 반대 방향 수평. */
-	UPROPERTY(EditDefaultsOnly, Category="Dash|Back Booster", meta=(ClampMin=0, ClampMax=80, Units="deg"))
-	float BackThrusterDownAngle = 20.f;
-
-	/** 대시 이동이 끝난 뒤 분사를 이만큼 더 유지한다. */
-	UPROPERTY(EditDefaultsOnly, Category="Dash|Back Booster", meta=(ClampMin=0, Units="s"))
-	float BackThrusterLinger = 0.05f;
-
-	/** 디버그: 분사 위치(노란 구)와 뿜는 방향(빨간 선)을 그리고 로그를 남긴다. */
-	UPROPERTY(EditDefaultsOnly, Category="Dash|Back Booster")
-	bool bDebugBackThrusters = false;
+	/** 발 부스터. 기본: 두 발 앞꿈치(Foot_L/R), 크기 0.45(살짝), 0.2초. 바뀔 수 있는 값. */
+	UPROPERTY(EditDefaultsOnly, Category="Dash|Booster", meta=(EditCondition="bUseRollFootThrust"))
+	FknightThrustSettings RollFootThrust;
 
 	/** 대시 소리의 AI 청각 크기. */
 	UPROPERTY(EditDefaultsOnly, Category="Dash|Noise", meta=(ClampMin=0))
@@ -373,17 +367,15 @@ private:
 	void StartCooldown();
 	void RemoveInvulnerability();
 
-	void StartBackThrusters(const ACharacter& Character);
-	void UpdateBackThrusters();
-	void StopBackThrusters();
+	/** 구르기 부스터(등·발)를 끈다. */
+	void StopRollThrust();
 	void SpawnGhostStep();
 	void StopGhostTrail();
 
-	UPROPERTY(Transient)
-	TArray<TObjectPtr<UNiagaraComponent>> BackThrusters;
+	/** 지금 뿜고 있는 구르기 등·발 부스터(부스터 컴포넌트 번호). 0이면 없음. */
+	int32 RollBackThrustId = 0;
+	int32 RollFootThrustId = 0;
 
-	FTimerHandle BackThrusterTimer;
-	FTimerHandle BackThrusterStopTimer;
 	FTimerHandle GhostTrailTimer;
 	FTimerHandle StandUpMoveTimer;
 	FTimerHandle ContactRateTimer;

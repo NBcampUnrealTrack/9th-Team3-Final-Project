@@ -32,6 +32,7 @@ class UMotionWarpingComponent;
 class UknightDamageVisualComponent;
 class UknightPartsComponent;
 class UknightPartHealthComponent;
+class UknightThrusterComponent;
 class UGameplayEffect;
 struct FGameplayEffectSpec;
 struct FGameplayEventData;
@@ -99,6 +100,10 @@ class KNIGHT_API AknightCharacter : public ACharacter, public IAbilitySystemInte
 	/** 부위 체력: 맞은 부위 판정, 부위 피해 분배, 파괴·복구, 최대 체력 = 부위 최대 체력의 합. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UknightPartHealthComponent> PartHealth;
+
+	/** 부스터 노즐(등·팔꿈치·발) 목록과 분사. 행동(구르기 등)이 노즐 이름으로 뿜는다. 노즐 위치는 여기서 조절. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UknightThrusterComponent> Thrusters;
 
 	UPROPERTY()
 	TObjectPtr<UknightCoreAttributeSet> CoreAttributeSet;

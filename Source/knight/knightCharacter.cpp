@@ -27,6 +27,7 @@
 #include "Item/knightDamageVisualComponent.h"
 #include "Item/knightPartsComponent.h"
 #include "Character/knightPartHealthComponent.h"
+#include "Character/knightThrusterComponent.h"
 #include "Input/knightInputComponent.h"
 #include "Settings/knightSettingsSubsystem.h"
 #include "Settings/knightSharedSettings.h"
@@ -77,6 +78,7 @@ AknightCharacter::AknightCharacter(const FObjectInitializer& ObjectInitializer)
 	Parts = CreateDefaultSubobject<UknightPartsComponent>(TEXT("Parts"));
 	DamageVisual = CreateDefaultSubobject<UknightDamageVisualComponent>(TEXT("DamageVisual"));
 	PartHealth = CreateDefaultSubobject<UknightPartHealthComponent>(TEXT("PartHealth"));
+	Thrusters = CreateDefaultSubobject<UknightThrusterComponent>(TEXT("Thrusters"));
 
 	// 참고: Mesh 컴포넌트(Character에서 상속)의 스켈레탈 메시와 애님 블루프린트는
 	// 파생 블루프린트 에셋(BP_Knight)에서 지정한다 (C++에서 콘텐츠를 직접 참조하지 않기 위해)
