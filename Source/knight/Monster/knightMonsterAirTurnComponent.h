@@ -78,6 +78,20 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(ClampMin=0, Units="s", EditCondition="GroundTurnTime > 0"))
 	float AirTurnMaxTime = 20.f;
 
+	/**
+	 * 지금 쓸 수 있는 공중 공격이 이 시간(초) 안에 하나도 준비되지 않으면 AirTurnMaxTime을 기다리지 않고 착지한다.
+	 * 쿨다운과 태그 조건만 보고 거리·각도는 보지 않는다(타깃이 잠깐 멀어졌다고 내려오지 않게). 음수면 쓰지 않는다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(Units="s", EditCondition="GroundTurnTime > 0"))
+	float EarlyLandWaitTime = 2.f;
+
+	/**
+	 * 공중 턴의 남은 시간(최대 시간 기준)이 이 값 이하가 되면 마무리 공격(State.Monster.LastAirAttack이 필요한 활강·회오리)을 연다.
+	 * 공격 수를 다 채우기 전에 시간이 끝나도 턴이 마무리 공격으로 닫히게 한다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(ClampMin=0, Units="s", EditCondition="GroundTurnTime > 0"))
+	float FinisherOpenTime = 8.f;
+
 	/** State.Monster.Enraged 동안 GroundTurnTime 대신 쓴다(공명해방은 공중 위주로). 0이면 평소 값. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn|Enraged", meta=(ClampMin=0, Units="s", EditCondition="GroundTurnTime > 0"))
 	float EnragedGroundTurnTime = 0.f;
@@ -145,6 +159,10 @@ private:
 	int32 GetAirAttacksPerTurn() const;
 	float GetAirTurnMaxTime() const;
 	bool CanChangeTurn() const;
+	/** 마무리 공격 = Selection.RequiredOwnerTags에 State.Monster.LastAirAttack이 있는 공중 공격(활강·회오리). */
+	enum class EAirAttackFilter : uint8 { All, NoFinishers, FinishersOnly };
+	/** 지금 태그 조건을 만족하는 공중 공격 중 Within초 안에 쿨다운이 끝나는 것이 있는지. 거리·각도는 보지 않는다. */
+	bool HasAirAttackSoon(EAirAttackFilter Filter, float Within) const;
 	void SendEvent(const FGameplayTag& EventTag) const;
 	/** 타깃이 AirKeepDistance보다 가까우면 뒤로 물러난다. */
 	void UpdateRetreat(float DeltaTime);
@@ -162,6 +180,9 @@ private:
 	bool bAirborne = false;
 	double LastAttackEndTime = -1.e9;
 	static constexpr float FollowUpGraceTime = 0.2f;
+	/** 최대 시간이 지나도 마무리 공격이 준비돼 있으면 이만큼 더 기다린다(공격 사이 쉬는 시간에 AI가 고를 수 있게). */
+	static constexpr float FinisherWaitTime = 3.f;
+	bool bLastAirAttackOpen = false;
 	float GroundTime = 0.f;
 	float AirTime = 0.f;
 	int32 AirAttacksUsed = 0;
