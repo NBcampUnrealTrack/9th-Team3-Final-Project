@@ -4,6 +4,7 @@
 #include "Components/MeshComponent.h"
 #include "knightAttackTrailComponent.generated.h"
 
+class UMaterialInterface;
 class USkeletalMeshComponent;
 
 /**
@@ -42,6 +43,9 @@ public:
 		float MinSpeed = 0.f;
 		float FullSpeed = 0.f;
 	};
+
+	/** Source의 주인 액터에 궤적을 새로 붙이고 바로 그리기 시작한다. */
+	static UknightAttackTrailComponent* SpawnOn(USkeletalMeshComponent* InSource, UMaterialInterface* Material, const FSettings& InSettings);
 
 	void Start(USkeletalMeshComponent* InSource, const FSettings& InSettings);
 	/** 새 자리를 그만 남긴다. 남은 궤적이 다 사라지면 스스로 지워진다. */

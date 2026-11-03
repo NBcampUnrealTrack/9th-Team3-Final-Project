@@ -13,7 +13,7 @@ UknightAnimNotifyState_AttackTrail::UknightAnimNotifyState_AttackTrail()
 void UknightAnimNotifyState_AttackTrail::NotifyBegin(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation, float TotalDuration, const FAnimNotifyEventReference& EventReference)
 {
 	Super::NotifyBegin(MeshComp, Animation, TotalDuration, EventReference);
-	if (!MeshComp || !MeshComp->GetWorld() || MeshComp->GetWorld()->GetNetMode() == NM_DedicatedServer)
+	if (!MeshComp || !MeshComp->GetWorld())
 	{
 		return;
 	}
@@ -26,10 +26,6 @@ void UknightAnimNotifyState_AttackTrail::NotifyBegin(USkeletalMeshComponent* Mes
 		}
 	}
 
-	UknightAttackTrailComponent* const Trail = NewObject<UknightAttackTrailComponent>(MeshComp->GetOwner() ? static_cast<UObject*>(MeshComp->GetOwner()) : MeshComp);
-	Trail->SetMaterial(0, Material);
-	Trail->RegisterComponent();
-
 	UknightAttackTrailComponent::FSettings Settings;
 	Settings.BaseSocket = BaseSocket;
 	Settings.TipSocket = TipSocket;
@@ -39,7 +35,7 @@ void UknightAnimNotifyState_AttackTrail::NotifyBegin(USkeletalMeshComponent* Mes
 	Settings.FadeTime = FadeIn;
 	Settings.MinSpeed = MinSpeed;
 	Settings.FullSpeed = FullSpeed;
-	Trail->Start(MeshComp, Settings);
+	UknightAttackTrailComponent* const Trail = UknightAttackTrailComponent::SpawnOn(MeshComp, Material, Settings);
 	ActiveTrails.Add(MeshComp, Trail);
 }
 

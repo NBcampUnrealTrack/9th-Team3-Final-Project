@@ -71,6 +71,10 @@ void UknightGameplayAbility_MonsterDiveAttack::ActivateAbility(const FGameplayAb
 
 	UAbilityTask_PlayMontageAndWait* const MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, Montage, 1.f, FoldSection);
 	MontageTask->ReadyForActivation();
+	if (ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
+	{
+		DiveEffects.StartFold(*Character);
+	}
 
 	UAbilityTask_Repeat* const Task = UAbilityTask_Repeat::RepeatAction(this, knightMonsterDive::TickInterval, knightMonsterDive::MaxTicks);
 	Task->OnPerformAction.AddDynamic(this, &ThisClass::HandleTick);
@@ -80,7 +84,7 @@ void UknightGameplayAbility_MonsterDiveAttack::ActivateAbility(const FGameplayAb
 
 void UknightGameplayAbility_MonsterDiveAttack::HandleTick(int32 ActionNumber)
 {
-	const AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetAvatarActorFromActorInfo());
+	AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetAvatarActorFromActorInfo());
 	if (!Monster)
 	{
 		return;
@@ -105,6 +109,7 @@ void UknightGameplayAbility_MonsterDiveAttack::HandleTick(int32 ActionNumber)
 	}
 	if (Phase == EPhase::Dive)
 	{
+		DiveEffects.Tick(*Monster, DeltaTime);
 		ApplyHits();
 		if (bParried || PhaseTime >= DiveDuration)
 		{
@@ -143,6 +148,7 @@ void UknightGameplayAbility_MonsterDiveAttack::StartDive()
 		ERootMotionFinishVelocityMode::SetVelocity, FVector::ZeroVector, 0.f, false);
 	DiveTask = Task;
 	Task->ReadyForActivation();
+	DiveEffects.StartDive(*Monster, Direction);
 	// 같은 시간 동안 공중 높이에서 바닥 높이로 내려온다.
 	if (UknightMonsterHoverComponent* const Hover = Monster->FindComponentByClass<UknightMonsterHoverComponent>())
 	{
@@ -161,6 +167,10 @@ void UknightGameplayAbility_MonsterDiveAttack::FinishDive()
 {
 	Phase = EPhase::Outcome;
 	ApplyHits();
+	if (ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
+	{
+		DiveEffects.FinishDive(*Character);
+	}
 	// 결과 몽타주는 제자리에서 재생한다. 남은 돌진 이동이 있으면 여기서 끊는다(끊으면 마무리 속도 0이 적용되지 않아 직접 멈춘다).
 	if (DiveTask.IsValid() && DiveTask->IsActive())
 	{
@@ -289,6 +299,7 @@ void UknightGameplayAbility_MonsterDiveAttack::EndAbility(const FGameplayAbility
 		TickTask->EndTask();
 	}
 	TickTask.Reset();
+	DiveEffects.Stop();
 	UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();
 	if (ASC && bNoFlinchApplied)
 	{

@@ -115,6 +115,19 @@ UknightAttackTrailComponent::UknightAttackTrailComponent()
 	SetUsingAbsoluteScale(true);
 }
 
+UknightAttackTrailComponent* UknightAttackTrailComponent::SpawnOn(USkeletalMeshComponent* InSource, UMaterialInterface* Material, const FSettings& InSettings)
+{
+	if (!InSource || !InSource->GetWorld() || InSource->GetWorld()->GetNetMode() == NM_DedicatedServer)
+	{
+		return nullptr;
+	}
+	UknightAttackTrailComponent* const Trail = NewObject<UknightAttackTrailComponent>(InSource->GetOwner() ? static_cast<UObject*>(InSource->GetOwner()) : InSource);
+	Trail->SetMaterial(0, Material);
+	Trail->RegisterComponent();
+	Trail->Start(InSource, InSettings);
+	return Trail;
+}
+
 void UknightAttackTrailComponent::Start(USkeletalMeshComponent* InSource, const FSettings& InSettings)
 {
 	Source = InSource;
