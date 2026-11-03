@@ -89,12 +89,23 @@ void UknightMonsterAirTurnComponent::TickComponent(float DeltaTime, ELevelTick T
 	}
 
 	AirTime += DeltaTime;
+	UpdateLastAttackTag();
 	// 분노 마무리 공격(물 회오리)을 기다리는 동안은 내리지 않는다. 그 공격이 공중 턴을 끝낸다.
-	if ((AirAttacksUsed >= GetAirAttacksPerTurn() || AirTime >= GetAirTurnMaxTime()) && CanChangeTurn()
-		&& !ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_EnrageFinale))
+	if (CanChangeTurn() && !ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_EnrageFinale))
 	{
-		Land();
-		return;
+		const float MaxTime = GetAirTurnMaxTime();
+		const bool bWaitFinisher = AirTime < MaxTime + FinisherWaitTime && HasAirAttackSoon(EAirAttackFilter::FinishersOnly, 0.f);
+		const bool bTurnDone = AirAttacksUsed >= GetAirAttacksPerTurn() || (AirTime >= MaxTime && !bWaitFinisher);
+		// 쓸 공중 공격이 모두 쿨다운이면 빈 비행으로 최대 시간을 채우지 않고 내려온다.
+		if (bTurnDone || (EarlyLandWaitTime >= 0.f && !HasAirAttackSoon(EAirAttackFilter::All, EarlyLandWaitTime)))
+		{
+			if (!bTurnDone)
+			{
+				UE_LOG(LogknightAI, Log, TEXT("%s: no air attack ready within %.1f s, landing early."), *GetNameSafe(GetOwner()), EarlyLandWaitTime);
+			}
+			Land();
+			return;
+		}
 	}
 	UpdateRetreat(DeltaTime);
 }
@@ -267,11 +278,25 @@ void UknightMonsterAirTurnComponent::SetPawnBlocking(bool bBlock)
 
 void UknightMonsterAirTurnComponent::UpdateLastAttackTag()
 {
-	if (ASC.IsValid())
+	if (!ASC.IsValid())
 	{
-		const bool bLast = bAirborne && AirAttacksUsed == GetAirAttacksPerTurn() - 1;
-		ASC->SetLooseGameplayTagCount(knightGameplayTags::State_Monster_LastAirAttack, bLast ? 1 : 0);
+		return;
 	}
+	// 마무리 공격은 턴의 마지막 공격으로 연다: 공격 수를 거의 채웠거나, 시간이 얼마 안 남았거나, 다른 공중 공격이 없을 때.
+	// 한 번 열면 턴이 끝날 때까지 둔다(다른 공격의 쿨다운이 끝나도 다시 닫지 않는다).
+	bool bOpen = false;
+	if (bAirborne)
+	{
+		bOpen = bLastAirAttackOpen || AirAttacksUsed >= GetAirAttacksPerTurn() - 1
+			|| GetAirTurnMaxTime() - AirTime <= FinisherOpenTime
+			|| !HasAirAttackSoon(EAirAttackFilter::NoFinishers, FMath::Max(EarlyLandWaitTime, 0.f));
+	}
+	if (bOpen && !bLastAirAttackOpen)
+	{
+		UE_LOG(LogknightAI, Log, TEXT("%s: finisher air attacks open (%.1f s in the air, %d air attack(s))."), *GetNameSafe(GetOwner()), AirTime, AirAttacksUsed);
+	}
+	bLastAirAttackOpen = bOpen;
+	ASC->SetLooseGameplayTagCount(knightGameplayTags::State_Monster_LastAirAttack, bOpen ? 1 : 0);
 }
 
 bool UknightMonsterAirTurnComponent::IsAttacking() const
@@ -317,6 +342,36 @@ bool UknightMonsterAirTurnComponent::CanChangeTurn() const
 	// 공격이 막 끝났으면 조금 기다린다. 그 사이에 연계 공격(FollowUpAttacks)이 이어질 수 있다.
 	return !IsAttacking() && !ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Reacting)
 		&& GetWorld()->GetTimeSeconds() - LastAttackEndTime >= FollowUpGraceTime;
+}
+
+bool UknightMonsterAirTurnComponent::HasAirAttackSoon(EAirAttackFilter Filter, float Within) const
+{
+	const double Now = GetWorld()->GetTimeSeconds();
+	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+	{
+		const UknightGameplayAbility_MonsterAttack* const Attack = Cast<UknightGameplayAbility_MonsterAttack>(Spec.GetPrimaryInstance());
+		if (!Attack || !Attack->CountsAsAttack())
+		{
+			continue;
+		}
+		const FknightMonsterAttackSelection& Selection = Attack->GetSelection();
+		const bool bFinisher = Selection.RequiredOwnerTags.HasTagExact(knightGameplayTags::State_Monster_LastAirAttack);
+		if ((Filter == EAirAttackFilter::NoFinishers && bFinisher) || (Filter == EAirAttackFilter::FinishersOnly && !bFinisher))
+		{
+			continue;
+		}
+		// 지상 공격은 Airborne 차단 태그로, 마무리 공격은 마무리가 열리기 전까지 LastAirAttack 요구 태그로 걸러진다.
+		if (Selection.Weight <= 0.f || Selection.bOnlyAsFollowUp || !ASC->HasAllMatchingGameplayTags(Selection.RequiredOwnerTags)
+			|| ASC->HasAnyMatchingGameplayTags(Selection.BlockedOwnerTags))
+		{
+			continue;
+		}
+		if (Attack->GetCooldownRemaining(Now) <= Within)
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 void UknightMonsterAirTurnComponent::SendEvent(const FGameplayTag& EventTag) const

@@ -58,6 +58,13 @@
 - 잔향 `AM_Janhyang_Down`: Hit_Screech_01(볼륨 1.8, 피치 0.75) + Hit_Screech_02(0.15초, 볼륨 1.2, 피치 0.9). GroggyBreath는 울부짖음과 겹치지 않게 0.1 → 1.8초로 옮김
 - 전용 음원이 생기면 이 노티파이들을 그 소리 하나로 바꾼다.
 
+잔향 근접 공격 소리 (기존 음원 재사용, 전용 음원이 생기면 교체):
+- `AM_Janhyang_Bite`: 잔열 SC_Janyeol_Bite_Snap(1.02초, 피치 1.2) — 머리가 멈추는 순간
+- `AM_Janhyang_ShoulderSlam`: SC_Janhyang_WingFlap(0.05초) + Exhaust_Landing_Thud(0.70초, 볼륨 1.3) — 몸이 내려꽂히는 순간
+- `AM_Janhyang_WingStrike`: 날갯짓(0.35초)에 SC_Janhyang_TailStab(0.74초) 추가 — 꼬리가 앞으로 찌르는 순간
+
+타격음 시간을 정할 때는 Play Rate 구간을 풀어 실제 시간으로 바꾼 뒤, wav 앞 무음을 빼서 소리가 커지는 순간을 접지·타격 프레임에 맞춘다.
+
 ## 4. 노티파이가 아닌 곳에 연결된 소리
 
 노티파이는 몽타주를 열면 보이지만, 아래는 데이터 에셋·GA·BP의 슬롯에 들어 있다.
