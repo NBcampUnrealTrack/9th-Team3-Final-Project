@@ -62,7 +62,8 @@ void UknightMonsterNearMissSubsystem::Play(const AknightMonsterCharacterBase& Mo
 		return;
 	}
 	LastPlayTime.Add(const_cast<AActor*>(&Target), World->GetTimeSeconds());
-	UGameplayStatics::PlaySoundAtLocation(World, Definition->NearMissSound, Location, Definition->NearMissVolume, Definition->NearMissPitch);
+	UGameplayStatics::PlaySoundAtLocation(World, Definition->NearMissSound, Location, Definition->NearMissVolume, Definition->NearMissPitch,
+		Definition->NearMissStartTime);
 	UE_LOG(LogknightAI, Log, TEXT("%s: near miss on %s."), *GetNameSafe(&Monster), *GetNameSafe(&Target));
 }
 
