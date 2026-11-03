@@ -31,11 +31,24 @@ namespace
 	constexpr float MoveCancelCheckInterval = 0.02f;
 
 	// 락온 상태가 아닐 때 공격하면 화면 중앙(카메라/컨트롤러 수평 방향)을 바라보게 한다.
-	void FaceScreenCenterIfUnlocked(ACharacter* Character, const UAbilitySystemComponent* ASC)
+	// bPreferMoveDirection이면 이동 입력 방향을 먼저, 입력이 없으면 이동 속도 방향을 보고, 둘 다 없을 때만 화면 중앙을 본다.
+	void FaceScreenCenterIfUnlocked(ACharacter* Character, const UAbilitySystemComponent* ASC, const bool bPreferMoveDirection = false)
 	{
 		if (!Character || (ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_LockedOn)))
 		{
 			return;
+		}
+		if (bPreferMoveDirection)
+		{
+			const FVector Input = Character->GetLastMovementInputVector();
+			const FVector Velocity = Character->GetVelocity();
+			// 입력은 0~1 크기, 속도는 cm/s. 아주 작은 값(스틱 떨림, 멈추기 직전)은 방향으로 보지 않는다.
+			const FVector Move = Input.SizeSquared2D() > 0.01f ? Input : (Velocity.SizeSquared2D() > 100.f ? Velocity : FVector::ZeroVector);
+			if (!Move.IsNearlyZero())
+			{
+				Character->SetActorRotation(FRotator(0.f, Move.Rotation().Yaw, 0.f));
+				return;
+			}
 		}
 		if (const AController* const Controller = Character->GetController())
 		{
@@ -130,7 +143,7 @@ void UknightGameplayAbility_MeleeAttack::ActivateAbility(const FGameplayAbilityS
 	{
 		// 락온 중이 아니면 화면 중앙(카메라 방향)을 보고 뽑는다. 공격은 StartAttack에서 한 번 더 맞춘다(뽑는 동안 카메라가 돌 수 있음).
 		// (2026-10-20) 뽑기 없이 바로 공격하면 StartAttack만 돌린다(중복 호출 정리).
-		FaceScreenCenterIfUnlocked(Cast<ACharacter>(GetAvatarActorFromActorInfo()), GetAbilitySystemComponentFromActorInfo());
+		FaceScreenCenterIfUnlocked(Cast<ACharacter>(GetAvatarActorFromActorInfo()), GetAbilitySystemComponentFromActorInfo(), bFaceMoveDirectionIfUnlocked);
 		// (2026-10-15) 뽑을 때는 항상 한손 스탠스로 시작한다.
 		UknightGameplayAbility_StanceSwitch::ResetToOneHanded(GetAbilitySystemComponentFromActorInfo());
 		// (2026-10-22) 뽑는 동안에는 걷지 않는다. 뽑기만 하면 칼이 손에 들어올 때(CheckDrawMoveCancel),
@@ -321,7 +334,7 @@ void UknightGameplayAbility_MeleeAttack::StartAttack()
 		const UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();
 		const float LockOnDelay = LockOnStartupDelay > 0.f && ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_LockedOn)
 			? LockOnStartupDelay : 0.f;
-		const float Delay = LockOnDelay + GetStanceStartupDelay();
+		const float Delay = BaseStartupDelay + LockOnDelay + GetStanceStartupDelay();
 		if (Delay > 0.f)
 		{
 			BeginStartupDelay(Delay);
@@ -332,6 +345,14 @@ void UknightGameplayAbility_MeleeAttack::StartAttack()
 	StartupDelayMontage.Reset();
 	bAttackStarted = true;
 	SetDrawMovementLocked(false);
+	if (const AActor* const Avatar = GetAvatarActorFromActorInfo())
+	{
+		if (UknightThrusterComponent* const Thrusters = Avatar->FindComponentByClass<UknightThrusterComponent>())
+		{
+			StopThrust(AttackStartThrustId);
+			AttackStartThrustId = Thrusters->StartThrust(AttackStartThrust, Avatar->GetActorForwardVector());
+		}
+	}
 	if (UWorld* const World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(DrawTimer);
@@ -353,12 +374,12 @@ void UknightGameplayAbility_MeleeAttack::StartAttack()
 	else if (ForwardLungeDistance > 0.f)
 	{
 		// (2026-10-29 사용자 결정) 락온 대상으로 끌려가지 않고 앞으로 ForwardLungeDistance만큼(앞에 적·벽이 있으면 그 앞까지).
-		FaceScreenCenterIfUnlocked(Cast<ACharacter>(GetAvatarActorFromActorInfo()), GetAbilitySystemComponentFromActorInfo());
+		FaceScreenCenterIfUnlocked(Cast<ACharacter>(GetAvatarActorFromActorInfo()), GetAbilitySystemComponentFromActorInfo(), bFaceMoveDirectionIfUnlocked);
 		bLunge = SetForwardLungeWarpTarget(WarpLocation, WarpRotation, WarpTravel);
 	}
 	else
 	{
-		FaceScreenCenterIfUnlocked(Cast<ACharacter>(GetAvatarActorFromActorInfo()), GetAbilitySystemComponentFromActorInfo());
+		FaceScreenCenterIfUnlocked(Cast<ACharacter>(GetAvatarActorFromActorInfo()), GetAbilitySystemComponentFromActorInfo(), bFaceMoveDirectionIfUnlocked);
 		const bool bWarp = UknightCombatLibrary::SetAttackWarpTarget(GetAvatarActorFromActorInfo(), WarpTargetName, MaxWarpDistance,
 			WarpStopDistance, bUseSoftTarget, SoftTargetRange, SoftTargetAngle);
 		bLunge = bWarp && UknightCombatLibrary::ComputeAttackWarp(GetAvatarActorFromActorInfo(), MaxWarpDistance, WarpStopDistance,
@@ -513,22 +534,26 @@ void UknightGameplayAbility_MeleeAttack::BeginStartupDelay(const float Delay)
 	SetDrawMovementLocked(true);
 	// 자세 몽타주(StartupDelayPoseMontage)가 있으면 선딜레이 동안 끝까지 재생하고, 없으면 공격 몽타주의 첫 자세로 멈춰 둔다.
 	UAnimInstance* const Anim = Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr;
-	if (Anim && StartupDelayPoseMontage)
+	// 한손 스탠스면 한손 자세 몽타주(비어 있으면 양손 것).
+	UAnimMontage* const PoseMontage = OneHandedStartupDelayPoseMontage
+		&& !UknightGameplayAbility_StanceSwitch::IsTwoHanded(GetAbilitySystemComponentFromActorInfo())
+		? OneHandedStartupDelayPoseMontage.Get() : StartupDelayPoseMontage.Get();
+	if (Anim && PoseMontage)
 	{
 		const float PoseRate = StartupDelayPoseRate > 0.f ? StartupDelayPoseRate
-			: FMath::Clamp(StartupDelayPoseMontage->GetPlayLength() / FMath::Max(Delay, 0.01f), 0.5f, 3.f);
+			: FMath::Clamp(PoseMontage->GetPlayLength() / FMath::Max(Delay, 0.01f), 0.5f, 3.f);
 		if (StartupDelayPoseBlendIn > 0.f)
 		{
 			// (2026-10-29) 달리던 자세에서 버티는 자세로 천천히 들어간다(몽타주 기본 0.1초 직선 블렌드는 툭 바뀌었다).
 			FAlphaBlendArgs BlendIn(StartupDelayPoseBlendIn);
 			BlendIn.BlendOption = EAlphaBlendOption::HermiteCubic;
-			Anim->Montage_PlayWithBlendIn(StartupDelayPoseMontage, BlendIn, PoseRate);
+			Anim->Montage_PlayWithBlendIn(PoseMontage, BlendIn, PoseRate);
 		}
 		else
 		{
-			Anim->Montage_Play(StartupDelayPoseMontage, PoseRate);
+			Anim->Montage_Play(PoseMontage, PoseRate);
 		}
-		StartupDelayMontage = StartupDelayPoseMontage;
+		StartupDelayMontage = PoseMontage;
 	}
 	else if (UAnimMontage* const Montage = GetStanceAttackMontage(); Anim && Montage)
 	{
@@ -546,6 +571,11 @@ void UknightGameplayAbility_MeleeAttack::BeginStartupDelay(const float Delay)
 				StartupDelayEffects.Add(Effect);
 			}
 		}
+	}
+	if (UknightThrusterComponent* const Thrusters = Character->FindComponentByClass<UknightThrusterComponent>())
+	{
+		StopThrust(StartupDelayThrustId);
+		StartupDelayThrustId = Thrusters->StartThrust(StartupDelayThrust, Character->GetActorForwardVector());
 	}
 	World->GetTimerManager().SetTimer(StartupDelayTimer, this, &ThisClass::OnStartupDelayFinished, Delay, false);
 	UE_LOG(LogknightAbility, Log, TEXT("%s: startup delay %.2fs (stance part %.2fs)"), *GetName(), Delay, GetStanceStartupDelay());
@@ -574,6 +604,21 @@ void UknightGameplayAbility_MeleeAttack::StopStartupDelay()
 		}
 	}
 	StartupDelayEffects.Reset();
+	StopThrust(StartupDelayThrustId);
+}
+
+void UknightGameplayAbility_MeleeAttack::StopThrust(int32& ThrustId) const
+{
+	if (ThrustId == 0)
+	{
+		return;
+	}
+	const AActor* const Avatar = GetAvatarActorFromActorInfo();
+	if (UknightThrusterComponent* const Thrusters = Avatar ? Avatar->FindComponentByClass<UknightThrusterComponent>() : nullptr)
+	{
+		Thrusters->StopThrust(ThrustId);
+	}
+	ThrustId = 0;
 }
 
 UAnimMontage* UknightGameplayAbility_MeleeAttack::GetStanceAttackMontage() const
@@ -658,6 +703,8 @@ void UknightGameplayAbility_MeleeAttack::EndAbility(const FGameplayAbilitySpecHa
 	SetDrawMovementLocked(false);
 	// (2026-10-29) 예열(락온 선딜레이) 도중 끝나면 이펙트를 끄고, 멈춰 둔 몽타주를 내린다(공격 몽타주가 시작됐으면 비어 있다).
 	StopStartupDelay();
+	// 공격 시작 부스터는 보통 정한 시간에 스스로 꺼진다. 공격이 먼저 끝나면(교체·피격 등) 여기서 끈다.
+	StopThrust(AttackStartThrustId);
 	if (UAnimMontage* const PausedMontage = StartupDelayMontage.Get())
 	{
 		const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());

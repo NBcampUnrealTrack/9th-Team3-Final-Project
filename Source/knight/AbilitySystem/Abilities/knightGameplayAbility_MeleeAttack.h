@@ -4,6 +4,7 @@
 #include "AbilitySystem/Abilities/knightGameplayAbility.h"
 #include "Combat/knightCombatTypes.h"
 #include "Combat/knightGhostTrailActor.h"
+#include "Character/knightThrusterComponent.h"
 #include "Input/knightMovePressTracker.h"
 #include "knightGameplayAbility_MeleeAttack.generated.h"
 
@@ -167,11 +168,22 @@ protected:
 	bool bStanceSlowdownAsStartupDelay = false;
 
 	/**
+	 * 스탠스·락온과 상관없이 늘 넣는 선딜레이(초, 실제 시간). 락온 선딜·양손 스탠스 감속분에 더한다.
+	 * 0이면 예전과 같다. 대쉬공격(GA_Knight_RunAttack)이 기 모으는 시간으로 켠다. 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Startup", meta=(ClampMin=0, Units="s"))
+	float BaseStartupDelay = 0.f;
+
+	/**
 	 * (2026-10-29 사용자 요청) 선딜레이 동안 재생할 자세 몽타주. 비우면 공격 몽타주의 첫 자세로 멈춘다.
 	 * 대쉬공격은 차지 유지 자세(AM_Knight_Charge_Loop, 두 다리를 벌리고 버팀). 차지 시작 자세(Charge_Start)는 빠르게 돌아 움찔거려서 바꿨다.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Startup")
 	TObjectPtr<UAnimMontage> StartupDelayPoseMontage;
+
+	/** 한손 스탠스에서 쓸 선딜레이 자세 몽타주. 비우면 StartupDelayPoseMontage를 쓴다. 대쉬공격은 AM_Knight_1H_Charge_Loop. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Startup")
+	TObjectPtr<UAnimMontage> OneHandedStartupDelayPoseMontage;
 
 	/**
 	 * (2026-10-29) 자세 몽타주 배속. 0이면 선딜레이 길이에 맞춰 끝까지 재생되도록 맞춘다(0.5~3배, 자세를 잡는 동작용).
@@ -196,6 +208,20 @@ protected:
 	TArray<FName> StartupDelayEffectSockets = { TEXT("thruster_l"), TEXT("thruster_r") };
 
 	/**
+	 * 선딜레이 동안 계속 뿜는 부스터(나이트의 부스터 컴포넌트 노즐, BP_Knight → Thrusters). 노즐이나 이펙트를 비우면 없다.
+	 * 대쉬공격은 등 가운데·팔꿈치에서 뒤로 약하게(기 모으는 느낌). 선딜레이가 끝나면 끈다. 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Startup")
+	FknightThrustSettings StartupDelayThrust;
+
+	/**
+	 * 공격이 나가는 순간 짧게 뿜는 부스터. 노즐이나 이펙트를 비우면 없다.
+	 * 대쉬공격은 등 가운데·팔꿈치에서 뒤로 세게(찌르며 밀고 나가는 느낌). 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Startup")
+	FknightThrustSettings AttackStartThrust;
+
+	/**
 	 * (2026-10-14) 공격 중 애니 루트 모션 이동 거리 배율(ACharacter::AnimRootMotionTranslationScale).
 	 * 1 = 애니 그대로, 0.5 = 절반만 나아간다. 공격이 끝나면 1로 되돌린다.
 	 */
@@ -205,10 +231,18 @@ protected:
 	/**
 	 * (2026-10-29 사용자 결정) 0보다 크면 락온 대상으로 끌려가지 않고, 바라보는 방향으로 이 거리(cm)만큼 나간다.
 	 * 앞에 적(다른 폰)이 있으면 그 표면에서 WarpStopDistance 앞에서, 벽이면 벽 앞에서 멈춘다(락온 여부와 상관없음).
-	 * 대쉬공격(GA_Knight_RunAttack)이 400(10-29 200 → 400). 0이면 예전처럼 락온 대상 쪽으로 MaxWarpDistance까지. 바뀔 수 있는 값.
+	 * 대쉬공격(GA_Knight_RunAttack)이 200. 0이면 예전처럼 락온 대상 쪽으로 MaxWarpDistance까지. 바뀔 수 있는 값.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Motion Warping", meta=(ClampMin=0, Units="cm"))
 	float ForwardLungeDistance = 0.f;
+
+	/**
+	 * 켜면 락온이 아닐 때 화면 정면(카메라 방향) 대신 이동 방향을 보고 공격한다. 누르고 있는 이동 입력 방향이 먼저,
+	 * 입력이 없으면 이동 속도 방향, 둘 다 없으면 예전처럼 화면 정면. 대쉬공격(GA_Knight_RunAttack)이 켜서 달리던 쪽으로 나간다.
+	 * 기본 꺼짐(다른 공격은 화면 정면).
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Motion Warping")
+	bool bFaceMoveDirectionIfUnlocked = false;
 
 	/** The warp stops this far in front of the target's surface (or part point), so the blade lands instead of the body. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Motion Warping", meta=(ClampMin=0, Units="cm"))
@@ -326,6 +360,11 @@ private:
 	/** 예열 동안 멈춰 둔 몽타주(공격이 시작되면 같은 몽타주를 처음부터 다시 튼다). 끊기면 EndAbility에서 내린다. */
 	TWeakObjectPtr<UAnimMontage> StartupDelayMontage;
 	TArray<TWeakObjectPtr<class UNiagaraComponent>> StartupDelayEffects;
+	/** 지금 뿜고 있는 선딜레이·공격 시작 부스터(부스터 컴포넌트 번호). 0이면 없음. */
+	int32 StartupDelayThrustId = 0;
+	int32 AttackStartThrustId = 0;
+	/** 부스터를 끈다(Id가 0이면 아무것도 안 함). Id는 0으로 돌린다. */
+	void StopThrust(int32& ThrustId) const;
 
 	/**
 	 * (2026-10-20 사용자 결정) 패링 반격 추적: bWarpToParriedAttacker 공격은 몽타주의 모션 워핑 구간이 끝날 때(휘두르기 직전)까지
