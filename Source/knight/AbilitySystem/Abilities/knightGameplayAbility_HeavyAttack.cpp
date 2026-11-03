@@ -73,13 +73,26 @@ void UknightGameplayAbility_HeavyAttack::ActivateAbility(const FGameplayAbilityS
 	bReleased = false;
 	ReleaseRateScale = 1.f;
 
+	// 누르자마자 차지: 떼기 감시보다 먼저 차지를 시작해야, 이미 뗀 채 발동돼도 탭 콤보가 아니라 해방으로 간다.
+	if (bChargeOnPress)
+	{
+		OnHoldThreshold();
+		if (!IsActive())
+		{
+			return;
+		}
+	}
+
 	UAbilityTask_WaitInputRelease* const Release = UAbilityTask_WaitInputRelease::WaitInputRelease(this, true);
 	Release->OnRelease.AddDynamic(this, &ThisClass::OnReleased);
 	Release->ReadyForActivation();
 
-	UAbilityTask_WaitDelay* const Hold = UAbilityTask_WaitDelay::WaitDelay(this, HoldThreshold);
-	Hold->OnFinish.AddDynamic(this, &ThisClass::OnHoldThreshold);
-	Hold->ReadyForActivation();
+	if (!bChargeOnPress)
+	{
+		UAbilityTask_WaitDelay* const Hold = UAbilityTask_WaitDelay::WaitDelay(this, HoldThreshold);
+		Hold->OnFinish.AddDynamic(this, &ThisClass::OnHoldThreshold);
+		Hold->ReadyForActivation();
+	}
 }
 
 void UknightGameplayAbility_HeavyAttack::OnReleased(float TimeHeld)
@@ -95,6 +108,14 @@ void UknightGameplayAbility_HeavyAttack::OnReleased(float TimeHeld)
 	}
 	else if (Phase == EPhase::WaitingCharge)
 	{
+		if (bChargeOnPress)
+		{
+			// 누르자마자 차지: 앞 공격 때문에 아직 못 모았으면 TapBufferTime 동안 더 보고(TryStartChargeWhileHeld),
+			// 모을 수 있게 되는 순간 바로 가장 약한 해방을 한다.
+			const UWorld* const World = GetWorld();
+			TapDeadline = (World ? World->GetTimeSeconds() : 0.0) + TapBufferTime;
+			return;
+		}
 		// (2026-10-28) 차지를 기다리다 떼면 아무것도 하지 않는다(예전에 HoldThreshold에서 차지를 못 시작했을 때와 같다).
 		Finish(false);
 	}
@@ -390,6 +411,17 @@ void UknightGameplayAbility_HeavyAttack::TryStartChargeWhileHeld()
 		// 다음 플레이 로그에서 '기다렸다가 시작한 차지'를 셀 수 있게 남긴다.
 		UE_LOG(LogknightAbility, Log, TEXT("%s: charge started after waiting %.2fs while held"), *GetName(), Waited);
 		StartCharge();
+		// 누르자마자 차지에서 기다리는 동안 이미 뗐으면 모으지 않고 바로 해방한다.
+		if (bReleased && Phase == EPhase::Charging)
+		{
+			OnReleased(0.f);
+		}
+		return;
+	}
+	if (bReleased && World->GetTimeSeconds() >= TapDeadline)
+	{
+		UE_LOG(LogknightAbility, Log, TEXT("%s: released while waiting, gave up after %.2fs"), *GetName(), Waited);
+		Finish(false);
 		return;
 	}
 	if (Waited >= ChargeWaitTime)

@@ -22,6 +22,7 @@ class USoundBase;
  *   held past HoldThreshold        -> charge: ChargeStartMontage, then ChargeLoopMontage repeats while held
  *                                     (its melee trace hits with LoopHitParams). Releasing plays ChargeReleaseMontage,
  *                                     whose hits use ReleaseHitParams scaled up to MaxChargeMultiplier after MaxChargeTime.
+ * bChargeOnPress를 켜면 누르는 순간 차지를 시작하고, 짧게 떼도 강공격 콤보 대신 모은 만큼의 해방 공격이 나간다(아래 칸 설명).
  * Charging starts only when no other attack / guard / dash is running, or inside Window.Cancel (it cancels them).
  * (2026-10-28) 그때 바로 시작할 수 없으면 누르고 있는 동안 ChargeWaitTime까지 다시 본다(후딜에 누른 차지가 버려지지 않게).
  * While charging the owner has State.Charging and other attacks are blocked.
@@ -58,6 +59,15 @@ protected:
 	/** Holding longer than this (seconds) charges instead of a heavy combo step. */
 	UPROPERTY(EditDefaultsOnly, Category="Heavy", meta=(ClampMin=0.05, Units="s"))
 	float HoldThreshold = 0.3f;
+
+	/**
+	 * 켜면 누르는 순간 차지를 시작한다(HoldThreshold를 기다리지 않는다). 짧게 눌렀다 떼도 강공격 콤보 대신
+	 * 모은 만큼(거의 0)의 가장 약한 해방 공격이 나간다. 앞 공격이 캔슬 창 전이라 바로 모으지 못한 채 떼면
+	 * TapBufferTime 동안 다시 보고, 모을 수 있게 되는 순간 모으기 없이 바로 해방한다(끝내 안 되면 아무것도 안 나감).
+	 * 끄면 예전처럼 짧게 누르면 강공격 콤보(HeavyAbilityTag), 길게 누르면 차지. 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Heavy")
+	bool bChargeOnPress = false;
 
 	/** Tag of the heavy combo step abilities. */
 	UPROPERTY(EditDefaultsOnly, Category="Heavy", meta=(Categories="Ability"))
