@@ -78,7 +78,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Tornado", meta=(EditCondition="bEnragedVolley"))
 	bool bVolleyReaimOnLaunch = true;
 
-	/** 연사 회오리가 쫓으며 꺾는 속도(Tornado.TurnRate 대신). 0이면 Tornado.TurnRate를 쓴다. */
+	/**
+	 * 끄면 연사 회오리가 쫓지 않고 출발할 때 겨눈 방향으로 일직선으로 지나간다. bVolleyReaimOnLaunch를 켜 두면
+	 * 회오리마다 출발 순간의 타깃 위치로 날아가므로, 세 개를 연달아 옆으로 피할 수 있다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Tornado", meta=(EditCondition="bEnragedVolley"))
+	bool bVolleyHoming = true;
+
+	/** 연사 회오리가 쫓으며 꺾는 속도(Tornado.TurnRate 대신). 0이면 Tornado.TurnRate를 쓴다. bVolleyHoming이 꺼져 있으면 보지 않는다. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Tornado", meta=(EditCondition="bEnragedVolley", ClampMin=0, Units="deg"))
 	float VolleyTurnRate = 0.f;
 

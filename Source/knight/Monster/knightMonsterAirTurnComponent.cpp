@@ -79,7 +79,9 @@ void UknightMonsterAirTurnComponent::TickComponent(float DeltaTime, ELevelTick T
 		{
 			GroundTime += DeltaTime;
 		}
-		if (GroundTime >= GetGroundTurnTime() && CanChangeTurn())
+		const int32 GroundAttacks = GetGroundAttacksPerTurn();
+		const bool bAttacksDone = GroundAttacks > 0 && GroundAttacksUsed >= GroundAttacks;
+		if ((bAttacksDone || GroundTime >= GetGroundTurnTime()) && CanChangeTurn())
 		{
 			TakeOff();
 		}
@@ -177,7 +179,7 @@ void UknightMonsterAirTurnComponent::TakeOff()
 	Hover->SetAirborne(true, TakeOffBlendTime);
 	SetPawnBlocking(false);
 	SendEvent(knightGameplayTags::Event_Monster_TakeOff);
-	UE_LOG(LogknightAI, Log, TEXT("%s: take off after %.1f s on the ground."), *GetNameSafe(GetOwner()), GroundTime);
+	UE_LOG(LogknightAI, Log, TEXT("%s: take off after %.1f s on the ground, %d ground attack(s)."), *GetNameSafe(GetOwner()), GroundTime, GroundAttacksUsed);
 }
 
 void UknightMonsterAirTurnComponent::Land()
@@ -195,6 +197,7 @@ void UknightMonsterAirTurnComponent::EndAirTurn(float BlendTime, bool bSendLandE
 {
 	bAirborne = false;
 	GroundTime = 0.f;
+	GroundAttacksUsed = 0;
 	if (ASC.IsValid())
 	{
 		ASC->RemoveLooseGameplayTag(knightGameplayTags::State_Monster_Airborne);
@@ -217,10 +220,18 @@ void UknightMonsterAirTurnComponent::HandleAbilityEnded(const FAbilityEndedData&
 	{
 		LastAttackEndTime = GetWorld()->GetTimeSeconds();
 		// 공격 사이의 탐색 비행 같은 이동 행동은 공중 공격 횟수에 넣지 않는다.
-		if (bAirborne && Attack->CountsAsAttack())
+		if (Attack->CountsAsAttack())
 		{
-			++AirAttacksUsed;
-			UpdateLastAttackTag();
+			if (bAirborne)
+			{
+				++AirAttacksUsed;
+				UpdateLastAttackTag();
+			}
+			// 공중 공격이 땅에서 끝나도(글라이드·회오리 착지) 지상 공격으로 세지 않는다. 그 공격이 지상 턴을 새로 시작한다.
+			else if (!Attack->GetSelection().RequiredOwnerTags.HasTagExact(knightGameplayTags::State_Monster_Airborne))
+			{
+				++GroundAttacksUsed;
+			}
 		}
 	}
 }
@@ -283,6 +294,11 @@ bool UknightMonsterAirTurnComponent::IsEnraged() const
 float UknightMonsterAirTurnComponent::GetGroundTurnTime() const
 {
 	return IsEnraged() && EnragedGroundTurnTime > 0.f ? EnragedGroundTurnTime : GroundTurnTime;
+}
+
+int32 UknightMonsterAirTurnComponent::GetGroundAttacksPerTurn() const
+{
+	return IsEnraged() && EnragedGroundAttacksPerTurn > 0 ? EnragedGroundAttacksPerTurn : GroundAttacksPerTurn;
 }
 
 int32 UknightMonsterAirTurnComponent::GetAirAttacksPerTurn() const

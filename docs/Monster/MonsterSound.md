@@ -53,6 +53,11 @@
 
 그 밖의 볼륨: 큐 `SC_` 전부 0.75, 잔열 발소리 노티파이 0.6, Burn_Sizzle 0.6, **포효 노티파이 1.5**(잔열 Roar_Engage·Roar_Enrage, 잔향 Roar_Encounter·Roar_GlideAlert·Roar_Resonance).
 
+그로기(다운) 울부짖음: 다운 몽타주 시작(0초)에 크게 겹쳐 낸다. 그로기를 만든 손맛을 주는 소리라 다른 소리보다 크다.
+- 잔열 `AM_Janyeol_Down`: Roar_Enrage(볼륨 1.5, 피치 1.15) + 기존 Hit_Moan. 이어서 Down_Collapse 1.65초, GroggyBreath 2.3초
+- 잔향 `AM_Janhyang_Down`: Hit_Screech_01(볼륨 1.8, 피치 0.75) + Hit_Screech_02(0.15초, 볼륨 1.2, 피치 0.9). GroggyBreath는 울부짖음과 겹치지 않게 0.1 → 1.8초로 옮김
+- 전용 음원이 생기면 이 노티파이들을 그 소리 하나로 바꾼다.
+
 ## 4. 노티파이가 아닌 곳에 연결된 소리
 
 노티파이는 몽타주를 열면 보이지만, 아래는 데이터 에셋·GA·BP의 슬롯에 들어 있다.
