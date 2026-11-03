@@ -121,6 +121,23 @@ protected:
 	float FullChargePoiseDamage = 60.f;
 
 	/**
+	 * (2026-11-03 팀 피드백 '공격 무게에 따라 역경직 차등') 풀차지 때의 역경직(초). 0보다 크면 ReleaseHitParams.HitStopDuration
+	 * (차지 없음, 기본 0.14)에서 이 값까지 차지 시간에 따라 오른다. 전에는 차지량과 상관없이 0.2초라 풀차지가 강공격 4타(0.22)보다
+	 * 짧았다. 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Charge", meta=(ClampMin=0, Units="s"))
+	float FullChargeHitStopDuration = 0.26f;
+
+	/**
+	 * (2026-11-03) 풀차지 해방의 카메라 킥 세기. 차지 없음(CameraKickScale)에서 이 값까지 차지량에 따라 오른다.
+	 * 0이면 차지량과 상관없이 CameraKickScale. 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Charge", meta=(ClampMin=0, ClampMax=3))
+	float FullChargeCameraKickScale = 1.6f;
+
+	virtual float GetCameraKickScale() const override;
+
+	/**
 	 * (2026-10-26 사용자 결정) 차지 행동 에너지. 모으는 동안 MaxChargeTime에 걸쳐 ChargeStaminaCost만큼 조금씩 쓰고(풀차지면 25),
 	 * 해방(돌진)할 때 ReleaseStaminaCost를 더 쓴다(풀차지 합 40). 0보다 많아야 모으기 시작하고, 시작한 뒤에는 모자라도
 	 * 끝까지 쓴다(가불). 이 어빌리티의 StaminaCost(시작할 때 한 번)는 쓰지 않는다(0). 바뀔 수 있는 값.
