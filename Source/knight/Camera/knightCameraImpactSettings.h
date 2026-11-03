@@ -53,6 +53,17 @@ struct KNIGHT_API FknightCameraImpactReaction
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Impact|Screen", meta=(ClampMin=0, ClampMax=5))
 	float ChromaticAberration = 0.f;
 
+	/**
+	 * (2026-11-03 팀 피드백 '블러 효과 추가') 반응하는 동안 모션 블러 세기(포스트 프로세스 MotionBlurAmount). 0~1.
+	 * 카메라가 당겨지고 시야각이 튀는 동안만 켜져서, 강한 순간에 화면이 확 번지는 느낌을 준다. 그래픽 설정에서 모션 블러를 끄면 안 보인다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Impact|Screen", meta=(ClampMin=0, ClampMax=1))
+	float MotionBlur = 0.f;
+
+	/** (2026-11-03) 반응하는 동안 화면 가장자리를 어둡게(포스트 프로세스 VignetteIntensity). 0~1. 시선이 가운데로 모인다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Impact|Screen", meta=(ClampMin=0, ClampMax=1))
+	float Vignette = 0.f;
+
 	/** 0에서 최대까지 가는 시간. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Impact|Timing", meta=(ClampMin=0, Units="s"))
 	float AttackTime = 0.05f;

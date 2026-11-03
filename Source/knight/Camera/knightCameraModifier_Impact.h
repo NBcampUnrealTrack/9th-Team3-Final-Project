@@ -43,5 +43,8 @@ private:
 
 	TArray<FActiveReaction> Active;
 	float CurrentFringe = 0.f;
+	/** (2026-11-03) 이번 프레임 모션 블러·비네트. 여러 반응이 겹치면 가장 센 것. */
+	float CurrentMotionBlur = 0.f;
+	float CurrentVignette = 0.f;
 	float CurrentFOVDelta = 0.f;
 };

@@ -35,6 +35,8 @@ float UknightCameraModifier_Impact::GetEnvelope(const FknightCameraImpactReactio
 bool UknightCameraModifier_Impact::ModifyCamera(float DeltaTime, FMinimalViewInfo& InOutPOV)
 {
 	CurrentFringe = 0.f;
+	CurrentMotionBlur = 0.f;
+	CurrentVignette = 0.f;
 	CurrentFOVDelta = 0.f;
 	// 월드 시간은 레이드 시작 대기 같은 정지 중에 0이 되어 반응이 걸린 채로 남는다. 반응은 짧은 연출이라 실제 시간으로 돈다.
 	DeltaTime = FApp::GetDeltaTime();
@@ -73,6 +75,8 @@ bool UknightCameraModifier_Impact::ModifyCamera(float DeltaTime, FMinimalViewInf
 			PullTotal += Pull;
 		}
 		CurrentFringe = FMath::Max(CurrentFringe, Reaction.ChromaticAberration * Weight);
+		CurrentMotionBlur = FMath::Max(CurrentMotionBlur, Reaction.MotionBlur * Weight);
+		CurrentVignette = FMath::Max(CurrentVignette, Reaction.Vignette * Weight);
 	}
 
 	// 여러 당기기가 겹쳐도 캐릭터를 뚫고 지나가지 않게 전체 비율을 0.9로 묶는다.
@@ -91,6 +95,21 @@ void UknightCameraModifier_Impact::ModifyPostProcess(float DeltaTime, float& Pos
 	{
 		PostProcessSettings.bOverride_SceneFringeIntensity = true;
 		PostProcessSettings.SceneFringeIntensity = CurrentFringe;
+		PostProcessBlendWeight = 1.f;
+	}
+	// (2026-11-03) 모션 블러: 세기만큼 양과 최대 번짐(화면 비율 %)을 올린다. 카메라가 움직이는 반응 동안만 보인다.
+	if (CurrentMotionBlur > KINDA_SMALL_NUMBER)
+	{
+		PostProcessSettings.bOverride_MotionBlurAmount = true;
+		PostProcessSettings.MotionBlurAmount = FMath::Clamp(CurrentMotionBlur, 0.f, 1.f);
+		PostProcessSettings.bOverride_MotionBlurMax = true;
+		PostProcessSettings.MotionBlurMax = 5.f + 15.f * CurrentMotionBlur;
+		PostProcessBlendWeight = 1.f;
+	}
+	if (CurrentVignette > KINDA_SMALL_NUMBER)
+	{
+		PostProcessSettings.bOverride_VignetteIntensity = true;
+		PostProcessSettings.VignetteIntensity = FMath::Max(PostProcessSettings.VignetteIntensity, CurrentVignette);
 		PostProcessBlendWeight = 1.f;
 	}
 }
