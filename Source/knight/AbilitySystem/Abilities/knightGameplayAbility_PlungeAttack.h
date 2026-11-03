@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "AbilitySystem/Abilities/knightGameplayAbility.h"
+#include "Character/knightThrusterComponent.h"
 #include "Combat/knightCombatTypes.h"
 #include "Combat/knightGhostTrailActor.h"
 #include "knightGameplayAbility_PlungeAttack.generated.h"
@@ -28,6 +29,8 @@ class USoundBase;
  *            무브먼트 컴포넌트의 착지 충격이 맡는다. 착지 후 ImpactDelay에 맞은 대상이 없어도 자기 히트스톱(ImpactSelfHitStop)과
  *            충격 이펙트(ImpactEffect)를 낸다.
  *   MaxDiveTime 안에 땅에 닿지 않으면(낭떠러지) 원래대로 돌려 놓고 끝낸다.
+ *   HoverThrust를 채우면 1·2의 추진기를 발 소켓 대신 나이트의 부스터 컴포넌트 노즐(낙하 공격은 등)로 뿜는다(1 HoverThrust, 2 DiveThrust).
+ *   BoostUpSpeed를 낮추고 BoostUpTime을 늘리면 '떠오르기' 대신 '잠깐 떠 있다가 바로 낙하'가 된다.
  * (2026-10-29) bKeepJumpArc(점프 궤적 유지): 1·2 없이 점프 궤적 그대로 떨어지며 칼을 든 자세 → 착지하면 3.
  */
 UCLASS()
@@ -194,6 +197,18 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Plunge|Effects", meta=(ClampMin=0.1))
 	float DiveThrusterScale = 1.3f;
 
+	/**
+	 * 체공(반동) 동안 나이트의 부스터 컴포넌트로 뿜는 분사(예: 등 노즐에서 아래로 = 떠 있는 느낌).
+	 * 노즐이 있으면 ThrusterSockets·ThrusterEffect 대신 이것을 쓰고, 낙하가 시작되면 DiveThrust로 바꾼다.
+	 * 비우면 예전처럼 ThrusterSockets(발)에 직접 뿜는다. 낙하 공격(GA_Knight_PlungeAttack)은 등 가운데. 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Plunge|Effects")
+	FknightThrustSettings HoverThrust;
+
+	/** 낙하 동안 부스터 컴포넌트로 뿜는 분사(예: 등 노즐에서 위로 = 아래로 꽂히는 느낌). HoverThrust를 쓸 때만 쓴다. 바뀔 수 있는 값. */
+	UPROPERTY(EditDefaultsOnly, Category="Plunge|Effects")
+	FknightThrustSettings DiveThrust;
+
 	UPROPERTY(EditDefaultsOnly, Category="Plunge|Effects")
 	TObjectPtr<USoundBase> BoostSound;
 
@@ -282,6 +297,9 @@ private:
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UNiagaraComponent>> ThrusterComponents;
+
+	/** HoverThrust·DiveThrust로 부스터 컴포넌트에서 뿜고 있는 분사 번호. 0이면 없음. */
+	int32 ComponentThrustId = 0;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UAudioComponent> ActiveThrusterAudio;

@@ -187,6 +187,15 @@ void UknightGameplayAbility_PlungeAttack::SpawnThrusters(float Scale)
 {
 	StopThrusters();
 	const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	// 부스터 컴포넌트 분사를 쓰면 발 소켓에 직접 뿜지 않는다. 체공이면 HoverThrust, 역분사(낙하)면 DiveThrust.
+	if (!HoverThrust.Nozzles.IsEmpty())
+	{
+		if (UknightThrusterComponent* const Thrusters = Character ? Character->FindComponentByClass<UknightThrusterComponent>() : nullptr)
+		{
+			ComponentThrustId = Thrusters->StartThrust(bThrustersReversed ? DiveThrust : HoverThrust);
+		}
+		return;
+	}
 	USkeletalMeshComponent* const Mesh = Character ? Character->GetMesh() : nullptr;
 	if (!Mesh || !ThrusterEffect)
 	{
@@ -212,6 +221,15 @@ void UknightGameplayAbility_PlungeAttack::SpawnThrusters(float Scale)
 
 void UknightGameplayAbility_PlungeAttack::StopThrusters()
 {
+	if (ComponentThrustId != 0)
+	{
+		const AActor* const Avatar = GetAvatarActorFromActorInfo();
+		if (UknightThrusterComponent* const Thrusters = Avatar ? Avatar->FindComponentByClass<UknightThrusterComponent>() : nullptr)
+		{
+			Thrusters->StopThrust(ComponentThrustId);
+		}
+		ComponentThrustId = 0;
+	}
 	for (UNiagaraComponent* const Jet : ThrusterComponents)
 	{
 		if (Jet)
