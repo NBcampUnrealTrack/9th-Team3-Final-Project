@@ -331,6 +331,7 @@ void UknightGameplayAbility_Guard::ExitGuardStance()
 	{
 		World->GetTimerManager().ClearTimer(MoveCancelTimer);
 	}
+	StopStepTurn(false);
 	if (bCancelWindowApplied)
 	{
 		bCancelWindowApplied = false;
@@ -361,7 +362,15 @@ void UknightGameplayAbility_Guard::CheckMoveCancel()
 	// 비락온 중에는 가드하는 동안 카메라 시선(화면 중앙)을 따라 몸을 돌린다.
 	if (GuardLockOnTurnRate > 0.f)
 	{
-		if (!FaceLockedTarget(GuardLockOnTurnRate * GuardMoveCancelCheckInterval))
+		if (FaceLockedTarget(GuardLockOnTurnRate * GuardMoveCancelCheckInterval))
+		{
+			StopStepTurn(true);
+		}
+		else if (bStepTurnWhenUnlocked)
+		{
+			UpdateStepTurn(*Character);
+		}
+		else
 		{
 			if (const AController* const Controller = Character->GetController())
 			{
@@ -383,6 +392,110 @@ void UknightGameplayAbility_Guard::CheckMoveCancel()
 	{
 		EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, false);
 	}
+}
+
+void UknightGameplayAbility_Guard::UpdateStepTurn(ACharacter& Character)
+{
+	UAnimInstance* const Anim = Character.GetMesh() ? Character.GetMesh()->GetAnimInstance() : nullptr;
+	if (!Anim)
+	{
+		return;
+	}
+	// 도는 동안에는 몽타주의 루트 회전이 몸을 돌린다(여기서 회전을 건드리면 축발이 미끄러진다).
+	// 돌기 몽타주는 자동 블렌드 아웃을 꺼 두어 끝 프레임에 멈춘다(재생은 끝났는데 아직 내려가지 않은 상태) → 다 돌았으니 가드 자세로 넘긴다.
+	// 끝 프레임 = 가드 대기 자세라 이어 붙인 티가 나지 않는다.
+	if (bStepTurning)
+	{
+		UAnimMontage* const Montage = ActiveStepTurnMontage.Get();
+		// 일시정지(재생 멈춤)와 헷갈리지 않게 위치가 끝에 닿았는지도 본다.
+		if (Montage && Anim->GetActiveInstanceForMontage(Montage) && !Anim->Montage_IsPlaying(Montage)
+			&& Anim->Montage_GetPosition(Montage) >= Montage->GetPlayLength() - 0.02f)
+		{
+			bStepTurning = false;
+			ActiveStepTurnMontage.Reset();
+			PlayGuardPoseMontage();
+		}
+		return;
+	}
+	const AController* const Controller = Character.GetController();
+	if (!Controller)
+	{
+		return;
+	}
+	const float Delta = FMath::FindDeltaAngleDegrees(Character.GetActorRotation().Yaw, Controller->GetControlRotation().Yaw);
+	if (FMath::Abs(Delta) <= StepTurnAngle)
+	{
+		return;
+	}
+	// 가드 자세가 아닌 다른 몽타주(가드 피격·패링 주춤 등) 중이면 돌지 않는다.
+	const UAnimMontage* const Current = Anim->GetCurrentActiveMontage();
+	if (Current && Current != GuardMontage)
+	{
+		return;
+	}
+	// 요(Yaw)가 커지면 오른쪽으로 도는 것이다.
+	const bool bRight = Delta > 0.f;
+	UAnimMontage* const TurnMontage = FMath::Abs(Delta) > Turn180Angle
+		? (bRight ? TurnRight180Montage.Get() : TurnLeft180Montage.Get())
+		: (bRight ? TurnRight90Montage.Get() : TurnLeft90Montage.Get());
+	if (!TurnMontage || Anim->Montage_Play(TurnMontage, StepTurnPlayRate * GetActionSpeed()) <= 0.f)
+	{
+		return;
+	}
+	bStepTurning = true;
+	ActiveStepTurnMontage = TurnMontage;
+	FOnMontageBlendingOutStarted BlendingOut;
+	BlendingOut.BindUObject(this, &ThisClass::OnStepTurnBlendingOut);
+	Anim->Montage_SetBlendingOutDelegate(BlendingOut, TurnMontage);
+}
+
+void UknightGameplayAbility_Guard::OnStepTurnBlendingOut(UAnimMontage* Montage, bool bInterrupted)
+{
+	if (Montage != ActiveStepTurnMontage.Get())
+	{
+		return;
+	}
+	bStepTurning = false;
+	ActiveStepTurnMontage.Reset();
+	// 다른 몽타주가 끼어들었으면 그 몽타주에 맡긴다. 끊긴 게 아니면 몽타주의 자동 블렌드 아웃이 켜져 있는 것(그러면 몇 도 덜 돈다) → 가드 자세로 이어 간다.
+	if (!bInterrupted && IsActive())
+	{
+		PlayGuardPoseMontage();
+	}
+}
+
+void UknightGameplayAbility_Guard::StopStepTurn(bool bResumeGuardPose)
+{
+	bStepTurning = false;
+	UAnimMontage* const Montage = ActiveStepTurnMontage.Get();
+	// 먼저 비워서 아래에서 몽타주를 멈출 때 오는 알림(OnStepTurnBlendingOut)을 무시하게 한다.
+	ActiveStepTurnMontage.Reset();
+	const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	UAnimInstance* const Anim = Character && Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr;
+	// 끝 프레임에 멈춰 있는 돌기 몽타주(재생은 끝났지만 아직 내려가지 않음)도 내려야 하므로 Montage_IsPlaying이 아니라 활성 여부로 본다.
+	if (!Montage || !Anim || !Anim->GetActiveInstanceForMontage(Montage))
+	{
+		return;
+	}
+	if (bResumeGuardPose && IsActive())
+	{
+		// 가드 자세 몽타주가 같은 슬롯의 돌기 몽타주를 밀어낸다.
+		PlayGuardPoseMontage();
+	}
+	else
+	{
+		Anim->Montage_Stop(0.2f, Montage);
+	}
+}
+
+void UknightGameplayAbility_Guard::PlayGuardPoseMontage()
+{
+	if (!GuardMontage)
+	{
+		return;
+	}
+	UAbilityTask_PlayMontageAndWait* const MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, GuardMontage, GetActionSpeed());
+	MontageTask->ReadyForActivation();
 }
 
 bool UknightGameplayAbility_Guard::FaceLockedTarget(float MaxDeltaYaw) const

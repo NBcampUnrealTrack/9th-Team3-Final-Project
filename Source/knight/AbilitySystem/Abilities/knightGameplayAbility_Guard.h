@@ -95,6 +95,50 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Guard")
 	TObjectPtr<UAnimMontage> GuardMontage;
 
+	/**
+	 * 락온이 아닐 때 가드 중 몸 돌리기를 제자리 돌기로 한다. 가드 몽타주가 다리까지 덮어서, 카메라를 따라 계속 돌면
+	 * 다리가 그대로인 채 제자리에서 미끄러지듯 돌았다.
+	 * 카메라와 몸 방향 차이가 StepTurnAngle 안이면 몸은 그대로 두고, 넘으면 가드 자세 제자리 돌기 몽타주를 한 번 튼다
+	 * (90°, 차이가 Turn180Angle을 넘으면 180°). 몸은 몽타주의 루트 회전(루트 모션)이 돌리므로 축발이 바닥에 붙어 있다.
+	 * 다 돌면 가드 자세(GuardMontage)로 이어 간다. 끄면 GuardLockOnTurnRate로 카메라를 계속 따라 돈다.
+	 * 락온 중에는 그대로 대상을 따라 돈다. 숫자는 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Guard|Step Turn")
+	bool bStepTurnWhenUnlocked = true;
+
+	/** 카메라와 몸 방향 차이가 이 각도를 넘으면 돈다. 한 번에 90°를 도니 45°보다 커야 돈 뒤 반대쪽으로 다시 돌지 않는다. */
+	UPROPERTY(EditDefaultsOnly, Category="Guard|Step Turn", meta=(ClampMin=46, ClampMax=180, Units="deg", EditCondition="bStepTurnWhenUnlocked"))
+	float StepTurnAngle = 60.f;
+
+	/** 차이가 이 각도를 넘으면 90° 대신 180°를 돈다. */
+	UPROPERTY(EditDefaultsOnly, Category="Guard|Step Turn", meta=(ClampMin=90, ClampMax=180, Units="deg", EditCondition="bStepTurnWhenUnlocked"))
+	float Turn180Angle = 135.f;
+
+	/**
+	 * 제자리 돌기 몽타주 배속(행동 속도와 곱한다). 몽타주가 1.48초(앞 0.15초는 돌기 전 가드 자세)라 1.5면 한 번 도는 데 약 1초.
+	 * 앞 준비 구간은 블렌드 인이 끝난 뒤 돌기 시작하게 둔 것이다(플레이어 ABP는 루트 모션을 가중치로 섞어서 블렌드 인 중엔 덜 돈다).
+	 * 배속 x 몽타주 블렌드 인(0.08초)이 0.15를 넘으면 그만큼 덜 돈다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Guard|Step Turn", meta=(ClampMin=0.1, EditCondition="bStepTurnWhenUnlocked"))
+	float StepTurnPlayRate = 1.5f;
+
+	/**
+	 * 가드 자세 제자리 돌기 몽타주(루트 모션으로 정확히 90°/180° 돈다). 비어 있는 쪽은 돌지 않는다.
+	 * 자동 블렌드 아웃(Enable Auto Blend Out)은 꺼 둔다: 엔진은 몽타주가 빠져나가기 시작하면 루트 모션을 끊어서
+	 * 켜 두면 마지막 블렌드 아웃 시간만큼(몇 도) 덜 돈다. 끝 프레임에 멈추면 가드 자세(GuardMontage)로 넘긴다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Guard|Step Turn", meta=(EditCondition="bStepTurnWhenUnlocked"))
+	TObjectPtr<UAnimMontage> TurnLeft90Montage;
+
+	UPROPERTY(EditDefaultsOnly, Category="Guard|Step Turn", meta=(EditCondition="bStepTurnWhenUnlocked"))
+	TObjectPtr<UAnimMontage> TurnRight90Montage;
+
+	UPROPERTY(EditDefaultsOnly, Category="Guard|Step Turn", meta=(EditCondition="bStepTurnWhenUnlocked"))
+	TObjectPtr<UAnimMontage> TurnLeft180Montage;
+
+	UPROPERTY(EditDefaultsOnly, Category="Guard|Step Turn", meta=(EditCondition="bStepTurnWhenUnlocked"))
+	TObjectPtr<UAnimMontage> TurnRight180Montage;
+
 	/** Event sent to the defender when a parry lands. Empty disables the counter. */
 	UPROPERTY(EditDefaultsOnly, Category="Guard|Parry Counter", meta=(Categories="Event"))
 	FGameplayTag ParrySucceededEventTag;
@@ -195,6 +239,24 @@ private:
 
 	/** 가드 중 몸 돌리기(락온 대상·카메라), 그리고 bMoveInputCancelsGuard면 새로 누른 이동 입력에 가드를 내린다(잠금이 풀리며 그대로 이동). */
 	void CheckMoveCancel();
+
+	/**
+	 * 비락온 제자리 돌기: 돌고 있지 않으면 카메라와의 차이를 보고 제자리 돌기 몽타주를 튼다(도는 동안은 루트 모션이 돌린다).
+	 * 돌고 있으면 몽타주가 끝 프레임에 멈췄는지 보고, 멈췄으면 가드 자세로 넘긴다.
+	 */
+	void UpdateStepTurn(ACharacter& Character);
+	/**
+	 * 제자리 돌기 몽타주가 빠져나가기 시작했다(다른 몽타주가 끼어들었거나 자동 블렌드 아웃): 다음 돌기를 받을 수 있게 한다.
+	 * 끊긴 게 아니면(자동 블렌드 아웃이 켜져 있으면) 가드 자세로 이어 간다.
+	 */
+	void OnStepTurnBlendingOut(UAnimMontage* Montage, bool bInterrupted);
+	/** 도는 중이면 멈춘다. bResumeGuardPose면 가드 자세로 이어 가고(락온이 걸렸을 때), 아니면 몽타주만 내린다(가드가 끝날 때). */
+	void StopStepTurn(bool bResumeGuardPose);
+	/** 가드 자세 몽타주(GuardMontage)를 태스크로 튼다. 태스크로 틀어야 가드가 끝날 때 함께 내려간다. */
+	void PlayGuardPoseMontage();
+
+	bool bStepTurning = false;
+	TWeakObjectPtr<UAnimMontage> ActiveStepTurnMontage;
 
 	bool bParryTagApplied = false;
 	bool bCancelWindowApplied = false;
