@@ -9,12 +9,16 @@
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/Image.h"
+#include "Components/Overlay.h"
+#include "Components/OverlaySlot.h"
+#include "Components/ProgressBar.h"
 #include "Components/ScaleBox.h"
 #include "Components/ScrollBox.h"
 #include "Components/SizeBox.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Engine/Texture2D.h"
+#include "Progression/knightProgressionSubsystem.h"
 
 #define LOCTEXT_NAMESPACE "KnightEnhancementPresentation"
 
@@ -142,9 +146,23 @@ void UKnightMaintenanceWidget::BuildEnhancementPresentation()
 	USizeBox* IconSize = WidgetTree->ConstructWidget<USizeBox>();
 	IconSize->SetWidthOverride(320.f); IconSize->SetHeightOverride(180.f);
 	UScaleBox* IconScale = WidgetTree->ConstructWidget<UScaleBox>(); IconScale->SetStretch(EStretch::ScaleToFit);
+	UOverlay* IconLayers = WidgetTree->ConstructWidget<UOverlay>();
 	EnhancementWeaponImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("EnhancementWeaponImage"));
 	EnhancementWeaponImage->SetVisibility(ESlateVisibility::HitTestInvisible);
-	IconScale->AddChild(EnhancementWeaponImage); IconSize->AddChild(IconScale); IconFrame->SetContent(IconSize);
+	UOverlaySlot* IconSlot = IconLayers->AddChildToOverlay(EnhancementWeaponImage);
+	IconSlot->SetHorizontalAlignment(HAlign_Fill); IconSlot->SetVerticalAlignment(VAlign_Fill);
+	EnhancementWeaponFill = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), TEXT("EnhancementWeaponFill"));
+	FSlateBrush NoDraw; NoDraw.DrawAs = ESlateBrushDrawType::NoDrawType; NoDraw.ImageSize = FVector2D::ZeroVector;
+	FProgressBarStyle FillStyle = EnhancementWeaponFill->GetWidgetStyle();
+	FillStyle.SetBackgroundImage(NoDraw).SetMarqueeImage(NoDraw).SetEnableFillAnimation(false);
+	EnhancementWeaponFill->SetWidgetStyle(FillStyle);
+	EnhancementWeaponFill->SetBarFillType(EProgressBarFillType::BottomToTop);
+	EnhancementWeaponFill->SetBarFillStyle(EProgressBarFillStyle::Mask);
+	EnhancementWeaponFill->SetPercent(0.f);
+	EnhancementWeaponFill->SetVisibility(ESlateVisibility::HitTestInvisible);
+	UOverlaySlot* FillSlot = IconLayers->AddChildToOverlay(EnhancementWeaponFill);
+	FillSlot->SetHorizontalAlignment(HAlign_Fill); FillSlot->SetVerticalAlignment(VAlign_Fill);
+	IconScale->AddChild(IconLayers); IconSize->AddChild(IconScale); IconFrame->SetContent(IconSize);
 	Add(UpgradePanel, IconFrame, 12.f)->SetHorizontalAlignment(HAlign_Center);
 	// Keep live numbers away from the apparatus's luminous ring on a recessed raster surface.
 	UBorder* Readout = Frame(TEXT("EnhancementReadout"));
@@ -217,6 +235,62 @@ void UKnightMaintenanceWidget::BuildEnhancementPresentation()
 	SummaryFrame->SetBrush(InsetBrush); SummaryFrame->SetPadding(FMargin(36.f, 16.f));
 	SummaryFrame->SetContent(EnhancementSuccessSummary); Add(Preview, SummaryFrame, 0.f);
 	Columns->SetVisibility(ESlateVisibility::Collapsed);
+}
+
+void UKnightMaintenanceWidget::ResetEnhancementIconFill()
+{
+	EnhancementFillPhase = EEnhancementFillPhase::Idle;
+	EnhancementFillElapsed = 0.f;
+	EnhancementFillFraction = 0.f;
+	bEnhancementFillSucceeded = false;
+	ApplyEnhancementIconFill();
+}
+
+void UKnightMaintenanceWidget::StartEnhancementIconFill(EKnightWeaponUpgradeOutcome Outcome)
+{
+	if (Outcome == EKnightWeaponUpgradeOutcome::Rejected) return;
+	ResetEnhancementIconFill();
+	bEnhancementFillSucceeded = Outcome == EKnightWeaponUpgradeOutcome::Success;
+	EnhancementFillPhase = EEnhancementFillPhase::Charging;
+}
+
+void UKnightMaintenanceWidget::TickEnhancementIconFill(float DeltaTime)
+{
+	if (EnhancementFillPhase == EEnhancementFillPhase::Idle || EnhancementFillPhase == EEnhancementFillPhase::CompleteSuccess) return;
+	EnhancementFillElapsed += FMath::Max(0.f, DeltaTime);
+	const float Duration = EnhancementFillPhase == EEnhancementFillPhase::Charging ? .3f : .22f;
+	const float T = FMath::Clamp(EnhancementFillElapsed / Duration, 0.f, 1.f);
+	const float EaseOut = 1.f - FMath::Pow(1.f - T, 3.f);
+	switch (EnhancementFillPhase)
+	{
+	case EEnhancementFillPhase::Charging:
+		EnhancementFillFraction = .6f * EaseOut;
+		if (T >= 1.f)
+		{
+			EnhancementFillFraction = .6f;
+			EnhancementFillElapsed = 0.f;
+			EnhancementFillPhase = bEnhancementFillSucceeded ? EEnhancementFillPhase::Success : EEnhancementFillPhase::Failure;
+		}
+		break;
+	case EEnhancementFillPhase::Success:
+		EnhancementFillFraction = .6f + .4f * EaseOut;
+		if (T >= 1.f) EnhancementFillPhase = EEnhancementFillPhase::CompleteSuccess;
+		break;
+	case EEnhancementFillPhase::Failure:
+		EnhancementFillFraction = .6f * (1.f - EaseOut);
+		if (T >= 1.f) EnhancementFillPhase = EEnhancementFillPhase::Idle;
+		break;
+	default: break;
+	}
+	ApplyEnhancementIconFill();
+}
+
+void UKnightMaintenanceWidget::ApplyEnhancementIconFill()
+{
+	if (!EnhancementWeaponFill) return;
+	EnhancementWeaponFill->SetFillColorAndOpacity(EnhancementFillPhase == EEnhancementFillPhase::Failure
+		? FLinearColor(FColor(0xE5, 0x48, 0x4D)) : KnightMaintenancePresentation::Accent);
+	EnhancementWeaponFill->SetPercent(EnhancementFillFraction);
 }
 
 #undef LOCTEXT_NAMESPACE

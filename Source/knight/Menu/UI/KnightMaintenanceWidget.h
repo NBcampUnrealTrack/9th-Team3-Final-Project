@@ -12,6 +12,7 @@ class UCommonButtonStyle;
 class UTexture2D;
 class UCommonTextBlock;
 class UImage;
+class UProgressBar;
 class UBorder;
 class UScrollBox;
 class UTextBlock;
@@ -29,6 +30,7 @@ class UEditableTextBox;
 class UKnightInventoryEntryWidget;
 class UknightItemDefinition;
 class UknightMaterialItemDefinition;
+enum class EKnightWeaponUpgradeOutcome : uint8;
 
 enum class EKnightMaintenanceDestination : uint8
 {
@@ -68,6 +70,7 @@ public:
 protected:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeDestruct() override;
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
 	/** Cooked artwork references, used only by the Enhancement destination. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Enhancement Presentation")
@@ -155,6 +158,10 @@ private:
 	void RefreshWeaponUpgradePanel();
 	void RebuildEnhancementTarget(bool bRestoreFocus = true);
 	void BuildEnhancementPresentation();
+	void ResetEnhancementIconFill();
+	void StartEnhancementIconFill(EKnightWeaponUpgradeOutcome Outcome);
+	void TickEnhancementIconFill(float DeltaTime);
+	void ApplyEnhancementIconFill();
 	void BuildIndustrialSideSurfaces();
 	void SelectEnhancementWeapon(FPrimaryAssetId WeaponId);
 	void RefreshEnhancementDetails();
@@ -226,6 +233,12 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> EnhancementIncrease;
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> EnhancementSuccessSummary;
 	UPROPERTY(Transient) TObjectPtr<UImage> EnhancementWeaponImage;
+	UPROPERTY(Transient) TObjectPtr<UProgressBar> EnhancementWeaponFill;
+	enum class EEnhancementFillPhase : uint8 { Idle, Charging, Success, Failure, CompleteSuccess };
+	EEnhancementFillPhase EnhancementFillPhase = EEnhancementFillPhase::Idle;
+	float EnhancementFillElapsed = 0.f;
+	float EnhancementFillFraction = 0.f;
+	bool bEnhancementFillSucceeded = false;
 	UPROPERTY(Transient) TObjectPtr<UImage> EnhancementMaterialImage;
 	UPROPERTY(Transient) TObjectPtr<UVerticalBox> UpgradePanel;
 	UPROPERTY(Transient) TObjectPtr<UScrollBox> EnhancementDetailPage;
