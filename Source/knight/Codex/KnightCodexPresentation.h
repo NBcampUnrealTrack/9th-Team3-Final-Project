@@ -39,7 +39,6 @@ public:
 	UKnightCodexArchiveButton(const FObjectInitializer& ObjectInitializer);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Codex") bool bCategoryTile = false;
 	void SetRecordState(bool bSelected, bool bLocked = false);
-	void ResetFillAnimation();
 	bool IsRecordSelected() const { return bRecordSelected; }
 	bool IsRecordLocked() const { return bRecordLocked; }
 protected:

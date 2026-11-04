@@ -45,14 +45,6 @@ namespace
 	{
 		FSlateDrawElement::MakeBox(Out, Layer, Geometry.ToPaintGeometry(), FCoreStyle::Get().GetBrush("WhiteBrush"), ESlateDrawEffect::None, Ink);
 	}
-	void FillArea(FSlateWindowElementList& Out, int32 Layer, const FGeometry& Geometry,
-		float Left, float Width, FLinearColor Ink)
-	{
-		if (Width <= 0.f) return;
-		FSlateDrawElement::MakeBox(Out, Layer,
-			Geometry.ToPaintGeometry(FVector2f(Width, Geometry.GetLocalSize().Y), FSlateLayoutTransform(FVector2f(Left, 0.f))),
-			FCoreStyle::Get().GetBrush("WhiteBrush"), ESlateDrawEffect::None, Ink);
-	}
 
 	class SCodexSymbol : public SLeafWidget
 	{
@@ -100,50 +92,25 @@ namespace
 	class SCodexArchiveButton : public SButton
 	{
 	public:
-		void ResetFillAnimation()
-		{
-			Hover = 0.f;
-			Invalidate(EInvalidateWidgetReason::Paint);
-		}
 		void Construct(const SButton::FArguments& Args, UKnightCodexArchiveButton* InOwner)
 		{
-			Owner = InOwner; SButton::Construct(Args); SetCanTick(true);
-		}
-		virtual void Tick(const FGeometry& G, double Time, float Delta) override
-		{
-			SButton::Tick(G, Time, Delta);
-			const float TargetSelected = Owner.IsValid() && Owner->IsRecordSelected() ? 1.f : 0.f;
-			const bool bInteractive = IsEnabled() && Owner.IsValid() && !Owner->IsRecordLocked();
-			const float TargetHover = bInteractive && (IsHovered() || HasKeyboardFocus()) ? 1.f : 0.f;
-			const float NewSelected = FMath::FInterpConstantTo(Selected, TargetSelected, Delta, 1.f/.14f);
-			const float NewHover = bInteractive
-				? FMath::FInterpConstantTo(Hover, TargetHover, Delta, TargetHover > Hover ? 1.f/.2f : 1.f/.12f) : 0.f;
-			if (NewSelected != Selected || NewHover != Hover)
-			{
-				Selected = NewSelected; Hover = NewHover; Invalidate(EInvalidateWidgetReason::Paint);
-			}
+			Owner = InOwner; SButton::Construct(Args); SetCanTick(false);
 		}
 		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& G, const FSlateRect& Clip,
 			FSlateWindowElementList& Out, int32 Layer, const FWidgetStyle& PaintStyle, bool ParentEnabled) const override
 		{
 			const bool Enabled = ParentEnabled && IsEnabled();
 			const bool Locked = Owner.IsValid() && Owner->IsRecordLocked();
+			const float Selected = Owner.IsValid() && Owner->IsRecordSelected() ? 1.f : 0.f;
+			const float Hover = Enabled && !Locked && (IsHovered() || HasKeyboardFocus()) ? 1.f : 0.f;
 			const FVector2D S = G.GetLocalSize();
 			const float X = S.X - 1.f, Y = S.Y - 1.f, C = 9.f;
 			FLinearColor Base = Color(TEXT("071018"), Locked ? .60f : .72f);
 			FLinearColor Active = Color(TEXT("075DB7"), .88f);
 			FLinearColor Background = FMath::Lerp(Base, Active, Selected);
+			Background = FMath::Lerp(Background, Color(TEXT("163246"), .87f), Hover * (1.f - Selected) * .8f);
 			if (!Enabled) Background.A *= .55f;
 			Fill(Out, Layer, G, Background * PaintStyle.GetColorAndOpacityTint());
-			if (Enabled && !Locked && Hover > 0.f)
-			{
-				const float Front = S.X * Hover;
-				FillArea(Out, Layer+1, G, 0.f, Front, Color(TEXT("075DB7")) * PaintStyle.GetColorAndOpacityTint());
-				const float BandWidth = FMath::Min(S.X, FMath::Max(8.f, S.Y * .9f));
-				const float BandLeft = FMath::Max(0.f, Front - BandWidth);
-				FillArea(Out, Layer+2, G, BandLeft, Front - BandLeft,
-					Color(TEXT("268BD5"), FMath::Min(1.f, (1.f-Hover)*5.f)) * PaintStyle.GetColorAndOpacityTint());
-			}
 			FLinearColor Edge = FMath::Lerp(Color(TEXT("416176"), .55f + .35f*Hover), Color(TEXT("50BDE9"), .95f), Selected);
 			if (HasKeyboardFocus()) Edge = Color(TEXT("C0EBFF"));
 			Edge *= PaintStyle.GetColorAndOpacityTint();
@@ -159,7 +126,6 @@ namespace
 		}
 	private:
 		TWeakObjectPtr<UKnightCodexArchiveButton> Owner;
-		float Selected = 0.f, Hover = 0.f;
 	};
 }
 
@@ -182,10 +148,6 @@ void UKnightCodexArchiveButton::SetRecordState(bool bSelected, bool bLocked)
 {
 	bRecordSelected = bSelected; bRecordLocked = bLocked;
 	if (MyButton) MyButton->Invalidate(EInvalidateWidgetReason::Paint);
-}
-void UKnightCodexArchiveButton::ResetFillAnimation()
-{
-	if (MyButton) StaticCastSharedPtr<SCodexArchiveButton>(MyButton)->ResetFillAnimation();
 }
 TSharedRef<SWidget> UKnightCodexArchiveButton::RebuildWidget()
 {

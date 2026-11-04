@@ -7,7 +7,6 @@
 #include "Raid/knightRaidGameState.h"
 #include "Screens/knightConfirmModal.h"
 #include "Widgets/knightButtonBase.h"
-#include "Menu/UI/KnightButtonFillExtension.h"
 #include "knightPlayerController.h"
 
 UknightPauseMenu::UknightPauseMenu(const FObjectInitializer& ObjectInitializer)
@@ -36,8 +35,6 @@ void UknightPauseMenu::Resume()
 void UknightPauseMenu::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
-	for (UknightButtonBase* Button : { Btn_Resume.Get(), Btn_Settings.Get(), Btn_Abandon.Get() })
-		UKnightButtonFillExtension::SetEnabled(Button, true);
 	Btn_Resume->OnClicked().AddUObject(this, &ThisClass::Resume);
 	Btn_Settings->OnClicked().AddUObject(this, &ThisClass::HandleSettingsClicked);
 	Btn_Abandon->OnClicked().AddUObject(this, &ThisClass::HandleAbandonClicked);
@@ -46,8 +43,6 @@ void UknightPauseMenu::NativeOnInitialized()
 void UknightPauseMenu::NativeOnActivated()
 {
 	Super::NativeOnActivated();
-	for (UknightButtonBase* Button : { Btn_Resume.Get(), Btn_Settings.Get(), Btn_Abandon.Get() })
-		UKnightButtonFillExtension::Reset(Button);
 
 	APlayerController* const PC = GetOwningPlayer();
 	if (AknightPlayerController* const KnightPC = Cast<AknightPlayerController>(PC))
@@ -70,8 +65,6 @@ void UknightPauseMenu::NativeOnActivated()
 
 void UknightPauseMenu::NativeOnDeactivated()
 {
-	for (UknightButtonBase* Button : { Btn_Resume.Get(), Btn_Settings.Get(), Btn_Abandon.Get() })
-		UKnightButtonFillExtension::Reset(Button);
 	StopIntro();
 	SetRenderOpacity(1.f);
 	if (AknightPlayerController* const PC = Cast<AknightPlayerController>(GetOwningPlayer()))

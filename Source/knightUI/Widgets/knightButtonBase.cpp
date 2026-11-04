@@ -1,5 +1,6 @@
 #include "Widgets/knightButtonBase.h"
 #include "Menu/UI/KnightMaintenancePresentation.h"
+#include "Menu/UI/KnightButtonFillExtension.h"
 
 #include "CommonButtonBase.h"
 #include "CommonTextBlock.h"
@@ -184,7 +185,9 @@ void UknightButtonBase::RefreshTargets()
 	const bool bInteractive = GetIsEnabled() && !GetLocked();
 	const bool bHot = bInteractive && (IsHovered() || bFocusedVisual);
 
-	TargetScale = !bInteractive ? 1.f : (bPressedVisual ? PressedScale : (bHot ? HoverScale : 1.f));
+	const UKnightButtonFillExtension* Fill = GetExtension<UKnightButtonFillExtension>();
+	const bool bFixedMenuLayout = Fill && Fill->IsEnabled();
+	TargetScale = !bInteractive || bFixedMenuLayout ? 1.f : (bPressedVisual ? PressedScale : (bHot ? HoverScale : 1.f));
 	TargetBracketAlpha = (bMaintenancePresentation ? bInteractive && bFocusedVisual : bHot) ? 1.f : 0.f;
 
 	if (IsDesignTime())

@@ -104,7 +104,6 @@ void UKnightStageMapWidget::SetMarkers(const TArray<FKnightMapMarker>& InMarkers
 void UKnightStageMapWidget::SetQuestMarkers(const TArray<FKnightMapQuestMarker>& InMarkers)
 {
 	QuestMarkers = InMarkers;
-	QuestHoverFills.Init(0.f, QuestMarkers.Num());
 	HoveredQuestIndex = INDEX_NONE;
 	if (!QuestMarkers.ContainsByPredicate([this](const FKnightMapQuestMarker& Marker) { return Marker.QuestId == SelectedQuestId; }))
 	{
@@ -199,12 +198,6 @@ void UKnightStageMapWidget::ApplyToMaterial(const FVector2D& LocalSize)
 void UKnightStageMapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
-	for (int32 Index = 0; Index < QuestHoverFills.Num(); ++Index)
-	{
-		const bool bHot = QuestMarkers.IsValidIndex(Index) && !QuestMarkers[Index].bLocked && Index == HoveredQuestIndex;
-		QuestHoverFills[Index] = FMath::FInterpConstantTo(QuestHoverFills[Index], bHot ? 1.f : 0.f,
-			FMath::Max(InDeltaTime, 0.f), bHot ? 1.f / 0.2f : 1.f / 0.12f);
-	}
 	Time += InDeltaTime;
 	const FVector2D LocalSize = MyGeometry.GetLocalSize();
 	const FMapView View = MakeView(LocalSize);
@@ -524,21 +517,6 @@ int32 UKnightStageMapWidget::NativePaint(const FPaintArgs& Args, const FGeometry
 		FSlateDrawElement::MakeBox(OutDrawElements, ++LayerId,
 			AllottedGeometry.ToPaintGeometry(FVector2f(PinSize - FVector2D(2.0)), FSlateLayoutTransform(FVector2f(TopLeft + FVector2D(1.0)))),
 			PinBrush, ESlateDrawEffect::None, WithAlpha(FLinearColor(FColor(15, 25, 35)), 0.94f * Opacity));
-		const float Fill = QuestHoverFills.IsValidIndex(Index) && !Marker.bLocked ? QuestHoverFills[Index] : 0.f;
-		if (Fill > 0.f)
-		{
-			const float Front = (PinSize.X - 2.f) * Fill;
-			const FVector2D InnerTopLeft = TopLeft + FVector2D(1.f);
-			FSlateDrawElement::MakeBox(OutDrawElements, ++LayerId,
-				AllottedGeometry.ToPaintGeometry(FVector2f(Front, PinSize.Y - 2.f), FSlateLayoutTransform(FVector2f(InnerTopLeft))),
-				PinBrush, ESlateDrawEffect::None, WithAlpha(FLinearColor(FColor(21, 106, 203)), Opacity));
-			const float BandWidth = FMath::Min(Front, (PinSize.Y - 2.f) * 0.9f);
-			if (Fill < 1.f && BandWidth > 0.f)
-				FSlateDrawElement::MakeBox(OutDrawElements, ++LayerId,
-					AllottedGeometry.ToPaintGeometry(FVector2f(BandWidth, PinSize.Y - 2.f),
-						FSlateLayoutTransform(FVector2f(InnerTopLeft + FVector2D(Front - BandWidth, 0.f)))),
-					PinBrush, ESlateDrawEffect::None, WithAlpha(FLinearColor(FColor(38, 139, 213)), Opacity * FMath::Min(1.f, (1.f - Fill) * 5.f)));
-		}
 		const FVector2D TextSize = Measure->Measure(Marker.Label, PinFont);
 		const FVector2D TextPosition = Position - TextSize * 0.5;
 		FSlateDrawElement::MakeText(OutDrawElements, ++LayerId,

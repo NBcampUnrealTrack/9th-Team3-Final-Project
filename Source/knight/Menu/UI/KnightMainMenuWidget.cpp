@@ -76,8 +76,8 @@ void UKnightMainMenuWidget::NativeOnInitialized()
 	ValidateRequiredWidget(Button_Settings, TEXT("Button_Settings"));
 	ValidateRequiredWidget(Button_Codex, TEXT("Button_Codex"));
 	for (UCommonButtonBase* Button : { Button_Stage.Get(), Button_ReturnToTitle.Get(), Button_Maintenance.Get(), Button_Settings.Get(),
-		Button_Codex.Get(), Button_LaunchStage.Get(), Button_Back.Get() })
-		UKnightButtonFillExtension::SetEnabled(Button, true);
+		Button_Codex.Get() })
+		UKnightButtonFillExtension::SetLabelFitted(Button, FLinearColor(FColor(36, 60, 88)));
 	BuildMaintenanceFooterBack();
 	if (Button_Stage) Button_Stage->OnClicked().AddUObject(this, &ThisClass::HandleStageClicked);
 	if (Button_ReturnToTitle) Button_ReturnToTitle->OnClicked().AddUObject(this, &ThisClass::HandleReturnToTitleClicked);
@@ -246,10 +246,8 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 	{
 		return false;
 	}
-	if (CurrentPage == EKnightMainMenuPage::Codex && NewPage != CurrentPage && CodexWidget) CodexWidget->ResetButtonFill();
-	if (CurrentPage == EKnightMainMenuPage::Stage && NewPage != CurrentPage && QuestWidget) QuestWidget->ResetButtonFills();
 	for (UCommonButtonBase* Button : { Button_Stage.Get(), Button_ReturnToTitle.Get(), Button_Maintenance.Get(), Button_Settings.Get(),
-		Button_Codex.Get(), Button_LaunchStage.Get(), Button_Back.Get() })
+		Button_Codex.Get() })
 		UKnightButtonFillExtension::Reset(Button);
 	SetMaintenanceSubmenuOpen(false);
 	const bool bEnteringStage = NewPage == EKnightMainMenuPage::Stage && CurrentPage != EKnightMainMenuPage::Stage;
@@ -496,7 +494,6 @@ void UKnightMainMenuWidget::BuildMaintenanceFooterBack()
 
 void UKnightMainMenuWidget::ApplyMaintenanceBackPresentation(bool bMaintenance)
 {
-	UKnightButtonFillExtension::SetEnabled(Button_Back, !bMaintenance);
 	if (!Button_Back || !MaintenanceBackContent || !NormalBackContent) return;
 	NormalBackContent->SetVisibility(bMaintenance ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
 	MaintenanceBackContent->SetVisibility(bMaintenance ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
