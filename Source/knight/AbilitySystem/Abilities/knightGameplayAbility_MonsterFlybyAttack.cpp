@@ -120,6 +120,7 @@ void UknightGameplayAbility_MonsterFlybyAttack::ActivateAbility(const FGameplayA
 		}
 	}
 	WarningRippleTime = Effects.WarningRippleInterval;
+	StartAttackWarning(WarningTime);
 	if (WarningMontage)
 	{
 		UAbilityTask_PlayMontageAndWait* const MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, WarningMontage);

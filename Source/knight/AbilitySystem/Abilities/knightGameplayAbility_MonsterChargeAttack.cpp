@@ -5,6 +5,7 @@
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
+#include "Animation/knightAnimNotifyState_PlayRate.h"
 #include "Combat/knightCombatLibrary.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "DrawDebugHelpers.h"
@@ -63,6 +64,14 @@ void UknightGameplayAbility_MonsterChargeAttack::ActivateAbility(const FGameplay
 	MontageTask->OnInterrupted.AddDynamic(this, &ThisClass::HandleMontageInterrupted);
 	MontageTask->OnCancelled.AddDynamic(this, &ThisClass::HandleMontageInterrupted);
 	MontageTask->ReadyForActivation();
+
+	// 판정은 Start 섹션 안 HitStartTime에 열린다. 그 앞의 느린 재생 구간까지 실제 시간으로 잰다.
+	const int32 StartIndex = Montage->GetSectionIndex(StartSection);
+	if (StartIndex != INDEX_NONE)
+	{
+		const float SectionStart = Montage->GetAnimCompositeSection(StartIndex).GetTime();
+		StartAttackWarning(UknightAnimNotifyState_PlayRate::GetPlaySeconds(*Montage, SectionStart, SectionStart + HitStartTime));
+	}
 
 	UAbilityTask_Repeat* const Task = UAbilityTask_Repeat::RepeatAction(this, knightMonsterCharge::TickInterval, knightMonsterCharge::MaxTicks);
 	Task->OnPerformAction.AddDynamic(this, &ThisClass::HandleTick);

@@ -272,3 +272,34 @@ void UknightGameplayAbility_MonsterAttack::HandleStartTurnTick(int32 ActionNumbe
 		StartTurnTask->EndTask();
 	}
 }
+
+void UknightGameplayAbility_MonsterAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
+{
+	StopAttackWarning();
+	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
+}
+
+void UknightGameplayAbility_MonsterAttack::StartAttackWarning(float TimeToHit)
+{
+	StopAttackWarning();
+	const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	UknightAttackWarningSubsystem* const Warnings = GetWorld() ? GetWorld()->GetSubsystem<UknightAttackWarningSubsystem>() : nullptr;
+	if (Warning.bEnabled && Character && Warnings)
+	{
+		ActiveWarningId = Warnings->Start(Character->GetMesh(), Warning, TimeToHit);
+	}
+}
+
+void UknightGameplayAbility_MonsterAttack::StopAttackWarning()
+{
+	if (ActiveWarningId == 0)
+	{
+		return;
+	}
+	if (UknightAttackWarningSubsystem* const Warnings = GetWorld() ? GetWorld()->GetSubsystem<UknightAttackWarningSubsystem>() : nullptr)
+	{
+		Warnings->Stop(ActiveWarningId);
+	}
+	ActiveWarningId = 0;
+}

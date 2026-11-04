@@ -779,6 +779,59 @@ UNiagaraSystem* UknightMonsterFXBuilder::BuildFireWarningBeatSystem(const FStrin
 	return BuildLayeredSystem(PackagePath, Layers, 0.f, 1.f, FVector(-Spread, -Spread, -100.f), FVector(Spread, Spread, 1200.f), Burst);
 }
 
+UNiagaraSystem* UknightMonsterFXBuilder::BuildAttackWarningGlintSystem(const FString& PackagePath, UMaterialInterface* GlintMaterial,
+	UMaterialInterface* SparkMaterial, float Size)
+{
+	using namespace knightMonsterFX;
+	if (!GlintMaterial)
+	{
+		return nullptr;
+	}
+	// 0.1초 동안 한꺼번에 나온다(십자 빛 한 장).
+	const float Burst = 0.1f;
+
+	// 확 커졌다가 줄며 사라지는 십자 빛. 밝게 넣어 블룸이 번지게 한다.
+	FSpriteLayer Glint{ TEXT("Glint"), GlintMaterial, 10.f, {0.32f, 0.32f}, {Size, Size}, {Size, Size}, {0.f, 0.f}, 0.f, 0.f, 0.f, 0.f, 0.f,
+		{ {0.f, 4.f}, {0.3f, 2.f}, {1.f, 1.f} }, { {0.f, 0.f}, {0.04f, 1.f}, {0.4f, 0.7f}, {1.f, 0.f} }, { {0.f, 0.35f}, {0.12f, 1.f}, {1.f, 0.55f} },
+		ENiagaraSpriteAlignment::Unaligned, 2 };
+	Glint.SpawnRadius = 0.f;
+
+	// 부위에서 사방으로 짧게 튀는 불티.
+	FSpriteLayer Sparks{ TEXT("Sparks"), SparkMaterial, 100.f, {0.2f, 0.35f}, {8.f, 40.f}, {14.f, 80.f}, {0.f, 0.f}, 0.f, 0.f, 4.f, 0.f, 0.f,
+		{ {0.f, 2.5f}, {1.f, 1.f} }, { {0.f, 0.f}, {0.05f, 1.f}, {1.f, 0.f} }, { {0.f, 1.f}, {1.f, 0.4f} },
+		ENiagaraSpriteAlignment::VelocityAligned, 3 };
+	Sparks.SpawnRadius = 10.f;
+	Sparks.bUseVelocity = true;
+	Sparks.VelocityMin = FVector3f(-1600.f, -1600.f, -900.f);
+	Sparks.VelocityMax = FVector3f(1600.f, 1600.f, 1600.f);
+
+	const FSpriteLayer Layers[] = { Glint, Sparks };
+	const float Spread = Size + 400.f;
+	return BuildLayeredSystem(PackagePath, Layers, 0.f, 1.f, FVector(-Spread), FVector(Spread), Burst);
+}
+
+UNiagaraSystem* UknightMonsterFXBuilder::BuildAttackWarningEmberSystem(const FString& PackagePath, UMaterialInterface* EmberMaterial, float Radius)
+{
+	using namespace knightMonsterFX;
+	if (!EmberMaterial)
+	{
+		return nullptr;
+	}
+	// 부위 둘레에서 몇 개씩만 천천히 피어올라 흔들리다 사라진다. 몸을 가리지 않게 작고 옅게 둔다.
+	FSpriteLayer Embers{ TEXT("Embers"), EmberMaterial, 18.f, {0.7f, 1.2f}, {9.f, 9.f}, {20.f, 20.f}, {0.f, 0.f}, 0.f, 0.f, 0.6f, 60.f, 0.01f,
+		{ {0.f, 1.6f}, {1.f, 0.6f} }, { {0.f, 0.f}, {0.15f, 0.8f}, {0.7f, 0.5f}, {1.f, 0.f} }, { {0.f, 1.f}, {1.f, 0.5f} },
+		ENiagaraSpriteAlignment::Unaligned, 1 };
+	Embers.BoxSize = FVector3f(Radius * 2.f);
+	Embers.SpawnRadius = 0.f;
+	Embers.bUseVelocity = true;
+	Embers.VelocityMin = FVector3f(-30.f, -30.f, 40.f);
+	Embers.VelocityMax = FVector3f(30.f, 30.f, 120.f);
+
+	const FSpriteLayer Layers[] = { Embers };
+	const float Spread = Radius + 300.f;
+	return BuildLayeredSystem(PackagePath, Layers, 0.f, 1.f, FVector(-Spread), FVector(Spread, Spread, Spread + 300.f));
+}
+
 UNiagaraSystem* UknightMonsterFXBuilder::BuildBurnSystem(const FString& PackagePath, UMaterialInterface* FireMaterial,
 	UMaterialInterface* SmokeMaterial, UMaterialInterface* EmberMaterial, FVector BodyExtent, float FlameScale)
 {

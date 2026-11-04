@@ -2,6 +2,9 @@
 
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
+#include "Animation/AnimMontage.h"
+#include "Animation/knightAnimNotifyState_MeleeTrace.h"
+#include "Animation/knightAnimNotifyState_PlayRate.h"
 #include "Combat/knightCombatLibrary.h"
 #include "System/knightGameplayTags.h"
 #include "knight.h"
@@ -34,6 +37,20 @@ void UknightGameplayAbility_MonsterMeleeAttack::ActivateAbility(const FGameplayA
 	MontageTask->OnInterrupted.AddDynamic(this, &ThisClass::HandleMontageFinished);
 	MontageTask->OnCancelled.AddDynamic(this, &ThisClass::HandleMontageFinished);
 	MontageTask->ReadyForActivation();
+
+	// 첫 판정 구간(Knight Melee Trace)이 열리는 위치까지.
+	float FirstHit = -1.f;
+	for (const FAnimNotifyEvent& Event : Montage->Notifies)
+	{
+		if (Cast<UknightAnimNotifyState_MeleeTrace>(Event.NotifyStateClass) && (FirstHit < 0.f || Event.GetTriggerTime() < FirstHit))
+		{
+			FirstHit = Event.GetTriggerTime();
+		}
+	}
+	if (FirstHit > 0.f)
+	{
+		StartAttackWarning(UknightAnimNotifyState_PlayRate::GetPlaySeconds(*Montage, 0.f, FirstHit, PlayRate));
+	}
 }
 
 void UknightGameplayAbility_MonsterMeleeAttack::HandleMontageFinished()

@@ -99,6 +99,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
 	static bool ReplaceUserWidget(UWidgetBlueprint* WidgetBlueprint, FName WidgetName, TSubclassOf<UUserWidget> NewClass, FName NewName);
 
+	/**
+	 * 루트 캔버스에 화면 전체를 덮는 유저 위젯을 AfterWidgetName 바로 뒤(그 위에 그려지는 자리)에 넣는다. 이미 만든 HUD에 요소를 더할 때 쓴다.
+	 * 같은 이름이 있거나 AfterWidgetName이 루트 캔버스의 자식이 아니면 false.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
+	static bool InsertFullScreenWidget(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> WidgetClass, FName WidgetName, FName AfterWidgetName);
+
 	/** 캔버스 패널에 놓인 위젯의 위치와 크기를 바꾼다. 앵커와 정렬은 그대로. */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
 	static bool SetCanvasSlotLayout(UWidgetBlueprint* WidgetBlueprint, FName WidgetName, FVector2D Position, FVector2D Size);
