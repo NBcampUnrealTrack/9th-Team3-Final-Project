@@ -10,6 +10,8 @@
 class UCommonButtonBase;
 class UCommonButtonStyle;
 class UTexture2D;
+class UMaterialInterface;
+class UMaterialInstanceDynamic;
 class UCommonTextBlock;
 class UImage;
 class UScaleBox;
@@ -83,6 +85,19 @@ protected:
 	TSubclassOf<UCommonButtonStyle> EnhancementActionStyle;
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Enhancement Presentation")
 	TSubclassOf<UCommonButtonStyle> EnhancementRowStyle;
+	/** Dedicated UI light masks. Hard references in the maintenance WBP keep them available when cooked. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Enhancement VFX")
+	TObjectPtr<UMaterialInterface> EnhancementFragmentMaterial;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Enhancement VFX")
+	TObjectPtr<UMaterialInterface> EnhancementEchoMaterial;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Enhancement VFX")
+	TObjectPtr<UMaterialInterface> EnhancementFieldGlowMaterial;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Enhancement VFX", meta=(ClampMin="0.05"))
+	float EnhancementGatherDuration = .46f;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Enhancement VFX", meta=(ClampMin="0.05"))
+	float EnhancementHoldDuration = .28f;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Enhancement VFX", meta=(ClampMin="0.05"))
+	float EnhancementReleaseDuration = .52f;
 
 	/** Full-height raster surfaces shared by Enhancement and Sockets only. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Industrial Presentation")
@@ -245,6 +260,11 @@ private:
 	bool bEnhancementIdleCaptured = false;
 	UPROPERTY(Transient) TObjectPtr<UCanvasPanel> EnhancementBarCanvas;
 	UPROPERTY(Transient) TArray<TObjectPtr<UImage>> EnhancementBars;
+	UPROPERTY(Transient) TArray<TObjectPtr<UMaterialInstanceDynamic>> EnhancementFragmentPalettes;
+	TArray<float> EnhancementTrailLengths;
+	TArray<float> EnhancementTrailOpacities;
+	UPROPERTY(Transient) TObjectPtr<UImage> EnhancementFieldGlow;
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> EnhancementGlowMID;
 	enum class EEnhancementBarPhase : uint8 { Idle, Rising, Trembling, Success, Failure };
 	EEnhancementBarPhase EnhancementBarPhase = EEnhancementBarPhase::Idle;
 	float EnhancementBarElapsed = 0.f;

@@ -1,6 +1,5 @@
 #include "Menu/UI/KnightMaintenanceWidget.h"
 #include "Menu/UI/KnightMaintenancePresentation.h"
-#include "Brushes/SlateColorBrush.h"
 #include "Blueprint/WidgetTree.h"
 #include "CommonButtonBase.h"
 #include "CommonTextBlock.h"
@@ -18,6 +17,7 @@
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Engine/Texture2D.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Progression/knightProgressionSubsystem.h"
 
 #define LOCTEXT_NAMESPACE "KnightEnhancementPresentation"
@@ -25,9 +25,7 @@
 namespace
 {
 	constexpr int32 EnhancementBarCount = 318;
-	constexpr float BarRiseDuration = .34f;
-	constexpr float BarTrembleDuration = .24f;
-	constexpr float BarResultDuration = .36f;
+	constexpr int32 FragmentPaletteCount = 24;
 
 	float EaseOutCubic(float T)
 	{
@@ -37,22 +35,22 @@ namespace
 
 	FVector2D BarAnchor(int32 Index)
 	{
-		// A broad field plus a denser central field; deterministic variation never touches gameplay RNG.
-		const bool bCenter = Index >= 126;
-		const int32 Cell = bCenter ? Index - 126 : Index;
-		const int32 Columns = bCenter ? 24 : 18;
-		const int32 Rows = bCenter ? 8 : 7;
-		const float X = (Cell % Columns + .5f + .18f * ((Index * 7) % 5 - 2)) / Columns;
-		const float Y = (Cell / Columns + .5f + .12f * ((Index * 11) % 5 - 2)) / Rows;
-		return FVector2D(FMath::Lerp(bCenter ? .30f : .07f, bCenter ? .70f : .93f, X),
-			FMath::Lerp(.09f, .91f, Y));
+		// Fixed sunflower distribution: dense center, sparse irregular perimeter, no rectangular rows.
+		// This is presentation-only and never consumes gameplay randomness.
+		const float Fraction = (Index + .5f) / EnhancementBarCount;
+		const float RadiusX = FMath::Pow(Fraction, .95f);
+		const float RadiusY = FMath::Pow(Fraction, .48f);
+		const float Angle = Index * 2.39996323f;
+		const float Edge = .90f + .10f * FMath::Sin(Index * 7.13f);
+		return FVector2D(.5f + .47f * RadiusX * FMath::Cos(Angle) * Edge,
+			.5f + .46f * RadiusY * FMath::Sin(Angle));
 	}
 
 	FVector2D BarJitter(int32 Index, float Time)
 	{
 		const int32 Beat = FMath::FloorToInt((Time + Index * .017f) * (23.f + (Index % 6) * 5.f));
-		return FVector2D(.0025f * ((Beat + Index * 2) % 3 - 1),
-			.017f * ((Beat * 2 + Index) % 3 - 1));
+		return FVector2D((Beat % 4 == 0 ? .002f : 0.f) * ((Beat + Index * 2) % 3 - 1),
+			.009f * ((Beat * 2 + Index) % 3 - 1));
 	}
 }
 
@@ -210,7 +208,7 @@ void UKnightMaintenanceWidget::BuildEnhancementPresentation()
 	Add(Center, UpgradeResult, 8.f);
 	const TSubclassOf<UCommonButtonBase> ButtonClass = LoadClass<UCommonButtonBase>(nullptr,
 		TEXT("/Game/Knight/UI/Common/WBP_KnightButton.WBP_KnightButton_C"));
-	UpgradeButton = ButtonClass ? CreateWidget<UCommonButtonBase>(GetOwningPlayer(), ButtonClass, TEXT("Phase7_UpgradeButton")) : nullptr;
+	UpgradeButton = ButtonClass && GetOwningPlayer() ? CreateWidget<UCommonButtonBase>(GetOwningPlayer(), ButtonClass, TEXT("Phase7_UpgradeButton")) : nullptr;
 	if (UpgradeButton)
 	{
 		if (UFunction* Function = UpgradeButton->FindFunction(TEXT("SetButtonText")))
@@ -255,7 +253,7 @@ void UKnightMaintenanceWidget::BuildEnhancementPresentation()
 UWidget* UKnightMaintenanceWidget::BuildEnhancementPreview()
 {
 	UOverlay* Preview = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("EnhancementPreviewLayers"));
-	Preview->SetClipping(EWidgetClipping::ClipToBoundsAlways);
+	Preview->SetClipping(EWidgetClipping::Inherit);
 	USizeBox* IconSize = WidgetTree->ConstructWidget<USizeBox>();
 	IconSize->SetWidthOverride(320.f); IconSize->SetHeightOverride(180.f);
 	EnhancementIconScale = WidgetTree->ConstructWidget<UScaleBox>(UScaleBox::StaticClass(), TEXT("EnhancementIconScale"));
@@ -274,13 +272,40 @@ UWidget* UKnightMaintenanceWidget::BuildEnhancementPreview()
 	EnhancementBarCanvas = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("EnhancementBarCanvas"));
 	EnhancementBarCanvas->SetClipping(EWidgetClipping::ClipToBoundsAlways);
 	EnhancementBarCanvas->SetVisibility(ESlateVisibility::Collapsed);
+	// A restrained soft central light, behind the individual fragments but in front of the sword.
+	if (EnhancementFieldGlowMaterial)
+	{
+		EnhancementFieldGlow = WidgetTree->ConstructWidget<UImage>();
+		EnhancementGlowMID = UMaterialInstanceDynamic::Create(EnhancementFieldGlowMaterial, this);
+		EnhancementFieldGlow->SetBrushFromMaterial(EnhancementGlowMID);
+		EnhancementFieldGlow->SetVisibility(ESlateVisibility::HitTestInvisible);
+		UCanvasPanelSlot* GlowSlot = EnhancementBarCanvas->AddChildToCanvas(EnhancementFieldGlow);
+		GlowSlot->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f)); GlowSlot->SetOffsets(FMargin(0.f));
+	}
+	// Shared palettes avoid hundreds of per-frame material parameter updates/draw states.
+	for (int32 Index = 0; Index < FragmentPaletteCount; ++Index)
+	{
+		UMaterialInterface* Parent = Index % 3 == 0 ? EnhancementEchoMaterial : EnhancementFragmentMaterial;
+		UMaterialInstanceDynamic* MID = Parent ? UMaterialInstanceDynamic::Create(Parent, this) : nullptr;
+		float CoreLength = .24f, TrailLength = .16f, TrailOpacity = .65f;
+		if (MID)
+		{
+			Parent->GetScalarParameterValue(TEXT("CoreLength"), CoreLength);
+			Parent->GetScalarParameterValue(TEXT("TrailLength"), TrailLength);
+			Parent->GetScalarParameterValue(TEXT("TrailOpacity"), TrailOpacity);
+			MID->SetScalarParameterValue(TEXT("CoreLength"), CoreLength * (.70f + .12f * (Index % 6)));
+		}
+		EnhancementTrailLengths.Add(TrailLength);
+		EnhancementTrailOpacities.Add(TrailOpacity);
+		EnhancementFragmentPalettes.Add(MID);
+	}
 	EnhancementBars.Reserve(EnhancementBarCount);
 	for (int32 Index = 0; Index < EnhancementBarCount; ++Index)
 	{
 		UImage* Bar = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(),
 			FName(*FString::Printf(TEXT("EnhancementBar_%03d"), Index)));
-		Bar->SetBrush(FSlateColorBrush(FLinearColor::White));
-		Bar->SetVisibility(ESlateVisibility::HitTestInvisible);
+		Bar->SetBrushFromMaterial(EnhancementFragmentPalettes[Index % FragmentPaletteCount]);
+		Bar->SetVisibility(EnhancementFragmentPalettes[Index % FragmentPaletteCount] ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 		UCanvasPanelSlot* BarSlot = EnhancementBarCanvas->AddChildToCanvas(Bar);
 		BarSlot->SetAlignment(FVector2D(.5f, .5f));
 		EnhancementBars.Add(Bar);
@@ -288,6 +313,8 @@ UWidget* UKnightMaintenanceWidget::BuildEnhancementPreview()
 	EffectArea->AddChild(EnhancementBarCanvas);
 	UOverlaySlot* EffectSlot = Preview->AddChildToOverlay(EffectArea);
 	EffectSlot->SetHorizontalAlignment(HAlign_Fill); EffectSlot->SetVerticalAlignment(VAlign_Fill);
+	// Use only the existing gap below the level and above the readout. No layout/weapon size changes.
+	EffectSlot->SetPadding(FMargin(0.f, -18.f, 0.f, -20.f));
 	CaptureEnhancementIdleTransform();
 	return Preview;
 }
@@ -341,14 +368,14 @@ void UKnightMaintenanceWidget::TickEnhancementBars(float DeltaTime)
 	switch (EnhancementBarPhase)
 	{
 	case EEnhancementBarPhase::Rising:
-		if (EnhancementBarElapsed >= BarRiseDuration)
+		if (EnhancementBarElapsed >= FMath::Max(.05f, EnhancementGatherDuration))
 		{
 			EnhancementBarElapsed = 0.f;
 			EnhancementBarPhase = EEnhancementBarPhase::Trembling;
 		}
 		break;
 	case EEnhancementBarPhase::Trembling:
-		if (EnhancementBarElapsed >= BarTrembleDuration)
+		if (EnhancementBarElapsed >= FMath::Max(.05f, EnhancementHoldDuration))
 		{
 			// Continue from the exact last displayed positions and opacity, without restarting the field.
 			EnhancementBarResultPositions = EnhancementBarPositions;
@@ -359,7 +386,7 @@ void UKnightMaintenanceWidget::TickEnhancementBars(float DeltaTime)
 		break;
 	case EEnhancementBarPhase::Success:
 	case EEnhancementBarPhase::Failure:
-		if (EnhancementBarElapsed >= BarResultDuration)
+		if (EnhancementBarElapsed >= FMath::Max(.05f, EnhancementReleaseDuration))
 		{
 			ResetEnhancementBars();
 			RefreshWeaponUpgradePanel();
@@ -379,6 +406,29 @@ void UKnightMaintenanceWidget::ApplyEnhancementBars()
 	EnhancementBarCanvas->SetVisibility(ESlateVisibility::HitTestInvisible);
 	EnhancementBarPositions.SetNum(EnhancementBars.Num());
 	EnhancementBarOpacities.SetNum(EnhancementBars.Num());
+	const bool bReleasing = EnhancementBarPhase == EEnhancementBarPhase::Success || EnhancementBarPhase == EEnhancementBarPhase::Failure;
+	const float Release = bReleasing ? FMath::Clamp(EnhancementBarElapsed / FMath::Max(.05f, EnhancementReleaseDuration), 0.f, 1.f) : 0.f;
+	const float Red = EnhancementBarPhase == EEnhancementBarPhase::Failure ? FMath::Clamp(EnhancementBarElapsed / .09f, 0.f, 1.f) : 0.f;
+	const FLinearColor CoreColor = FMath::Lerp(FLinearColor(1.f, .62f, .12f), FLinearColor(1.f, .022f, .008f), Red);
+	const FLinearColor GlowColor = FMath::Lerp(FLinearColor(1.f, .19f, .008f), FLinearColor(1.f, .003f, .001f), Red);
+	for (int32 Palette = 0; Palette < EnhancementFragmentPalettes.Num(); ++Palette)
+	{
+		if (UMaterialInstanceDynamic* MID = EnhancementFragmentPalettes[Palette])
+		{
+			MID->SetVectorParameterValue(TEXT("CoreColor"), CoreColor);
+			MID->SetVectorParameterValue(TEXT("GlowColor"), GlowColor);
+			MID->SetScalarParameterValue(TEXT("TrailDirection"), 1.f - 2.f * Red);
+			const float GatherTrail = EnhancementBarPhase == EEnhancementBarPhase::Rising ? .09f * (1.f - EaseOutCubic(EnhancementBarElapsed / FMath::Max(.05f, EnhancementGatherDuration))) : 0.f;
+			MID->SetScalarParameterValue(TEXT("TrailLength"), EnhancementTrailLengths[Palette] * (.65f + .075f * (Palette % 4) + GatherTrail * 6.f + 1.4f * Release * Release));
+			MID->SetScalarParameterValue(TEXT("TrailOpacity"), EnhancementTrailOpacities[Palette] * (1.f - .65f * Release));
+		}
+	}
+	if (EnhancementGlowMID && EnhancementFieldGlow)
+	{
+		EnhancementGlowMID->SetVectorParameterValue(TEXT("GlowColor"), GlowColor);
+		const float Gather = EnhancementBarPhase == EEnhancementBarPhase::Rising ? EaseOutCubic(EnhancementBarElapsed / FMath::Max(.05f, EnhancementGatherDuration)) : 1.f;
+		EnhancementFieldGlow->SetRenderOpacity(Gather * (1.f - Release));
+	}
 	for (int32 Index = 0; Index < EnhancementBars.Num(); ++Index)
 	{
 		UImage* Bar = EnhancementBars[Index];
@@ -388,8 +438,9 @@ void UKnightMaintenanceWidget::ApplyEnhancementBars()
 		float Opacity = 1.f;
 		if (EnhancementBarPhase == EEnhancementBarPhase::Rising)
 		{
-			const float Delay = (Index % 7) * .011f;
-			const float T = FMath::Clamp((EnhancementBarElapsed - Delay) / (BarRiseDuration - Delay), 0.f, 1.f);
+			const float Duration = FMath::Max(.05f, EnhancementGatherDuration);
+			const float Delay = (Index % 9) * Duration * .025f;
+			const float T = FMath::Clamp((EnhancementBarElapsed - Delay) / (Duration - Delay), 0.f, 1.f);
 			Position.Y = FMath::Lerp(1.08f + .025f * (Index % 5), Position.Y, EaseOutCubic(T));
 			Opacity = FMath::Min(1.f, T * 2.f);
 		}
@@ -401,21 +452,22 @@ void UKnightMaintenanceWidget::ApplyEnhancementBars()
 		else
 		{
 			if (EnhancementBarResultPositions.IsValidIndex(Index)) Position = EnhancementBarResultPositions[Index];
-			const float Delay = (Index % 6) * .009f;
-			const float T = FMath::Clamp((EnhancementBarElapsed - Delay) / (BarResultDuration - Delay), 0.f, 1.f);
+			const float Duration = FMath::Max(.05f, EnhancementReleaseDuration);
+			const float Delay = (Index % 6) * Duration * .018f;
+			const float T = FMath::Clamp((EnhancementBarElapsed - Delay) / (Duration - Delay), 0.f, 1.f);
 			Position.Y += EnhancementBarPhase == EEnhancementBarPhase::Success
-				? -.98f * EaseOutCubic(T) : .98f * T * T;
-			Opacity = (EnhancementBarResultOpacities.IsValidIndex(Index) ? EnhancementBarResultOpacities[Index] : 1.f) * (1.f - T);
+				? -1.35f * T * T : 1.35f * T * T;
+			Opacity = (EnhancementBarResultOpacities.IsValidIndex(Index) ? EnhancementBarResultOpacities[Index] : 1.f) * (1.f - T * T);
 		}
 		EnhancementBarPositions[Index] = Position;
 		EnhancementBarOpacities[Index] = Opacity;
 		BarSlot->SetPosition(FVector2D(Position.X * Size.X, Position.Y * Size.Y));
-		BarSlot->SetSize(FVector2D(Size.X * ((Index >= 126 ? .005f : .003f) + .0014f * (Index % 3)),
-			Size.Y * ((Index >= 126 ? .055f : .045f) + .012f * (Index % 7))));
-		FLinearColor Color = EnhancementBarPhase == EEnhancementBarPhase::Failure
-			? FLinearColor(FColor(0xE5, 0x48, 0x4D)) : KnightMaintenancePresentation::Accent;
-		Color.A = Opacity;
-		Bar->SetColorAndOpacity(Color);
+		// Padded quads contain a narrow bright core, a softer halo and room for a directional trail.
+		BarSlot->SetSize(FVector2D(Size.X * (.018f + .005f * (Index % 4)),
+			Size.Y * (.24f + .035f * (Index % 6))));
+		const float EdgeFade = 1.f - .58f * FMath::Pow(static_cast<float>(Index) / EnhancementBarCount, 1.5f);
+		const float BoundaryFade = FMath::Square(FMath::Clamp(FMath::Min(Position.Y, 1.f - Position.Y) / .14f, 0.f, 1.f));
+		Bar->SetColorAndOpacity(FLinearColor(1.f, 1.f, 1.f, Opacity * EdgeFade * BoundaryFade));
 	}
 }
 
