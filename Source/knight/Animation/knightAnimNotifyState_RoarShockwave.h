@@ -32,4 +32,11 @@ protected:
 	/** 화면 전체가 천천히 일렁이는 세기(1 = 기본). 0이면 일렁임 없음. */
 	UPROPERTY(EditAnywhere, Category="Roar", meta=(ClampMin=0, ClampMax=3))
 	float Wiggle = 0.f;
+
+	/** 구간 동안 화면 색이 TintColor 쪽으로 가라앉는 정도(0~1, 분노 진입). 0이면 색 변화 없음. */
+	UPROPERTY(EditAnywhere, Category="Roar", meta=(ClampMin=0, ClampMax=1))
+	float Tint = 0.f;
+
+	UPROPERTY(EditAnywhere, Category="Roar", meta=(EditCondition="Tint > 0"))
+	FLinearColor TintColor = FLinearColor(1.f, 0.22f, 0.15f);
 };

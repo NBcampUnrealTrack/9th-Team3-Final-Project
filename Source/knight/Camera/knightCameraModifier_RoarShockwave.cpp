@@ -4,6 +4,8 @@
 #include "Components/SceneComponent.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/LocalPlayer.h"
+#include "Engine/World.h"
+#include "Camera/PlayerCameraManager.h"
 #include "GameFramework/PlayerController.h"
 #include "Materials/MaterialInstanceDynamic.h"
 
@@ -19,6 +21,7 @@ void UknightCameraModifier_RoarShockwave::StartRoar(USceneComponent* Source, FNa
 	bRoaring = true;
 	bPulsing = true;
 	RoarWiggle = 0.f;
+	RoarTint = 0.f;
 	// The first ring goes out on the next camera update, so SetRoarStyle can still turn the rings off.
 	SinceLastPulse = PulseInterval;
 	PulsesSent = 0;
@@ -33,12 +36,62 @@ void UknightCameraModifier_RoarShockwave::StopRoar(const USceneComponent* Source
 	}
 }
 
-void UknightCameraModifier_RoarShockwave::SetRoarStyle(const USceneComponent* Source, bool bPulses, float Wiggle)
+void UknightCameraModifier_RoarShockwave::SetRoarStyle(const USceneComponent* Source, bool bPulses, float Wiggle, float Tint, const FLinearColor& TintColor)
 {
 	if (bRoaring && RoarSource.Get() == Source)
 	{
 		bPulsing = bPulses;
 		RoarWiggle = FMath::Max(0.f, Wiggle);
+		if (Tint > 0.f)
+		{
+			// Only a tinting roar changes the color, so a plain roar does not recolor a tint still fading out.
+			RoarTint = FMath::Min(Tint, 1.f);
+			RoarTintColor = TintColor;
+		}
+	}
+}
+
+void UknightCameraModifier_RoarShockwave::AddBurst(const FVector& WorldLocation, float Strength)
+{
+	if (Strength <= 0.f)
+	{
+		return;
+	}
+	const float Remaining = BurstAge >= 0.f ? BurstStrength * (1.f - BurstAge / BurstLifetime) : 0.f;
+	if (Strength >= Remaining)
+	{
+		BurstLocation = WorldLocation;
+		BurstAge = 0.f;
+		BurstStrength = Strength;
+	}
+}
+
+UknightCameraModifier_RoarShockwave* UknightCameraModifier_RoarShockwave::FindOrAdd(APlayerCameraManager& Camera)
+{
+	UCameraModifier* Modifier = Camera.FindCameraModifierByClass(StaticClass());
+	if (!Modifier)
+	{
+		Modifier = Camera.AddNewCameraModifier(StaticClass());
+	}
+	return Cast<UknightCameraModifier_RoarShockwave>(Modifier);
+}
+
+void UknightCameraModifier_RoarShockwave::AddBurstForLocalPlayers(const UWorld* World, const FVector& WorldLocation, float Strength)
+{
+	if (!World || !World->IsGameWorld() || Strength <= 0.f)
+	{
+		return;
+	}
+	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+	{
+		const APlayerController* const PC = It->Get();
+		if (APlayerCameraManager* const Camera = PC && PC->IsLocalController() ? PC->PlayerCameraManager.Get() : nullptr)
+		{
+			if (UknightCameraModifier_RoarShockwave* const Modifier = FindOrAdd(*Camera))
+			{
+				Modifier->AddBurst(WorldLocation, Strength);
+			}
+		}
 	}
 }
 
@@ -54,14 +107,14 @@ void UknightCameraModifier_RoarShockwave::SendPulse()
 
 bool UknightCameraModifier_RoarShockwave::IsVisible() const
 {
-	return !Pulses.IsEmpty() || Envelope > 0.f || WiggleLevel > 0.f;
+	return !Pulses.IsEmpty() || Envelope > 0.f || WiggleLevel > 0.f || TintLevel > 0.f || BurstAge >= 0.f;
 }
 
-float UknightCameraModifier_RoarShockwave::GetStrengthScale(const FMinimalViewInfo& POV) const
+float UknightCameraModifier_RoarShockwave::GetStrengthScale(const FMinimalViewInfo& POV, const FVector& WorldLocation) const
 {
 	const AknightPlayerCameraManager* const KnightCamera = Cast<AknightPlayerCameraManager>(CameraOwner);
 	const float SettingScale = KnightCamera ? KnightCamera->GetShakeScale() : 1.f;
-	const float Meters = FVector::Dist(LastSourceLocation, POV.Location) / 100.f;
+	const float Meters = FVector::Dist(WorldLocation, POV.Location) / 100.f;
 	const float Range = FMath::Max(MinStrengthDistance - FullStrengthDistance, KINDA_SMALL_NUMBER);
 	const float DistanceScale = FMath::Lerp(1.f, MinDistanceScale, FMath::Clamp((Meters - FullStrengthDistance) / Range, 0.f, 1.f));
 	return SettingScale * DistanceScale;
@@ -135,6 +188,16 @@ bool UknightCameraModifier_RoarShockwave::ModifyCamera(float DeltaTime, FMinimal
 	}
 	const bool bWiggling = bRoaring && RoarWiggle > 0.f;
 	WiggleLevel = bWiggling ? FMath::Min(1.f, WiggleLevel + DeltaTime / WiggleRiseTime) : FMath::Max(0.f, WiggleLevel - DeltaTime / WiggleFadeTime);
+	const bool bTinting = bRoaring && RoarTint > 0.f;
+	TintLevel = bTinting ? FMath::Min(1.f, TintLevel + DeltaTime / TintRiseTime) : FMath::Max(0.f, TintLevel - DeltaTime / TintFadeTime);
+	if (BurstAge >= 0.f)
+	{
+		BurstAge += DeltaTime;
+		if (BurstAge > BurstLifetime)
+		{
+			BurstAge = -1.f;
+		}
+	}
 	if (Source)
 	{
 		LastSourceLocation = RoarSocket != NAME_None && Source->DoesSocketExist(RoarSocket) ? Source->GetSocketLocation(RoarSocket) : Source->Bounds.Origin;
@@ -142,7 +205,7 @@ bool UknightCameraModifier_RoarShockwave::ModifyCamera(float DeltaTime, FMinimal
 
 	if (IsVisible())
 	{
-		const float Scale = GetStrengthScale(InOutPOV);
+		const float Scale = GetStrengthScale(InOutPOV, LastSourceLocation);
 
 		float Strongest = 0.f;
 		FVector4 Ages(-1.f, -1.f, -1.f, -1.f);
@@ -174,14 +237,29 @@ bool UknightCameraModifier_RoarShockwave::ModifyCamera(float DeltaTime, FMinimal
 		if (MaterialInstance)
 		{
 			NoiseSeed = (NoiseSeed + 1) % 997;
-			const FVector2D Center = ProjectToScreen(InOutPOV, LastSourceLocation, GetAspectRatio());
+			const float AspectRatio = GetAspectRatio();
+			const FVector2D Center = ProjectToScreen(InOutPOV, LastSourceLocation, AspectRatio);
 			MaterialInstance->SetVectorParameterValue(TEXT("Center"), FLinearColor(Center.X, Center.Y, NoiseSeed, 0.f));
 			MaterialInstance->SetVectorParameterValue(TEXT("Ages0"), FLinearColor(Ages.X, Ages.Y, Ages.Z, Ages.W));
 			MaterialInstance->SetVectorParameterValue(TEXT("Ages1"), FLinearColor(MoreAges.X, MoreAges.Y, MoreAges.Z, MoreAges.W));
 			MaterialInstance->SetVectorParameterValue(TEXT("Strengths0"), FLinearColor(Strengths.X, Strengths.Y, Strengths.Z, Strengths.W));
 			MaterialInstance->SetVectorParameterValue(TEXT("Strengths1"), FLinearColor(MoreStrengths.X, MoreStrengths.Y, MoreStrengths.Z, MoreStrengths.W));
 			MaterialInstance->SetVectorParameterValue(TEXT("Look0"), FLinearColor(RingSpeed, RingWidth, Distortion * Scale, ChromaticAberration * Scale));
-			MaterialInstance->SetVectorParameterValue(TEXT("Look1"), FLinearColor(Jitter * Scale, PulseLifetime, bPulsing ? Envelope : 0.f, 0.f));
+			// Burst: its own center and age; the radial blur (Look1.w) is strongest at the start and gone by mid-life.
+			float BurstPower = 0.f;
+			FVector2D BurstCenter(0.5f, 0.5f);
+			if (BurstAge >= 0.f)
+			{
+				BurstPower = BurstStrength * GetStrengthScale(InOutPOV, BurstLocation);
+				BurstCenter = ProjectToScreen(InOutPOV, BurstLocation, AspectRatio);
+			}
+			const float BlurFade = BurstAge >= 0.f ? FMath::Square(FMath::Max(0.f, 1.f - 2.f * BurstAge / BurstLifetime)) : 0.f;
+			MaterialInstance->SetVectorParameterValue(TEXT("Burst"), FLinearColor(BurstCenter.X, BurstCenter.Y, BurstAge, BurstPower));
+			MaterialInstance->SetVectorParameterValue(TEXT("BurstLook"), FLinearColor(BurstSpeed, BurstLifetime, BurstWidth, BurstDistortion));
+			MaterialInstance->SetVectorParameterValue(TEXT("Look1"), FLinearColor(Jitter * Scale, PulseLifetime, bPulsing ? Envelope : 0.f, BurstBlur * BurstPower * BlurFade));
+
+			const float TintEase = TintLevel * TintLevel * (3.f - 2.f * TintLevel);
+			MaterialInstance->SetVectorParameterValue(TEXT("Tint"), FLinearColor(RoarTintColor.R, RoarTintColor.G, RoarTintColor.B, RoarTint * TintEase));
 
 			// Smooth in and out, and swell a little with each ring.
 			WiggleTime += DeltaTime;
