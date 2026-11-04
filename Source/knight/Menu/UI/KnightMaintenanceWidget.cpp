@@ -13,7 +13,6 @@
 #include "Components/Border.h"
 #include "Components/EditableTextBox.h"
 #include "Components/Image.h"
-#include "Components/ProgressBar.h"
 #include "Components/ScrollBox.h"
 #include "Components/ScrollBoxSlot.h"
 #include "Components/SizeBox.h"
@@ -590,7 +589,7 @@ void UKnightMaintenanceWidget::NativeOnInitialized()
 
 void UKnightMaintenanceWidget::NativeDestruct()
 {
-	ResetEnhancementIconFill();
+	ResetEnhancementBars();
 	if (UknightProgressionSubsystem* Progression = GetProgression())
 		Progression->OnProgressionChanged.RemoveDynamic(this, &ThisClass::HandleProgressionChanged);
 	if (UGameInstance* const GI = GetGameInstance())
@@ -605,7 +604,7 @@ void UKnightMaintenanceWidget::NativeDestruct()
 void UKnightMaintenanceWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
-	TickEnhancementIconFill(InDeltaTime);
+	TickEnhancementBars(InDeltaTime);
 }
 
 UknightProgressionSubsystem* UKnightMaintenanceWidget::GetProgression() const
@@ -694,7 +693,7 @@ void UKnightMaintenanceWidget::ApplyDestinationLayout()
 
 void UKnightMaintenanceWidget::Open(EKnightMaintenanceDestination InDestination, bool bStartInMaterials)
 {
-	ResetEnhancementIconFill();
+	ResetEnhancementBars();
 	SelectedSocketSlot = INDEX_NONE;
 	SelectedSocketItem = nullptr;
 	SelectedSocketCandidateId = FPrimaryAssetId();
@@ -743,7 +742,7 @@ bool UKnightMaintenanceWidget::IsMaterialQuantityInputFocused() const
 
 void UKnightMaintenanceWidget::Close()
 {
-	ResetEnhancementIconFill();
+	ResetEnhancementBars();
 	SelectedSocketCandidateId = FPrimaryAssetId();
 	SocketSelectionProfileId.Reset();
 	SelectedSocketAssignmentId = FPrimaryAssetId();
@@ -794,7 +793,7 @@ void UKnightMaintenanceWidget::SetCategory(int32 NewCategory, bool bFromPlayer)
 	if (Destination == EKnightMaintenanceDestination::Crafting && NewCategory != 0 && NewCategory != 2 && NewCategory != 4) return;
 	if (Destination == EKnightMaintenanceDestination::Enhancement && NewCategory != 1) return;
 	if (Destination == EKnightMaintenanceDestination::Sockets && NewCategory != 3) return;
-	if (Category != NewCategory) ResetEnhancementIconFill();
+	if (Category != NewCategory) ResetEnhancementBars();
 	CloseMaterialSaleConfirmation(false);
 	CloseEquipmentPicker(false);
 	if (NewCategory != 4)
@@ -1299,7 +1298,7 @@ void UKnightMaintenanceWidget::RebuildEnhancementTarget(bool bRestoreFocus)
 	const UknightWeaponItemDefinition* Weapon = GetEnhancementTarget(bComplete);
 	if (bComplete && EnhancementTargetId.IsValid() && !Weapon)
 	{
-		ResetEnhancementIconFill();
+		ResetEnhancementBars();
 		EnhancementTargetId = FPrimaryAssetId(); EnhancementTargetProfileId.Reset(); EnhancementQuotedLevel = INDEX_NONE;
 		UpgradeResultMessage = FText::GetEmpty();
 	}
@@ -1371,7 +1370,8 @@ void UKnightMaintenanceWidget::SelectEnhancementWeapon(FPrimaryAssetId WeaponId)
 	const bool bOwned = Owned.ContainsByPredicate([WeaponId](const FknightItemStack& Stack)
 		{ return Stack.Count > 0 && Stack.Item && Stack.Item->IsA<UknightWeaponItemDefinition>() && Stack.Item->GetPrimaryAssetId() == WeaponId; });
 	if (!bOwned) return;
-	ResetEnhancementIconFill();
+	if (EnhancementBarPhase != EEnhancementBarPhase::Idle && WeaponId == EnhancementTargetId) return;
+	ResetEnhancementBars();
 	EnhancementTargetId = WeaponId; EnhancementTargetProfileId = Saves->GetActiveSlotId();
 	UpgradeResultMessage = FText::GetEmpty(); UpgradeSaveStatusMessage = FText::GetEmpty();
 	for (UKnightMaintenanceEntryWidget* Row : EnhancementWeaponRows)
@@ -2061,17 +2061,9 @@ void UKnightMaintenanceWidget::RefreshEnhancementDetails()
 		UTexture2D* Icon = Weapon ? Weapon->Icon.LoadSynchronous() : nullptr;
 		EnhancementWeaponImage->SetBrushFromTexture(Icon, true);
 		EnhancementWeaponImage->SetVisibility(Icon ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Hidden);
-		if (EnhancementWeaponFill)
-		{
-			FProgressBarStyle Style = EnhancementWeaponFill->GetWidgetStyle();
-			FSlateBrush FillBrush = Icon ? EnhancementWeaponImage->GetBrush() : FSlateBrush();
-			FillBrush.DrawAs = Icon ? ESlateBrushDrawType::Image : ESlateBrushDrawType::NoDrawType;
-			FillBrush.TintColor = FSlateColor(FLinearColor::White);
-			Style.SetFillImage(FillBrush);
-			EnhancementWeaponFill->SetWidgetStyle(Style);
-			EnhancementWeaponFill->SetVisibility(Icon ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Hidden);
-			ApplyEnhancementIconFill();
-		}
+		if (EnhancementBarCanvas)
+			EnhancementBarCanvas->SetVisibility(Icon && EnhancementBarPhase != EEnhancementBarPhase::Idle
+				? ESlateVisibility::HitTestInvisible : Icon ? ESlateVisibility::Hidden : ESlateVisibility::Collapsed);
 	}
 	TArray<FText> Lines;
 	if (Weapon)
@@ -2170,13 +2162,15 @@ void UKnightMaintenanceWidget::RefreshWeaponUpgradePanel()
 		UpgradeResult->SetText(Message);
 		UpgradeResult->SetVisibility(Message.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
 	}
-	SetButtonLocked(UpgradeButton, bBusy || !bComplete || Quote.Availability != EKnightWeaponUpgradeAvailability::Ready, Reason);
+	SetButtonLocked(UpgradeButton, bBusy || EnhancementBarPhase != EEnhancementBarPhase::Idle
+		|| !bComplete || Quote.Availability != EKnightWeaponUpgradeAvailability::Ready, Reason);
 }
 
 void UKnightMaintenanceWidget::RequestWeaponUpgrade()
 {
-	if (bBusy || Category != 1 || (Panel_Confirm && Panel_Confirm->IsVisible())) return;
-	ResetEnhancementIconFill();
+	if (bBusy || EnhancementBarPhase != EEnhancementBarPhase::Idle || Category != 1
+		|| (Panel_Confirm && Panel_Confirm->IsVisible())) return;
+	ResetEnhancementBars();
 	UknightProgressionSubsystem* Progression = GetProgression();
 	const UknightSaveSubsystem* const Saves = GetGameInstance() ? GetGameInstance()->GetSubsystem<UknightSaveSubsystem>() : nullptr;
 	bool bComplete = false;
@@ -2196,7 +2190,7 @@ void UKnightMaintenanceWidget::RequestWeaponUpgrade()
 	FKnightWeaponUpgradeReceipt Receipt;
 	const EKnightWeaponUpgradeOutcome Outcome = Progression->TryUpgradeWeapon(Weapon, Receipt);
 	bBusy = false;
-	StartEnhancementIconFill(Outcome);
+	StartEnhancementBars(Outcome);
 	if (Outcome != EKnightWeaponUpgradeOutcome::Rejected)
 	{
 		bAwaitingUpgradeSave = true;
@@ -2645,7 +2639,7 @@ void UKnightMaintenanceWidget::HandleProgressionChanged()
 
 void UKnightMaintenanceWidget::HandleActiveSlotChanged(const FString& SlotId)
 {
-	ResetEnhancementIconFill();
+	ResetEnhancementBars();
 	SelectedSocketCandidateId = FPrimaryAssetId();
 	SocketSelectionProfileId.Reset();
 	SelectedSocketAssignmentId = FPrimaryAssetId();

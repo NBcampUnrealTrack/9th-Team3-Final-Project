@@ -1,5 +1,6 @@
 #include "Menu/UI/KnightMaintenanceWidget.h"
 #include "Menu/UI/KnightMaintenancePresentation.h"
+#include "Brushes/SlateColorBrush.h"
 #include "Blueprint/WidgetTree.h"
 #include "CommonButtonBase.h"
 #include "CommonTextBlock.h"
@@ -11,7 +12,6 @@
 #include "Components/Image.h"
 #include "Components/Overlay.h"
 #include "Components/OverlaySlot.h"
-#include "Components/ProgressBar.h"
 #include "Components/ScaleBox.h"
 #include "Components/ScrollBox.h"
 #include "Components/SizeBox.h"
@@ -21,6 +21,37 @@
 #include "Progression/knightProgressionSubsystem.h"
 
 #define LOCTEXT_NAMESPACE "KnightEnhancementPresentation"
+
+namespace
+{
+	constexpr int32 EnhancementBarCount = 36;
+	constexpr float BarRiseDuration = .34f;
+	constexpr float BarTrembleDuration = .24f;
+	constexpr float BarResultDuration = .36f;
+
+	float EaseOutCubic(float T)
+	{
+		const float Remaining = 1.f - FMath::Clamp(T, 0.f, 1.f);
+		return 1.f - Remaining * Remaining * Remaining;
+	}
+
+	FVector2D BarAnchor(int32 Index)
+	{
+		const int32 Along = Index / 3;
+		const int32 Lane = Index % 3 - 1;
+		const float T = static_cast<float>(Along) / 11.f;
+		// The shared sword artwork runs from its lower-left grip to its upper-right tip.
+		return FVector2D(.32f + .36f * T + .014f * Lane,
+			.82f - .68f * T + .012f * Lane);
+	}
+
+	FVector2D BarJitter(int32 Index, float Time)
+	{
+		const int32 Beat = FMath::FloorToInt((Time + Index * .017f) * (23.f + (Index % 6) * 5.f));
+		return FVector2D(.010f * ((Beat + Index * 2) % 3 - 1),
+			.017f * ((Beat * 2 + Index) % 3 - 1));
+	}
+}
 
 void UKnightMaintenanceWidget::BuildIndustrialSideSurfaces()
 {
@@ -147,21 +178,27 @@ void UKnightMaintenanceWidget::BuildEnhancementPresentation()
 	IconSize->SetWidthOverride(320.f); IconSize->SetHeightOverride(180.f);
 	UScaleBox* IconScale = WidgetTree->ConstructWidget<UScaleBox>(); IconScale->SetStretch(EStretch::ScaleToFit);
 	UOverlay* IconLayers = WidgetTree->ConstructWidget<UOverlay>();
+	IconLayers->SetClipping(EWidgetClipping::ClipToBoundsAlways);
 	EnhancementWeaponImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("EnhancementWeaponImage"));
 	EnhancementWeaponImage->SetVisibility(ESlateVisibility::HitTestInvisible);
 	UOverlaySlot* IconSlot = IconLayers->AddChildToOverlay(EnhancementWeaponImage);
 	IconSlot->SetHorizontalAlignment(HAlign_Fill); IconSlot->SetVerticalAlignment(VAlign_Fill);
-	EnhancementWeaponFill = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), TEXT("EnhancementWeaponFill"));
-	FSlateBrush NoDraw; NoDraw.DrawAs = ESlateBrushDrawType::NoDrawType; NoDraw.ImageSize = FVector2D::ZeroVector;
-	FProgressBarStyle FillStyle = EnhancementWeaponFill->GetWidgetStyle();
-	FillStyle.SetBackgroundImage(NoDraw).SetMarqueeImage(NoDraw).SetEnableFillAnimation(false);
-	EnhancementWeaponFill->SetWidgetStyle(FillStyle);
-	EnhancementWeaponFill->SetBarFillType(EProgressBarFillType::BottomToTop);
-	EnhancementWeaponFill->SetBarFillStyle(EProgressBarFillStyle::Mask);
-	EnhancementWeaponFill->SetPercent(0.f);
-	EnhancementWeaponFill->SetVisibility(ESlateVisibility::HitTestInvisible);
-	UOverlaySlot* FillSlot = IconLayers->AddChildToOverlay(EnhancementWeaponFill);
-	FillSlot->SetHorizontalAlignment(HAlign_Fill); FillSlot->SetVerticalAlignment(VAlign_Fill);
+	EnhancementBarCanvas = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("EnhancementBarCanvas"));
+	EnhancementBarCanvas->SetClipping(EWidgetClipping::ClipToBoundsAlways);
+	EnhancementBarCanvas->SetVisibility(ESlateVisibility::Hidden);
+	EnhancementBars.Reserve(EnhancementBarCount);
+	for (int32 Index = 0; Index < EnhancementBarCount; ++Index)
+	{
+		UImage* Bar = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(),
+			FName(*FString::Printf(TEXT("EnhancementBar_%02d"), Index)));
+		Bar->SetBrush(FSlateColorBrush(FLinearColor::White));
+		Bar->SetVisibility(ESlateVisibility::HitTestInvisible);
+		UCanvasPanelSlot* BarSlot = EnhancementBarCanvas->AddChildToCanvas(Bar);
+		BarSlot->SetAlignment(FVector2D(.5f, .5f));
+		EnhancementBars.Add(Bar);
+	}
+	UOverlaySlot* BarsSlot = IconLayers->AddChildToOverlay(EnhancementBarCanvas);
+	BarsSlot->SetHorizontalAlignment(HAlign_Fill); BarsSlot->SetVerticalAlignment(VAlign_Fill);
 	IconScale->AddChild(IconLayers); IconSize->AddChild(IconScale); IconFrame->SetContent(IconSize);
 	Add(UpgradePanel, IconFrame, 12.f)->SetHorizontalAlignment(HAlign_Center);
 	// Keep live numbers away from the apparatus's luminous ring on a recessed raster surface.
@@ -237,60 +274,103 @@ void UKnightMaintenanceWidget::BuildEnhancementPresentation()
 	Columns->SetVisibility(ESlateVisibility::Collapsed);
 }
 
-void UKnightMaintenanceWidget::ResetEnhancementIconFill()
+void UKnightMaintenanceWidget::ResetEnhancementBars()
 {
-	EnhancementFillPhase = EEnhancementFillPhase::Idle;
-	EnhancementFillElapsed = 0.f;
-	EnhancementFillFraction = 0.f;
-	bEnhancementFillSucceeded = false;
-	ApplyEnhancementIconFill();
+	EnhancementBarPhase = EEnhancementBarPhase::Idle;
+	EnhancementBarElapsed = 0.f;
+	EnhancementBarResultJitterTime = 0.f;
+	bEnhancementBarsSucceeded = false;
+	if (EnhancementBarCanvas) EnhancementBarCanvas->SetVisibility(ESlateVisibility::Hidden);
 }
 
-void UKnightMaintenanceWidget::StartEnhancementIconFill(EKnightWeaponUpgradeOutcome Outcome)
+void UKnightMaintenanceWidget::StartEnhancementBars(EKnightWeaponUpgradeOutcome Outcome)
 {
 	if (Outcome == EKnightWeaponUpgradeOutcome::Rejected) return;
-	ResetEnhancementIconFill();
-	bEnhancementFillSucceeded = Outcome == EKnightWeaponUpgradeOutcome::Success;
-	EnhancementFillPhase = EEnhancementFillPhase::Charging;
+	ResetEnhancementBars();
+	bEnhancementBarsSucceeded = Outcome == EKnightWeaponUpgradeOutcome::Success;
+	EnhancementBarPhase = EEnhancementBarPhase::Rising;
+	if (EnhancementBarCanvas) EnhancementBarCanvas->SetVisibility(ESlateVisibility::HitTestInvisible);
+	ApplyEnhancementBars();
 }
 
-void UKnightMaintenanceWidget::TickEnhancementIconFill(float DeltaTime)
+void UKnightMaintenanceWidget::TickEnhancementBars(float DeltaTime)
 {
-	if (EnhancementFillPhase == EEnhancementFillPhase::Idle || EnhancementFillPhase == EEnhancementFillPhase::CompleteSuccess) return;
-	EnhancementFillElapsed += FMath::Max(0.f, DeltaTime);
-	const float Duration = EnhancementFillPhase == EEnhancementFillPhase::Charging ? .3f : .22f;
-	const float T = FMath::Clamp(EnhancementFillElapsed / Duration, 0.f, 1.f);
-	const float EaseOut = 1.f - FMath::Pow(1.f - T, 3.f);
-	switch (EnhancementFillPhase)
+	if (EnhancementBarPhase == EEnhancementBarPhase::Idle) return;
+	const float PreviousElapsed = EnhancementBarElapsed;
+	EnhancementBarElapsed += FMath::Max(0.f, DeltaTime);
+	switch (EnhancementBarPhase)
 	{
-	case EEnhancementFillPhase::Charging:
-		EnhancementFillFraction = .6f * EaseOut;
-		if (T >= 1.f)
+	case EEnhancementBarPhase::Rising:
+		if (EnhancementBarElapsed >= BarRiseDuration)
 		{
-			EnhancementFillFraction = .6f;
-			EnhancementFillElapsed = 0.f;
-			EnhancementFillPhase = bEnhancementFillSucceeded ? EEnhancementFillPhase::Success : EEnhancementFillPhase::Failure;
+			EnhancementBarElapsed = 0.f;
+			EnhancementBarPhase = EEnhancementBarPhase::Trembling;
 		}
 		break;
-	case EEnhancementFillPhase::Success:
-		EnhancementFillFraction = .6f + .4f * EaseOut;
-		if (T >= 1.f) EnhancementFillPhase = EEnhancementFillPhase::CompleteSuccess;
+	case EEnhancementBarPhase::Trembling:
+		if (EnhancementBarElapsed >= BarTrembleDuration)
+		{
+			EnhancementBarResultJitterTime = PreviousElapsed;
+			EnhancementBarElapsed = 0.f;
+			EnhancementBarPhase = bEnhancementBarsSucceeded ? EEnhancementBarPhase::Success : EEnhancementBarPhase::Failure;
+		}
 		break;
-	case EEnhancementFillPhase::Failure:
-		EnhancementFillFraction = .6f * (1.f - EaseOut);
-		if (T >= 1.f) EnhancementFillPhase = EEnhancementFillPhase::Idle;
+	case EEnhancementBarPhase::Success:
+	case EEnhancementBarPhase::Failure:
+		if (EnhancementBarElapsed >= BarResultDuration)
+		{
+			ResetEnhancementBars();
+			RefreshWeaponUpgradePanel();
+			return;
+		}
 		break;
 	default: break;
 	}
-	ApplyEnhancementIconFill();
+	ApplyEnhancementBars();
 }
 
-void UKnightMaintenanceWidget::ApplyEnhancementIconFill()
+void UKnightMaintenanceWidget::ApplyEnhancementBars()
 {
-	if (!EnhancementWeaponFill) return;
-	EnhancementWeaponFill->SetFillColorAndOpacity(EnhancementFillPhase == EEnhancementFillPhase::Failure
-		? FLinearColor(FColor(0xE5, 0x48, 0x4D)) : KnightMaintenancePresentation::Accent);
-	EnhancementWeaponFill->SetPercent(EnhancementFillFraction);
+	if (!EnhancementBarCanvas || EnhancementBarPhase == EEnhancementBarPhase::Idle) return;
+	const FVector2D Size = EnhancementBarCanvas->GetCachedGeometry().GetLocalSize();
+	if (Size.X <= 1.f || Size.Y <= 1.f || !EnhancementWeaponImage || !EnhancementWeaponImage->IsVisible()) return;
+	EnhancementBarCanvas->SetVisibility(ESlateVisibility::HitTestInvisible);
+	for (int32 Index = 0; Index < EnhancementBars.Num(); ++Index)
+	{
+		UImage* Bar = EnhancementBars[Index];
+		UCanvasPanelSlot* BarSlot = Bar ? Cast<UCanvasPanelSlot>(Bar->Slot) : nullptr;
+		if (!BarSlot) continue;
+		FVector2D Position = BarAnchor(Index);
+		float Opacity = 1.f;
+		if (EnhancementBarPhase == EEnhancementBarPhase::Rising)
+		{
+			const float Delay = (Index % 7) * .011f;
+			const float T = FMath::Clamp((EnhancementBarElapsed - Delay) / (BarRiseDuration - Delay), 0.f, 1.f);
+			Position.Y = FMath::Lerp(1.08f + .025f * (Index % 5), Position.Y, EaseOutCubic(T));
+			Opacity = FMath::Min(1.f, T * 2.f);
+		}
+		else if (EnhancementBarPhase == EEnhancementBarPhase::Trembling)
+		{
+			Position += BarJitter(Index, EnhancementBarElapsed);
+			Opacity = .72f + .28f * ((Index + FMath::FloorToInt(EnhancementBarElapsed * (17.f + Index % 5))) % 3) / 2.f;
+		}
+		else
+		{
+			Position += BarJitter(Index, EnhancementBarResultJitterTime);
+			const float Delay = (Index % 6) * .009f;
+			const float T = FMath::Clamp((EnhancementBarElapsed - Delay) / (BarResultDuration - Delay), 0.f, 1.f);
+			Position.Y += EnhancementBarPhase == EEnhancementBarPhase::Success
+				? -.42f * EaseOutCubic(T) : .46f * T * T;
+			Opacity = 1.f - T;
+		}
+		BarSlot->SetPosition(FVector2D(Position.X * Size.X, Position.Y * Size.Y));
+		BarSlot->SetSize(FVector2D(Size.X * (.010f + .002f * (Index % 3)),
+			Size.Y * (.065f + .014f * (Index % 5))));
+		FLinearColor Color = EnhancementBarPhase == EEnhancementBarPhase::Failure
+			? FLinearColor(FColor(0xE5, 0x48, 0x4D)) : KnightMaintenancePresentation::Accent;
+		Color.A = Opacity;
+		Bar->SetColorAndOpacity(Color);
+	}
 }
 
 #undef LOCTEXT_NAMESPACE
