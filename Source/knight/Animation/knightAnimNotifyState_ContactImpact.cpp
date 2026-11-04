@@ -1,5 +1,7 @@
 #include "Animation/knightAnimNotifyState_ContactImpact.h"
 
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemGlobals.h"
 #include "Animation/knightAnimNotify_GroundImpact.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
@@ -78,6 +80,11 @@ void UknightAnimNotifyState_ContactImpact::Trigger(USkeletalMeshComponent* MeshC
 		return;
 	}
 	Triggered.Add(MeshComp, true);
+	const UAbilitySystemComponent* const ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(MeshComp->GetOwner());
+	if (ASC && ASC->HasAnyMatchingGameplayTags(BlockedTags))
+	{
+		return;
+	}
 	UWorld* const World = MeshComp->GetWorld();
 	for (const FknightContactImpactStep& Step : Steps)
 	{
