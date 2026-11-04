@@ -29,6 +29,13 @@ struct KNIGHT_API FknightMeleeTraceParams
 	/** Points along the blade that are swept each frame. More points catch thin targets on long blades. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Trace", meta=(ClampMin=2, ClampMax=16))
 	int32 BladeSamples = 4;
+
+	/**
+	 * 0보다 크면 이 판정 구간의 칼자국(SwingTrail) 꼬리가 남는 시간(초)을 이 값으로 덮어쓴다. 0이면 판정 컴포넌트의 SwingTrailLife(또는 이펙트 기본값).
+	 * 대쉬공격처럼 크게 미끄러지며 찌르는 공격은 꼬리가 제자리에 길게 남아 칼을 따라오지 않는 것처럼 보여서 짧게 준다. 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Trace", meta=(ClampMin=0, Units="s"))
+	float SwingTrailLife = 0.f;
 };
 
 /** How one resolved melee hit turned out. */

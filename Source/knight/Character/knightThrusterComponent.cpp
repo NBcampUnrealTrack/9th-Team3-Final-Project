@@ -41,6 +41,9 @@ UknightThrusterComponent::UknightThrusterComponent()
 		MakeNozzle(TEXT("Arm_R"), TEXT("lowerarm_r"), FVector(-8.f, 0.f, 0.f), 0.7f),
 		MakeNozzle(TEXT("Foot_L"), TEXT("thruster_l"), FVector::ZeroVector, 1.f),
 		MakeNozzle(TEXT("Foot_R"), TEXT("thruster_r"), FVector::ZeroVector, 1.f),
+		// 종아리 뒤(정강이 가운데 뼈에서 몸 기준 뒤로 조금). 대쉬공격이 미끄러져 나가는 동안 쓴다.
+		MakeNozzle(TEXT("Calf_L"), TEXT("calf_twist_01_l"), FVector(-5.f, 0.f, 0.f), 1.f),
+		MakeNozzle(TEXT("Calf_R"), TEXT("calf_twist_01_r"), FVector(-5.f, 0.f, 0.f), 1.f),
 	};
 }
 
