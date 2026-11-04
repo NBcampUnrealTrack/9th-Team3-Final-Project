@@ -34,8 +34,6 @@ private:
 	void Clear();
 
 	UPROPERTY(Transient)
-	TObjectPtr<UImage> IdleImage;
-	UPROPERTY(Transient)
 	TObjectPtr<UImage> FillImage;
 	UPROPERTY(Transient)
 	TObjectPtr<UImage> BandImage;

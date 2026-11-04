@@ -66,7 +66,6 @@ void UKnightButtonFillExtension::EnsureLayers()
 	Clip->SetRenderTransformPivot(FVector2D::ZeroVector);
 	Clip->SetClipping(EWidgetClipping::ClipToBounds);
 	Clip->SetVisibility(ESlateVisibility::HitTestInvisible);
-	IdleImage = Tree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("KnightFillIdle"));
 	FillImage = Tree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("KnightFillSurface"));
 	BandImage = Tree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("KnightFillBand"));
 	FSlateBrush SurfaceBrush = *FCoreStyle::Get().GetBrush(TEXT("WhiteBrush"));
@@ -81,9 +80,9 @@ void UKnightButtonFillExtension::EnsureLayers()
 			SurfaceBrush.OutlineSettings.Width = 0.f;
 		}
 	}
-	for (UImage* Image : { IdleImage.Get(), FillImage.Get(), BandImage.Get() })
+	for (UImage* Image : { FillImage.Get(), BandImage.Get() })
 	{
-		Image->SetBrush(Image != BandImage ? SurfaceBrush : *FCoreStyle::Get().GetBrush(TEXT("WhiteBrush")));
+		Image->SetBrush(Image == FillImage ? SurfaceBrush : *FCoreStyle::Get().GetBrush(TEXT("WhiteBrush")));
 		Image->SetVisibility(ESlateVisibility::HitTestInvisible);
 		Image->SetRenderTransformPivot(FVector2D::ZeroVector);
 		UOverlaySlot* const Slot = Clip->AddChildToOverlay(Image);
@@ -173,13 +172,8 @@ void UKnightButtonFillExtension::ApplyVisual(const FVector2D& Size)
 		FillClip->SetRenderScale(FVector2D(BackgroundScale, 1.f));
 	}
 	FillImage->SetColorAndOpacity(FillColor);
-	if (IdleImage)
-	{
-		FLinearColor IdleColor = FillColor;
-		IdleColor.A = bEnabled ? 0.18f : 0.f;
-		IdleImage->SetColorAndOpacity(IdleColor);
-	}
 	FillImage->SetRenderScale(FVector2D(Progress, 1.f));
+	FillImage->SetRenderOpacity(Progress > 0.f ? 1.f : 0.f);
 	const float Width = FMath::Max(0.f, SurfaceSize.X);
 	const float BandWidth = FMath::Min(Width, FMath::Max(8.f, SurfaceSize.Y * 0.9f) / BackgroundScale);
 	FLinearColor BandColor = FLinearColor::LerpUsingHSV(FillColor, FLinearColor::White, BandLighten);
