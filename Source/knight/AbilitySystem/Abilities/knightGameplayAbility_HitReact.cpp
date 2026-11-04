@@ -8,6 +8,7 @@
 #include "Character/knightMovementComponent.h"
 #include "GameFramework/Character.h"
 #include "Camera/CameraShakeBase.h"
+#include "Curves/CurveFloat.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
@@ -225,6 +226,32 @@ void UknightGameplayAbility_HitReact::StartGuardBreak(AActor& Avatar)
 	UE_LOG(LogknightCombat, Log, TEXT("%s: guard broken."), *Avatar.GetName());
 }
 
+UCurveFloat* UknightGameplayAbility_HitReact::GetKnockbackStrengthCurve(const float Power)
+{
+	const float N = FMath::Clamp(Power, 1.f, 8.f);
+	if (N <= 1.01f)
+	{
+		return nullptr;
+	}
+	const int32 Key = FMath::RoundToInt(N * 100.f);
+	if (const TObjectPtr<UCurveFloat>* const Found = KnockbackCurves.Find(Key))
+	{
+		return Found->Get();
+	}
+	// 위치 1 - (1 - t)^N 의 기울기 = 속도 N(1 - t)^(N - 1). 0..1 평균이 1이라 거리 = 세기(평균 속도) × 시간 그대로.
+	// 직선 보간이라 촘촘히 찍는다. 끝(t = 1)은 0이고, 마지막은 FinishVelocity(0)로 딱 멈춘다.
+	UCurveFloat* const Curve = NewObject<UCurveFloat>(this, NAME_None, RF_Transient);
+	constexpr int32 Samples = 24;
+	for (int32 Index = 0; Index <= Samples; ++Index)
+	{
+		const float T = static_cast<float>(Index) / Samples;
+		const FKeyHandle Handle = Curve->FloatCurve.AddKey(T, N * FMath::Pow(1.f - T, N - 1.f));
+		Curve->FloatCurve.SetKeyInterpMode(Handle, RCIM_Linear);
+	}
+	KnockbackCurves.Add(Key, Curve);
+	return Curve;
+}
+
 void UknightGameplayAbility_HitReact::ApplyImpactFeel(AActor& Avatar, const AActor* EventInstigator)
 {
 	const FknightHitImpactFeel& Feel = GetImpactFeel(ActiveType);
@@ -236,10 +263,14 @@ void UknightGameplayAbility_HitReact::ApplyImpactFeel(AActor& Avatar, const AAct
 		if (!Away.IsNearlyZero())
 		{
 			const float Time = FMath::Max(Feel.KnockbackTime, 0.02f);
+			// (2026-11-04) 등속 대신 Ease-Out: 처음에 최고 속도로 튕겨 나가 끝에서 급제동한다. 1이면 예전처럼 등속(커브 없음).
+			UCurveFloat* const Curve = GetKnockbackStrengthCurve(Feel.KnockbackEasePower);
 			UAbilityTask_ApplyRootMotionConstantForce* const Task = UAbilityTask_ApplyRootMotionConstantForce::ApplyRootMotionConstantForce(
-				this, TEXT("HitKnockback"), Away, Feel.KnockbackDistance / Time, Time, true, nullptr,
+				this, TEXT("HitKnockback"), Away, Feel.KnockbackDistance / Time, Time, true, Curve,
 				ERootMotionFinishVelocityMode::SetVelocity, FVector::ZeroVector, 0.f, true);
 			Task->ReadyForActivation();
+			UE_LOG(LogknightAbility, Verbose, TEXT("%s: knockback %.0fcm in %.2fs, ease power %.1f (start speed %.0f cm/s)"), *GetName(),
+				Feel.KnockbackDistance, Time, Feel.KnockbackEasePower, Feel.KnockbackDistance / Time * (Curve ? FMath::Max(Feel.KnockbackEasePower, 1.f) : 1.f));
 		}
 	}
 
