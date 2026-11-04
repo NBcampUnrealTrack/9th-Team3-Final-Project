@@ -1,4 +1,5 @@
 #include "KnightMainMenuWidget.h"
+#include "KnightButtonFillExtension.h"
 #include "Menu/UI/KnightMaintenancePresentation.h"
 
 #include "GameFlow/KnightGameFlowSubsystem.h"
@@ -74,6 +75,9 @@ void UKnightMainMenuWidget::NativeOnInitialized()
 	ValidateRequiredWidget(Button_Maintenance, TEXT("Button_Maintenance"));
 	ValidateRequiredWidget(Button_Settings, TEXT("Button_Settings"));
 	ValidateRequiredWidget(Button_Codex, TEXT("Button_Codex"));
+	for (UCommonButtonBase* Button : { Button_Stage.Get(), Button_ReturnToTitle.Get(), Button_Maintenance.Get(), Button_Settings.Get(),
+		Button_Codex.Get() })
+		UKnightButtonFillExtension::SetLabelFitted(Button, FLinearColor(FColor(36, 60, 88)));
 	BuildMaintenanceFooterBack();
 	if (Button_Stage) Button_Stage->OnClicked().AddUObject(this, &ThisClass::HandleStageClicked);
 	if (Button_ReturnToTitle) Button_ReturnToTitle->OnClicked().AddUObject(this, &ThisClass::HandleReturnToTitleClicked);
@@ -242,6 +246,9 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 	{
 		return false;
 	}
+	for (UCommonButtonBase* Button : { Button_Stage.Get(), Button_ReturnToTitle.Get(), Button_Maintenance.Get(), Button_Settings.Get(),
+		Button_Codex.Get() })
+		UKnightButtonFillExtension::Reset(Button);
 	SetMaintenanceSubmenuOpen(false);
 	const bool bEnteringStage = NewPage == EKnightMainMenuPage::Stage && CurrentPage != EKnightMainMenuPage::Stage;
 	const bool bLeavingMaintenance = CurrentPage == EKnightMainMenuPage::Maintenance && NewPage != CurrentPage;
