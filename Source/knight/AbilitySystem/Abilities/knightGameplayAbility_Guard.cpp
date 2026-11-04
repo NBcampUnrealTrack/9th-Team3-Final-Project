@@ -9,6 +9,7 @@
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
+#include "Abilities/Tasks/AbilityTask_WaitGameplayTag.h"
 #include "Abilities/Tasks/AbilityTask_WaitInputRelease.h"
 #include "Character/knightMovementComponent.h"
 #include "Combat/knightCombatLibrary.h"
@@ -40,6 +41,8 @@ UknightGameplayAbility_Guard::UknightGameplayAbility_Guard(const FObjectInitiali
 	ActivationOwnedTags.AddTag(knightGameplayTags::State_Guarding);
 	ActivationBlockedTags.AddTag(knightGameplayTags::State_Dead);
 	ActivationBlockedTags.AddTag(knightGameplayTags::State_HitReact);
+	// 공중(점프·낙하·호버링)에서는 가드를 올리지 않는다. 가드 중에 공중에 뜨면 내린다(OnLeftGround).
+	ActivationBlockedTags.AddTag(knightGameplayTags::State_Airborne);
 	PerfectGuardDamageEffect = UknightGameplayEffect_Damage::StaticClass();
 	// 가드는 행동 에너지를 쓰지 않는다(StaminaCost 0, 2026-10-09 사용자 결정). 막은 피격은 가드 효율에 따라 체력·그로기가 줄어든다(피해 실행).
 	// (2026-10-15 사용자 결정) 공격 후딜 등으로 누른 순간 막혀 있었으면, 키를 누르고 있는 동안 가드할 수 있게 되는 순간 바로 올린다.
@@ -140,6 +143,16 @@ void UknightGameplayAbility_Guard::ActivateAbility(const FGameplayAbilitySpecHan
 	// 전에는 판정 시간이 끝날 때 뗌을 확인해서, 짧게 톡 눌러도 판정 시간 내내 패리가 유지되는 대신 그동안 가드를 내릴 수 없었다.
 	// 입력 버퍼로 늦게 발동했는데 이미 키를 뗀 상태면 바로 끝난다.
 	WaitForRelease();
+
+	// 가드 중에 공중에 뜨면(점프·낭떠러지) 가드를 내린다. 키를 누르고 있으면 착지해서 다시 올릴 수 있게 되는 순간 올라간다(bRetryPressWhileHeld).
+	UAbilityTask_WaitGameplayTagAdded* const AirborneTask = UAbilityTask_WaitGameplayTagAdded::WaitGameplayTagAdd(this, knightGameplayTags::State_Airborne, nullptr, true);
+	AirborneTask->Added.AddDynamic(this, &ThisClass::OnLeftGround);
+	AirborneTask->ReadyForActivation();
+}
+
+void UknightGameplayAbility_Guard::OnLeftGround()
+{
+	EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, true);
 }
 
 void UknightGameplayAbility_Guard::WaitForRelease()

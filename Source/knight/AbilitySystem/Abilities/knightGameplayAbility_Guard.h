@@ -177,6 +177,10 @@ private:
 	UFUNCTION()
 	void OnGuardReleased(float TimeHeld);
 
+	/** 가드 중에 공중에 떴다(State.Airborne). 가드를 내린다. */
+	UFUNCTION()
+	void OnLeftGround();
+
 	void RemoveParryTag();
 	void WaitForRelease();
 
