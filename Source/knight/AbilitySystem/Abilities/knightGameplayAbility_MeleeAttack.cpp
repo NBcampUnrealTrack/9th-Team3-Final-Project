@@ -139,6 +139,10 @@ void UknightGameplayAbility_MeleeAttack::ActivateAbility(const FGameplayAbilityS
 
 	bAttackStarted = false;
 	bStartupDelayDone = false;
+	// 무작위 몽타주는 칼을 뽑아 스탠스가 정해진 뒤 처음 쓸 때 고른다(GetStanceAttackMontage).
+	bRandomMontageChosen = false;
+	ChosenRandomMontage.Reset();
+	bHitCuePlayed = false;
 	if (DrawMontage && !IsWeaponInHand())
 	{
 		// 락온 중이 아니면 화면 중앙(카메라 방향)을 보고 뽑는다. 공격은 StartAttack에서 한 번 더 맞춘다(뽑는 동안 카메라가 돌 수 있음).
@@ -623,8 +627,39 @@ void UknightGameplayAbility_MeleeAttack::StopThrust(int32& ThrustId) const
 
 UAnimMontage* UknightGameplayAbility_MeleeAttack::GetStanceAttackMontage() const
 {
+	const bool bOneHanded = !UknightGameplayAbility_StanceSwitch::IsTwoHanded(GetAbilitySystemComponentFromActorInfo());
+	// 무작위 목록이 있으면 이번 발동에서 한 번만 고르고(바로 앞에 나온 것은 빼고), 끝날 때까지 같은 몽타주를 준다.
+	if (!bRandomMontageChosen)
+	{
+		bRandomMontageChosen = true;
+		const TArray<TObjectPtr<UAnimMontage>>& Pool = bOneHanded && !OneHandedRandomAttackMontages.IsEmpty()
+			? OneHandedRandomAttackMontages : RandomAttackMontages;
+		TArray<UAnimMontage*> Choices;
+		for (const TObjectPtr<UAnimMontage>& Candidate : Pool)
+		{
+			if (Candidate)
+			{
+				Choices.AddUnique(Candidate.Get());
+			}
+		}
+		if (Choices.Num() > 1)
+		{
+			Choices.Remove(LastRandomMontage.Get());
+		}
+		if (!Choices.IsEmpty())
+		{
+			ChosenRandomMontage = Choices[FMath::RandRange(0, Choices.Num() - 1)];
+			LastRandomMontage = ChosenRandomMontage;
+			UE_LOG(LogknightAbility, Log, TEXT("%s: random attack montage %s (%d choices, %s)"), *GetName(), *GetNameSafe(ChosenRandomMontage.Get()),
+				Choices.Num(), bOneHanded ? TEXT("one-handed") : TEXT("two-handed"));
+		}
+	}
+	if (UAnimMontage* const Chosen = ChosenRandomMontage.Get())
+	{
+		return Chosen;
+	}
 	// (2026-10-15) 한손 스탠스면 한손 몽타주. 비어 있으면 양손 몽타주를 그대로 쓴다.
-	if (OneHandedAttackMontage && !UknightGameplayAbility_StanceSwitch::IsTwoHanded(GetAbilitySystemComponentFromActorInfo()))
+	if (OneHandedAttackMontage && bOneHanded)
 	{
 		return OneHandedAttackMontage;
 	}
@@ -762,5 +797,20 @@ void UknightGameplayAbility_MeleeAttack::OnMeleeHitEvent(FGameplayEventData Payl
 		return;
 	}
 	const EknightHitOutcome Outcome = UknightCombatLibrary::ApplyMeleeHit(GetAvatarActorFromActorInfo(), *Hit, GetStanceScaledHitParams(HitParams), this);
+	// 실제로 맞혔을 때만 추가 타격 큐(HitCueTag)를 맞은 곳에서 한 번 실행한다.
+	if (Outcome == EknightHitOutcome::Hit && HitCueTag.IsValid() && !bHitCuePlayed)
+	{
+		if (UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo())
+		{
+			bHitCuePlayed = true;
+			FGameplayCueParameters CueParams;
+			CueParams.Location = Hit->ImpactPoint;
+			CueParams.Normal = Hit->ImpactNormal;
+			CueParams.Instigator = GetAvatarActorFromActorInfo();
+			CueParams.EffectCauser = GetAvatarActorFromActorInfo();
+			CueParams.PhysicalMaterial = Hit->PhysMaterial;
+			ASC->ExecuteGameplayCue(HitCueTag, CueParams);
+		}
+	}
 	OnHitResolved(*Hit, Outcome);
 }

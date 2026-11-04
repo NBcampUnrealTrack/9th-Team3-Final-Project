@@ -76,6 +76,17 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack")
 	TObjectPtr<UAnimMontage> OneHandedAttackMontage;
 
+	/**
+	 * 비어 있지 않으면 발동할 때마다 이 중 하나를 무작위로 골라 AttackMontage 대신 쓴다(양손 스탠스. 한손 목록이 비었으면 한손에서도).
+	 * 둘 이상이면 바로 앞 발동에 나온 것은 다시 고르지 않는다. 패링 반격(GA_Knight_ParryCounter)이 쓴다. 기본 빈칸(다른 공격은 그대로).
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack")
+	TArray<TObjectPtr<UAnimMontage>> RandomAttackMontages;
+
+	/** 한손 스탠스용 RandomAttackMontages. 비어 있으면 RandomAttackMontages, 그것도 비면 OneHandedAttackMontage. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack")
+	TArray<TObjectPtr<UAnimMontage>> OneHandedRandomAttackMontages;
+
 	UPROPERTY(EditDefaultsOnly, Category="Attack", meta=(ClampMin=0.01))
 	float PlayRate = 1.f;
 
@@ -84,6 +95,14 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category="Attack")
 	FknightMeleeHitParams HitParams;
+
+	/**
+	 * 맞혔을 때(가드·패링·회피가 아닌 실제 타격) 맞은 곳에서 추가로 실행할 게임플레이 큐. 한 번 휘두를 때 한 번만 나온다.
+	 * 비우면 없음(기본). 패링 반격(GA_Knight_ParryCounter)이 GameplayCue.Hit.ParryCounter로
+	 * 패링 때처럼 큰 불꽃·묵직한 타격음·화면 흔들림을 더한다(큐 에셋 GCN_Hit_ParryCounter에서 조정).
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack")
+	FGameplayTag HitCueTag;
 
 	/** Played first when the weapon is not in the hand (sword on the back). Leave empty to draw instantly. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Draw")
@@ -231,7 +250,7 @@ protected:
 	/**
 	 * (2026-10-29 사용자 결정) 0보다 크면 락온 대상으로 끌려가지 않고, 바라보는 방향으로 이 거리(cm)만큼 나간다.
 	 * 앞에 적(다른 폰)이 있으면 그 표면에서 WarpStopDistance 앞에서, 벽이면 벽 앞에서 멈춘다(락온 여부와 상관없음).
-	 * 대쉬공격(GA_Knight_RunAttack)이 200. 0이면 예전처럼 락온 대상 쪽으로 MaxWarpDistance까지. 바뀔 수 있는 값.
+	 * 대쉬공격(GA_Knight_RunAttack)이 500. 0이면 예전처럼 락온 대상 쪽으로 MaxWarpDistance까지. 바뀔 수 있는 값.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Motion Warping", meta=(ClampMin=0, Units="cm"))
 	float ForwardLungeDistance = 0.f;
@@ -334,8 +353,15 @@ private:
 	bool SetForwardLungeWarpTarget(FVector& OutLocation, FRotator& OutRotation, float& OutTravel) const;
 	/** (2026-10-20) bWarpToParriedAttacker이고 락온이 아닐 때 돌진할 패링한 적. 없거나 죽었으면 null. */
 	AActor* GetParriedWarpTarget() const;
-	/** 지금 스탠스에 맞는 공격 몽타주. */
+	/** 지금 스탠스에 맞는 공격 몽타주. 무작위 목록이 있으면 이번 발동에 처음 부를 때 하나를 골라 끝날 때까지 같은 것을 준다. */
 	UAnimMontage* GetStanceAttackMontage() const;
+	/** 이번 발동에 무작위 목록(RandomAttackMontages)에서 고른 몽타주와 고른 적이 있는지. 발동할 때 지운다. */
+	mutable TWeakObjectPtr<UAnimMontage> ChosenRandomMontage;
+	mutable bool bRandomMontageChosen = false;
+	/** 바로 앞 발동에 고른 몽타주. 같은 것이 연달아 나오지 않게 한다. */
+	mutable TWeakObjectPtr<UAnimMontage> LastRandomMontage;
+	/** 이번 발동에 HitCueTag를 이미 실행했는지. 여러 부위·여러 적을 맞혀도 한 번만 나오게 한다. 발동할 때 지운다. */
+	bool bHitCuePlayed = false;
 	void CheckDrawMoveCancel();
 	/** (2026-10-22) 발도 중 이동 잠금(bLockMovementWhileDrawing). 칼이 손에 들어오거나 공격이 끝나면 푼다. */
 	void SetDrawMovementLocked(bool bLock);
