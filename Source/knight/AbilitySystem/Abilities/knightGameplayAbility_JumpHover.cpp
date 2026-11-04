@@ -525,7 +525,14 @@ void UknightGameplayAbility_JumpHover::EndAbility(const FGameplayAbilitySpecHand
 		bJumped = false;
 		if (ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
 		{
-			Character->StopJumping();
+			// 아직 땅을 떠나기 전이면 점프 요청을 지우지 않는다. 다음 이동 틱에 점프가 나간다.
+			// 착지 동작 중에 누른 점프가 입력 버퍼에 남았다가 키를 뗀 뒤에 발동하면 바로 여기로 오는데,
+			// 그때 지우면 행동 에너지만 쓰고 점프는 나가지 않았다. 누른 시간과 점프 높이는 상관없다(JumpMaxHoldTime 0).
+			const UCharacterMovementComponent* const Movement = Character->GetCharacterMovement();
+			if (!Movement || !Movement->IsMovingOnGround())
+			{
+				Character->StopJumping();
+			}
 		}
 	}
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
