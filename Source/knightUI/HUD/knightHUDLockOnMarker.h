@@ -32,6 +32,13 @@ class KNIGHTUI_API UknightHUDLockOnMarker : public UUserWidget
 {
 	GENERATED_BODY()
 
+public:
+	/**
+	 * 이번 프레임 이름판 자리(슬레이트 단위). 이름판 아래 모서리(뒤집히지 않았으면 왼쪽, 뒤집혔으면 오른쪽)와 방향을 준다.
+	 * 다른 HUD가 이름판 바로 아래에 붙어 그릴 때 쓴다. 잠겨 있지 않거나 대상이 화면 뒤면 false.
+	 */
+	bool GetPlateAnchor(const AActor*& OutTarget, FVector2D& OutPlateCorner, bool& bOutFlipped) const;
+
 protected:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
@@ -167,4 +174,6 @@ private:
 	float FlashElapsed = TNumericLimits<float>::Max();
 	int32 ShownDistance = -1;
 	bool bFlipped = false;
+	bool bPlateAnchorValid = false;
+	FVector2D PlateAnchor = FVector2D::ZeroVector;
 };

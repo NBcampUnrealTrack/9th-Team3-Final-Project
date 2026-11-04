@@ -5,45 +5,13 @@
 #include "Combat/knightAttackWarningSubsystem.h"
 #include "Engine/World.h"
 #include "Fonts/FontMeasure.h"
+#include "HUD/knightHUDScreenDraw.h"
 #include "Framework/Application/SlateApplication.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
-#include "Rendering/DrawElements.h"
 #include "Styling/CoreStyle.h"
 
 #define LOCTEXT_NAMESPACE "knightHUDAttackWarning"
-
-namespace knightAttackWarningDraw
-{
-	float EaseOut(float Alpha)
-	{
-		return 1.f - FMath::Pow(1.f - FMath::Clamp(Alpha, 0.f, 1.f), 3.f);
-	}
-
-	FLinearColor WithOpacity(FLinearColor Color, float Opacity)
-	{
-		Color.A *= Opacity;
-		return Color;
-	}
-
-	void Lines(FSlateWindowElementList& Out, int32 Layer, const FGeometry& Geometry, const TArray<FVector2f>& Points, const FLinearColor& Color, float Thickness)
-	{
-		FSlateDrawElement::MakeLines(Out, Layer, Geometry.ToPaintGeometry(), Points, ESlateDrawEffect::None, Color, true, Thickness);
-	}
-
-	void Box(FSlateWindowElementList& Out, int32 Layer, const FGeometry& Geometry, const FVector2D& Position, const FVector2D& Size, const FLinearColor& Color)
-	{
-		FSlateDrawElement::MakeBox(Out, Layer, Geometry.ToPaintGeometry(FVector2f(Size), FSlateLayoutTransform(FVector2f(Position))),
-			FCoreStyle::Get().GetBrush("GenericWhiteBox"), ESlateDrawEffect::None, Color);
-	}
-
-	void Text(FSlateWindowElementList& Out, int32 Layer, const FGeometry& Geometry, const FVector2D& Position, const FText& Label, const FSlateFontInfo& Font,
-		const FLinearColor& Color)
-	{
-		FSlateDrawElement::MakeText(Out, Layer, Geometry.ToPaintGeometry(FVector2f(400.f, 40.f), FSlateLayoutTransform(FVector2f(Position))), Label, Font,
-			ESlateDrawEffect::None, Color);
-	}
-}
 
 UknightHUDAttackWarning::UknightHUDAttackWarning(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -123,15 +91,24 @@ void UknightHUDAttackWarning::CollectMarkers(const FVector2D& Size, TArray<FMark
 	}
 }
 
+knightHUDDraw::FScreenLook UknightHUDAttackWarning::GetScreenLook() const
+{
+	knightHUDDraw::FScreenLook Look;
+	Look.GhostColor = GhostColor;
+	Look.GhostOffset = GhostOffset;
+	Look.ScanlineSpacing = ScanlineSpacing;
+	Look.ScanlineOpacity = ScanlineOpacity;
+	Look.SweepPeriod = SweepPeriod;
+	return Look;
+}
+
 float UknightHUDAttackWarning::GetOpacity(const FMarker& Marker) const
 {
-	const float Intro = knightAttackWarningDraw::EaseOut(Marker.Elapsed / BoxInTime) * BaseOpacity;
+	const float Intro = knightHUDDraw::EaseOut(Marker.Elapsed / BoxInTime) * BaseOpacity;
 	if (Marker.Elapsed < BootFlickerTime)
 	{
 		// 신호가 잡히듯 프레임 단위로 들쭉날쭉 켜진다.
-		const uint32 Frame = static_cast<uint32>(Marker.Elapsed * 60.f);
-		const float Noise = static_cast<float>((Frame * 2654435761u >> 16) & 0xFF) / 255.f;
-		return Intro * (Noise > 0.4f ? 1.f : 0.15f);
+		return Intro * knightHUDDraw::BootFlicker(Marker.Elapsed, BootFlickerTime);
 	}
 	if (Marker.Remaining <= FinalPhaseTime)
 	{
@@ -144,40 +121,19 @@ float UknightHUDAttackWarning::GetOpacity(const FMarker& Marker) const
 void UknightHUDAttackWarning::ScreenLines(FSlateWindowElementList& Out, int32 Layer, const FGeometry& Geometry, const TArray<FVector2f>& Points,
 	const FLinearColor& Color, float Thickness) const
 {
-	// 조종석 디스플레이처럼 옆에 다른 색이 살짝 어긋나 겹친다.
-	if (GhostOffset > 0.f)
-	{
-		TArray<FVector2f> Ghost = Points;
-		for (FVector2f& Point : Ghost)
-		{
-			Point.X += GhostOffset;
-		}
-		knightAttackWarningDraw::Lines(Out, Layer, Geometry, Ghost, knightAttackWarningDraw::WithOpacity(GhostColor, Color.A), Thickness);
-	}
-	knightAttackWarningDraw::Lines(Out, Layer, Geometry, Points, Color, Thickness);
+	knightHUDDraw::ScreenLines(GetScreenLook(), Out, Layer, Geometry, Points, Color, Thickness);
 }
 
 void UknightHUDAttackWarning::ScreenText(FSlateWindowElementList& Out, int32 Layer, const FGeometry& Geometry, const FVector2D& Position, const FText& Label,
 	const FSlateFontInfo& Font, const FLinearColor& Color) const
 {
-	if (GhostOffset > 0.f)
-	{
-		knightAttackWarningDraw::Text(Out, Layer, Geometry, Position + FVector2D(GhostOffset, 0.f), Label, Font, knightAttackWarningDraw::WithOpacity(GhostColor, Color.A));
-	}
-	knightAttackWarningDraw::Text(Out, Layer, Geometry, Position, Label, Font, Color);
+	knightHUDDraw::ScreenText(GetScreenLook(), Out, Layer, Geometry, Position, Label, Font, Color);
 }
 
 void UknightHUDAttackWarning::PaintScanlines(FSlateWindowElementList& Out, int32 Layer, const FGeometry& Geometry, const FVector2D& Position, const FVector2D& Extent,
 	float Opacity, float Time) const
 {
-	const FLinearColor Row = knightAttackWarningDraw::WithOpacity(WarningColor, Opacity * ScanlineOpacity);
-	for (float Y = Position.Y + 1.f; Y < Position.Y + Extent.Y; Y += ScanlineSpacing)
-	{
-		knightAttackWarningDraw::Lines(Out, Layer, Geometry, { FVector2f(Position.X, Y), FVector2f(Position.X + Extent.X, Y) }, Row, 1.f);
-	}
-	// 위에서 아래로 훑고 지나가는 밝은 줄(화면 갱신).
-	const float SweepY = Position.Y + FMath::Frac(Time / SweepPeriod) * Extent.Y;
-	knightAttackWarningDraw::Lines(Out, Layer, Geometry, { FVector2f(Position.X, SweepY), FVector2f(Position.X + Extent.X, SweepY) }, knightAttackWarningDraw::WithOpacity(WarningColor, Opacity * 0.5f), 1.f);
+	knightHUDDraw::Scanlines(GetScreenLook(), Out, Layer, Geometry, Position, Extent, WarningColor, Opacity, Time);
 }
 
 int32 UknightHUDAttackWarning::NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect,
@@ -206,8 +162,8 @@ int32 UknightHUDAttackWarning::NativePaint(const FPaintArgs& Args, const FGeomet
 void UknightHUDAttackWarning::PaintBracket(const FMarker& Marker, const FGeometry& Geometry, FSlateWindowElementList& Out, int32 Layer, float Opacity,
 	const FVector2D& Size) const
 {
-	const FLinearColor Color = knightAttackWarningDraw::WithOpacity(WarningColor, Opacity);
-	const float Intro = knightAttackWarningDraw::EaseOut(Marker.Elapsed / BoxInTime);
+	const FLinearColor Color = knightHUDDraw::WithOpacity(WarningColor, Opacity);
+	const float Intro = knightHUDDraw::EaseOut(Marker.Elapsed / BoxInTime);
 	const bool bFinal = Marker.Remaining <= FinalPhaseTime;
 	const float Half = BoxSize * 0.5f * FMath::Lerp(BoxStartScale, 1.f, Intro) * (bFinal ? FinalBoxScale : 1.f);
 	const FVector2f C(Marker.Position);
@@ -220,10 +176,10 @@ void UknightHUDAttackWarning::PaintBracket(const FMarker& Marker, const FGeometr
 		ScreenLines(Out, Layer, Geometry, { Tip - FVector2f(0.f, Sign.Y * Corner), Tip, Tip - FVector2f(Sign.X * Corner, 0.f) }, Color, LineThickness);
 	}
 	// 가운데 점.
-	knightAttackWarningDraw::Box(Out, Layer, Geometry, FVector2D(C) - FVector2D(1.5f), FVector2D(3.f), Color);
+	knightHUDDraw::Box(Out, Layer, Geometry, FVector2D(C) - FVector2D(1.5f), FVector2D(3.f), Color);
 
 	// 태그는 브래킷이 다 좁혀진 뒤에 뻗어 나온다.
-	const float TagAlpha = knightAttackWarningDraw::EaseOut((Marker.Elapsed - BoxInTime * 0.6f) / BoxInTime);
+	const float TagAlpha = knightHUDDraw::EaseOut((Marker.Elapsed - BoxInTime * 0.6f) / BoxInTime);
 	if (TagAlpha <= 0.f)
 	{
 		return;
@@ -232,18 +188,18 @@ void UknightHUDAttackWarning::PaintBracket(const FMarker& Marker, const FGeometr
 	const FVector2f Start = C + FVector2f(Side * Half, -Half);
 	const FVector2f Elbow = Start + FVector2f(Side * LeaderLength.X, -LeaderLength.X) * TagAlpha;
 	const FVector2f End = Elbow + FVector2f(Side * LeaderLength.Y, 0.f) * TagAlpha;
-	const FLinearColor TagColor = knightAttackWarningDraw::WithOpacity(WarningColor, Opacity * TagAlpha);
+	const FLinearColor TagColor = knightHUDDraw::WithOpacity(WarningColor, Opacity * TagAlpha);
 	ScreenLines(Out, Layer, Geometry, { Start, Elbow, End }, TagColor, 1.f);
 
 	const FVector2D TagPosition = FVector2D(Side > 0.f ? End.X : End.X - TagSize.X, End.Y - TagSize.Y * 0.5f);
-	knightAttackWarningDraw::Box(Out, Layer, Geometry, TagPosition, TagSize, knightAttackWarningDraw::WithOpacity(PlateColor, Opacity * TagAlpha));
+	knightHUDDraw::Box(Out, Layer, Geometry, TagPosition, TagSize, knightHUDDraw::WithOpacity(PlateColor, Opacity * TagAlpha));
 	PaintScanlines(Out, Layer, Geometry, TagPosition, TagSize, Opacity * TagAlpha, Marker.Elapsed);
 	const FVector2f TL(TagPosition);
 	const FVector2f BR = TL + FVector2f(TagSize);
 	ScreenLines(Out, Layer, Geometry, { TL, FVector2f(BR.X, TL.Y), BR, FVector2f(TL.X, BR.Y), TL }, TagColor, 1.f);
 	// 테두리는 비쳐도 글자는 밝은 배경에서도 읽혀야 하므로 BaseOpacity를 빼고 그린다.
 	const float TextOpacity = FMath::Min(1.f, Opacity / FMath::Max(BaseOpacity, KINDA_SMALL_NUMBER)) * TagAlpha;
-	ScreenText(Out, Layer + 1, Geometry, TagPosition + FVector2D(8.f, 2.f), WarningLabel, LabelFont, knightAttackWarningDraw::WithOpacity(WarningColor, TextOpacity));
+	ScreenText(Out, Layer + 1, Geometry, TagPosition + FVector2D(8.f, 2.f), WarningLabel, LabelFont, knightHUDDraw::WithOpacity(WarningColor, TextOpacity));
 
 	// 경고 줄무늬와 NO PARRY.
 	const float StripeY = BR.Y + 4.f;
@@ -251,13 +207,13 @@ void UknightHUDAttackWarning::PaintBracket(const FMarker& Marker, const FGeometr
 	{
 		ScreenLines(Out, Layer, Geometry, { FVector2f(X, StripeY + 5.f), FVector2f(X + 5.f, StripeY) }, TagColor, 1.5f);
 	}
-	ScreenText(Out, Layer + 1, Geometry, FVector2D(TL.X, StripeY + 8.f), SubLabel, SubLabelFont, knightAttackWarningDraw::WithOpacity(SubLabelColor, TextOpacity));
+	ScreenText(Out, Layer + 1, Geometry, FVector2D(TL.X, StripeY + 8.f), SubLabel, SubLabelFont, knightHUDDraw::WithOpacity(SubLabelColor, TextOpacity));
 }
 
 void UknightHUDAttackWarning::PaintEdge(const FMarker& Marker, const FGeometry& Geometry, FSlateWindowElementList& Out, int32 Layer, float Opacity,
 	const FVector2D& Size) const
 {
-	const FLinearColor Color = knightAttackWarningDraw::WithOpacity(WarningColor, Opacity);
+	const FLinearColor Color = knightHUDDraw::WithOpacity(WarningColor, Opacity);
 	const FVector2D Center = Size * 0.5f;
 	const FVector2D Reach = (Center - EdgeMargin).ComponentMax(FVector2D(1.f));
 	const FVector2D D = Marker.OffscreenDirection;
@@ -282,15 +238,15 @@ void UknightHUDAttackWarning::PaintEdge(const FMarker& Marker, const FGeometry& 
 	ScreenText(Out, Layer + 1, Geometry, TextCenter - TextSize * 0.5f, Label, SubLabelFont, Color);
 
 	// 그쪽 화면 가장자리에 옅은 띠.
-	const FLinearColor Band = knightAttackWarningDraw::WithOpacity(WarningColor, Opacity * 0.35f);
+	const FLinearColor Band = knightHUDDraw::WithOpacity(WarningColor, Opacity * 0.35f);
 	const float Thickness = 8.f;
 	if (FMath::Abs(D.X) * Reach.Y >= FMath::Abs(D.Y) * Reach.X)
 	{
-		knightAttackWarningDraw::Box(Out, Layer, Geometry, FVector2D(D.X > 0.f ? Size.X - Thickness : 0.f, 0.f), FVector2D(Thickness, Size.Y), Band);
+		knightHUDDraw::Box(Out, Layer, Geometry, FVector2D(D.X > 0.f ? Size.X - Thickness : 0.f, 0.f), FVector2D(Thickness, Size.Y), Band);
 	}
 	else
 	{
-		knightAttackWarningDraw::Box(Out, Layer, Geometry, FVector2D(0.f, D.Y > 0.f ? Size.Y - Thickness : 0.f), FVector2D(Size.X, Thickness), Band);
+		knightHUDDraw::Box(Out, Layer, Geometry, FVector2D(0.f, D.Y > 0.f ? Size.Y - Thickness : 0.f), FVector2D(Size.X, Thickness), Band);
 	}
 }
 
