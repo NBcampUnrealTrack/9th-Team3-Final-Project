@@ -18,6 +18,7 @@
 #include "Animation/AnimSequence.h"
 #include "Animation/BlendSpace.h"
 #include "Animation/knightAnimNode_LegPlacement.h"
+#include "Animation/knightAnimNode_LookAt.h"
 #include "Animation/knightAnimNode_WingClearance.h"
 #include "Animation/knightAnimNotifyState_MeleeTrace.h"
 #include "Animation/knightAnimNotifyState_PlayRate.h"
@@ -1933,6 +1934,87 @@ bool UknightMonsterRecipeLibrary::SetupPunishState(UStateTree* StateTree)
 	const bool bCompiled = UStateTreeEditingSubsystem::CompileStateTree(StateTree, CompilerLog);
 	StateTree->MarkPackageDirty();
 	UE_LOG(LogTemp, Display, TEXT("SetupPunishState: %s %s."), *GetNameSafe(StateTree), bCompiled ? TEXT("compiled") : TEXT("FAILED to compile"));
+	return bCompiled;
+}
+
+bool UknightMonsterRecipeLibrary::SetupLookAt(UAnimBlueprint* AnimBlueprint, const TArray<FName>& Bones, const TArray<float>& Weights,
+	float MaxYaw, float MaxPitch, bool bDisableWhenAirborne)
+{
+	UClass* const LookAtClass = FindObject<UClass>(nullptr, TEXT("/Script/knightAnimGraph.AnimGraphNode_knightLookAt"));
+	if (!AnimBlueprint || !LookAtClass || Bones.IsEmpty() || Bones.Num() != Weights.Num())
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetupLookAt: %s needs an anim blueprint and matching Bones/Weights."), *GetNameSafe(AnimBlueprint));
+		return false;
+	}
+	UEdGraphNode* LookAtNode = nullptr;
+	UEdGraphNode* ToLocalNode = nullptr;
+	TArray<UEdGraph*> Graphs;
+	AnimBlueprint->GetAllGraphs(Graphs);
+	for (UEdGraph* const Graph : Graphs)
+	{
+		for (UEdGraphNode* const Node : Graph->Nodes)
+		{
+			if (Node && Node->GetClass() == LookAtClass)
+			{
+				LookAtNode = Node;
+			}
+			else if (Node && Node->GetClass()->GetFName() == TEXT("AnimGraphNode_ComponentToLocalSpace"))
+			{
+				ToLocalNode = Node;
+			}
+		}
+	}
+	if (!LookAtNode)
+	{
+		// 컴포넌트 공간 노드들(발 배치, 날개) 뒤, 로컬 공간으로 돌아가기 바로 앞에 끼운다.
+		UEdGraphPin* const ToLocalIn = ToLocalNode ? ToLocalNode->FindPin(TEXT("ComponentPose"), EGPD_Input) : nullptr;
+		if (!ToLocalIn || ToLocalIn->LinkedTo.Num() != 1)
+		{
+			UE_LOG(LogTemp, Error, TEXT("SetupLookAt: %s has no Component To Local node with one input link."), *GetNameSafe(AnimBlueprint));
+			return false;
+		}
+		UEdGraphPin* const Source = ToLocalIn->LinkedTo[0];
+		UEdGraph* const Graph = ToLocalNode->GetGraph();
+		Graph->Modify();
+		LookAtNode = NewObject<UEdGraphNode>(Graph, LookAtClass, NAME_None, RF_Transactional);
+		Graph->AddNode(LookAtNode, false, false);
+		LookAtNode->CreateNewGuid();
+		LookAtNode->PostPlacedNewNode();
+		LookAtNode->AllocateDefaultPins();
+		LookAtNode->NodePosX = ToLocalNode->NodePosX - 40;
+		LookAtNode->NodePosY = ToLocalNode->NodePosY + 220;
+		UEdGraphPin* const LookIn = LookAtNode->FindPin(TEXT("ComponentPose"), EGPD_Input);
+		UEdGraphPin* const LookOut = LookAtNode->FindPin(TEXT("Pose"), EGPD_Output);
+		if (!LookIn || !LookOut)
+		{
+			Graph->RemoveNode(LookAtNode);
+			return false;
+		}
+		ToLocalIn->BreakAllPinLinks();
+		Source->MakeLinkTo(LookIn);
+		LookOut->MakeLinkTo(ToLocalIn);
+	}
+	FAnimNode_knightLookAt* const Node = knightRecipe::ValuePtr<FAnimNode_knightLookAt>(LookAtNode->GetClass(), LookAtNode, TEXT("Node"), nullptr);
+	if (!Node)
+	{
+		return false;
+	}
+	LookAtNode->Modify();
+	Node->Bones.Reset();
+	for (int32 Index = 0; Index < Bones.Num(); ++Index)
+	{
+		FknightLookAtBone& Entry = Node->Bones.AddDefaulted_GetRef();
+		Entry.Bone.BoneName = Bones[Index];
+		Entry.Weight = Weights[Index];
+	}
+	Node->MaxYaw = MaxYaw;
+	Node->MaxPitch = MaxPitch;
+	Node->bDisableWhenAirborne = bDisableWhenAirborne;
+
+	FKismetEditorUtilities::CompileBlueprint(AnimBlueprint, EBlueprintCompileOptions::SkipGarbageCollection);
+	AnimBlueprint->MarkPackageDirty();
+	const bool bCompiled = AnimBlueprint->Status != BS_Error;
+	UE_LOG(LogTemp, Display, TEXT("SetupLookAt: %s %s."), *GetNameSafe(AnimBlueprint), bCompiled ? TEXT("compiled") : TEXT("FAILED to compile"));
 	return bCompiled;
 }
 
