@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
 #include "GameplayTagContainer.h"
+#include "Monster/knightMonsterReadout.h"
 #include "knightMonsterDefinition.generated.h"
 
 class UAnimMontage;
@@ -207,6 +208,12 @@ public:
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="States", meta=(ClampMin=0, ClampMax=1))
 	float Phase2HealthRatio = 0.f;
+
+	/**
+	 * HUD 센서 판독 문구를 이 몬스터에 맞게 바꾼다(잔열 분노 = HEAT CRITICAL 등). 없는 종류나 비운 줄은 HUD 기본 문구를 쓴다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI")
+	TMap<EknightMonsterReadout, FknightMonsterReadoutText> ReadoutTexts;
 
 	/** Rough radius for lock-on camera framing. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Targeting", meta=(ClampMin=0, Units="cm"))
