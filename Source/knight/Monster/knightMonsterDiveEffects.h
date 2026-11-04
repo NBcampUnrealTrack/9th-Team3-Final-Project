@@ -117,12 +117,14 @@ struct KNIGHT_API FknightMonsterDiveEffects
 	void StartFold(ACharacter& Character);
 	void StartDive(ACharacter& Character, const FVector& Direction);
 	void Tick(ACharacter& Character, float DeltaTime);
-	void FinishDive(ACharacter& Character);
+	/** bImpact가 false면(패링으로 공중에서 끊겨 바닥에 닿지 않았을 때) 착지 충격파 없이 연출을 끄고, 출발 지점의 소닉 붐 고리도 바로 지운다. */
+	void FinishDive(ACharacter& Character, bool bImpact = true);
 	/** 남은 연출을 모두 끈다(어빌리티가 끝날 때). */
 	void Stop();
 
 private:
 	TWeakObjectPtr<UNiagaraComponent> Fold;
+	TWeakObjectPtr<UNiagaraComponent> Boom;
 	TWeakObjectPtr<UNiagaraComponent> Bow;
 	TWeakObjectPtr<UNiagaraComponent> Streak;
 	TWeakObjectPtr<UNiagaraComponent> Skim;

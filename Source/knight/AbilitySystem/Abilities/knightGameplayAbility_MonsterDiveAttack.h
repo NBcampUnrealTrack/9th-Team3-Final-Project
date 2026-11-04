@@ -175,5 +175,6 @@ private:
 	bool bConnected = false;
 	bool bParried = false;
 	bool bNoFlinchApplied = false;
+	bool bDiveParriedApplied = false;
 	bool bFallGetUpStarted = false;
 };

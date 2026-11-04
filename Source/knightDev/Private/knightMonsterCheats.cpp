@@ -18,6 +18,7 @@
 //   knight.Monster.Attack <Name>                      공격을 바로 쓴다(쿨다운 무시). 공중 공격이면 이륙, 지상 공격이면 착지한 뒤 쓴다.
 //                                                     이름은 어빌리티 이름이나 끝 구간(Tornado, SonicBreath). 틀리면 공격 목록을 출력한다
 //   knight.Player.Invulnerable [0|1]                  플레이어에 State.Invulnerable을 건다. 인자가 없으면 토글한다
+//   knight.Player.Parrying [0|1]                      패링 판정 구간을 계속 켜 둔다(패링 연출 확인용). 인자가 없으면 토글한다
 //   knight.Monster.Spawn <Name|/Game/Path> [Distance] 플레이어 앞 지면에 몬스터를 스폰한다 (Janyeol 또는 BP_Janyeol)
 //   knight.Monster.Revive [all]                       죽은 몬스터를 지우고 그 자리에 같은 몬스터를 새로 스폰한다
 //
@@ -528,6 +529,23 @@ namespace knightMonsterCheats
 		UE_LOG(LogknightDev, Display, TEXT("knight.Player.Invulnerable: %d (hits on the player now resolve as Evaded)."), bWant ? 1 : 0);
 	}
 
+	// knight.Player.Parrying [0|1]
+	// 패링 판정 구간(State.Parrying + State.Guarding)을 계속 켜 둔다. 패링 연출을 몬스터 공격별로 확인할 때 쓴다. 정면에서 오는 공격만 패링된다.
+	static void PlayerParryingCommand(const TArray<FString>& Args, UWorld* World)
+	{
+		UAbilitySystemComponent* const ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetPlayerPawn(World));
+		if (!ASC)
+		{
+			UE_LOG(LogknightDev, Warning, TEXT("knight.Player.Parrying: no player pawn with an ability system."));
+			return;
+		}
+		const bool bHas = ASC->GetTagCount(knightGameplayTags::State_Parrying) > 0;
+		const bool bWant = Args.IsValidIndex(0) ? FCString::Atoi(*Args[0]) != 0 : !bHas;
+		ASC->SetLooseGameplayTagCount(knightGameplayTags::State_Parrying, bWant ? 1 : 0);
+		ASC->SetLooseGameplayTagCount(knightGameplayTags::State_Guarding, bWant ? 1 : 0);
+		UE_LOG(LogknightDev, Display, TEXT("knight.Player.Parrying: %d (parryable hits from the front now resolve as Parried)."), bWant ? 1 : 0);
+	}
+
 	// knight.Monster.Spawn <Name|/Game/Path> [Distance]
 
 	/** BP 경로, 또는 /Game 아래 몬스터 Blueprint 이름(BP_ 생략 가능, 대소문자 무시). */
@@ -856,4 +874,7 @@ namespace knightMonsterCheats
 	static FAutoConsoleCommandWithWorldAndArgs PlayerInvulnerableCmd(TEXT("knight.Player.Invulnerable"),
 		TEXT("knight.Player.Invulnerable [0|1]. Toggles State.Invulnerable on the player."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&PlayerInvulnerableCommand), ECVF_Cheat);
+	static FAutoConsoleCommandWithWorldAndArgs PlayerParryingCmd(TEXT("knight.Player.Parrying"),
+		TEXT("knight.Player.Parrying [0|1]. Keeps the player in the parry window (State.Parrying + State.Guarding)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&PlayerParryingCommand), ECVF_Cheat);
 }

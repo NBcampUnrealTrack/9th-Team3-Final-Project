@@ -64,8 +64,9 @@ void FknightMonsterDiveEffects::StartDive(ACharacter& Character, const FVector& 
 	const FRotator Rotation = DiveDirection.Rotation();
 	if (LaunchEffect)
 	{
-		UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, LaunchEffect, GetSocketOrActor(Character, LaunchSocket), Rotation, FVector::OneVector, true, true,
-			ENCPoolMethod::AutoRelease);
+		// 패링으로 끊기면 지워야 하므로 풀을 쓰지 않는다(풀로 돌아간 컴포넌트를 다른 이펙트가 다시 쓰면 잘못 끄게 된다).
+		Boom = UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, LaunchEffect, GetSocketOrActor(Character, LaunchSocket), Rotation, FVector::OneVector, true, true,
+			ENCPoolMethod::None);
 	}
 	if (BowEffect)
 	{
@@ -136,10 +137,26 @@ void FknightMonsterDiveEffects::Tick(ACharacter& Character, float DeltaTime)
 	}
 }
 
-void FknightMonsterDiveEffects::FinishDive(ACharacter& Character)
+void FknightMonsterDiveEffects::FinishDive(ACharacter& Character, bool bImpact)
 {
+	if (!bImpact)
+	{
+		// 공중에서 튕겨 나면 몸은 멈췄는데 파면·소닉 붐만 허공에 남아 커진다. 남은 입자까지 바로 지운다.
+		for (TWeakObjectPtr<UNiagaraComponent>* const Component : { &Boom, &Bow, &Streak })
+		{
+			if (UNiagaraComponent* const Niagara = Component->Get())
+			{
+				Niagara->DeactivateImmediate();
+			}
+		}
+	}
+	Boom.Reset();
 	StopDiveEffects();
 	UWorld* const World = Character.GetWorld();
+	if (!bImpact)
+	{
+		return;
+	}
 	if (!ImpactEffect || !World)
 	{
 		return;

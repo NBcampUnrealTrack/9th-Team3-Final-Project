@@ -17,6 +17,47 @@ void UknightAnimNotifyState_PlayRate::NotifyEnd(USkeletalMeshComponent* MeshComp
 	Super::NotifyEnd(MeshComp, Animation, EventReference);
 }
 
+float UknightAnimNotifyState_PlayRate::GetPlaySeconds(const UAnimMontage& Montage, float From, float To, float PlayRate)
+{
+	if (To <= From)
+	{
+		return 0.f;
+	}
+	// 구간 경계마다 끊어서, 조각마다 겹친 Play Rate 구간의 배율을 곱해 나눈다.
+	TArray<float> Cuts = { From, To };
+	for (const FAnimNotifyEvent& Event : Montage.Notifies)
+	{
+		if (Cast<UknightAnimNotifyState_PlayRate>(Event.NotifyStateClass))
+		{
+			Cuts.Add(FMath::Clamp(Event.GetTriggerTime(), From, To));
+			Cuts.Add(FMath::Clamp(Event.GetEndTriggerTime(), From, To));
+		}
+	}
+	Cuts.Sort();
+	const float BaseRate = FMath::Max(Montage.RateScale * PlayRate, KINDA_SMALL_NUMBER);
+	float Seconds = 0.f;
+	for (int32 Index = 1; Index < Cuts.Num(); ++Index)
+	{
+		const float Length = Cuts[Index] - Cuts[Index - 1];
+		if (Length <= 0.f)
+		{
+			continue;
+		}
+		const float Middle = (Cuts[Index] + Cuts[Index - 1]) * 0.5f;
+		float Rate = BaseRate;
+		for (const FAnimNotifyEvent& Event : Montage.Notifies)
+		{
+			const UknightAnimNotifyState_PlayRate* const Window = Cast<UknightAnimNotifyState_PlayRate>(Event.NotifyStateClass);
+			if (Window && Middle >= Event.GetTriggerTime() && Middle < Event.GetEndTriggerTime())
+			{
+				Rate *= Window->PlayRate;
+			}
+		}
+		Seconds += Length / Rate;
+	}
+	return Seconds;
+}
+
 FString UknightAnimNotifyState_PlayRate::GetNotifyName_Implementation() const
 {
 	return FString::Printf(TEXT("Play Rate x%.2g"), PlayRate);
