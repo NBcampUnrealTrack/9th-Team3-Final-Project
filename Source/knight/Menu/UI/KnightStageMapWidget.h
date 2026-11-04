@@ -175,6 +175,7 @@ private:
 	FSlateBrush MapBrush;
 	TArray<FKnightMapMarker> Markers;
 	TArray<FKnightMapQuestMarker> QuestMarkers;
+	TArray<float> QuestHoverFills;
 	TWeakObjectPtr<UWidget> LeaderTarget;
 	FName SelectedStageId;
 	FName SelectedQuestId;

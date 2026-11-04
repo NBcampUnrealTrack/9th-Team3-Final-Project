@@ -193,6 +193,7 @@ void UKnightCodexWidget::NativeDestruct()
 
 void UKnightCodexWidget::Open()
 {
+	ResetButtonFill();
 	LoadedData = CodexData.LoadSynchronous();
 	if (!LoadedData)
 	{
@@ -214,7 +215,19 @@ void UKnightCodexWidget::Open()
 	SelectCategory(0);
 }
 
-void UKnightCodexWidget::RequestClose() { OnClosed.Broadcast(); }
+void UKnightCodexWidget::RequestClose() { ResetButtonFill(); OnClosed.Broadcast(); }
+void UKnightCodexWidget::ResetButtonFill()
+{
+	for (UButton* Button : { Button_World.Get(), Button_Mech.Get(), Button_Monster.Get(), Button_Close.Get() })
+		if (UKnightCodexArchiveButton* Archive = Cast<UKnightCodexArchiveButton>(Button)) Archive->ResetFillAnimation();
+	for (int32 Category = 0; Category < 2; ++Category)
+		for (const TWeakObjectPtr<UKnightCodexSectionButton>& Button : ReadingButtons[Category])
+			if (Button.IsValid()) Button->ResetFillAnimation();
+	for (UKnightCodexBossEntryWidget* Entry : GeneratedEntries)
+		if (Entry)
+			if (UKnightCodexArchiveButton* Archive = Cast<UKnightCodexArchiveButton>(Entry->GetWidgetFromName(TEXT("Button_Select"))))
+				Archive->ResetFillAnimation();
+}
 void UKnightCodexWidget::HandleWorld() { SelectCategory(0); }
 void UKnightCodexWidget::HandleMech() { SelectCategory(1); }
 void UKnightCodexWidget::HandleMonster() { SelectCategory(2); }
@@ -347,6 +360,15 @@ void UKnightCodexWidget::ResetReadingScroll(FName ScrollName)
 void UKnightCodexWidget::SelectCategory(int32 Category)
 {
 	if (Category < 0 || Category > 2) return;
+	for (int32 OtherCategory = 0; OtherCategory < 2; ++OtherCategory)
+		if (OtherCategory != Category)
+			for (const TWeakObjectPtr<UKnightCodexSectionButton>& Button : ReadingButtons[OtherCategory])
+				if (Button.IsValid()) Button->ResetFillAnimation();
+	if (Category != 2)
+		for (UKnightCodexBossEntryWidget* Entry : GeneratedEntries)
+			if (Entry)
+				if (UKnightCodexArchiveButton* Button = Cast<UKnightCodexArchiveButton>(Entry->GetWidgetFromName(TEXT("Button_Select"))))
+					Button->ResetFillAnimation();
 	ActiveCategory = Category;
 	if (Switcher_Content) Switcher_Content->SetActiveWidgetIndex(Category);
 	if (UWidgetSwitcher* EntrySwitcher = Cast<UWidgetSwitcher>(GetWidgetFromName(TEXT("Switcher_Entries"))))

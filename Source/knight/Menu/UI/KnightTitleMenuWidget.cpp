@@ -10,6 +10,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "KnightSaveSlotCard.h"
+#include "KnightButtonFillExtension.h"
 #include "KnightMenuVideoBackgroundWidget.h"
 #include "LoadingScreenManager.h"
 #include "Misc/Paths.h"
@@ -35,6 +36,9 @@ void UKnightTitleMenuWidget::NativeOnInitialized()
 	ValidateRequiredWidget(Button_Slot3, TEXT("Button_Slot3"));
 	ValidateRequiredWidget(Button_Settings, TEXT("Button_Settings"));
 	ValidateRequiredWidget(Button_Quit, TEXT("Button_Quit"));
+	for (UCommonButtonBase* Button : { Button_StartGame.Get(), Button_SaveSelect.Get(), Button_Settings.Get(), Button_Quit.Get(), Button_Back.Get(),
+		static_cast<UCommonButtonBase*>(Button_Slot1.Get()), static_cast<UCommonButtonBase*>(Button_Slot2.Get()), static_cast<UCommonButtonBase*>(Button_Slot3.Get()) })
+		UKnightButtonFillExtension::SetEnabled(Button, true);
 	if (Button_StartGame) Button_StartGame->OnClicked().AddUObject(this, &ThisClass::HandleStartGameClicked);
 	if (Button_SaveSelect) Button_SaveSelect->OnClicked().AddUObject(this, &ThisClass::HandleSaveSelectClicked);
 	if (Button_Slot1) Button_Slot1->OnClicked().AddUObject(this, &ThisClass::HandleSlot1Clicked);
@@ -266,6 +270,9 @@ bool UKnightTitleMenuWidget::ApplyPage(EKnightTitlePage NewPage, bool bAllowDuri
 	{
 		return false;
 	}
+	for (UCommonButtonBase* Button : { Button_StartGame.Get(), Button_SaveSelect.Get(), Button_Settings.Get(), Button_Quit.Get(), Button_Back.Get(),
+		static_cast<UCommonButtonBase*>(Button_Slot1.Get()), static_cast<UCommonButtonBase*>(Button_Slot2.Get()), static_cast<UCommonButtonBase*>(Button_Slot3.Get()) })
+		UKnightButtonFillExtension::Reset(Button);
 	CurrentPage = NewPage;
 	if (NewPage == EKnightTitlePage::Settings)
 	{

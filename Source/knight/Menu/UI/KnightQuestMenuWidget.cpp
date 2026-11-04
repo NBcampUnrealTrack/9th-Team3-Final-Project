@@ -1,4 +1,5 @@
 #include "Menu/UI/KnightQuestMenuWidget.h"
+#include "Menu/UI/KnightButtonFillExtension.h"
 
 #include "Blueprint/WidgetTree.h"
 #include "Codex/KnightCodexData.h"
@@ -39,7 +40,9 @@ namespace
 	{
 		const TSubclassOf<UCommonButtonBase> ButtonClass = LoadClass<UCommonButtonBase>(nullptr,
 			TEXT("/Game/Knight/UI/Common/WBP_KnightButton.WBP_KnightButton_C"));
-		return Owner && ButtonClass ? CreateWidget<UCommonButtonBase>(Owner, ButtonClass) : nullptr;
+		UCommonButtonBase* const Button = Owner && ButtonClass ? CreateWidget<UCommonButtonBase>(Owner, ButtonClass) : nullptr;
+		UKnightButtonFillExtension::SetEnabled(Button, true);
+		return Button;
 	}
 
 	FText RewardCount(const FknightRaidReward& Reward)
@@ -101,6 +104,12 @@ void UKnightQuestMenuWidget::BuildLayout()
 		LaunchButton->OnClicked().AddUObject(this, &ThisClass::HandleLaunchClicked);
 	}
 	DetailBorder->SetVisibility(ESlateVisibility::Collapsed);
+}
+
+void UKnightQuestMenuWidget::ResetButtonFills()
+{
+	UKnightButtonFillExtension::Reset(LaunchButton);
+	for (UCommonButtonBase* Button : QuestButtons) UKnightButtonFillExtension::Reset(Button);
 }
 
 void UKnightQuestMenuWidget::SetButtonLabel(UCommonButtonBase* Button, const FText& Label)

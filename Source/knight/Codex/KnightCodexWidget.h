@@ -85,6 +85,7 @@ public:
 	UPROPERTY(BlueprintAssignable, Category="Knight|Codex") FKnightCodexClosed OnClosed;
 	UFUNCTION(BlueprintCallable, Category="Knight|Codex") void Open();
 	UFUNCTION(BlueprintCallable, Category="Knight|Codex") void RequestClose();
+	void ResetButtonFill();
 	UFUNCTION(BlueprintCallable, Category="Knight|Codex") void SelectCategory(int32 Category);
 	UFUNCTION(BlueprintCallable, Category="Knight|Codex") bool SelectBoss(FName BossId);
 	UButton* GetFocusButton() const;

@@ -22,6 +22,7 @@ class KNIGHT_API UKnightQuestMenuWidget : public UUserWidget
 
 public:
 	void RefreshQuests();
+	void ResetButtonFills();
 	/** Show only the quests on the selected map region. Does not change raid state. */
 	void SetRegionQuests(FName RegionId, const FText& RegionName, const TArray<FName>& QuestIds);
 	bool SelectQuest(FName QuestId);

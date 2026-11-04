@@ -11,6 +11,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "UObject/UObjectIterator.h"
 #include "Widgets/knightSettingRow.h"
+#include "Menu/UI/KnightButtonFillExtension.h"
 
 #define LOCTEXT_NAMESPACE "knightUI"
 
@@ -80,12 +81,16 @@ void UknightSettingsScreen::NativeOnInitialized()
 	{
 		if (UknightSettingsTab* const Tab = GetTabButton(Index))
 		{
+			UKnightButtonFillExtension::SetEnabled(Tab, true);
 			Tab->SetTab(GetTabCaption(Index), GetTabLabel(Index));
 			Tab->OnClicked().AddWeakLambda(this, [this, Index] { SetTab(Index); FocusLevel(true); });
 			Tab->OnTabFocused.BindWeakLambda(this, [this, Index] { HandleTabFocused(Index); });
 			Tab->OnTabEntered.BindWeakLambda(this, [this] { FocusLevel(true); });
 		}
 	}
+	for (UknightButtonBase* Button : { Btn_Apply.Get(), Btn_Revert.Get(), Btn_Defaults.Get(),
+		Btn_PromptApply.Get(), Btn_PromptDiscard.Get(), Btn_PromptContinue.Get() })
+		UKnightButtonFillExtension::SetEnabled(Button, true);
 	Btn_Apply->OnClicked().AddUObject(this, &ThisClass::Apply);
 	Btn_Revert->OnClicked().AddUObject(this, &ThisClass::Revert);
 	if (Btn_Defaults) Btn_Defaults->OnClicked().AddUObject(this, &ThisClass::RestoreDefaults);
@@ -158,6 +163,7 @@ void UknightSettingsScreen::HandleTabChanged()
 				continue;
 			}
 			UknightSettingRow* const Row = CreateWidget<UknightSettingRow>(this, RowClass);
+			UKnightButtonFillExtension::SetEnabled(Row, true);
 			Row->Setup(Item);
 			Row->OnEdited.BindUObject(this, &ThisClass::HandleRowEdited);
 			Row->OnFocused.BindUObject(this, &ThisClass::HandleRowFocused);
@@ -273,6 +279,9 @@ void UknightSettingsScreen::HandleDisplayConfirm(bool bShow)
 
 void UknightSettingsScreen::ShowPrompt(bool bShow, UknightButtonBase* FocusTarget)
 {
+	for (UknightButtonBase* Button : { Btn_Apply.Get(), Btn_Revert.Get(), Btn_Defaults.Get(),
+		Btn_PromptApply.Get(), Btn_PromptDiscard.Get(), Btn_PromptContinue.Get() })
+		UKnightButtonFillExtension::Reset(Button);
 	if (Panel_Prompt)
 	{
 		Panel_Prompt->SetVisibility(bShow ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
