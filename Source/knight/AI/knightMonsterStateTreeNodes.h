@@ -85,6 +85,22 @@ struct FknightMonsterTargetEvaluatorInstanceData
 	/** ChaseStopDistance + 몬스터 정의의 SpacingDistanceSlack. Spacing 상태의 거리 조건에 바인딩한다. */
 	UPROPERTY(EditAnywhere, Category="Output")
 	float SpacingMaxDistance = 1300.f;
+
+	/** 플레이어 상태 반응(Punish) 조건. 수리 중(State.Repairing). */
+	UPROPERTY(EditAnywhere, Category="Output")
+	bool bPunishRepair = false;
+
+	/** 몬스터 정의의 PunishFleeTime 이상 계속 멀어지고 PunishFleeDistance 이상 떨어져 있다. */
+	UPROPERTY(EditAnywhere, Category="Output")
+	bool bPunishFlee = false;
+
+	/** 몬스터 정의의 PunishGuardTime 이상 가드를 계속 올리고 있다. */
+	UPROPERTY(EditAnywhere, Category="Output")
+	bool bPunishGuard = false;
+
+	/** 위 셋 중 하나라도 참. 쉬기·간 보기·추격 상태가 Punish로 넘어가는 전이에 바인딩한다. */
+	UPROPERTY(EditAnywhere, Category="Output")
+	bool bPunishAny = false;
 };
 
 USTRUCT(meta=(DisplayName="Knight Monster Target", Category="Knight"))

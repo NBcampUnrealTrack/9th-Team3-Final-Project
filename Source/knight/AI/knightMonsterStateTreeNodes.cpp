@@ -96,6 +96,15 @@ void FknightStateTreeMonsterTargetEvaluator::Update(FInstanceDataType& InstanceD
 		InstanceData.RecoverRetreatChance = Definition->RecoverRetreatChance;
 		InstanceData.SpacingMaxDistance = InstanceData.ChaseStopDistance + Definition->SpacingDistanceSlack;
 	}
+
+	const UknightMonsterDefinition* const Definition = Monster ? Monster->GetMonsterDefinition() : nullptr;
+	const UAbilitySystemComponent* const TargetASC = Target ? UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Target) : nullptr;
+	InstanceData.bPunishRepair = TargetASC && TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_Repairing);
+	InstanceData.bPunishFlee = Definition && Targeting && Definition->PunishFleeTime > 0.f
+		&& Targeting->GetTargetAwayTime() >= Definition->PunishFleeTime && InstanceData.Distance >= Definition->PunishFleeDistance;
+	InstanceData.bPunishGuard = Definition && Targeting && Definition->PunishGuardTime > 0.f
+		&& Targeting->GetTargetGuardTime() >= Definition->PunishGuardTime;
+	InstanceData.bPunishAny = InstanceData.bPunishRepair || InstanceData.bPunishFlee || InstanceData.bPunishGuard;
 }
 
 // Knight Activate Ability
