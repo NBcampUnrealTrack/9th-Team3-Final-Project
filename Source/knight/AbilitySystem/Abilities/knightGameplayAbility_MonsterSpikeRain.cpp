@@ -46,6 +46,9 @@ void UknightGameplayAbility_MonsterSpikeRain::ActivateAbility(const FGameplayAbi
 	MontageTask->OnCancelled.AddDynamic(this, &ThisClass::HandleMontageEnded);
 	MontageTask->ReadyForActivation();
 
+	// 가시를 쏘아 올리는 순간까지. 떨어지는 자리는 바닥 예고가 따로 알려 준다.
+	StartAttackWarning(FireTime);
+
 	UAbilityTask_WaitDelay* const FireTask = UAbilityTask_WaitDelay::WaitDelay(this, FireTime);
 	FireTask->OnFinish.AddDynamic(this, &ThisClass::HandleFire);
 	FireTask->ReadyForActivation();

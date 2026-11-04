@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "AbilitySystem/Abilities/knightGameplayAbility.h"
+#include "Combat/knightAttackWarningSubsystem.h"
 #include "Monster/knightMonsterGuardPushComponent.h"
 #include "knightGameplayAbility_MonsterAttack.generated.h"
 
@@ -156,10 +157,24 @@ public:
 
 	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 		const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData) override;
+	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+		const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
 
 protected:
 	UPROPERTY(EditDefaultsOnly, Category="Selection")
 	FknightMonsterAttackSelection Selection;
+
+	/**
+	 * 가드·패링 불가 공격의 예고(#198). 켜면 예비 동작부터 첫 판정까지 플레이어 HUD에 경고 마커를 띄우고 공격 부위에 섬광·불씨를 붙인다.
+	 * 첫 판정 시각은 하위 클래스가 자기 타이밍 값(WindupTime, 판정 노티파이 등)으로 정해 StartAttackWarning에 넘긴다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Warning")
+	FknightAttackWarningSettings Warning;
+
+	/** Warning이 켜져 있으면 예고를 시작한다. TimeToHit은 지금부터 첫 판정까지의 몬스터 시간(초)이고, 다 차면 예고가 저절로 끝난다. */
+	void StartAttackWarning(float TimeToHit);
+	/** 판정 전에 공격이 바뀌거나 끊길 때 예고를 끈다. EndAbility에서도 부른다. */
+	void StopAttackWarning();
 
 	/**
 	 * 발동하면 타깃 방향에서 이 각도(도)만큼 틀어진 쪽으로 몸을 돌린다. 양수는 오른쪽, 음수는 왼쪽, 0이면 돌지 않는다.
@@ -189,12 +204,16 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack|FollowUp")
 	TArray<TSubclassOf<UknightGameplayAbility_MonsterAttack>> FollowUpAttacks;
 
-	/** 몬스터에 이 태그가 모두 있을 때만 잇는다(잔향은 공명해방 State.Monster.Enraged). 비우면 항상. */
+	/** 몬스터에 이 태그가 모두 있으면 FollowUpChance로, 아니면 FollowUpChanceWithoutTags로 잇는다(잔향은 공명해방 State.Monster.Enraged). 비우면 항상 FollowUpChance. */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|FollowUp")
 	FGameplayTagContainer FollowUpRequiredTags;
 
 	UPROPERTY(EditDefaultsOnly, Category="Attack|FollowUp", meta=(ClampMin=0, ClampMax=1))
 	float FollowUpChance = 1.f;
+
+	/** FollowUpRequiredTags가 모두 있지는 않을 때(잔향은 공명해방 전) 잇는 확률. 0이면 잇지 않는다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|FollowUp", meta=(ClampMin=0, ClampMax=1))
+	float FollowUpChanceWithoutTags = 0.f;
 
 	/**
 	 * 연계가 나오지 않았을 때 이 공격 뒤에 바로 쓸 이동 행동 후보(물러나기 등). FollowUpRequiredTags·FollowUpChance를 보지 않고
@@ -202,6 +221,10 @@ protected:
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Attack|FollowUp")
 	TArray<TSubclassOf<UknightGameplayAbility_MonsterAttack>> AfterAttackMoves;
+
+	/** 연계가 나오지 않았을 때 AfterAttackMoves를 쓸 확률. 낮추면 공격 뒤 그 자리에 남아 반격할 틈이 생긴다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|FollowUp", meta=(ClampMin=0, ClampMax=1))
+	float AfterAttackMoveChance = 1.f;
 
 	/**
 	 * 이 공격을 가드로 막았을 때의 반응(밀리는 거리, 가드 브레이크). 거리는 몬스터의 UknightMonsterGuardPushComponent에서 정한다.
@@ -212,6 +235,12 @@ protected:
 
 	/** 가드로 막힌 타격이면 GuardReaction만큼 밀어낸다. ExistingPushDistance보다 멀게 밀었으면 true(부른 쪽은 자기 가드 넉백을 걸지 않는다). */
 	bool HandleGuardPush(AActor& Target, EknightHitOutcome Outcome, float ExistingPushDistance = 0.f) const;
+
+	/**
+	 * 구체 판정(Center, Radius)이 이번 공격에 맞지 않은 플레이어 몸 가까이(몬스터 정의 NearMissMargin)를 지나가면 바람 소리를 예약한다.
+	 * 범위 판정(ApplyAreaMeleeHits) 바로 뒤에 부른다. 회피 무적으로 흘린 타격은 HandleGuardPush에서 따로 처리한다.
+	 */
+	void CheckNearMiss(const FVector& Center, float Radius, const TSet<TWeakObjectPtr<AActor>>& HitActors) const;
 
 	/**
 	 * 월드 시간 Interval을 몬스터 시간으로 바꾼다. 히트스톱은 몬스터의 CustomTimeDilation만 낮춰 몸(몽타주·이동)을 멈추고
@@ -231,4 +260,5 @@ private:
 
 	TWeakObjectPtr<UAbilityTask_Repeat> StartTurnTask;
 	double LastActivationTime = -1.e9;
+	int32 ActiveWarningId = 0;
 };

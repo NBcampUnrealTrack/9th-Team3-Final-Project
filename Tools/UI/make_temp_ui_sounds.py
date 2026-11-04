@@ -153,6 +153,37 @@ def part_alert():
     return normalize(tail(x), -4)
 
 
+def attack_warning():
+    # Unparryable attack incoming: three quick rising beeps, sharper and higher than the part alert so the two never blur.
+    def beep(f, seconds):
+        t = t_axis(seconds)
+        s = np.sign(np.sin(2 * np.pi * f * t)) * 0.4 + np.sin(2 * np.pi * f * t) * 0.6
+        return lowpass(s * np.clip(t / 0.002, 0, 1) * np.clip((seconds - t) / 0.015, 0, 1), 3600)
+    x = place(0.34, (0.0, beep(1175, 0.055) * 0.55), (0.075, beep(1175, 0.055) * 0.55), (0.15, beep(1568, 0.12) * 0.6),
+              (0.0, band_noise(0.015, 2000, 8000, 0.004) * 0.5))
+    return normalize(tail(x), -4)
+
+
+def readout_opening():
+    # Monster readout, opening (exhausted, stunned, staggered): a clean rising two-note chime, soft so it never covers combat.
+    def chime(f, seconds):
+        t = t_axis(seconds)
+        s = np.sin(2 * np.pi * f * t) + 0.3 * np.sin(2 * np.pi * f * 2 * t)
+        return s * np.clip(t / 0.004, 0, 1) * np.exp(-t / (seconds * 0.45))
+    x = place(0.36, (0.0, chime(1319, 0.14) * 0.6), (0.085, chime(1976, 0.26) * 0.6))
+    return normalize(tail(x), -9)
+
+
+def readout_danger():
+    # Monster readout, danger and vitals (enraged, phase shift, low health): two low falling pulses, darker than the attack warning.
+    def pulse(f, seconds):
+        t = t_axis(seconds)
+        s = np.sign(np.sin(2 * np.pi * f * t)) * 0.5 + np.sin(2 * np.pi * f * t) * 0.5
+        return lowpass(s * np.clip(t / 0.004, 0, 1) * np.clip((seconds - t) / 0.03, 0, 1), 1400)
+    x = place(0.42, (0.0, pulse(330, 0.13) * 0.6), (0.17, pulse(247, 0.2) * 0.6), (0.0, partials([62], 0.3, 0.09) * 0.6))
+    return normalize(tail(x), -6)
+
+
 def deploy():
     total = 0.95
     clank = partials([420, 713, 1130, 1790, 2610], 0.6, 0.18, amps=[1, .8, .6, .45, .3])
@@ -178,6 +209,9 @@ SOUNDS = {
     "S_UI_Slider": slider,
     "S_UI_Deploy": deploy,
     "S_UI_PartAlert": part_alert,
+    "S_UI_AttackWarning": attack_warning,
+    "S_UI_ReadoutOpening": readout_opening,
+    "S_UI_ReadoutDanger": readout_danger,
 }
 
 if __name__ == "__main__":

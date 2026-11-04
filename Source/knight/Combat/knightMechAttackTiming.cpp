@@ -36,7 +36,7 @@ namespace
 }
 
 TSharedPtr<FknightMechAttackTiming> FknightMechAttackTiming::Start(UAnimInstance* AnimInstance, UAnimMontage* InMontage, float InBaseRate,
-	const FknightMechTimingSettings& InSettings, bool bTwoHanded)
+	const FknightMechTimingSettings& InSettings, bool bTwoHanded, float InCameraKickScale)
 {
 	if (!InSettings.bEnabled || CVarMechTiming.GetValueOnGameThread() == 0 || !AnimInstance || !InMontage || InBaseRate <= 0.f
 		|| !AnimInstance->Montage_IsPlaying(InMontage))
@@ -74,6 +74,7 @@ TSharedPtr<FknightMechAttackTiming> FknightMechAttackTiming::Start(UAnimInstance
 	Timing->LockTime = InSettings.LockTime * (bTwoHanded ? InSettings.TwoHandedLockScale : 1.f);
 	Timing->BurstRate = InSettings.BurstRate * (bTwoHanded ? InSettings.TwoHandedBurstScale : 1.f);
 	Timing->bTwoHandedStance = bTwoHanded;
+	Timing->CameraKickScale = FMath::Max(0.f, InCameraKickScale);
 	Timing->Phase = EPhase::Windup;
 	Timing->SetRate(InSettings.WindupRate);
 	TWeakPtr<FknightMechAttackTiming> Weak = Timing;
@@ -204,7 +205,8 @@ void FknightMechAttackTiming::EnterPhase(EPhase NewPhase)
 		// 카메라 연출: 칼을 젖힌 순간 시야각을 살짝 조인다(양손은 락처럼 TwoHandedLockScale만큼 더 크게).
 		if (UknightCameraComponent* const Camera = FindLocalPlayerCamera(Mesh.Get()))
 		{
-			Camera->StartAttackWindup(bTwoHandedStance ? Settings.TwoHandedLockScale : 1.f);
+			// (2026-11-03) 공격 무게별 세기(CameraKickScale)를 곱한다. 0이면 이 공격은 카메라가 움직이지 않는다.
+			Camera->StartAttackWindup((bTwoHandedStance ? Settings.TwoHandedLockScale : 1.f) * CameraKickScale);
 		}
 		break;
 	case EPhase::Burst:
@@ -231,7 +233,7 @@ void FknightMechAttackTiming::EnterPhase(EPhase NewPhase)
 		// 카메라 연출: 휘두르는 순간 조임을 풀며 시야각이 튀고 앞으로 밀렸다가 돌아온다.
 		if (UknightCameraComponent* const Camera = FindLocalPlayerCamera(MeshComp))
 		{
-			Camera->StartAttackSwing(bTwoHandedStance ? Settings.TwoHandedLockScale : 1.f);
+			Camera->StartAttackSwing((bTwoHandedStance ? Settings.TwoHandedLockScale : 1.f) * CameraKickScale);
 		}
 		break;
 	}

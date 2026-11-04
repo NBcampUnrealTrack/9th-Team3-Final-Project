@@ -66,6 +66,20 @@ void AknightRaidGameMode::ResolveRaidDefinition()
 void AknightRaidGameMode::StartPlay()
 {
 	Super::StartPlay();
+	if (IsMapTestMode())
+	{
+		if (UknightRaidSubsystem* const Session = GetGameInstance()->GetSubsystem<UknightRaidSubsystem>())
+		{
+			Session->EndRun();
+		}
+		if (AknightRaidGameState* const RaidState = GetRaidGameState())
+		{
+			RaidState->SetRaidDefinition(RaidDefinition);
+		}
+		// Release the raid loading gate without starting an encounter or its clock.
+		SetPhase(EknightRaidPhase::Explore);
+		return;
+	}
 	if (UknightRaidSubsystem* const Session = GetGameInstance()->GetSubsystem<UknightRaidSubsystem>())
 	{
 		if (!Session->GetCurrentRunId().IsValid())
@@ -215,7 +229,7 @@ void AknightRaidGameMode::BindPlacedTargetMonsters()
 
 bool AknightRaidGameMode::IsTargetMonster(const AknightMonsterCharacterBase* Monster) const
 {
-	if (!Monster)
+	if (!Monster || IsMapTestMode())
 	{
 		return false;
 	}
@@ -224,7 +238,7 @@ bool AknightRaidGameMode::IsTargetMonster(const AknightMonsterCharacterBase* Mon
 
 void AknightRaidGameMode::RegisterTargetMonster(AknightMonsterCharacterBase* Monster)
 {
-	if (!Monster || Monster->IsDead() || TargetMonsters.Contains(Monster))
+	if (IsMapTestMode() || !Monster || Monster->IsDead() || TargetMonsters.Contains(Monster))
 	{
 		return;
 	}
@@ -390,6 +404,7 @@ void AknightRaidGameMode::BeginExploration()
 
 bool AknightRaidGameMode::RequestStartRaid()
 {
+	if (IsMapTestMode()) return false;
 	const AknightRaidGameState* const State = GetRaidGameState();
 	if (!State || State->GetRaidPhase() != EknightRaidPhase::Deploy) return false;
 	GetWorldTimerManager().ClearTimer(PhaseTimer);
@@ -503,11 +518,22 @@ void AknightRaidGameMode::HandleTimeUp()
 
 void AknightRaidGameMode::AbandonRaid()
 {
+	if (IsMapTestMode())
+	{
+		ReturnToMainMenu();
+		return;
+	}
 	FinishRaid(false, EknightRaidFailReason::Abandoned);
+}
+
+bool AknightRaidGameMode::IsMapTestMode() const
+{
+	return RaidDefinition && RaidDefinition->IsWaitingForTargetMonster();
 }
 
 void AknightRaidGameMode::FinishRaid(bool bSuccess, EknightRaidFailReason FailReason)
 {
+	if (IsMapTestMode()) return;
 	AknightRaidGameState* const RaidState = GetRaidGameState();
 	const EknightRaidPhase Phase = RaidState ? RaidState->GetRaidPhase() : EknightRaidPhase::None;
 	if (Phase == EknightRaidPhase::Success || Phase == EknightRaidPhase::Failed || Phase == EknightRaidPhase::Returning)

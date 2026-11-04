@@ -7,6 +7,7 @@
 
 class ACharacter;
 class UAnimMontage;
+class UCameraShakeBase;
 class UGameplayEffect;
 
 /**
@@ -52,6 +53,14 @@ class UGameplayEffect;
  *   - 내린 뒤 PerfectGuardRearmTime(0.3초) 안에 다시 올리면 퍼펙트 가드 판정이 RearmPerfectGuardScale(0.5)배,
  *     그렇게 연속 두 번째부터는 0(일반 가드만). 그 시간이 지나 올리면 원래대로, 연속 횟수도 처음부터.
  *   - 퍼펙트 가드에 성공해 내려간 직후는 둘 다 적용하지 않는다(연속 공격을 이어서 패링하는 플레이는 그대로).
+ *
+ * (2026-11-02) 가드 밀림 반응: 몬스터 공격을 막으면 몬스터의 UknightMonsterGuardPushComponent가 무게만큼 밀어내고
+ *   Event.GuardPushed(EventMagnitude 1 = 약하게, 2 = 크게)를 보낸다. 가드는 유지한 채 반응만 한다.
+ *   - 약하게: GuardPushLightShake만(가드 자세 그대로).
+ *   - 크게: GuardPushHeavyMontage(가드한 채 뒤로 밀리는 반동)를 재생하고 끝나면 가드 자세(GuardMontage)로 돌아간다.
+ *     GuardPushHeavyLockTime 동안은 캔슬 창(Window.Cancel)을 닫아 공격·구르기로 바로 끊을 수 없다(무거운 공격을 막은 대가).
+ *     가드 키를 떼면 그때도 가드는 내려간다. 밀리는 거리는 몬스터 쪽이 맡는다.
+ *   가드 브레이크(Event.GuardBroken)는 피격 반응(knightGameplayAbility_HitReact)이 받아 가드를 풀고 비틀거린다.
  */
 UCLASS()
 class KNIGHT_API UknightGameplayAbility_Guard : public UknightGameplayAbility
@@ -202,6 +211,30 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Guard|Reguard", meta=(ClampMin=0, ClampMax=1))
 	float RearmPerfectGuardScale = 0.5f;
 
+	/** (2026-11-02) 가드한 채 크게 밀려날 때의 반동 모션. 비우면 모션 없이 밀리기만 한다. 끝나면 GuardMontage로 돌아간다. */
+	UPROPERTY(EditDefaultsOnly, Category="Guard|Guard Push")
+	TObjectPtr<UAnimMontage> GuardPushHeavyMontage;
+
+	UPROPERTY(EditDefaultsOnly, Category="Guard|Guard Push", meta=(ClampMin=0.1))
+	float GuardPushHeavyPlayRate = 1.f;
+
+	/** 크게 밀려난 뒤 공격·구르기로 가드를 끊을 수 없는 시간(초). 0이면 바로 끊을 수 있다. 바뀔 수 있는 값. */
+	UPROPERTY(EditDefaultsOnly, Category="Guard|Guard Push", meta=(ClampMin=0, Units="s"))
+	float GuardPushHeavyLockTime = 0.35f;
+
+	/** 약하게 / 크게 밀려날 때 화면 흔들림. 비우면 없다. */
+	UPROPERTY(EditDefaultsOnly, Category="Guard|Guard Push")
+	TSubclassOf<UCameraShakeBase> GuardPushLightShake;
+
+	UPROPERTY(EditDefaultsOnly, Category="Guard|Guard Push", meta=(ClampMin=0))
+	float GuardPushLightShakeScale = 0.3f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Guard|Guard Push")
+	TSubclassOf<UCameraShakeBase> GuardPushHeavyShake;
+
+	UPROPERTY(EditDefaultsOnly, Category="Guard|Guard Push", meta=(ClampMin=0))
+	float GuardPushHeavyShakeScale = 0.8f;
+
 private:
 	/** 이번 가드의 퍼펙트 가드 판정 시간(초). 메카 속성 PerfectGuardWindow, 없으면 ParryWindow. */
 	float GetPerfectGuardWindow() const;
@@ -217,6 +250,20 @@ private:
 
 	UFUNCTION()
 	void OnParryWindowEnded();
+
+	/** (2026-11-02) 몬스터 공격을 막아 밀려났다(Event.GuardPushed). */
+	UFUNCTION()
+	void OnGuardPushed(FGameplayEventData Payload);
+
+	/** 크게 밀려난 반동 모션이 끝났다: 가드 자세로 돌아간다. */
+	UFUNCTION()
+	void OnGuardPushMontageDone();
+
+	/** GuardPushHeavyLockTime이 끝났다: 닫아 둔 캔슬 창을 다시 연다. */
+	void RestoreCancelWindowAfterPush();
+
+	/** 가드 자세 모션(GuardMontage)을 재생한다. */
+	void PlayGuardPose();
 
 	UFUNCTION()
 	void OnGuardReleased(float TimeHeld);
@@ -252,8 +299,6 @@ private:
 	void OnStepTurnBlendingOut(UAnimMontage* Montage, bool bInterrupted);
 	/** 도는 중이면 멈춘다. bResumeGuardPose면 가드 자세로 이어 가고(락온이 걸렸을 때), 아니면 몽타주만 내린다(가드가 끝날 때). */
 	void StopStepTurn(bool bResumeGuardPose);
-	/** 가드 자세 몽타주(GuardMontage)를 태스크로 튼다. 태스크로 틀어야 가드가 끝날 때 함께 내려간다. */
-	void PlayGuardPoseMontage();
 
 	bool bStepTurning = false;
 	TWeakObjectPtr<UAnimMontage> ActiveStepTurnMontage;
@@ -261,6 +306,10 @@ private:
 	bool bParryTagApplied = false;
 	bool bCancelWindowApplied = false;
 	bool bMoveLockApplied = false;
+
+	/** (2026-11-02) 크게 밀려서 캔슬 창을 잠시 닫아 두었는지. */
+	bool bCancelWindowSuspended = false;
+	FTimerHandle GuardPushLockTimer;
 
 	/** 가드를 올릴 때 누르고 있던 방향은 새 이동 입력이 아니다(방향 전환에만 씀). */
 	FknightMovePressTracker MovePress;

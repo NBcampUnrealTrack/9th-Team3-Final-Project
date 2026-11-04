@@ -71,6 +71,10 @@ void UknightGameplayAbility_MonsterDiveAttack::ActivateAbility(const FGameplayAb
 
 	UAbilityTask_PlayMontageAndWait* const MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, Montage, 1.f, FoldSection);
 	MontageTask->ReadyForActivation();
+	if (ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
+	{
+		DiveEffects.StartFold(*Character);
+	}
 
 	UAbilityTask_Repeat* const Task = UAbilityTask_Repeat::RepeatAction(this, knightMonsterDive::TickInterval, knightMonsterDive::MaxTicks);
 	Task->OnPerformAction.AddDynamic(this, &ThisClass::HandleTick);
@@ -80,7 +84,7 @@ void UknightGameplayAbility_MonsterDiveAttack::ActivateAbility(const FGameplayAb
 
 void UknightGameplayAbility_MonsterDiveAttack::HandleTick(int32 ActionNumber)
 {
-	const AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetAvatarActorFromActorInfo());
+	AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetAvatarActorFromActorInfo());
 	if (!Monster)
 	{
 		return;
@@ -105,6 +109,7 @@ void UknightGameplayAbility_MonsterDiveAttack::HandleTick(int32 ActionNumber)
 	}
 	if (Phase == EPhase::Dive)
 	{
+		DiveEffects.Tick(*Monster, DeltaTime);
 		ApplyHits();
 		if (bParried || PhaseTime >= DiveDuration)
 		{
@@ -143,6 +148,7 @@ void UknightGameplayAbility_MonsterDiveAttack::StartDive()
 		ERootMotionFinishVelocityMode::SetVelocity, FVector::ZeroVector, 0.f, false);
 	DiveTask = Task;
 	Task->ReadyForActivation();
+	DiveEffects.StartDive(*Monster, Direction);
 	// 같은 시간 동안 공중 높이에서 바닥 높이로 내려온다.
 	if (UknightMonsterHoverComponent* const Hover = Monster->FindComponentByClass<UknightMonsterHoverComponent>())
 	{
@@ -161,6 +167,11 @@ void UknightGameplayAbility_MonsterDiveAttack::FinishDive()
 {
 	Phase = EPhase::Outcome;
 	ApplyHits();
+	if (ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
+	{
+		// 패링되면 공중에서 튕겨 나가므로 머리 아래 수면에 충격파를 남기지 않고, 출발 지점에 남은 소닉 붐 고리도 지운다.
+		DiveEffects.FinishDive(*Character, bConnected || !bParried);
+	}
 	// 결과 몽타주는 제자리에서 재생한다. 남은 돌진 이동이 있으면 여기서 끊는다(끊으면 마무리 속도 0이 적용되지 않아 직접 멈춘다).
 	if (DiveTask.IsValid() && DiveTask->IsActive())
 	{
@@ -173,6 +184,12 @@ void UknightGameplayAbility_MonsterDiveAttack::FinishDive()
 	DiveTask.Reset();
 	if (bParried && !bConnected)
 	{
+		// 떨어지는 몽타주의 착수 물보라는 정말로 내리꽂혔을 때용이다. 패링으로 튕겨 날 때는 건너뛴다(BlockedTags).
+		if (UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo())
+		{
+			ASC->AddLooseGameplayTag(knightGameplayTags::State_Monster_DiveParried);
+			bDiveParriedApplied = true;
+		}
 		if (UknightMonsterHoverComponent* const Hover = GetAvatarActorFromActorInfo()->FindComponentByClass<UknightMonsterHoverComponent>())
 		{
 			Hover->SetAirborne(false, ParriedDropTime);
@@ -246,6 +263,7 @@ void UknightGameplayAbility_MonsterDiveAttack::ApplyHits()
 			SpawnContactSplash(Target, Outcome);
 			HandleGuardPush(Target, Outcome);
 		});
+	CheckNearMiss(Center, HitRadius, HitActors);
 #if ENABLE_DRAW_DEBUG
 	if (knightMonsterDebug::ShouldDrawAttacks())
 	{
@@ -288,12 +306,18 @@ void UknightGameplayAbility_MonsterDiveAttack::EndAbility(const FGameplayAbility
 		TickTask->EndTask();
 	}
 	TickTask.Reset();
+	DiveEffects.Stop();
 	UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();
 	if (ASC && bNoFlinchApplied)
 	{
 		ASC->RemoveLooseGameplayTag(knightGameplayTags::State_Monster_NoFlinch);
 	}
 	bNoFlinchApplied = false;
+	if (ASC && bDiveParriedApplied)
+	{
+		ASC->RemoveLooseGameplayTag(knightGameplayTags::State_Monster_DiveParried);
+	}
+	bDiveParriedApplied = false;
 
 	// 공중 턴이 이어지면 다시 공중 높이로 오른다. 격추(다운)·사망이면 공중 턴 컴포넌트가 이미 바닥으로 내렸다.
 	const AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetAvatarActorFromActorInfo());

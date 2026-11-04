@@ -94,6 +94,7 @@ void UknightGameplayAbility_MonsterAreaAttack::ActivateAbility(const FGameplayAb
 	NextImpact = 0;
 	bLungeStarted = false;
 	bWindupDone = false;
+	StartAttackWarning(Impacts.IsEmpty() ? WindupTime : Impacts[0].Time);
 	// 월드 시간으로 기다리면 히트스톱 동안 몽타주만 멈추고 판정은 그대로 나간다. 몬스터 시간으로 직접 센다.
 	UAbilityTask_Repeat* const ClockTask = UAbilityTask_Repeat::RepeatAction(this, knightMonsterAreaAttack::ClockInterval, knightMonsterAreaAttack::MaxClockTicks);
 	ClockTask->OnPerformAction.AddDynamic(this, &ThisClass::HandleClockTick);
@@ -345,6 +346,7 @@ void UknightGameplayAbility_MonsterAreaAttack::HitArea(const FVector& Center, fl
 				SourceASC->ApplyGameplayEffectSpecToTarget(*Spec.Data.Get(), TargetASC);
 			}
 		});
+	CheckNearMiss(Center, Radius, HitActors);
 
 #if ENABLE_DRAW_DEBUG
 	if (knightMonsterDebug::ShouldDrawAttacks())

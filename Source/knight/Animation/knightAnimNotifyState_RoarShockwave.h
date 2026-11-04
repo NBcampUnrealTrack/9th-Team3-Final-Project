@@ -24,4 +24,19 @@ protected:
 	/** 파동이 시작되는 소켓(보통 머리). 없으면 메시 중심에서 시작한다. */
 	UPROPERTY(EditAnywhere, Category="Roar")
 	FName Socket = TEXT("head");
+
+	/** 파동 고리를 내보낸다. 끄면 화면 일렁임과 약한 흔들림만 남는다. */
+	UPROPERTY(EditAnywhere, Category="Roar")
+	bool bPulses = true;
+
+	/** 화면 전체가 천천히 일렁이는 세기(1 = 기본). 0이면 일렁임 없음. */
+	UPROPERTY(EditAnywhere, Category="Roar", meta=(ClampMin=0, ClampMax=3))
+	float Wiggle = 0.f;
+
+	/** 구간 동안 화면 색이 TintColor 쪽으로 가라앉는 정도(0~1, 분노 진입). 0이면 색 변화 없음. */
+	UPROPERTY(EditAnywhere, Category="Roar", meta=(ClampMin=0, ClampMax=1))
+	float Tint = 0.f;
+
+	UPROPERTY(EditAnywhere, Category="Roar", meta=(EditCondition="Tint > 0"))
+	FLinearColor TintColor = FLinearColor(1.f, 0.22f, 0.15f);
 };

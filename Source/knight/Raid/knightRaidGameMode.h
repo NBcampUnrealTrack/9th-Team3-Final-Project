@@ -19,7 +19,7 @@ struct FStreamableHandle;
  *
  * The raid rules come from the stage the main menu launched (FKnightStageDefinition::RaidDefinition), or from
  * DefaultRaidDefinition when a raid map is played directly in the editor. Target monsters are the placed
- * monsters whose definition matches the raid's TargetMonster (all monsters if it is empty).
+ * monsters whose definition matches the raid's TargetMonster. Required but missing targets enter map-test mode.
  * On success or failure the result goes to UknightRaidSubsystem and the game returns to the main menu.
  */
 UCLASS(abstract)
@@ -64,6 +64,10 @@ public:
 	bool RecordBrokenPart(FGuid RunId, FName BossId, AknightMonsterCharacterBase* Monster, FGameplayTag PartTag);
 
 	const UknightRaidDefinition* GetRaidDefinition() const { return RaidDefinition; }
+
+	/** Map exploration only: no run, boss binding, timer, result or progression until the required target is configured. */
+	UFUNCTION(BlueprintPure, Category="Knight|Raid")
+	bool IsMapTestMode() const;
 
 	/** Monsters that must be defeated. Filled in StartPlay, after actors begin play. */
 	const TArray<TWeakObjectPtr<AknightMonsterCharacterBase>>& GetTargetMonsters() const { return TargetMonsters; }

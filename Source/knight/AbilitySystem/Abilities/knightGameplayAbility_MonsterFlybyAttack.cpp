@@ -120,6 +120,7 @@ void UknightGameplayAbility_MonsterFlybyAttack::ActivateAbility(const FGameplayA
 		}
 	}
 	WarningRippleTime = Effects.WarningRippleInterval;
+	StartAttackWarning(WarningTime);
 	if (WarningMontage)
 	{
 		UAbilityTask_PlayMontageAndWait* const MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, WarningMontage);
@@ -529,6 +530,7 @@ void UknightGameplayAbility_MonsterFlybyAttack::ApplyHits()
 	const int32 NewHits = UknightCombatLibrary::ApplyAreaMeleeHits(Monster, Center, FCollisionShape::MakeSphere(HalfWidth), HitParams, HitActors,
 		[](const AActor&) { return true; },
 		[this](AActor& Target, EknightHitOutcome Outcome) { HandleGuardPush(Target, Outcome); });
+	CheckNearMiss(Center, HalfWidth, HitActors);
 #if ENABLE_DRAW_DEBUG
 	if (knightMonsterDebug::ShouldDrawAttacks())
 	{

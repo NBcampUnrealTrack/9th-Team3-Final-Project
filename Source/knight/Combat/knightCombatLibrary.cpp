@@ -295,7 +295,8 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 	{
 		KnightSourceASC->PlayAttackImpactShake(Params.PoiseDamage, false);
 		// (2026-10-21) 나이트 전용 타격 이펙트·소리(몬스터 ASC는 비어 있어 아무것도 안 한다).
-		KnightSourceASC->PlayAttackImpactEffects(Hit, false, bWeakpointHit);
+		// (2026-10-29) 타격 종류별 소리(무거운 타격·장갑 부위)를 고르도록 그로기 피해와 부위 피해 배율도 넘긴다.
+		KnightSourceASC->PlayAttackImpactEffects(Hit, false, bWeakpointHit, Params.PoiseDamage, PartMultiplier);
 	}
 	// 전투는 소리가 난다. 아직 전투를 알아채지 못한 몬스터도 이 소리를 들을 수 있다.
 	UAISense_Hearing::ReportNoiseEvent(Attacker, Hit.ImpactPoint, 1.f, Attacker, 0.f, TEXT("Hit"));
@@ -338,14 +339,26 @@ int32 UknightCombatLibrary::ApplyAreaMeleeHits(AActor* Attacker, const FVector& 
 		// 피해 컨텍스트, 큐, 부위 조회는 히트 결과를 필요로 하므로 가장 가까운 표면 지점으로 하나 만든다.
 		FVector ImpactPoint = Component->GetComponentLocation();
 		FVector ClosestPoint;
-		if (Component->GetClosestPointOnCollision(Center, ClosestPoint) >= 0.f)
+		const float ClosestDistance = Component->GetClosestPointOnCollision(Center, ClosestPoint);
+		if (ClosestDistance >= 0.f)
 		{
 			ImpactPoint = ClosestPoint;
+		}
+		// 메시 충돌 바디가 몸 일부에만 있으면 위에서 내리꽂는 공격도 허리 아래에 닿은 것으로 나온다(패링 불꽃, 맞은 부위가 엉뚱해진다).
+		// 루트 캡슐 표면이 판정 중심에 더 가까우면 그 점을 쓴다.
+		const UPrimitiveComponent* const Root = Cast<UPrimitiveComponent>(Target->GetRootComponent());
+		FVector RootPoint = FVector::ZeroVector;
+		const float RootDistance = Root && Root != Component ? Root->GetClosestPointOnCollision(Center, RootPoint) : -1.f;
+		if (RootDistance >= 0.f && (ClosestDistance < 0.f || RootDistance < ClosestDistance))
+		{
+			ImpactPoint = RootPoint;
 		}
 		FHitResult Hit(Target, Component, ImpactPoint, FixedNormal.IsZero() ? (Center - ImpactPoint).GetSafeNormal() : FixedNormal);
 		Hit.bBlockingHit = true;
 		Hit.TraceStart = Center;
 		Hit.TraceEnd = ImpactPoint;
+		UE_LOG(LogknightCombat, Verbose, TEXT("%s area hit on %s via %s at %s (center %s, target %s)."), *GetNameSafe(Attacker), *GetNameSafe(Target),
+			*GetNameSafe(Component), *ImpactPoint.ToCompactString(), *Center.ToCompactString(), *Target->GetActorLocation().ToCompactString());
 		const EknightHitOutcome Outcome = ApplyMeleeHit(Attacker, Hit, Params);
 		UE_LOG(LogknightAI, Verbose, TEXT("%s: area hit %s (outcome %d)."), *GetNameSafe(Attacker), *GetNameSafe(Target), static_cast<int32>(Outcome));
 		OnHit(*Target, Outcome);

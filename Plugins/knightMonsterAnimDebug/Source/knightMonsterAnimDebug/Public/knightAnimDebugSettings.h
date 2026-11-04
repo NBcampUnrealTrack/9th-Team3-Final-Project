@@ -158,4 +158,48 @@ public:
 
 	UPROPERTY(Config, EditAnywhere, Category="Preview", meta=(ClampMin=1, Units="cm"))
 	float DummyHalfHeight = 96.f;
+
+	/**
+	 * 전투 피드백 튜닝 탭에 보일 숫자 프로퍼티. 이름(또는 감싼 구조체 프로퍼티 이름)에 하나라도 들어가면 보인다.
+	 * 감싼 구조체나 객체 이름이 걸리면 그 안의 숫자는 모두 보인다(FlinchImpact → 넉백 거리, 슬로 시간 / GuardPush 컴포넌트 → 밀림 거리).
+	 */
+	UPROPERTY(Config, EditAnywhere, Category="Feedback Tuning")
+	TArray<FString> FeedbackPropertyKeywords;
+
+	/** 이 클래스를 상속한 객체는 숫자 프로퍼티를 이름과 상관없이 모두 보인다(카메라 셰이크처럼 값 이름이 제각각인 것). */
+	UPROPERTY(Config, EditAnywhere, Category="Feedback Tuning")
+	TArray<TSoftClassPtr<UObject>> FeedbackAllPropertyClasses;
+
+	/**
+	 * 카메라 묶음. 이 클래스를 상속한 게임 클래스(엔진 클래스 제외)의 기본값을 모두 보인다. 모디파이어처럼 공격 중에만 생기는 것도
+	 * 미리 바꿔 둘 수 있게 PIE의 인스턴스가 아니라 클래스 기본값을 잡는다.
+	 */
+	UPROPERTY(Config, EditAnywhere, Category="Feedback Tuning")
+	TArray<TSoftClassPtr<UObject>> FeedbackCameraClasses;
+
+	/** 플레이어 공격을 다시 실행할 때 몬스터 몸통 가장자리에서 이만큼 떨어져 선다. */
+	UPROPERTY(Config, EditAnywhere, Category="Feedback Tuning", meta=(ClampMin=0, Units="cm"))
+	float FeedbackPlayerAttackGap = 150.f;
+
+	/** 다시 실행 전에 플레이어를 몬스터 정면 이 거리에 세운다. */
+	UPROPERTY(Config, EditAnywhere, Category="Feedback Tuning", meta=(ClampMin=0, Units="cm"))
+	float FeedbackPlaceDistance = 900.f;
+
+	/** false면 플레이어 묶음 값은 PIE에서 바꿔 보기만 하고 저장하지 않는다. */
+	UPROPERTY(Config, EditAnywhere, Category="Feedback Tuning")
+	bool bFeedbackAllowSavingPlayerValues = false;
+
+	/** 카메라 묶음이어도 이 경로로 시작하는 에셋은 저장하지 않는다(플레이어 담당 에셋: 캐릭터 BP, 어빌리티·큐, 카메라 모드). */
+	UPROPERTY(Config, EditAnywhere, Category="Feedback Tuning")
+	TArray<FString> FeedbackLockedPathPrefixes;
+
+	/**
+	 * 카메라 반응 표 클래스. 이 클래스의 구조체 프로퍼티 하나가 순간 하나다(탭의 "카메라 반응" 목록).
+	 * 미리보기는 카메라 매니저의 FeedbackImpactPreviewFunction(순간 이름, 세기)을 부른다.
+	 */
+	UPROPERTY(Config, EditAnywhere, Category="Feedback Tuning")
+	TSoftClassPtr<UObject> FeedbackImpactSettingsClass;
+
+	UPROPERTY(Config, EditAnywhere, Category="Feedback Tuning")
+	FName FeedbackImpactPreviewFunction;
 };

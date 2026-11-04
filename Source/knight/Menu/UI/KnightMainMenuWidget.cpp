@@ -1,4 +1,5 @@
 #include "KnightMainMenuWidget.h"
+#include "KnightButtonFillExtension.h"
 #include "Menu/UI/KnightMaintenancePresentation.h"
 
 #include "GameFlow/KnightGameFlowSubsystem.h"
@@ -74,6 +75,9 @@ void UKnightMainMenuWidget::NativeOnInitialized()
 	ValidateRequiredWidget(Button_Maintenance, TEXT("Button_Maintenance"));
 	ValidateRequiredWidget(Button_Settings, TEXT("Button_Settings"));
 	ValidateRequiredWidget(Button_Codex, TEXT("Button_Codex"));
+	for (UCommonButtonBase* Button : { Button_Stage.Get(), Button_ReturnToTitle.Get(), Button_Maintenance.Get(), Button_Settings.Get(),
+		Button_Codex.Get() })
+		UKnightButtonFillExtension::SetLabelFitted(Button, FLinearColor(FColor(36, 60, 88)));
 	BuildMaintenanceFooterBack();
 	if (Button_Stage) Button_Stage->OnClicked().AddUObject(this, &ThisClass::HandleStageClicked);
 	if (Button_ReturnToTitle) Button_ReturnToTitle->OnClicked().AddUObject(this, &ThisClass::HandleReturnToTitleClicked);
@@ -242,6 +246,9 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 	{
 		return false;
 	}
+	for (UCommonButtonBase* Button : { Button_Stage.Get(), Button_ReturnToTitle.Get(), Button_Maintenance.Get(), Button_Settings.Get(),
+		Button_Codex.Get() })
+		UKnightButtonFillExtension::Reset(Button);
 	SetMaintenanceSubmenuOpen(false);
 	const bool bEnteringStage = NewPage == EKnightMainMenuPage::Stage && CurrentPage != EKnightMainMenuPage::Stage;
 	const bool bLeavingMaintenance = CurrentPage == EKnightMainMenuPage::Maintenance && NewPage != CurrentPage;
@@ -816,7 +823,8 @@ bool UKnightMainMenuWidget::RebuildMapMarkers()
 			FKnightMapQuestMarker& Pin = QuestMarkers.AddDefaulted_GetRef();
 			Pin.QuestId = Quest->QuestId;
 			Pin.RegionId = Placement.RegionId;
-			Pin.Label = Quest->Difficulty == EKnightQuestDifficulty::Hard ? LOCTEXT("MapHard", "어려움") : LOCTEXT("MapNormal", "일반");
+			Pin.Label = Quest->bMapExplorationOnly ? LOCTEXT("MapExplore", "일반 · 탐색")
+				: (Quest->Difficulty == EKnightQuestDifficulty::Hard ? LOCTEXT("MapHard", "어려움") : LOCTEXT("MapNormal", "일반"));
 			Pin.Location = Region->Location + Placement.MarkerOffset;
 			Pin.bLocked = !bCanLaunch;
 			QuestRegionById.Add(Quest->QuestId, Placement.RegionId);
@@ -1040,7 +1048,12 @@ void UKnightMainMenuWidget::HandleQuestLaunchRequested(FName QuestId)
 	FText Reason;
 	const bool bAccepted = Flow->RequestStartQuest(QuestId, Reason);
 	RefreshTravelControls();
-	if (bAccepted) SetStatusText(LOCTEXT("LaunchingQuest", "퀘스트 출격 준비 중입니다."));
+	if (bAccepted)
+	{
+		const UKnightQuestDefinition* const Quest = MapQuestCatalog ? MapQuestCatalog->FindQuest(QuestId) : nullptr;
+		SetStatusText(Quest && Quest->bMapExplorationOnly ? LOCTEXT("LaunchingExploration", "맵으로 이동 중입니다.")
+			: LOCTEXT("LaunchingQuest", "퀘스트 출격 준비 중입니다."));
+	}
 	else if (!Reason.IsEmpty()) SetStatusText(Reason);
 }
 

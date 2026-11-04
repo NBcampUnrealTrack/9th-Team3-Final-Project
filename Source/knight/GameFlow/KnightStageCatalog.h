@@ -48,6 +48,14 @@ struct KNIGHT_API FKnightStageDefinition
 	/** Listed only in editor PIE for isolated developer validation. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stage")
 	bool bDevelopmentOnly = false;
+
+	/** Keep the stage launchable through a quest placement without drawing a second region. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stage")
+	bool bShowOnMap = true;
+
+	/** Permit travel to an unfinished raid map without a target monster; the GameMode remains in exploration. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stage")
+	bool bAllowMapExploration = false;
 };
 
 /** Definitions only; referencing this asset does not load the gameplay maps. */

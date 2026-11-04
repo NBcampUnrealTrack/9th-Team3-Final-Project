@@ -20,9 +20,12 @@
 #include "GameFramework/RootMotionSource.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
+#include "Camera/CameraShakeBase.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "GameFramework/PlayerController.h"
 #include "GameplayEffect.h"
 #include "TimerManager.h"
+#include "Monster/knightMonsterGuardPushComponent.h"
 #include "System/knightGameplayTags.h"
 #include "knight.h"
 
@@ -132,12 +135,13 @@ void UknightGameplayAbility_Guard::ActivateAbility(const FGameplayAbilitySpecHan
 		ParryTask->ReadyForActivation();
 	}
 
-	if (GuardMontage)
-	{
-		// 가드 모션은 행동 속도 배속으로 재생한다. 퍼펙트 가드 판정 시간은 난이도가 바뀌지 않게 배속과 무관하게 둔다.
-		UAbilityTask_PlayMontageAndWait* const MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, GuardMontage, GetActionSpeed());
-		MontageTask->ReadyForActivation();
-	}
+	PlayGuardPose();
+
+	// (2026-11-02) 몬스터 공격을 막아 밀려날 때의 반응. 가드가 올라가 있는 동안 계속 받는다.
+	UAbilityTask_WaitGameplayEvent* const PushTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
+		this, knightMonsterGuardPush::Event_GuardPushed, nullptr, false, true);
+	PushTask->EventReceived.AddDynamic(this, &ThisClass::OnGuardPushed);
+	PushTask->ReadyForActivation();
 
 	// 키를 떼면 퍼펙트 가드 판정 시간 중이라도 바로 가드를 내린다(퍼펙트 가드도 같이 끝남).
 	// 전에는 판정 시간이 끝날 때 뗌을 확인해서, 짧게 톡 눌러도 판정 시간 내내 패리가 유지되는 대신 그동안 가드를 내릴 수 없었다.
@@ -150,9 +154,94 @@ void UknightGameplayAbility_Guard::ActivateAbility(const FGameplayAbilitySpecHan
 	AirborneTask->ReadyForActivation();
 }
 
+void UknightGameplayAbility_Guard::PlayGuardPose()
+{
+	if (GuardMontage)
+	{
+		// 가드 모션은 행동 속도 배속으로 재생한다. 퍼펙트 가드 판정 시간은 난이도가 바뀌지 않게 배속과 무관하게 둔다.
+		UAbilityTask_PlayMontageAndWait* const MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, GuardMontage, GetActionSpeed());
+		MontageTask->ReadyForActivation();
+	}
+}
+
 void UknightGameplayAbility_Guard::OnLeftGround()
 {
 	EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, true);
+}
+
+void UknightGameplayAbility_Guard::OnGuardPushed(FGameplayEventData Payload)
+{
+	if (!IsActive())
+	{
+		return;
+	}
+	const bool bHeavy = Payload.EventMagnitude >= 2.f;
+	ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+
+	// 화면 흔들림(플레이어가 조종할 때만).
+	const TSubclassOf<UCameraShakeBase> Shake = bHeavy ? GuardPushHeavyShake : GuardPushLightShake;
+	const float ShakeScale = bHeavy ? GuardPushHeavyShakeScale : GuardPushLightShakeScale;
+	if (Shake && ShakeScale > 0.f && Character && Character->IsPlayerControlled())
+	{
+		if (APlayerController* const PC = Cast<APlayerController>(Character->GetController()))
+		{
+			PC->ClientStartCameraShake(Shake, ShakeScale);
+		}
+	}
+	UE_LOG(LogknightCombat, Verbose, TEXT("%s: guard pushed by %s (%s)."), *GetNameSafe(Character), *GetNameSafe(Payload.Instigator.Get()), bHeavy ? TEXT("heavy") : TEXT("light"));
+	if (!bHeavy)
+	{
+		return;
+	}
+
+	// 크게: 잠시 캔슬 창을 닫아 공격·구르기로 바로 끊지 못하게 한다. 가드 키를 떼면 그대로 내려간다.
+	UWorld* const World = GetWorld();
+	if (GuardPushHeavyLockTime > 0.f && World)
+	{
+		if (bCancelWindowApplied)
+		{
+			bCancelWindowApplied = false;
+			bCancelWindowSuspended = true;
+			if (UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo())
+			{
+				ASC->RemoveLooseGameplayTag(knightGameplayTags::Window_Cancel);
+			}
+		}
+		// 연달아 밀리면 그때부터 다시 센다.
+		World->GetTimerManager().SetTimer(GuardPushLockTimer, this, &ThisClass::RestoreCancelWindowAfterPush, GuardPushHeavyLockTime, false);
+	}
+
+	// 가드한 채 뒤로 밀리는 반동. 끝나면 가드 자세로 돌아간다.
+	if (GuardPushHeavyMontage)
+	{
+		UAbilityTask_PlayMontageAndWait* const Task = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
+			this, NAME_None, GuardPushHeavyMontage, GuardPushHeavyPlayRate);
+		Task->OnBlendOut.AddDynamic(this, &ThisClass::OnGuardPushMontageDone);
+		Task->OnCompleted.AddDynamic(this, &ThisClass::OnGuardPushMontageDone);
+		Task->ReadyForActivation();
+	}
+}
+
+void UknightGameplayAbility_Guard::OnGuardPushMontageDone()
+{
+	if (IsActive())
+	{
+		PlayGuardPose();
+	}
+}
+
+void UknightGameplayAbility_Guard::RestoreCancelWindowAfterPush()
+{
+	if (!bCancelWindowSuspended || !IsActive())
+	{
+		return;
+	}
+	bCancelWindowSuspended = false;
+	if (UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		ASC->AddLooseGameplayTag(knightGameplayTags::Window_Cancel);
+		bCancelWindowApplied = true;
+	}
 }
 
 void UknightGameplayAbility_Guard::WaitForRelease()
@@ -330,8 +419,11 @@ void UknightGameplayAbility_Guard::ExitGuardStance()
 	if (UWorld* const World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(MoveCancelTimer);
+		World->GetTimerManager().ClearTimer(GuardPushLockTimer);
 	}
 	StopStepTurn(false);
+	// 크게 밀려 잠시 닫아 둔 캔슬 창은 이미 태그가 빠져 있다.
+	bCancelWindowSuspended = false;
 	if (bCancelWindowApplied)
 	{
 		bCancelWindowApplied = false;
@@ -413,7 +505,7 @@ void UknightGameplayAbility_Guard::UpdateStepTurn(ACharacter& Character)
 		{
 			bStepTurning = false;
 			ActiveStepTurnMontage.Reset();
-			PlayGuardPoseMontage();
+			PlayGuardPose();
 		}
 		return;
 	}
@@ -460,7 +552,7 @@ void UknightGameplayAbility_Guard::OnStepTurnBlendingOut(UAnimMontage* Montage, 
 	// 다른 몽타주가 끼어들었으면 그 몽타주에 맡긴다. 끊긴 게 아니면 몽타주의 자동 블렌드 아웃이 켜져 있는 것(그러면 몇 도 덜 돈다) → 가드 자세로 이어 간다.
 	if (!bInterrupted && IsActive())
 	{
-		PlayGuardPoseMontage();
+		PlayGuardPose();
 	}
 }
 
@@ -480,22 +572,12 @@ void UknightGameplayAbility_Guard::StopStepTurn(bool bResumeGuardPose)
 	if (bResumeGuardPose && IsActive())
 	{
 		// 가드 자세 몽타주가 같은 슬롯의 돌기 몽타주를 밀어낸다.
-		PlayGuardPoseMontage();
+		PlayGuardPose();
 	}
 	else
 	{
 		Anim->Montage_Stop(0.2f, Montage);
 	}
-}
-
-void UknightGameplayAbility_Guard::PlayGuardPoseMontage()
-{
-	if (!GuardMontage)
-	{
-		return;
-	}
-	UAbilityTask_PlayMontageAndWait* const MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, GuardMontage, GetActionSpeed());
-	MontageTask->ReadyForActivation();
 }
 
 bool UknightGameplayAbility_Guard::FaceLockedTarget(float MaxDeltaYaw) const

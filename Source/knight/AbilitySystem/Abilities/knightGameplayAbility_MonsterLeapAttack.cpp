@@ -5,6 +5,7 @@
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
+#include "Animation/knightAnimNotifyState_PlayRate.h"
 #include "Combat/knightCombatLibrary.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "DrawDebugHelpers.h"
@@ -74,6 +75,9 @@ void UknightGameplayAbility_MonsterLeapAttack::ActivateAbility(const FGameplayAb
 	MontageTask->OnInterrupted.AddDynamic(this, &ThisClass::HandleMontageInterrupted);
 	MontageTask->OnCancelled.AddDynamic(this, &ThisClass::HandleMontageInterrupted);
 	MontageTask->ReadyForActivation();
+
+	// 달리기 앞부분을 건너뛰면 그만큼 예고도 짧아진다.
+	StartAttackWarning(UknightAnimNotifyState_PlayRate::GetPlaySeconds(*Montage, StartTime, HitStartTime));
 
 	UAbilityTask_Repeat* const Task = UAbilityTask_Repeat::RepeatAction(this, knightMonsterLeap::TickInterval, knightMonsterLeap::MaxTicks);
 	Task->OnPerformAction.AddDynamic(this, &ThisClass::HandleTick);
@@ -224,6 +228,7 @@ void UknightGameplayAbility_MonsterLeapAttack::ApplyHits()
 	const int32 NewHits = UknightCombatLibrary::ApplyAreaMeleeHits(Avatar, Center, FCollisionShape::MakeSphere(HitRadius), HitParams, HitActors,
 		[](const AActor&) { return true; },
 		[this](AActor& Target, EknightHitOutcome Outcome) { HandleGuardPush(Target, Outcome); });
+	CheckNearMiss(Center, HitRadius, HitActors);
 
 #if ENABLE_DRAW_DEBUG
 	if (knightMonsterDebug::ShouldDrawAttacks())

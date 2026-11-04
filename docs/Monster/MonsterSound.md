@@ -53,6 +53,18 @@
 
 그 밖의 볼륨: 큐 `SC_` 전부 0.75, 잔열 발소리 노티파이 0.6, Burn_Sizzle 0.6, **포효 노티파이 1.5**(잔열 Roar_Engage·Roar_Enrage, 잔향 Roar_Encounter·Roar_GlideAlert·Roar_Resonance).
 
+그로기(다운) 울부짖음: 다운 몽타주 시작(0초)에 크게 겹쳐 낸다. 그로기를 만든 손맛을 주는 소리라 다른 소리보다 크다.
+- 잔열 `AM_Janyeol_Down`: Roar_Enrage(볼륨 1.5, 피치 1.15) + 기존 Hit_Moan. 이어서 Down_Collapse 1.65초, GroggyBreath 2.3초
+- 잔향 `AM_Janhyang_Down`: Hit_Screech_01(볼륨 1.8, 피치 0.75) + Hit_Screech_02(0.15초, 볼륨 1.2, 피치 0.9). GroggyBreath는 울부짖음과 겹치지 않게 0.1 → 1.8초로 옮김
+- 전용 음원이 생기면 이 노티파이들을 그 소리 하나로 바꾼다.
+
+잔향 근접 공격 소리 (기존 음원 재사용, 전용 음원이 생기면 교체):
+- `AM_Janhyang_Bite`: 잔열 SC_Janyeol_Bite_Snap(1.02초, 피치 1.2) — 머리가 멈추는 순간
+- `AM_Janhyang_ShoulderSlam`: SC_Janhyang_WingFlap(0.05초) + Exhaust_Landing_Thud(0.70초, 볼륨 1.3) — 몸이 내려꽂히는 순간
+- `AM_Janhyang_WingStrike`: 날갯짓(0.35초)에 SC_Janhyang_TailStab(0.74초) 추가 — 꼬리가 앞으로 찌르는 순간
+
+타격음 시간을 정할 때는 Play Rate 구간을 풀어 실제 시간으로 바꾼 뒤, wav 앞 무음을 빼서 소리가 커지는 순간을 접지·타격 프레임에 맞춘다.
+
 ## 4. 노티파이가 아닌 곳에 연결된 소리
 
 노티파이는 몽타주를 열면 보이지만, 아래는 데이터 에셋·GA·BP의 슬롯에 들어 있다.
@@ -69,6 +81,7 @@
 | S_Janhyang_Chest_Core_Break | DA_Janhyang_Parts, DA_Recipe_Janhyang (BreakSound) |
 | SC_Janhyang_DarkEcho | GA_Janhyang_DarkAmbush, GA_Janhyang_Glide (DarkEchoSound) |
 | S_Janhyang_Sonic_Tinnitus | 코드에서 경로로 불러옴(청각 마비). 이름을 바꾸면 `knightCameraModifier_Deafen.cpp`도 바꿔야 함 |
+| S_Janhyang_Glide_Dive_Whoosh, SC_Janyeol_Swipe_Whoosh | DA_Janhyang, DA_Janyeol (NearMissSound, 공격이 스쳤을 때). 잔향 소리는 서서히 커지는 소리라 NearMissStartTime 0.42초부터 틀어 스친 순간에 가장 크게 들리게 함. 음원을 바꾸면 이 값도 다시 맞춘다 |
 
 ## 5. 잔향 어둠 초음파 (SC_Janhyang_DarkEcho)
 

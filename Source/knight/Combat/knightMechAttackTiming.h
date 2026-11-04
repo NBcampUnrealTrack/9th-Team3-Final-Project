@@ -143,8 +143,9 @@ class KNIGHT_API FknightMechAttackTiming : public TSharedFromThis<FknightMechAtt
 {
 public:
 	/** 몽타주에 근접 판정이 없거나 꺼져 있으면 nullptr. */
+	/** (2026-11-03) CameraKickScale: 이 공격의 카메라 킥 세기(공격 무게별, 어빌리티가 정한다). 스탠스 배율에 곱한다. */
 	static TSharedPtr<FknightMechAttackTiming> Start(UAnimInstance* AnimInstance, UAnimMontage* Montage, float BaseRate,
-		const FknightMechTimingSettings& Settings, bool bTwoHanded);
+		const FknightMechTimingSettings& Settings, bool bTwoHanded, float CameraKickScale = 1.f);
 
 	~FknightMechAttackTiming();
 
@@ -180,5 +181,6 @@ private:
 	float BurstRate = 1.f;
 	float PhaseElapsed = 0.f;
 	bool bTwoHandedStance = false;
+	float CameraKickScale = 1.f;
 	EPhase Phase = EPhase::Windup;
 };

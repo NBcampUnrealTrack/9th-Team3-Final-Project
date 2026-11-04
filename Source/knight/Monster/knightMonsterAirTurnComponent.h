@@ -15,7 +15,7 @@ struct FAbilityEndedData;
 /**
  * 지상 턴과 공중 턴을 번갈아 돌리는 날짐승 몬스터(잔향)의 턴 관리.
  *
- *   지상 턴: 타깃을 잡은 뒤 GroundTurnTime 동안 지상 공격 → 공격이 끝나면 이륙(Event.Monster.TakeOff)
+ *   지상 턴: 타깃을 잡은 뒤 지상 공격을 GroundAttacksPerTurn번 쓰거나 GroundTurnTime이 지나면, 공격이 끝난 뒤 이륙(Event.Monster.TakeOff)
  *   공중 턴: State.Monster.Airborne이 붙는다. 공중 공격을 AirAttacksPerTurn번 쓰거나 AirTurnMaxTime이 지나면,
  *            공격이 끝난 뒤 착지(Event.Monster.Land)
  *            다음 공격이 이 턴의 마지막이면 State.Monster.LastAirAttack을 붙인다. 공중 턴을 스스로 끝내는 공격(잔향 회오리)은
@@ -56,12 +56,19 @@ public:
 	void EndAirTurnNow(float BlendTime) { if (bAirborne) { EndAirTurn(BlendTime, false); } }
 
 	/** 지상 턴 시간을 처음부터 센다(탈진 착지 같은 딜 타임이 끝난 뒤). */
-	void RestartGroundTurn() { GroundTime = 0.f; }
+	void RestartGroundTurn() { GroundTime = 0.f; GroundAttacksUsed = 0; }
 
 protected:
-	/** 타깃을 잡은 뒤 지상 턴이 이어지는 시간. 반응(다운·포효) 중에는 흐르지 않는다. 0이면 공중 턴을 쓰지 않는다. */
+	/**
+	 * 타깃을 잡은 뒤 지상 턴이 이어지는 시간. 반응(다운·포효) 중에는 흐르지 않는다. 0이면 공중 턴을 쓰지 않는다.
+	 * GroundAttacksPerTurn을 쓰면 공격을 다 못 썼을 때(타깃이 멀리 도망감)의 최대 시간이 된다.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(ClampMin=0, Units="s"))
 	float GroundTurnTime = 0.f;
+
+	/** 지상 턴 한 번에 쓰는 지상 공격 수. 쉬는 시간이 길어도 지상 턴의 공격 수가 같게 유지된다. 0이면 GroundTurnTime만 본다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(ClampMin=0, EditCondition="GroundTurnTime > 0"))
+	int32 GroundAttacksPerTurn = 0;
 
 	/** 공중 턴 한 번에 쓰는 공중 공격 수. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(ClampMin=1, EditCondition="GroundTurnTime > 0"))
@@ -71,9 +78,27 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(ClampMin=0, Units="s", EditCondition="GroundTurnTime > 0"))
 	float AirTurnMaxTime = 20.f;
 
+	/**
+	 * 지금 쓸 수 있는 공중 공격이 이 시간(초) 안에 하나도 준비되지 않으면 AirTurnMaxTime을 기다리지 않고 착지한다.
+	 * 쿨다운과 태그 조건만 보고 거리·각도는 보지 않는다(타깃이 잠깐 멀어졌다고 내려오지 않게). 음수면 쓰지 않는다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(Units="s", EditCondition="GroundTurnTime > 0"))
+	float EarlyLandWaitTime = 2.f;
+
+	/**
+	 * 공중 턴의 남은 시간(최대 시간 기준)이 이 값 이하가 되면 마무리 공격(State.Monster.LastAirAttack이 필요한 활강·회오리)을 연다.
+	 * 공격 수를 다 채우기 전에 시간이 끝나도 턴이 마무리 공격으로 닫히게 한다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn", meta=(ClampMin=0, Units="s", EditCondition="GroundTurnTime > 0"))
+	float FinisherOpenTime = 8.f;
+
 	/** State.Monster.Enraged 동안 GroundTurnTime 대신 쓴다(공명해방은 공중 위주로). 0이면 평소 값. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn|Enraged", meta=(ClampMin=0, Units="s", EditCondition="GroundTurnTime > 0"))
 	float EnragedGroundTurnTime = 0.f;
+
+	/** State.Monster.Enraged 동안 GroundAttacksPerTurn 대신 쓴다. 0이면 평소 값. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn|Enraged", meta=(ClampMin=0, EditCondition="GroundTurnTime > 0"))
+	int32 EnragedGroundAttacksPerTurn = 0;
 
 	/** State.Monster.Enraged 동안 AirAttacksPerTurn 대신 쓴다. 0이면 평소 값. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Air Turn|Enraged", meta=(ClampMin=0, EditCondition="GroundTurnTime > 0"))
@@ -130,9 +155,14 @@ private:
 	bool IsAttacking() const;
 	bool IsEnraged() const;
 	float GetGroundTurnTime() const;
+	int32 GetGroundAttacksPerTurn() const;
 	int32 GetAirAttacksPerTurn() const;
 	float GetAirTurnMaxTime() const;
 	bool CanChangeTurn() const;
+	/** 마무리 공격 = Selection.RequiredOwnerTags에 State.Monster.LastAirAttack이 있는 공중 공격(활강·회오리). */
+	enum class EAirAttackFilter : uint8 { All, NoFinishers, FinishersOnly };
+	/** 지금 태그 조건을 만족하는 공중 공격 중 Within초 안에 쿨다운이 끝나는 것이 있는지. 거리·각도는 보지 않는다. */
+	bool HasAirAttackSoon(EAirAttackFilter Filter, float Within) const;
 	void SendEvent(const FGameplayTag& EventTag) const;
 	/** 타깃이 AirKeepDistance보다 가까우면 뒤로 물러난다. */
 	void UpdateRetreat(float DeltaTime);
@@ -150,9 +180,13 @@ private:
 	bool bAirborne = false;
 	double LastAttackEndTime = -1.e9;
 	static constexpr float FollowUpGraceTime = 0.2f;
+	/** 최대 시간이 지나도 마무리 공격이 준비돼 있으면 이만큼 더 기다린다(공격 사이 쉬는 시간에 AI가 고를 수 있게). */
+	static constexpr float FinisherWaitTime = 3.f;
+	bool bLastAirAttackOpen = false;
 	float GroundTime = 0.f;
 	float AirTime = 0.f;
 	int32 AirAttacksUsed = 0;
+	int32 GroundAttacksUsed = 0;
 	double RetreatEndTime = 0.0;
 	TEnumAsByte<ECollisionResponse> SavedPawnResponse = ECR_Block;
 };

@@ -109,6 +109,7 @@ bool UKnightGameFlowSubsystem::GetStageDefinitions(TArray<FKnightStageDefinition
 		}
 		else
 		{
+			if (!Stage.bShowOnMap) continue;
 			if (Stage.bDevelopmentOnly)
 			{
 				bool bEditorPIE = false;
@@ -195,6 +196,12 @@ bool UKnightGameFlowSubsystem::CanLaunchStage(FName StageId, FText& OutReason) c
 		OutReason = LOCTEXT("RaidDefinitionMissing", "The raid definition is missing.");
 		return false;
 	}
+	const UknightRaidDefinition* const Raid = Stage.RaidDefinition.LoadSynchronous();
+	if (Raid && Raid->IsWaitingForTargetMonster() && !Stage.bAllowMapExploration)
+	{
+		OutReason = LOCTEXT("RaidTargetNotReady", "이 레이드의 몬스터가 아직 준비되지 않았습니다.");
+		return false;
+	}
 	OutReason = FText::GetEmpty();
 	return true;
 }
@@ -256,7 +263,7 @@ bool UKnightGameFlowSubsystem::RequestStartQuest(FName QuestId, FText& OutReason
 		UE_LOG(Logknight, Warning, TEXT("Quest %s cannot launch: %s"), *QuestId.ToString(), *OutReason.ToString());
 		return RejectRequest(EKnightFlowState::Gameplay, OutReason);
 	}
-	return RequestStartStageInternal(Quest->StageId, Quest, OutReason);
+	return RequestStartStageInternal(Quest->StageId, Quest->bMapExplorationOnly ? nullptr : Quest, OutReason);
 }
 
 bool UKnightGameFlowSubsystem::RequestStartStageInternal(FName StageId, const UKnightQuestDefinition* Quest, FText& OutReason)
@@ -475,6 +482,29 @@ void UKnightGameFlowSubsystem::RegisterEnteredGameplay(UWorld* EnteredWorld)
 	}
 	RegisteredWorld = EnteredWorld;
 	ActiveStageId = bWasPending ? PendingStageId : NAME_None;
+	if (!bWasPending)
+	{
+		// Direct PIE/OpenLevel must not inherit a selected quest or another world's run.
+		if (UknightRaidSubsystem* const Session = GameInstance->GetSubsystem<UknightRaidSubsystem>())
+		{
+			Session->EndRun();
+		}
+		const FString MapPackage = UWorld::RemovePIEPrefix(EnteredWorld->GetOutermost()->GetName());
+		if (const UKnightStageCatalog* const Catalog = GetStageCatalog())
+		{
+			for (const FKnightStageDefinition& Stage : Catalog->Stages)
+			{
+				if (Stage.StageId.IsNone() || Stage.GameplayMap.ToSoftObjectPath().GetLongPackageName() != MapPackage) continue;
+				if (!ActiveStageId.IsNone())
+				{
+					// Shared test maps are ambiguous; keep their GameMode's existing default-definition fallback.
+					ActiveStageId = NAME_None;
+					break;
+				}
+				ActiveStageId = KnightProgressionIds::Stage(Stage.StageId);
+			}
+		}
+	}
 	ConfirmEnteredWorld(EKnightFlowState::Gameplay);
 	if (bWasPending)
 	{

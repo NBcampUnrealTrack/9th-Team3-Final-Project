@@ -159,7 +159,7 @@ void UknightGameplayAbility::StartMechTiming(UAnimMontage* Montage, float BaseRa
 		return;
 	}
 	ActiveMechTiming = FknightMechAttackTiming::Start(Anim, Montage, BaseRate, ASC->GetMechTimingSettings(),
-		ASC->HasMatchingGameplayTag(knightGameplayTags::State_Stance_TwoHanded));
+		ASC->HasMatchingGameplayTag(knightGameplayTags::State_Stance_TwoHanded), GetCameraKickScale());
 }
 
 void UknightGameplayAbility::StopMechTiming()

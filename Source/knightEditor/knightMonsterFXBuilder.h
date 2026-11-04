@@ -65,6 +65,18 @@ public:
 	static UNiagaraSystem* BuildFireWarningSystem(const FString& PackagePath, UMaterialInterface* GlowMaterial, UMaterialInterface* SmokeMaterial,
 		UMaterialInterface* EmberMaterial, float Radius = 120.f);
 
+	/**
+	 * 가드·패링 불가 공격 예고(#198)가 시작될 때 공격 부위에서 한 번 번쩍이는 섬광: 십자 빛(0.3초)과 사방으로 튀는 짧은 불티. 스스로 끝난다.
+	 * 소켓에 절대 스케일 1로 붙인다. Size(cm)는 십자 빛 한 변.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|FX")
+	static UNiagaraSystem* BuildAttackWarningGlintSystem(const FString& PackagePath, UMaterialInterface* GlintMaterial, UMaterialInterface* SparkMaterial,
+		float Size = 700.f);
+
+	/** 예고 동안 공격 부위 주변에 아주 옅게 피어오르는 붉은 불씨(계속 생성). Radius(cm)는 불씨가 생기는 범위의 반지름(컴포넌트 스케일로 키운다). */
+	UFUNCTION(BlueprintCallable, Category="Knight|FX")
+	static UNiagaraSystem* BuildAttackWarningEmberSystem(const FString& PackagePath, UMaterialInterface* EmberMaterial, float Radius = 90.f);
+
 	/** 불기둥 예고의 박자 한 번: 바닥에서 짧게 번쩍이는 열빛과 위로 튀어 오르는 불씨(월드에 스폰, 스스로 끝남). */
 	UFUNCTION(BlueprintCallable, Category="Knight|FX")
 	static UNiagaraSystem* BuildFireWarningBeatSystem(const FString& PackagePath, UMaterialInterface* GlowMaterial, UMaterialInterface* EmberMaterial,

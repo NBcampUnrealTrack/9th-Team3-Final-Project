@@ -153,6 +153,7 @@ void UknightGameplayAbility_HeavyAttack::OnReleased(float TimeHeld)
 		const float FullChargeTime = GetStanceMaxChargeTime();
 		const float Alpha = FMath::Clamp(static_cast<float>(Held) / FullChargeTime, 0.f, 1.f);
 		LastReleaseChargeAlpha = Alpha;
+		// (2026-11-03) 카메라 킥도 차지량을 따른다(GetCameraKickScale이 LastReleaseChargeAlpha를 읽는다).
 		// 풀차지 값(FullCharge*)이 있으면 ReleaseHitParams 값에서 그 값까지, 없으면 MaxChargeMultiplier배까지 오른다.
 		const float MotionScale = FMath::Lerp(1.f, FullChargeMotionValue > 0.f && ReleaseHitParams.MotionValue > 0.f
 			? FullChargeMotionValue / ReleaseHitParams.MotionValue : MaxChargeMultiplier, Alpha);
@@ -162,8 +163,13 @@ void UknightGameplayAbility_HeavyAttack::OnReleased(float TimeHeld)
 		ActiveHitParams = GetStanceScaledHitParams(ReleaseHitParams);
 		ActiveHitParams.MotionValue *= MotionScale;
 		ActiveHitParams.PoiseDamage *= PoiseScale;
-		UE_LOG(LogknightAbility, Log, TEXT("%s: released after %.2fs charge (full at %.2fs), MV x%.2f (%.0f), poise x%.2f (%.0f), stamina %.1f + %.1f"),
-			*GetName(), Held, FullChargeTime, MotionScale, ActiveHitParams.MotionValue, PoiseScale, ActiveHitParams.PoiseDamage, ChargeStaminaSpent, ReleaseStaminaCost);
+		// (2026-11-03) 역경직도 차지량에 따라 ReleaseHitParams 값에서 FullChargeHitStopDuration까지 오른다(0이면 그대로).
+		if (FullChargeHitStopDuration > 0.f)
+		{
+			ActiveHitParams.HitStopDuration = FMath::Lerp(ReleaseHitParams.HitStopDuration, FullChargeHitStopDuration, Alpha);
+		}
+		UE_LOG(LogknightAbility, Log, TEXT("%s: released after %.2fs charge (full at %.2fs), MV x%.2f (%.0f), poise x%.2f (%.0f), hit stop %.2fs, stamina %.1f + %.1f"),
+			*GetName(), Held, FullChargeTime, MotionScale, ActiveHitParams.MotionValue, PoiseScale, ActiveHitParams.PoiseDamage, ActiveHitParams.HitStopDuration, ChargeStaminaSpent, ReleaseStaminaCost);
 		if (ChargeReleaseMontage)
 		{
 			AActor* const Avatar = GetAvatarActorFromActorInfo();
@@ -952,4 +958,14 @@ void UknightGameplayAbility_HeavyAttack::EndAbility(const FGameplayAbilitySpecHa
 	// 해방 때 바꾼 활성화 그룹을 되돌린다. 다음 발동은 다시 독립 그룹으로 시작한다(탭 강공격 단계를 막지 않게).
 	// ASC의 그룹 수는 위 EndAbility가 바뀐 그룹 기준으로 이미 뺐다.
 	ChangeActivationGroupWhileActive(EknightAbilityActivationGroup::Independent);
+}
+
+float UknightGameplayAbility_HeavyAttack::GetCameraKickScale() const
+{
+	// (2026-11-03) 해방은 차지량만큼 CameraKickScale → FullChargeCameraKickScale.
+	if (Phase == EPhase::Releasing && FullChargeCameraKickScale > 0.f)
+	{
+		return FMath::Lerp(CameraKickScale, FullChargeCameraKickScale, LastReleaseChargeAlpha);
+	}
+	return CameraKickScale;
 }

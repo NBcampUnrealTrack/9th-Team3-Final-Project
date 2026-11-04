@@ -40,6 +40,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Ground Impact|Shake", meta=(ClampMin=0, Units="cm"))
 	float OuterRadius = 7000.f;
 
+	/** 찍은 자리에서 화면에 퍼지는 충격파 세기(1 = 기본, 0 = 없음). 큰 내려찍기에만 켠다. 거리와 화면 흔들림 설정을 따른다. */
+	UPROPERTY(EditAnywhere, Category="Ground Impact|Shake", meta=(ClampMin=0, ClampMax=3))
+	float ScreenShockwave = 0.f;
+
 	UPROPERTY(EditAnywhere, Category="Ground Impact|Dust")
 	TObjectPtr<UNiagaraSystem> Dust;
 

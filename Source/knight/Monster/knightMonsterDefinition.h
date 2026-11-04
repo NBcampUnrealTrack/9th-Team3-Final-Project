@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
 #include "GameplayTagContainer.h"
+#include "Monster/knightMonsterReadout.h"
 #include "knightMonsterDefinition.generated.h"
 
 class UAnimMontage;
@@ -208,6 +209,12 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="States", meta=(ClampMin=0, ClampMax=1))
 	float Phase2HealthRatio = 0.f;
 
+	/**
+	 * HUD 센서 판독 문구를 이 몬스터에 맞게 바꾼다(잔열 분노 = HEAT CRITICAL 등). 없는 종류나 비운 줄은 HUD 기본 문구를 쓴다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI")
+	TMap<EknightMonsterReadout, FknightMonsterReadoutText> ReadoutTexts;
+
 	/** Rough radius for lock-on camera framing. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Targeting", meta=(ClampMin=0, Units="cm"))
 	float TargetRadius = 600.f;
@@ -223,13 +230,23 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI")
 	bool bAvoidRepeatingLastAttack = false;
 
-	/** 몬스터 공격이 끝난 뒤 다음 행동을 고르기 전까지 서 있는 시간. Knight Activate Ability 태스크가 본다. 0이면 바로 다음 행동으로 넘어간다. */
+	/**
+	 * 몬스터 공격이 끝난 뒤 다음 공격을 고르기 전까지의 틈(StateTree Recover 상태의 Knight Rest가 본다). 이 동안 타깃 쪽으로 천천히 몸을 돌린다.
+	 * 0이면 바로 다음 행동으로 넘어간다.
+	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="s"))
 	float AttackRestTime = 0.f;
 
 	/** 2페이즈(State.Monster.Phase2) 동안 AttackRestTime 대신 쓴다. 2페이즈 공격은 몽타주가 빨라 공격 사이 틈이 없어지기 쉽다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="s"))
 	float Phase2AttackRestTime = 0.f;
+
+	/**
+	 * 공격이 끝난 뒤(Recover 상태) 쉬는 대신 물러날 확률. 물러나기 행동(Ability.Move.Retreat 태그 어빌리티)을 지금 쓸 수 있을 때만 본다.
+	 * 물러나기의 조건(예: 공격하는 동안 맞지 않음 MinTimeSinceHit)은 그 어빌리티의 Selection이 정한다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, ClampMax=1))
+	float RecoverRetreatChance = 0.4f;
 
 	/** 공용 StateTree(ST_Monster_Default)의 추격이 멈추는 거리. 몸 크기에 맞춘다. Knight Monster Target 평가기가 내보낸다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="cm"))
@@ -292,4 +309,30 @@ public:
 	/** 살아 있는 동안 몸에 붙여 계속 트는 소리(몸 열기, 그르렁). 죽으면 잦아든다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation")
 	TArray<FknightMonsterLoopSound> LoopSounds;
+
+	/**
+	 * 공격이 플레이어 바로 옆을 스쳤지만 맞지 않았을 때(회피 무적으로 흘린 공격 포함) 스친 자리에서 트는 묵직한 바람 소리.
+	 * 비어 있으면 내지 않는다. 몬스터 공격 어빌리티의 구체 판정과 타격 결과에서 정한다(UknightMonsterNearMissSubsystem).
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation|Near Miss")
+	TObjectPtr<USoundBase> NearMissSound;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation|Near Miss", meta=(ClampMin=0))
+	float NearMissVolume = 1.f;
+
+	/** 1보다 낮으면 같은 바람 소리도 무겁게 들린다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation|Near Miss", meta=(ClampMin=0.1))
+	float NearMissPitch = 1.f;
+
+	/** 소리를 이 위치(초, 음원 기준)부터 튼다. 서서히 커지는 바람 소리는 앞부분을 건너뛰어야 스친 순간과 맞는다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation|Near Miss", meta=(ClampMin=0, Units="s"))
+	float NearMissStartTime = 0.f;
+
+	/** 판정 겉면이 플레이어 몸에서 이 거리(cm) 안으로 지나가면 스친 것으로 본다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation|Near Miss", meta=(ClampMin=0, Units="cm"))
+	float NearMissMargin = 250.f;
+
+	/** 같은 플레이어에게 다시 내기까지 최소 간격. 연속 공격마다 나면 시끄럽다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation|Near Miss", meta=(ClampMin=0, Units="s"))
+	float NearMissInterval = 1.5f;
 };

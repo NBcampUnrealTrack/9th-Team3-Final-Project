@@ -8,7 +8,9 @@
 #include "Engine/Scene.h"
 #include "Engine/StreamableManager.h"
 #include "HAL/PlatformTime.h"
+#include "Camera/knightCameraImpactSettings.h"
 #include "Camera/knightCameraModifier_Darkness.h"
+#include "Camera/knightCameraModifier_Impact.h"
 #include "Camera/knightCameraModifier_Deafen.h"
 #include "Camera/knightCameraModifier_RoarShockwave.h"
 #include "Engine/World.h"
@@ -20,6 +22,22 @@
 #include "System/knightGameplayTags.h"
 #include "Combat/knightGroggyFeedbackComponent.h"
 
+DEFINE_LOG_CATEGORY_STATIC(LogknightCameraImpact, Log, All);
+
+namespace knightCamera
+{
+	template <typename ModifierType>
+	ModifierType* FindOrAddModifier(AknightPlayerCameraManager& Camera, TSubclassOf<ModifierType> Class)
+	{
+		if (!Class)
+		{
+			return nullptr;
+		}
+		ModifierType* Modifier = Cast<ModifierType>(Camera.FindCameraModifierByClass(Class));
+		return Modifier ? Modifier : Cast<ModifierType>(Camera.AddNewCameraModifier(Class));
+	}
+}
+
 AknightPlayerCameraManager::AknightPlayerCameraManager()
 {
 	ViewPitchMin = -70.f;
@@ -27,6 +45,8 @@ AknightPlayerCameraManager::AknightPlayerCameraManager()
 	RoarShockwaveClass = UknightCameraModifier_RoarShockwave::StaticClass();
 	DarknessClass = UknightCameraModifier_Darkness::StaticClass();
 	DeafenClass = UknightCameraModifier_Deafen::StaticClass();
+	ImpactSettings = TSoftObjectPtr<UknightCameraImpactSettings>(FSoftObjectPath(TEXT("/Game/Knight/Camera/DA_CameraImpact.DA_CameraImpact")));
+	ImpactModifierClass = UknightCameraModifier_Impact::StaticClass();
 }
 
 void AknightPlayerCameraManager::BeginPlay()
@@ -51,6 +71,173 @@ void AknightPlayerCameraManager::BeginPlay()
 	{
 		PreloadHandle = UAssetManager::GetStreamableManager().RequestAsyncLoad(Paths, FStreamableDelegate(), FStreamableManager::AsyncLoadHighPriority);
 	}
+	// 작은 데이터 에셋 하나라 바로 읽는다. 첫 타격 전에 있어야 한다.
+	LoadedImpactSettings = ImpactSettings.LoadSynchronous();
+}
+
+void AknightPlayerCameraManager::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	UnbindImpactEvents();
+	Super::EndPlay(EndPlayReason);
+}
+
+void AknightPlayerCameraManager::RefreshImpactBinding()
+{
+	const APawn* const Pawn = PCOwner ? PCOwner->GetPawn() : nullptr;
+	UAbilitySystemComponent* const ASC = LoadedImpactSettings ? UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Pawn) : nullptr;
+	if (ASC == ImpactASC.Get())
+	{
+		return;
+	}
+	UnbindImpactEvents();
+	if (!ASC)
+	{
+		return;
+	}
+	ImpactASC = ASC;
+	ImpactEffectHandle = ASC->OnGameplayEffectAppliedDelegateToTarget.AddUObject(this, &ThisClass::HandleImpactEffectApplied);
+	static const FGameplayTag ParrySucceeded = FGameplayTag::RequestGameplayTag(TEXT("Event.ParrySucceeded"), false);
+	for (const FGameplayTag& Tag : { knightGameplayTags::Event_Damaged.GetTag(), knightGameplayTags::Event_PoiseBroken.GetTag(),
+		knightGameplayTags::Event_Guarded.GetTag(), knightGameplayTags::Event_GuardBroken.GetTag(), ParrySucceeded })
+	{
+		if (Tag.IsValid())
+		{
+			ImpactEventHandles.Emplace(Tag, ASC->GenericGameplayEventCallbacks.FindOrAdd(Tag).AddUObject(this, &ThisClass::HandleImpactEvent));
+		}
+	}
+}
+
+void AknightPlayerCameraManager::UnbindImpactEvents()
+{
+	if (UAbilitySystemComponent* const ASC = ImpactASC.Get())
+	{
+		ASC->OnGameplayEffectAppliedDelegateToTarget.Remove(ImpactEffectHandle);
+		for (const TPair<FGameplayTag, FDelegateHandle>& Pair : ImpactEventHandles)
+		{
+			if (FGameplayEventMulticastDelegate* const Delegate = ASC->GenericGameplayEventCallbacks.Find(Pair.Key))
+			{
+				Delegate->Remove(Pair.Value);
+			}
+		}
+	}
+	ImpactASC.Reset();
+	ImpactEffectHandle.Reset();
+	ImpactEventHandles.Reset();
+}
+
+FVector AknightPlayerCameraManager::GetDirectionFrom(const AActor* Source) const
+{
+	const AActor* const Target = GetViewTarget();
+	return Source && Target ? (Target->GetActorLocation() - Source->GetActorLocation()).GetSafeNormal2D() : FVector::ZeroVector;
+}
+
+void AknightPlayerCameraManager::HandleImpactEffectApplied(UAbilitySystemComponent* Target, const FGameplayEffectSpec& Spec, FActiveGameplayEffectHandle Handle)
+{
+	// 내가 다른 대상에게 근접 피해를 줬다. 근접 타격만 그로기 피해(SetByCaller)를 싣고 오므로 그걸로 가른다(화상 같은 지속 피해는 제외).
+	const UknightCameraImpactSettings* const Settings = LoadedImpactSettings;
+	if (!Settings || !Target || Target == ImpactASC.Get())
+	{
+		return;
+	}
+	const float Poise = Spec.GetSetByCallerMagnitude(knightGameplayTags::SetByCaller_PoiseDamage, false, -1.f);
+	if (Poise < 0.f)
+	{
+		return;
+	}
+	// 때린 쪽에서 맞은 쪽으로 민다.
+	const FVector Direction = -GetDirectionFrom(Target->GetAvatarActor());
+	const FknightCameraImpactReaction& Heavy = Settings->PlayerHeavyHit;
+	if (Heavy.bEnabled && Poise >= Heavy.MinStrength)
+	{
+		PlayImpactReaction(TEXT("PlayerHeavyHit"), Heavy, Poise, Direction);
+		return;
+	}
+	PlayImpactReaction(TEXT("PlayerHit"), Settings->PlayerHit, Poise, Direction);
+}
+
+void AknightPlayerCameraManager::HandleImpactEvent(const FGameplayEventData* Payload)
+{
+	const UknightCameraImpactSettings* const Settings = LoadedImpactSettings;
+	const UWorld* const World = GetWorld();
+	if (!Settings || !Payload || !World)
+	{
+		return;
+	}
+	const double Now = World->GetTimeSeconds();
+	const FVector Direction = GetDirectionFrom(Payload->Instigator.Get());
+	const FGameplayTag Tag = Payload->EventTag;
+	if (Tag == knightGameplayTags::Event_Damaged)
+	{
+		// 가드·패링하고 남은 피해에는 맞은 반응을 겹치지 않는다.
+		if (Now - LastDefenseEventTime > Settings->DefenseDamageSuppressTime)
+		{
+			PlayImpactReaction(TEXT("Damaged"), Settings->Damaged, Payload->EventMagnitude, Direction);
+		}
+		return;
+	}
+	if (Tag == knightGameplayTags::Event_PoiseBroken)
+	{
+		PlayImpactReaction(TEXT("PoiseBroken"), Settings->PoiseBroken, Payload->EventMagnitude, Direction);
+		return;
+	}
+	LastDefenseEventTime = Now;
+	if (Tag == knightGameplayTags::Event_Guarded)
+	{
+		PlayImpactReaction(TEXT("Guarded"), Settings->Guarded, 1.f, Direction);
+	}
+	else if (Tag == knightGameplayTags::Event_GuardBroken)
+	{
+		PlayImpactReaction(TEXT("GuardBroken"), Settings->GuardBroken, 1.f, Direction);
+	}
+	else
+	{
+		PlayImpactReaction(TEXT("Parried"), Settings->Parried, 1.f, Direction);
+	}
+}
+
+void AknightPlayerCameraManager::PlayImpactReaction(FName Moment, const FknightCameraImpactReaction& Reaction, float Strength,
+	const FVector& Direction, bool bIgnoreGates)
+{
+	const UWorld* const World = GetWorld();
+	if (!World || (!bIgnoreGates && (!Reaction.bEnabled || Strength < Reaction.MinStrength)))
+	{
+		return;
+	}
+	const double Now = World->GetTimeSeconds();
+	if (!bIgnoreGates)
+	{
+		double& LastTime = LastImpactTimes.FindOrAdd(Moment, -UE_BIG_NUMBER);
+		if (Now - LastTime < Reaction.Cooldown)
+		{
+			return;
+		}
+		LastTime = Now;
+	}
+	const float Alpha = Reaction.FullStrength > Reaction.MinStrength
+		? FMath::Clamp((Strength - Reaction.MinStrength) / (Reaction.FullStrength - Reaction.MinStrength), 0.f, 1.f)
+		: 1.f;
+	// 움직임과 색 갈라짐 모두 화면 흔들림 설정을 따른다(0이면 끈다).
+	const float Scale = FMath::Lerp(Reaction.MinScale, 1.f, Alpha) * GetShakeScale();
+	if (UknightCameraModifier_Impact* const Modifier = knightCamera::FindOrAddModifier(*this, ImpactModifierClass))
+	{
+		Modifier->Play(Reaction, Scale, Direction);
+		UE_LOG(LogknightCameraImpact, Verbose, TEXT("%s strength %.1f scale %.2f"), *Moment.ToString(), Strength, Scale);
+	}
+}
+
+void AknightPlayerCameraManager::PreviewImpactReaction(FName Moment, float Strength)
+{
+	const UknightCameraImpactSettings* const Settings = LoadedImpactSettings ? LoadedImpactSettings.Get() : ImpactSettings.LoadSynchronous();
+	const FStructProperty* const Property = Settings ? FindFProperty<FStructProperty>(Settings->GetClass(), Moment) : nullptr;
+	if (!Property || Property->Struct != FknightCameraImpactReaction::StaticStruct())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Camera impact reaction '%s' not found."), *Moment.ToString());
+		return;
+	}
+	const FknightCameraImpactReaction& Reaction = *Property->ContainerPtrToValuePtr<FknightCameraImpactReaction>(Settings);
+	const float PreviewStrength = Strength > 0.f ? Strength : FMath::Max3(Reaction.FullStrength, Reaction.MinStrength, 1.f);
+	// 미리보기는 카메라가 보는 방향으로 민다.
+	PlayImpactReaction(Moment, Reaction, PreviewStrength, GetCameraRotation().Vector().GetSafeNormal2D(), true);
 }
 
 void AknightPlayerCameraManager::SetRadialPullSource(UknightGroggyFeedbackComponent* Source)
@@ -122,6 +309,12 @@ void AknightPlayerCameraManager::UpdateViewTarget(FTViewTarget& OutVT, float Del
 		// Compose on this frame's underlying view (user FOV, lock-on and existing zoom).
 		const float BaseFOV = OutVT.POV.FOV;
 		OutVT.POV.FOV = FMath::Max(FMath::Min(BaseFOV, 62.f), BaseFOV - Pull->GetRadialPullFOVOffset());
+	}
+	// 전투 순간 카메라 반응의 시야각은 사용자 FOV 보정과 다른 줌을 모두 더한 뒤에 뺀다(110도 자르기에 묻히지 않게).
+	if (const UknightCameraModifier_Impact* const Impact = ImpactModifierClass
+		? Cast<UknightCameraModifier_Impact>(FindCameraModifierByClass(ImpactModifierClass)) : nullptr)
+	{
+		OutVT.POV.FOV = FMath::Clamp(OutVT.POV.FOV - Impact->GetFOVDelta(), 5.f, 170.f);
 	}
 }
 
@@ -202,6 +395,7 @@ void AknightPlayerCameraManager::CancelKnockdownZoom()
 
 void AknightPlayerCameraManager::UpdateCamera(float DeltaTime)
 {
+	RefreshImpactBinding();
 	Super::UpdateCamera(DeltaTime);
 
 	if (bKnockdownZoomActive)
@@ -272,6 +466,11 @@ UCameraShakeBase* AknightPlayerCameraManager::StartCameraShake(TSubclassOf<UCame
 	{
 		return nullptr;
 	}
+	// 몬스터 큰 공격의 착지 셰이크에는 카메라 반응을 같이 건다. 세기는 설정 배율을 곱하기 전 값(거리 감쇠만 반영).
+	if (LoadedImpactSettings && ShakeClass && ShakeClass == LoadedImpactSettings->MonsterImpactShake)
+	{
+		PlayImpactReaction(TEXT("MonsterImpact"), LoadedImpactSettings->MonsterImpact, Params.Scale, FVector::ZeroVector);
+	}
 	return Super::StartCameraShake(ShakeClass, Scaled);
 }
 
@@ -313,20 +512,6 @@ void AknightPlayerCameraManager::StopRoarShockwave(const USceneComponent* Source
 	if (UknightCameraModifier_RoarShockwave* const Modifier = RoarShockwaveClass ? Cast<UknightCameraModifier_RoarShockwave>(FindCameraModifierByClass(RoarShockwaveClass)) : nullptr)
 	{
 		Modifier->StopRoar(Source);
-	}
-}
-
-namespace knightCamera
-{
-	template <typename ModifierType>
-	ModifierType* FindOrAddModifier(AknightPlayerCameraManager& Camera, TSubclassOf<ModifierType> Class)
-	{
-		if (!Class)
-		{
-			return nullptr;
-		}
-		ModifierType* Modifier = Cast<ModifierType>(Camera.FindCameraModifierByClass(Class));
-		return Modifier ? Modifier : Cast<ModifierType>(Camera.AddNewCameraModifier(Class));
 	}
 }
 
