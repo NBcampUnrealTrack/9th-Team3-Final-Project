@@ -3,11 +3,17 @@
 #include "CoreMinimal.h"
 #include "ActiveGameplayEffectHandle.h"
 #include "Components/ActorComponent.h"
+#include "Engine/TimerHandle.h"
 #include "GameplayTagContainer.h"
 #include "knightPartHealthComponent.generated.h"
 
 class UAbilitySystemComponent;
+class UCameraShakeBase;
 class UGameplayEffect;
+class UMaterialInterface;
+class UMeshComponent;
+class UNiagaraSystem;
+class USoundBase;
 struct FGameplayEffectSpec;
 struct FHitResult;
 struct FOnAttributeChangeData;
@@ -46,6 +52,16 @@ namespace knightPartHealth
 	KNIGHT_API void DistributeRepair(float (&InOutHealth)[PartCount], const float (&MaxHealth)[PartCount], float Amount);
 }
 
+/** 부위 파괴 연출을 낼 뼈(소켓) 이름들. 팔·다리처럼 양쪽이면 둘 다 넣는다. */
+USTRUCT(BlueprintType)
+struct FknightPartEffectBones
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, Category="Knight|PartHealth")
+	TArray<FName> Bones;
+};
+
 /**
  * 부위 체력 (2026-10-06, 1차 MVP용 간단 구현).
  *
@@ -56,6 +72,11 @@ namespace knightPartHealth
  *   - 부위 체력 0 이하 = 파괴(State.PartBroken.* 태그 + 페널티), 1 이상 = 복구.
  *     머리: 받는 피해 증가 / 몸통: MaxPoise 감소 / 팔: 공격력 감소 / 다리: 걷기·달리기 속도 감소
  *   - 파괴된 부위를 또 맞으면 피해에 BrokenPartHitMultiplier를 곱한다 (맞는 쪽 기준 크리티컬).
+ *   - 파괴 연출(Feedback 칸, 비우면 그 연출은 없음):
+ *     파괴되는 순간 그 부위 뼈(PartEffectBones)에서 BreakEffect·BreakSound, 내가 조종하는 캐릭터면 BreakShake.
+ *     파괴된 동안 그 부위 메시(원본 부위 메시 + 그 슬롯·부위를 덮는 장착 파츠)에 BrokenOverlayMaterial을 겹쳐 그리고(그을림),
+ *     몸이 한 덩어리 메시면(부위 분할 데이터가 지금 메시와 안 맞을 때) 본체에 겹치고 재질이 메시 위치로 그 부위만 그을린다,
+ *     BrokenSparkInterval마다 그 부위 뼈 하나에서 작은 불꽃(BrokenSparkEffect)이 튄다. 수리되면 둘 다 없앤다.
  *
  * 간단 구현의 한계 (다음 단계에서 보완):
  *   - 머리 파괴의 피해 증가와 파괴 부위 크리티컬은 히트 정보가 있는 피격에만 적용된다(GetDamageMultiplier 경로).
@@ -68,6 +89,8 @@ class KNIGHT_API UknightPartHealthComponent : public UActorComponent
 
 public:
 	UknightPartHealthComponent();
+
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	/** 소유 캐릭터의 ASC가 준비되고 파츠가 장착된 뒤 한 번 호출한다. 이벤트 연결과 MaxHealth 합산을 한다. */
 	void InitializeWithAbilitySystem(UAbilitySystemComponent* InASC);
@@ -120,6 +143,66 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|PartHealth", meta=(ClampMin=0, ClampMax=0.9))
 	float BrokenStatPenalty = 0.15f;
 
+	/** 부위별 파괴 연출 위치(뼈·소켓 이름). 기본값은 생성자(머리 = head, 몸통 = spine_03, 팔·다리 = 양쪽 팔뚝·종아리). */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|PartHealth|Feedback")
+	TMap<EknightBodyPart, FknightPartEffectBones> PartEffectBones;
+
+	/**
+	 * 부위가 파괴되는 순간 PartEffectBones마다 터지는 이펙트. BP_Knight에서 NS_Knight_PartBreak(청백색 작은 전기 불꽃).
+	 * 패링 불꽃과 헷갈리지 않게 색·크기를 따로 맞춘 이펙트를 쓴다. 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|PartHealth|Feedback")
+	TObjectPtr<UNiagaraSystem> BreakEffect;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|PartHealth|Feedback", meta=(ClampMin=0))
+	float BreakEffectScale = 1.f;
+
+	/** 부위가 파괴되는 순간 소리(뼈마다가 아니라 한 번). 바뀔 수 있는 값. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|PartHealth|Feedback")
+	TObjectPtr<USoundBase> BreakSound;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|PartHealth|Feedback", meta=(ClampMin=0))
+	float BreakSoundVolume = 1.f;
+
+	/** 부위가 파괴되는 순간 화면 흔들림. 내가 조종하는 캐릭터일 때만. 바뀔 수 있는 값. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|PartHealth|Feedback")
+	TSubclassOf<UCameraShakeBase> BreakShake;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|PartHealth|Feedback", meta=(ClampMin=0))
+	float BreakShakeScale = 1.f;
+
+	/**
+	 * 파괴된 동안 그 부위 메시에 겹쳐 그리는 재질(그을림). 원래 재질은 그대로 두고 위에 그린다. 비우면 없음.
+	 * BP_Knight에서 MI_Knight_PartDamaged(부모 M_Knight_PartDamaged): 진하기 SootOpacity, 얼룩 양 SootThreshold(높을수록 적음), 불씨 EmberIntensity.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|PartHealth|Feedback")
+	TObjectPtr<UMaterialInterface> BrokenOverlayMaterial;
+
+	/**
+	 * 그을림 재질이 읽는 Custom Primitive Data 시작 번호. +0 머리, +1 몸통, +2 팔, +3 다리, +4 메시 전체(1이면 위치와 상관없이).
+	 * 재질(M_Knight_PartDamaged)의 파라미터 번호와 같아야 한다. 다른 재질이 쓰는 번호와 겹치지 않게 20부터.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|PartHealth|Feedback", meta=(ClampMin=0, ClampMax=31))
+	int32 OverlayDataIndex = 20;
+
+	/** 파괴된 동안 가끔 그 부위에서 튀는 작은 불꽃. BP_Knight에서 NS_Knight_PartSpark(번쩍임 없는 청백색 불꽃 12개). 바뀔 수 있는 값. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|PartHealth|Feedback")
+	TObjectPtr<UNiagaraSystem> BrokenSparkEffect;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|PartHealth|Feedback", meta=(ClampMin=0))
+	float BrokenSparkScale = 1.f;
+
+	/** 작은 불꽃 소리. 비우면 소리 없이 불꽃만. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|PartHealth|Feedback")
+	TObjectPtr<USoundBase> BrokenSparkSound;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|PartHealth|Feedback", meta=(ClampMin=0))
+	float BrokenSparkSoundVolume = 0.35f;
+
+	/** 작은 불꽃 사이 간격(초, 이 사이에서 무작위). 바뀔 수 있는 값. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|PartHealth|Feedback", meta=(ClampMin=0.1, Units="s"))
+	FVector2D BrokenSparkInterval = FVector2D(0.4f, 1.2f);
+
 private:
 	/**
 	 * 히트 → 부위. BoneToPart에 있는 본에 맞았으면 그 부위.
@@ -144,6 +227,26 @@ private:
 
 	/** 파괴 페널티 GE (무한 지속, 스탯에 곱하기). 머리는 GE 없이 GetDamageMultiplier로 처리한다. */
 	const UGameplayEffect* GetPenaltyEffect(EknightBodyPart Part);
+
+	/** 파괴되는 순간 연출: 뼈마다 BreakEffect, 소리 한 번, 내 캐릭터면 화면 흔들림. */
+	void PlayBreakFeedback(EknightBodyPart Part) const;
+	/** 파괴된 동안 연출 시작: 그을림 재질을 겹치고 작은 불꽃 타이머를 건다. */
+	void StartBrokenVisuals(EknightBodyPart Part);
+	/** 파괴된 동안 연출 끝(수리): 그 부위 불꽃 타이머를 멈추고 그을림을 다시 맞춘다. */
+	void StopBrokenVisuals(EknightBodyPart Part);
+	/**
+	 * 지금 파괴된 부위 전부를 보고 그을림을 다시 맞춘다. 부위 메시·장착 파츠는 메시 전체를, 몸이 한 덩어리 메시면
+	 * 파괴된 부위 칸만 켠다(OverlayDataIndex부터 Custom Primitive Data에 씀). 더 필요 없는 메시는 겹친 재질을 지운다.
+	 */
+	void RefreshBrokenOverlay();
+	/** 작은 불꽃 한 번 튀기고 다음 불꽃을 예약한다. */
+	void SpawnBrokenSpark(EknightBodyPart Part);
+	/** 그 부위를 그리는 메시(원본 부위 메시 + 장착 파츠). 파츠 컴포넌트가 없으면 비어 있다. */
+	void GetMeshesForPart(EknightBodyPart Part, TArray<UMeshComponent*>& OutMeshes) const;
+
+	/** 그을림 재질을 겹친 메시(되돌릴 때 이것만)와 부위마다 작은 불꽃 타이머. */
+	TArray<TWeakObjectPtr<UMeshComponent>> OverlaidMeshes;
+	FTimerHandle SparkTimers[knightPartHealth::PartCount];
 
 	TWeakObjectPtr<UAbilitySystemComponent> ASC;
 

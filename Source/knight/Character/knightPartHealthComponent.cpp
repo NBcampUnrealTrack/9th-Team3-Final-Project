@@ -3,11 +3,23 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystem/Attributes/knightAttributeSet.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
+#include "Camera/CameraShakeBase.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/HitResult.h"
+#include "Engine/World.h"
 #include "GameFramework/Character.h"
+#include "GameFramework/PlayerController.h"
 #include "GameplayEffect.h"
+#include "Item/knightPartsComponent.h"
+#include "Kismet/GameplayStatics.h"
+#include "Materials/MaterialInterface.h"
+#include "MechPartAttachment.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
+#include "Sound/SoundBase.h"
 #include "System/knightGameplayTags.h"
+#include "TimerManager.h"
 #include "knight.h"
 
 // ---- 순수 계산 (테스트 대상) ----
@@ -164,6 +176,40 @@ UknightPartHealthComponent::UknightPartHealthComponent()
 		TEXT("clavicle_r"), TEXT("upperarm_r"), TEXT("upperarm_twist_01_r"), TEXT("lowerarm_r"), TEXT("lowerarm_twist_01_r"), TEXT("hand_r") }, EknightBodyPart::Arms);
 	Map({ TEXT("pelvis_l"), TEXT("thigh_l"), TEXT("thigh_twist_01_l"), TEXT("calf_l"), TEXT("calf_twist_01_l"), TEXT("foot_l"), TEXT("ball_l"),
 		TEXT("pelvis_r"), TEXT("thigh_r"), TEXT("thigh_twist_01_r"), TEXT("calf_r"), TEXT("calf_twist_01_r"), TEXT("foot_r"), TEXT("ball_r") }, EknightBodyPart::Legs);
+
+	// 파괴 연출 위치: 머리, 가슴, 양쪽 팔뚝, 양쪽 종아리.
+	auto Bones = [this](EknightBodyPart Part, std::initializer_list<const TCHAR*> Names)
+	{
+		FknightPartEffectBones& Entry = PartEffectBones.Add(Part);
+		for (const TCHAR* const Name : Names)
+		{
+			Entry.Bones.Add(FName(Name));
+		}
+	};
+	Bones(EknightBodyPart::Head, { TEXT("head") });
+	Bones(EknightBodyPart::Torso, { TEXT("spine_03") });
+	Bones(EknightBodyPart::Arms, { TEXT("lowerarm_l"), TEXT("lowerarm_r") });
+	Bones(EknightBodyPart::Legs, { TEXT("calf_l"), TEXT("calf_r") });
+}
+
+void UknightPartHealthComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (UWorld* const World = GetWorld())
+	{
+		for (FTimerHandle& Timer : SparkTimers)
+		{
+			World->GetTimerManager().ClearTimer(Timer);
+		}
+	}
+	for (const TWeakObjectPtr<UMeshComponent>& Mesh : OverlaidMeshes)
+	{
+		if (Mesh.IsValid() && Mesh->GetOverlayMaterial() == BrokenOverlayMaterial)
+		{
+			Mesh->SetOverlayMaterial(nullptr);
+		}
+	}
+	OverlaidMeshes.Reset();
+	Super::EndPlay(EndPlayReason);
 }
 
 void UknightPartHealthComponent::InitializeWithAbilitySystem(UAbilitySystemComponent* InASC)
@@ -397,6 +443,8 @@ void UknightPartHealthComponent::BreakPart(EknightBodyPart Part)
 		PenaltyHandles[static_cast<int32>(Part)] = OwnerASC->ApplyGameplayEffectToSelf(Penalty, 1.f, OwnerASC->MakeEffectContext());
 	}
 	UE_LOG(Logknight, Log, TEXT("%s: part %s broken (%d broken)."), *GetNameSafe(GetOwner()), *GetPartTag(Part).ToString(), GetBrokenPartCount());
+	PlayBreakFeedback(Part);
+	StartBrokenVisuals(Part);
 }
 
 void UknightPartHealthComponent::RepairPart(EknightBodyPart Part)
@@ -414,6 +462,176 @@ void UknightPartHealthComponent::RepairPart(EknightBodyPart Part)
 		Handle.Invalidate();
 	}
 	UE_LOG(Logknight, Log, TEXT("%s: part %s repaired (%d broken)."), *GetNameSafe(GetOwner()), *GetPartTag(Part).ToString(), GetBrokenPartCount());
+	StopBrokenVisuals(Part);
+}
+
+void UknightPartHealthComponent::PlayBreakFeedback(EknightBodyPart Part) const
+{
+	const ACharacter* const Character = Cast<ACharacter>(GetOwner());
+	USkeletalMeshComponent* const Mesh = Character ? Character->GetMesh() : nullptr;
+	UWorld* const World = GetWorld();
+	if (!Mesh || !World || World->GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+	FVector SoundLocation = Character->GetActorLocation();
+	if (const FknightPartEffectBones* const Bones = PartEffectBones.Find(Part))
+	{
+		for (const FName Bone : Bones->Bones)
+		{
+			if (!Mesh->DoesSocketExist(Bone))
+			{
+				continue;
+			}
+			SoundLocation = Mesh->GetSocketLocation(Bone);
+			if (BreakEffect)
+			{
+				UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, BreakEffect, SoundLocation, Character->GetActorRotation(),
+					FVector(BreakEffectScale), true, true, ENCPoolMethod::AutoRelease);
+			}
+		}
+	}
+	if (BreakSound && BreakSoundVolume > 0.f)
+	{
+		UGameplayStatics::PlaySoundAtLocation(World, BreakSound, SoundLocation, BreakSoundVolume);
+	}
+	if (BreakShake && BreakShakeScale > 0.f && Character->IsLocallyControlled())
+	{
+		const APlayerController* const PC = Character->GetController<APlayerController>();
+		if (PC && PC->PlayerCameraManager)
+		{
+			PC->PlayerCameraManager->StartCameraShake(BreakShake, BreakShakeScale);
+		}
+	}
+}
+
+void UknightPartHealthComponent::StartBrokenVisuals(EknightBodyPart Part)
+{
+	RefreshBrokenOverlay();
+	UWorld* const World = GetWorld();
+	if (World)
+	{
+		World->GetTimerManager().ClearTimer(SparkTimers[static_cast<int32>(Part)]);
+	}
+	if (BrokenSparkEffect && World && World->GetNetMode() != NM_DedicatedServer)
+	{
+		World->GetTimerManager().SetTimer(SparkTimers[static_cast<int32>(Part)], FTimerDelegate::CreateUObject(this, &ThisClass::SpawnBrokenSpark, Part),
+			FMath::FRandRange(BrokenSparkInterval.X, FMath::Max(BrokenSparkInterval.X, BrokenSparkInterval.Y)), false);
+	}
+}
+
+void UknightPartHealthComponent::RefreshBrokenOverlay()
+{
+	// 메시마다 재질이 켤 칸: 비트 0~3 = 머리·몸통·팔·다리(재질이 메시 위치로 그 부위만 그을림), 비트 4 = 메시 전체.
+	constexpr uint8 WholeMesh = 1 << knightPartHealth::PartCount;
+	TMap<UMeshComponent*, uint8> Wanted;
+	const ACharacter* const Character = Cast<ACharacter>(GetOwner());
+	const UknightPartsComponent* const Parts = Character ? Character->FindComponentByClass<UknightPartsComponent>() : nullptr;
+	// 원본 부위 메시가 있으면 그 메시들이 몸을 그리고, 없으면(부위 분할 데이터가 메시와 안 맞음) 본체 한 덩어리가 그린다.
+	const bool bRegionMeshes = Parts && Parts->HasBodyRegionMeshes();
+	for (int32 Index = 0; Index < knightPartHealth::PartCount; ++Index)
+	{
+		const EknightBodyPart Part = PartFromIndex(Index);
+		if (!IsPartBroken(Part))
+		{
+			continue;
+		}
+		TArray<UMeshComponent*> Meshes;
+		GetMeshesForPart(Part, Meshes);
+		for (UMeshComponent* const Mesh : Meshes)
+		{
+			Wanted.FindOrAdd(Mesh) |= WholeMesh;
+		}
+		if (!bRegionMeshes && Character && Character->GetMesh())
+		{
+			Wanted.FindOrAdd(Character->GetMesh()) |= static_cast<uint8>(1 << Index);
+		}
+	}
+
+	// 더 그을릴 필요가 없는 메시는 되돌린다.
+	for (const TWeakObjectPtr<UMeshComponent>& Mesh : OverlaidMeshes)
+	{
+		if (Mesh.IsValid() && !Wanted.Contains(Mesh.Get()) && Mesh->GetOverlayMaterial() == BrokenOverlayMaterial)
+		{
+			Mesh->SetOverlayMaterial(nullptr);
+		}
+	}
+	OverlaidMeshes.Reset();
+	if (!BrokenOverlayMaterial)
+	{
+		return;
+	}
+	for (const TPair<UMeshComponent*, uint8>& Entry : Wanted)
+	{
+		UMeshComponent* const Mesh = Entry.Key;
+		// 다른 연출이 겹친 재질을 쓰고 있으면 덮지 않는다.
+		if (!Mesh || (Mesh->GetOverlayMaterial() && Mesh->GetOverlayMaterial() != BrokenOverlayMaterial))
+		{
+			continue;
+		}
+		for (int32 Bit = 0; Bit <= knightPartHealth::PartCount; ++Bit)
+		{
+			Mesh->SetCustomPrimitiveDataFloat(OverlayDataIndex + Bit, (Entry.Value & (1 << Bit)) ? 1.f : 0.f);
+		}
+		Mesh->SetOverlayMaterial(BrokenOverlayMaterial);
+		OverlaidMeshes.Add(Mesh);
+	}
+}
+
+void UknightPartHealthComponent::StopBrokenVisuals(EknightBodyPart Part)
+{
+	if (UWorld* const World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(SparkTimers[static_cast<int32>(Part)]);
+	}
+	RefreshBrokenOverlay();
+}
+
+void UknightPartHealthComponent::SpawnBrokenSpark(EknightBodyPart Part)
+{
+	UWorld* const World = GetWorld();
+	const ACharacter* const Character = Cast<ACharacter>(GetOwner());
+	USkeletalMeshComponent* const Mesh = Character ? Character->GetMesh() : nullptr;
+	if (!World || !Mesh || !BrokenSparkEffect || !IsPartBroken(Part))
+	{
+		return;
+	}
+	// 그 부위 뼈 중 하나를 골라 붙여서 튀긴다(움직이는 동안에도 그 자리에서 나오게).
+	const FknightPartEffectBones* const Bones = PartEffectBones.Find(Part);
+	if (Bones && !Bones->Bones.IsEmpty())
+	{
+		const FName Bone = Bones->Bones[FMath::RandRange(0, Bones->Bones.Num() - 1)];
+		if (Mesh->DoesSocketExist(Bone))
+		{
+			UNiagaraFunctionLibrary::SpawnSystemAttached(BrokenSparkEffect, Mesh, Bone, FVector::ZeroVector, FRotator::ZeroRotator,
+				FVector(BrokenSparkScale), EAttachLocation::SnapToTarget, true, ENCPoolMethod::AutoRelease, true, true);
+			if (BrokenSparkSound && BrokenSparkSoundVolume > 0.f)
+			{
+				UGameplayStatics::PlaySoundAtLocation(World, BrokenSparkSound, Mesh->GetSocketLocation(Bone), BrokenSparkSoundVolume);
+			}
+		}
+	}
+	World->GetTimerManager().SetTimer(SparkTimers[static_cast<int32>(Part)], FTimerDelegate::CreateUObject(this, &ThisClass::SpawnBrokenSpark, Part),
+		FMath::FRandRange(BrokenSparkInterval.X, FMath::Max(BrokenSparkInterval.X, BrokenSparkInterval.Y)), false);
+}
+
+void UknightPartHealthComponent::GetMeshesForPart(EknightBodyPart Part, TArray<UMeshComponent*>& OutMeshes) const
+{
+	const UknightPartsComponent* const Parts = GetOwner() ? GetOwner()->FindComponentByClass<UknightPartsComponent>() : nullptr;
+	if (!Parts)
+	{
+		return;
+	}
+	EMechBodyRegion Regions;
+	FGameplayTag Slot;
+	switch (Part)
+	{
+	case EknightBodyPart::Head:  Regions = EMechBodyRegion::Head; Slot = knightGameplayTags::Equipment_Slot_Head; break;
+	case EknightBodyPart::Torso: Regions = EMechBodyRegion::Torso; Slot = knightGameplayTags::Equipment_Slot_Torso; break;
+	case EknightBodyPart::Arms:  Regions = EMechBodyRegion::ArmLeft | EMechBodyRegion::ArmRight; Slot = knightGameplayTags::Equipment_Slot_Arms; break;
+	default:                     Regions = EMechBodyRegion::LegLeft | EMechBodyRegion::LegRight; Slot = knightGameplayTags::Equipment_Slot_Legs; break;
+	}
+	Parts->GetMeshesForBodyRegion(static_cast<int32>(Regions), Slot, OutMeshes);
 }
 
 const UGameplayEffect* UknightPartHealthComponent::GetPenaltyEffect(EknightBodyPart Part)

@@ -132,6 +132,16 @@ public:
 	void GetPartMeshes(TArray<UMeshComponent*>& OutMeshes) const;
 
 	/**
+	 * 몸의 한 부위를 그리는 메시: RegionFlags(EMechBodyRegion 비트)에 걸리는 원본 부위 메시(BodyRegions)와,
+	 * SlotTag 슬롯에 장착한 파츠 또는 그 부위를 덮는(Replace Regions) 파츠의 메시. 부위 파괴 연출(그을림)에 쓴다.
+	 * 원본 부위 메시가 없으면(BodyRegions 미설정) 본체는 몸 전체라 넣지 않는다.
+	 */
+	void GetMeshesForBodyRegion(int32 RegionFlags, FGameplayTag SlotTag, TArray<UMeshComponent*>& OutMeshes) const;
+
+	/** 원본 부위 메시(BodyRegions)로 몸을 그리고 있는지. 아니면 본체 메시 하나가 몸 전체를 그린다. */
+	bool HasBodyRegionMeshes() const { return !BodyRegionMeshes.IsEmpty(); }
+
+	/**
 	 * (2026-10-26) 무기 메시를 몸 메시의 소켓으로 옮긴다(검 뽑기·넣기 노티파이, 자동으로 검 넣기).
 	 * 그 소켓이 장착한 무기 파츠의 붙일 소켓(Attachment.AttachSocket, 보통 손 weapon_r)이면 워크벤치에서 맞춘 위치·회전·크기로 붙이고,
 	 * 다른 소켓(등 weapon_back)이면 지금처럼 소켓에 딱 붙인다. 예전에는 뽑을 때도 딱 붙여서 워크벤치 값이 사라졌다.

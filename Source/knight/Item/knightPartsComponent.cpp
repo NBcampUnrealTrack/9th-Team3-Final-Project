@@ -437,6 +437,25 @@ void UknightPartsComponent::GetPartMeshes(TArray<UMeshComponent*>& OutMeshes) co
 	}
 }
 
+void UknightPartsComponent::GetMeshesForBodyRegion(const int32 RegionFlags, const FGameplayTag SlotTag, TArray<UMeshComponent*>& OutMeshes) const
+{
+	for (const TPair<FGameplayTag, FknightEquippedPart>& Entry : EquippedParts)
+	{
+		const UknightPartItemDefinition* const Part = Entry.Value.Definition.Get();
+		if (Entry.Value.MeshComponent && Part && (Entry.Key == SlotTag || (Part->Attachment.ReplaceRegions & RegionFlags) != 0))
+		{
+			OutMeshes.AddUnique(Entry.Value.MeshComponent);
+		}
+	}
+	for (int32 Index = 0; Index < BodyRegionMeshes.Num(); ++Index)
+	{
+		if (BodyRegionMeshes[Index] && (BodyRegionFlags[Index] & RegionFlags) != 0)
+		{
+			OutMeshes.AddUnique(BodyRegionMeshes[Index]);
+		}
+	}
+}
+
 void UknightPartsComponent::AttachWeaponToSocket(UMeshComponent* WeaponMesh, USkeletalMeshComponent* Body, FName Socket)
 {
 	if (!WeaponMesh || !Body)
