@@ -230,13 +230,23 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI")
 	bool bAvoidRepeatingLastAttack = false;
 
-	/** 몬스터 공격이 끝난 뒤 다음 행동을 고르기 전까지 서 있는 시간. Knight Activate Ability 태스크가 본다. 0이면 바로 다음 행동으로 넘어간다. */
+	/**
+	 * 몬스터 공격이 끝난 뒤 다음 공격을 고르기 전까지의 틈(StateTree Recover 상태의 Knight Rest가 본다). 이 동안 타깃 쪽으로 천천히 몸을 돌린다.
+	 * 0이면 바로 다음 행동으로 넘어간다.
+	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="s"))
 	float AttackRestTime = 0.f;
 
 	/** 2페이즈(State.Monster.Phase2) 동안 AttackRestTime 대신 쓴다. 2페이즈 공격은 몽타주가 빨라 공격 사이 틈이 없어지기 쉽다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="s"))
 	float Phase2AttackRestTime = 0.f;
+
+	/**
+	 * 공격이 끝난 뒤(Recover 상태) 쉬는 대신 물러날 확률. 물러나기 행동(Ability.Move.Retreat 태그 어빌리티)을 지금 쓸 수 있을 때만 본다.
+	 * 물러나기의 조건(예: 공격하는 동안 맞지 않음 MinTimeSinceHit)은 그 어빌리티의 Selection이 정한다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, ClampMax=1))
+	float RecoverRetreatChance = 0.4f;
 
 	/** 공용 StateTree(ST_Monster_Default)의 추격이 멈추는 거리. 몸 크기에 맞춘다. Knight Monster Target 평가기가 내보낸다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="cm"))

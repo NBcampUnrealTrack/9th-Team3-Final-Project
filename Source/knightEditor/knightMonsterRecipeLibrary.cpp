@@ -8,6 +8,9 @@
 #include "AbilitySystem/Attributes/knightMonsterAttributeSet.h"
 #include "AbilitySystem/knightAbilitySet.h"
 #include "AI/knightBossAIController.h"
+#include "AI/knightMonsterStateTreeNodes.h"
+#include "Conditions/StateTreeCommonConditions.h"
+#include "System/knightGameplayTags.h"
 #include "AnimGraphNode_BlendSpacePlayer.h"
 #include "Animation/AnimBlueprint.h"
 #include "Animation/AnimMontage.h"
@@ -1525,6 +1528,10 @@ namespace knightRecipe
 		{
 			Log.Error(TEXT("공용 StateTree의 Aim 상태에서 Knight Face Target을 찾지 못했습니다."));
 		}
+		if (!UknightMonsterRecipeLibrary::SetupRecoverState(StateTree))
+		{
+			Log.Error(TEXT("공용 StateTree에 공격 사이 상태(Recover)를 만들지 못했습니다."));
+		}
 
 		FStateTreeCompilerLog CompilerLog;
 		if (!UStateTreeEditingSubsystem::CompileStateTree(StateTree, CompilerLog))
@@ -1570,6 +1577,140 @@ bool UknightMonsterRecipeLibrary::SetFaceTargetSideAttacks(UStateTree* StateTree
 		}
 	}
 	return false;
+}
+
+bool UknightMonsterRecipeLibrary::SetupRecoverState(UStateTree* StateTree, float TurnAngle)
+{
+	UStateTreeEditorData* const EditorData = StateTree ? Cast<UStateTreeEditorData>(StateTree->EditorData) : nullptr;
+	if (!EditorData || EditorData->Evaluators.IsEmpty())
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetupRecoverState: %s has no editor data or Knight Monster Target evaluator."), *GetNameSafe(StateTree));
+		return false;
+	}
+	const FGuid EvaluatorID = EditorData->Evaluators[0].ID;
+
+	auto FindState = [EditorData](FName Name) -> UStateTreeState*
+	{
+		TArray<UStateTreeState*> Pending(EditorData->SubTrees);
+		while (!Pending.IsEmpty())
+		{
+			UStateTreeState* const State = Pending.Pop();
+			if (State->Name == Name)
+			{
+				return State;
+			}
+			Pending.Append(State->Children);
+		}
+		return nullptr;
+	};
+	auto Bind = [&](const FGuid& TargetID, FName TargetProperty, FName SourceProperty)
+	{
+		const FPropertyBindingPath Target(TargetID, TargetProperty);
+		EditorData->EditorBindings.RemoveBindings(Target);
+		EditorData->EditorBindings.AddBinding(FPropertyBindingPath(EvaluatorID, SourceProperty), Target);
+	};
+
+	UStateTreeState* const Combat = FindState(TEXT("Combat"));
+	UStateTreeState* const Strike = FindState(TEXT("Strike"));
+	UStateTreeState* const React = FindState(TEXT("React"));
+	UStateTreeState* const Breath = FindState(TEXT("Breath"));
+	if (!Combat || !Strike || !React)
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetupRecoverState: %s is missing Combat, Strike or React."), *GetNameSafe(StateTree));
+		return false;
+	}
+	EditorData->Modify();
+	Combat->Modify();
+
+	// 다시 만들 때 예전 Rest·Recover는 지운다(남은 바인딩은 아래 RemoveInvalidBindings가 정리한다).
+	Combat->Children.RemoveAll([](const UStateTreeState* Child) { return Child && (Child->Name == TEXT("Rest") || Child->Name == TEXT("Recover")); });
+
+	UStateTreeState& Recover = Combat->AddChildState(TEXT("Recover"));
+	Recover.SelectionBehavior = EStateTreeStateSelectionBehavior::TrySelectChildrenInOrder;
+	{
+		// 쉬는 동안 반응이 시작되면(다운, 경직) 바로 React로.
+		FStateTreeTransition& ToReact = Recover.AddTransition(EStateTreeTransitionTrigger::OnTick, EStateTreeTransitionType::GotoState, React);
+		TStateTreeEditorNode<FStateTreeCompareBoolCondition>& Reacting = ToReact.AddConditionWithOuter<FStateTreeCompareBoolCondition>(&Recover);
+		Reacting.GetInstanceData().bRight = true;
+		Bind(Reacting.ID, TEXT("bLeft"), TEXT("bIsReacting"));
+	}
+
+	const FGameplayTagContainer RetreatTags(knightGameplayTags::Ability_Move_Retreat);
+	{
+		UStateTreeState& Retreat = Recover.AddChildState(TEXT("Retreat"));
+		TStateTreeEditorNode<FStateTreeRandomCondition>& Chance = Retreat.AddEnterCondition<FStateTreeRandomCondition>();
+		Bind(Chance.ID, TEXT("Threshold"), TEXT("RecoverRetreatChance"));
+		TStateTreeEditorNode<FknightStateTreeCanUseAbilityCondition>& CanRetreat = Retreat.AddEnterCondition<FknightStateTreeCanUseAbilityCondition>();
+		CanRetreat.GetInstanceData().AbilityTags = RetreatTags;
+		CanRetreat.GetInstanceData().bIgnoreAngle = false;
+		Bind(CanRetreat.ID, TEXT("Target"), TEXT("Target"));
+
+		TStateTreeEditorNode<FknightStateTreeActivateAbilityTask>& Move = Retreat.AddTask<FknightStateTreeActivateAbilityTask>();
+		Move.GetInstanceData().AbilityTags = RetreatTags;
+		Move.GetInstanceData().RetryDelay = 0.f;
+		Move.GetInstanceData().MaxStopWaitTime = 0.f;
+		Move.GetInstanceData().bRestAfterAttack = false;
+		Bind(Move.ID, TEXT("Target"), TEXT("Target"));
+		Retreat.AddTransition(EStateTreeTransitionTrigger::OnStateCompleted, EStateTreeTransitionType::GotoState, Combat);
+	}
+	{
+		UStateTreeState& Turn = Recover.AddChildState(TEXT("Turn"));
+		TStateTreeEditorNode<FStateTreeCompareFloatCondition>& Behind = Turn.AddEnterCondition<FStateTreeCompareFloatCondition>(UE::StateTree::EComparisonOperator::GreaterOrEqual);
+		Behind.GetInstanceData().Right = TurnAngle;
+		Bind(Behind.ID, TEXT("Left"), TEXT("AbsAngleToTarget"));
+
+		TStateTreeEditorNode<FknightStateTreeFaceTargetTask>& Face = Turn.AddTask<FknightStateTreeFaceTargetTask>();
+		Face.GetInstanceData().TurnRate = 120.f;
+		Face.GetInstanceData().MaxTime = 1.5f;
+		Face.GetInstanceData().bSkipForSideAttacks = true;
+		Bind(Face.ID, TEXT("Target"), TEXT("Target"));
+		Turn.AddTransition(EStateTreeTransitionTrigger::OnStateCompleted, EStateTreeTransitionType::GotoState, Combat);
+	}
+	{
+		UStateTreeState& Hold = Recover.AddChildState(TEXT("Hold"));
+		TStateTreeEditorNode<FknightStateTreeRestTask>& Rest = Hold.AddTask<FknightStateTreeRestTask>();
+		Bind(Rest.ID, TEXT("Target"), TEXT("Target"));
+		Hold.AddTransition(EStateTreeTransitionTrigger::OnStateCompleted, EStateTreeTransitionType::GotoState, Combat);
+	}
+
+	// 공격 Task 안에서 쉬지 않고, 끝나면 Recover로. 고를 공격이 없어 실패하면 원래 전이(Combat, Chase)를 그대로 쓴다.
+	auto RouteToRecover = [&](UStateTreeState& State)
+	{
+		State.Modify();
+		for (FStateTreeEditorNode& Task : State.Tasks)
+		{
+			if (FknightActivateAbilityTaskInstanceData* const Data = Task.Instance.GetMutablePtr<FknightActivateAbilityTaskInstanceData>())
+			{
+				Data->bRestAfterAttack = false;
+			}
+		}
+		const bool bHadFailedTransition = State.Transitions.ContainsByPredicate([](const FStateTreeTransition& Transition)
+		{
+			return Transition.Trigger == EStateTreeTransitionTrigger::OnStateFailed;
+		});
+		State.Transitions.RemoveAll([](const FStateTreeTransition& Transition)
+		{
+			return Transition.Trigger == EStateTreeTransitionTrigger::OnStateCompleted || Transition.Trigger == EStateTreeTransitionTrigger::OnStateSucceeded;
+		});
+		State.AddTransition(EStateTreeTransitionTrigger::OnStateSucceeded, EStateTreeTransitionType::GotoState, &Recover);
+		if (!bHadFailedTransition)
+		{
+			State.AddTransition(EStateTreeTransitionTrigger::OnStateFailed, EStateTreeTransitionType::GotoState, Combat);
+		}
+	};
+	RouteToRecover(*Strike);
+	if (Breath)
+	{
+		RouteToRecover(*Breath);
+	}
+
+	EditorData->ReparentStates();
+	EditorData->RemoveInvalidBindings();
+	FStateTreeCompilerLog CompilerLog;
+	const bool bCompiled = UStateTreeEditingSubsystem::CompileStateTree(StateTree, CompilerLog);
+	StateTree->MarkPackageDirty();
+	UE_LOG(LogTemp, Display, TEXT("SetupRecoverState: %s %s."), *GetNameSafe(StateTree), bCompiled ? TEXT("compiled") : TEXT("FAILED to compile"));
+	return bCompiled;
 }
 
 bool UknightMonsterRecipeLibrary::CreateSharedMonsterAssets()
