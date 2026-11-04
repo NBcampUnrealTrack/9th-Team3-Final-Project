@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Fonts/SlateFontInfo.h"
+#include "HUD/knightHUDScreenDraw.h"
 #include "knightHUDAttackWarning.generated.h"
 
 class USoundBase;
@@ -148,6 +149,7 @@ private:
 	void PaintBracket(const FMarker& Marker, const FGeometry& Geometry, FSlateWindowElementList& Out, int32 Layer, float Opacity, const FVector2D& Size) const;
 	void PaintEdge(const FMarker& Marker, const FGeometry& Geometry, FSlateWindowElementList& Out, int32 Layer, float Opacity, const FVector2D& Size) const;
 	float GetOpacity(const FMarker& Marker) const;
+	knightHUDDraw::FScreenLook GetScreenLook() const;
 	/** 선·글자를 색 번짐(GhostColor)과 함께 그린다. */
 	void ScreenLines(FSlateWindowElementList& Out, int32 Layer, const FGeometry& Geometry, const TArray<FVector2f>& Points, const FLinearColor& Color, float Thickness) const;
 	void ScreenText(FSlateWindowElementList& Out, int32 Layer, const FGeometry& Geometry, const FVector2D& Position, const FText& Label, const FSlateFontInfo& Font,

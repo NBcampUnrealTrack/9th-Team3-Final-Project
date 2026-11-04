@@ -207,8 +207,21 @@ void UknightHUDLockOnMarker::TickMarker(UWorld* World, ELevelTick TickType, floa
 	ApplyAnimation();
 }
 
+bool UknightHUDLockOnMarker::GetPlateAnchor(const AActor*& OutTarget, FVector2D& OutPlateCorner, bool& bOutFlipped) const
+{
+	if (!bPlateAnchorValid || !ShownTarget.IsValid() || GetVisibility() == ESlateVisibility::Collapsed)
+	{
+		return false;
+	}
+	OutTarget = ShownTarget.Get();
+	OutPlateCorner = PlateAnchor;
+	bOutFlipped = bFlipped;
+	return true;
+}
+
 bool UknightHUDLockOnMarker::UpdateLayout()
 {
+	bPlateAnchorValid = false;
 	APlayerController* const PC = GetOwningPlayer();
 	const UknightTargetLockComponent* const TargetLock = FindTargetLock();
 	FVector WorldLocation;
@@ -278,6 +291,8 @@ bool UknightHUDLockOnMarker::UpdateLayout()
 	PlatePosition.X = FMath::Clamp(PlatePosition.X, SafeMargin.X, Viewport.X - SafeMargin.X);
 	PlatePosition.Y = FMath::Clamp(PlatePosition.Y, SafeMargin.Y, Viewport.Y - SafeMargin.Y);
 	PlaceInCanvas(Plate, PlatePosition, FVector2D(bFlipped ? 1.f : 0.f, 1.f));
+	PlateAnchor = PlatePosition;
+	bPlateAnchorValid = true;
 
 	PlaceInCanvas(Txt_Distance, Center + FVector2D(0.f, DistanceOffset), FVector2D(0.5f, 0.f));
 	if (Txt_Distance)
