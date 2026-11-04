@@ -17,10 +17,12 @@ void UknightCameraModifier_RoarShockwave::StartRoar(USceneComponent* Source, FNa
 	RoarSource = Source;
 	RoarSocket = Socket;
 	bRoaring = true;
-	SinceLastPulse = 0.f;
+	bPulsing = true;
+	RoarWiggle = 0.f;
+	// The first ring goes out on the next camera update, so SetRoarStyle can still turn the rings off.
+	SinceLastPulse = PulseInterval;
 	PulsesSent = 0;
 	Envelope = 1.f;
-	SendPulse();
 }
 
 void UknightCameraModifier_RoarShockwave::StopRoar(const USceneComponent* Source)
@@ -28,6 +30,15 @@ void UknightCameraModifier_RoarShockwave::StopRoar(const USceneComponent* Source
 	if (RoarSource.Get() == Source)
 	{
 		bRoaring = false;
+	}
+}
+
+void UknightCameraModifier_RoarShockwave::SetRoarStyle(const USceneComponent* Source, bool bPulses, float Wiggle)
+{
+	if (bRoaring && RoarSource.Get() == Source)
+	{
+		bPulsing = bPulses;
+		RoarWiggle = FMath::Max(0.f, Wiggle);
 	}
 }
 
@@ -43,7 +54,7 @@ void UknightCameraModifier_RoarShockwave::SendPulse()
 
 bool UknightCameraModifier_RoarShockwave::IsVisible() const
 {
-	return !Pulses.IsEmpty() || Envelope > 0.f;
+	return !Pulses.IsEmpty() || Envelope > 0.f || WiggleLevel > 0.f;
 }
 
 float UknightCameraModifier_RoarShockwave::GetStrengthScale(const FMinimalViewInfo& POV) const
@@ -111,14 +122,19 @@ bool UknightCameraModifier_RoarShockwave::ModifyCamera(float DeltaTime, FMinimal
 		SinceLastPulse += DeltaTime;
 		if (SinceLastPulse >= PulseInterval)
 		{
-			SinceLastPulse -= PulseInterval;
-			SendPulse();
+			SinceLastPulse = FMath::Fmod(SinceLastPulse, PulseInterval);
+			if (bPulsing)
+			{
+				SendPulse();
+			}
 		}
 	}
 	else
 	{
 		Envelope = FMath::Max(0.f, Envelope - DeltaTime / FadeOutTime);
 	}
+	const bool bWiggling = bRoaring && RoarWiggle > 0.f;
+	WiggleLevel = bWiggling ? FMath::Min(1.f, WiggleLevel + DeltaTime / WiggleRiseTime) : FMath::Max(0.f, WiggleLevel - DeltaTime / WiggleFadeTime);
 	if (Source)
 	{
 		LastSourceLocation = RoarSocket != NAME_None && Source->DoesSocketExist(RoarSocket) ? Source->GetSocketLocation(RoarSocket) : Source->Bounds.Origin;
@@ -165,7 +181,13 @@ bool UknightCameraModifier_RoarShockwave::ModifyCamera(float DeltaTime, FMinimal
 			MaterialInstance->SetVectorParameterValue(TEXT("Strengths0"), FLinearColor(Strengths.X, Strengths.Y, Strengths.Z, Strengths.W));
 			MaterialInstance->SetVectorParameterValue(TEXT("Strengths1"), FLinearColor(MoreStrengths.X, MoreStrengths.Y, MoreStrengths.Z, MoreStrengths.W));
 			MaterialInstance->SetVectorParameterValue(TEXT("Look0"), FLinearColor(RingSpeed, RingWidth, Distortion * Scale, ChromaticAberration * Scale));
-			MaterialInstance->SetVectorParameterValue(TEXT("Look1"), FLinearColor(Jitter * Scale, PulseLifetime, Envelope, 0.f));
+			MaterialInstance->SetVectorParameterValue(TEXT("Look1"), FLinearColor(Jitter * Scale, PulseLifetime, bPulsing ? Envelope : 0.f, 0.f));
+
+			// Smooth in and out, and swell a little with each ring.
+			WiggleTime += DeltaTime;
+			const float WiggleEase = WiggleLevel * WiggleLevel * (3.f - 2.f * WiggleLevel);
+			const float WiggleStrength = WiggleAmount * RoarWiggle * WiggleEase * (1.f + 0.5f * Strongest) * Scale;
+			MaterialInstance->SetVectorParameterValue(TEXT("Look2"), FLinearColor(WiggleStrength, WiggleFrequency, WiggleSpeed, WiggleTime));
 		}
 		CurrentScale = Scale;
 	}

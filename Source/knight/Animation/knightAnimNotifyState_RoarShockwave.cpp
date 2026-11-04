@@ -1,5 +1,6 @@
 #include "Animation/knightAnimNotifyState_RoarShockwave.h"
 
+#include "Camera/knightCameraModifier_RoarShockwave.h"
 #include "Camera/knightPlayerCameraManager.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
@@ -30,7 +31,15 @@ void UknightAnimNotifyState_RoarShockwave::NotifyBegin(USkeletalMeshComponent* M
 	const FAnimNotifyEventReference& EventReference)
 {
 	Super::NotifyBegin(MeshComp, Animation, TotalDuration, EventReference);
-	ForEachLocalCamera(MeshComp, [MeshComp, this](AknightPlayerCameraManager& Camera) { Camera.StartRoarShockwave(MeshComp, Socket); });
+	ForEachLocalCamera(MeshComp, [MeshComp, this](AknightPlayerCameraManager& Camera)
+	{
+		Camera.StartRoarShockwave(MeshComp, Socket);
+		if (UknightCameraModifier_RoarShockwave* const Modifier =
+			Cast<UknightCameraModifier_RoarShockwave>(Camera.FindCameraModifierByClass(UknightCameraModifier_RoarShockwave::StaticClass())))
+		{
+			Modifier->SetRoarStyle(MeshComp, bPulses, Wiggle);
+		}
+	});
 }
 
 void UknightAnimNotifyState_RoarShockwave::NotifyEnd(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation, const FAnimNotifyEventReference& EventReference)
