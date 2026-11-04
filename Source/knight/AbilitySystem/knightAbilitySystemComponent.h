@@ -30,14 +30,14 @@ namespace knightPoiseRecovery
 }
 
 /**
- * 행동 에너지(BoostGauge, 스테미너) 자연 회복의 순수 계산. 테스트: knightBoostRecoveryTest.cpp (2026-10-09)
+ * 행동 에너지(BoostGauge, 스테미너) 자연 회복의 순수 계산. 테스트: knightBoostRecoveryTest.cpp
  */
 namespace knightBoostRecovery
 {
 	/**
 	 * 한 번의 회복 단계 후의 행동 에너지.
 	 * 회복 속도가 0 이하이거나, 이미 최대치이거나, 마지막으로 쓴 뒤 회복 대기 시간이 아직 지나지 않았거나,
-	 * bRecoveryPaused(달리는 중, 2026-10-13)면 그대로. 멈춤은 대기 시간을 다시 세게 하지 않는다: 대기 시간이 이미 지났으면
+	 * bRecoveryPaused(달리는 중)면 그대로. 멈춤은 대기 시간을 다시 세게 하지 않는다: 대기 시간이 이미 지났으면
 	 * 멈춤이 풀리는 즉시 다시 회복한다.
 	 * 그 외에는 초당 RecoveryRate만큼, 최대치를 넘지 않게 올린다. (그로기와 달리 0에서도 회복한다)
 	 */
@@ -84,17 +84,17 @@ struct KNIGHT_API FknightStanceModifiers
  * ProcessAbilityInput을 한 번 호출한다. 어빌리티는 스펙의 동적 소스 태그에 저장된 InputTag로 찾으며,
  * 이 태그는 UknightAbilitySet이 어빌리티를 부여할 때 기록한다.
  *
- * 그로기 자연 회복 (2026-10-06):
+ * 그로기 자연 회복:
  *   마지막 피격 후 PoiseRecoveryDelay초가 지나면 초당 PoiseRecoveryRate(Core 속성)만큼 Poise가 최대치까지 찬다.
  *   플레이어와 몬스터가 모두 이 클래스를 쓰므로 같은 규칙이 적용된다.
  *   회복 속도는 각자의 초기값 GE에서, 대기 시간은 각 BP의 AbilitySystemComponent 디테일에서 정한다.
  *   회복 속도 기본값이 0이라 따로 정하지 않으면 회복하지 않는다(기존 동작과 같음).
  *
- * 행동 에너지(스테미너) 자연 회복 (2026-10-09):
+ * 행동 에너지(스테미너) 자연 회복:
  *   마지막으로 쓴 뒤 BoostRecoveryDelay초(메카 속성, 기본 1.2)가 지나면 초당 BoostRecoveryRate(메카 속성, 기본 25)만큼 찬다.
- *   (2026-10-13) 달리는 동안에는 회복이 멈춘다(bPauseBoostRecoveryWhileRunning). 달리기는 쓰는 게 아니라서 대기 시간을 다시 세지 않는다.
- *   (2026-10-16) 대기 시간이 지나도 공격이 끝나기 전(휘두르는 중·후딜·콤보 창)에는 회복을 미룬다(bHoldBoostRecoveryDuringAction).
- *   (2026-10-26) 가드를 올리고 있는 동안(State.Guarding)은 회복 속도에 GuardBoostRecoveryScale을 곱한다.
+ *   달리는 동안에는 회복이 멈춘다(bPauseBoostRecoveryWhileRunning). 달리기는 쓰는 게 아니라서 대기 시간을 다시 세지 않는다.
+ *   대기 시간이 지나도 공격이 끝나기 전(휘두르는 중·후딜·콤보 창)에는 회복을 미룬다(bHoldBoostRecoveryDuringAction).
+ *   가드를 올리고 있는 동안(State.Guarding)은 회복 속도에 GuardBoostRecoveryScale을 곱한다.
  *   가불(비용이 남은 양보다 많아 음수가 된 것)도 같은 속도로 0을 거쳐 그대로 찬다.
  *   메카 속성 세트가 있는 나이트만 해당된다.
  */
@@ -126,33 +126,33 @@ public:
 	 * Exclusive_Blocking 어빌리티는 다른 모든 배타 어빌리티를 막는다.
 	 * 실행 중인 Exclusive_Replaceable 어빌리티는 Window.Cancel 안에서만,
 	 * 또는 새 어빌리티가 Ability.Attack일 때 Window.Combo 안에서만 교체될 수 있다.
-	 * (2026-10-14) 공격 후딜(공격 실행 중의 Window.Cancel)은 퀵스텝(Ability.Boost.Dash)만 끊을 수 있다(IsAttackRecoveryDashOnly).
+	 * 공격 후딜(공격 실행 중의 Window.Cancel)은 퀵스텝(Ability.Boost.Dash)만 끊을 수 있다(IsAttackRecoveryDashOnly).
 	 * 콤보 창이 함께 열려 있으면 다음 공격은 지금처럼 이어진다.
-	 * (2026-10-29) bIsComboStep = 같은 콤보의 다음 단계(발동에 앞 단계의 Combo.Greatsword 태그가 필요한 공격, 예: 2타).
+	 * bIsComboStep = 같은 콤보의 다음 단계(발동에 앞 단계의 Combo.Greatsword 태그가 필요한 공격, 예: 2타).
 	 *   bOnlyComboStepsInComboWindow면 콤보 창·후딜에서는 이것만 이어지고, 다른 공격은 후딜이 끝난 뒤에 나간다.
 	 */
 	bool IsActivationGroupBlocked(EknightAbilityActivationGroup Group, const FGameplayTagContainer& AbilityTags, bool bIsComboStep = false) const;
 
 	/**
-	 * (2026-10-14) 지금 공격 후딜이라 퀵스텝만 끊을 수 있는지: bOnlyDashCancelsAttackRecovery가 켜져 있고,
+	 * 지금 공격 후딜이라 퀵스텝만 끊을 수 있는지: bOnlyDashCancelsAttackRecovery가 켜져 있고,
 	 * 공격(Ability.Attack, 교체 가능 배타 어빌리티)이 실행 중이며, Window.Cancel이 열린 지 AttackRecoveryDashOnlyTime초가 안 됐을 때.
 	 * 그 뒤(검을 들어 올리는 꼬리 동작)는 예전처럼 무엇이든 공격을 끊는다.
 	 * 교체 규칙 말고도 강공격 차지 시작·공격의 이동 캔슬이 이걸 보고 멈춘다.
 	 */
 	bool IsAttackRecoveryDashOnly() const;
 
-	/** (2026-10-23) 지금 후딜이라 다음 공격도 막혀 있는지(퀵스텝만 되는 후딜이면서 bAttacksCancelAttackRecovery가 꺼져 있을 때). */
+	/** 지금 후딜이라 다음 공격도 막혀 있는지(퀵스텝만 되는 후딜이면서 bAttacksCancelAttackRecovery가 꺼져 있을 때). */
 	bool IsAttackRecoveryBlockingAttacks() const { return !bAttacksCancelAttackRecovery && IsAttackRecoveryDashOnly(); }
 
 	/**
-	 * (2026-10-14) 공격 몽타주 재생 속도 배율. 공격 어빌리티가 PlayRate x 행동 속도에 곱한다(발도·가드 몽타주는 제외).
-	 * 기본 0.75(10-15. 1이면 몽타주 원래 속도). PIE에서 knight.Player.AttackSpeed로 바꿔 시험한다(새로 시작하는 공격부터 적용).
+	 * 공격 몽타주 재생 속도 배율. 공격 어빌리티가 PlayRate x 행동 속도에 곱한다(발도·가드 몽타주는 제외).
+	 * 기본 0.75(1이면 몽타주 원래 속도). PIE에서 knight.Player.AttackSpeed로 바꿔 시험한다(새로 시작하는 공격부터 적용).
 	 */
 	float GetAttackAnimationSpeed() const { return AttackAnimationSpeed; }
 	void SetAttackAnimationSpeed(float NewSpeed) { AttackAnimationSpeed = FMath::Max(0.1f, NewSpeed); }
 
 	/**
-	 * (2026-10-20) 마지막으로 패링한 공격의 주인(투사체면 쏜 쪽). 가드가 패링에 성공하면 넣는다.
+	 * 마지막으로 패링한 공격의 주인(투사체면 쏜 쪽). 가드가 패링에 성공하면 넣는다.
 	 * 패링 반격(근접 공격 bWarpToParriedAttacker)이 락온이 아닐 때 이 대상에게 돌진한다.
 	 */
 	void SetParryCounterTarget(AActor* Target) { ParryCounterTarget = Target; }
@@ -190,7 +190,7 @@ public:
 	void CancelActivationGroupAbilities(EknightAbilityActivationGroup Group, const UknightGameplayAbility* IgnoreAbility);
 
 	/**
-	 * (2026-10-26) 실행 중인 어빌리티의 활성화 그룹이 OldGroup에서 NewGroup으로 바뀌었을 때 그룹별 실행 수를 고친다
+	 * 실행 중인 어빌리티의 활성화 그룹이 OldGroup에서 NewGroup으로 바뀌었을 때 그룹별 실행 수를 고친다
 	 * (UknightGameplayAbility::ChangeActivationGroupWhileActive가 부른다). 배타 그룹으로 바뀌면 새로 발동할 때처럼
 	 * 실행 중인 교체 가능 배타 어빌리티를 끊는다.
 	 */
@@ -217,7 +217,7 @@ protected:
 	/** 타이머마다 호출: 조건을 확인하고 Poise를 올린다. */
 	void TickPoiseRecovery();
 
-	/** 행동 에너지 자연 회복 타이머를 켠다. 메카 속성 세트(UknightAttributeSet)가 없는 액터는 틱에서 아무것도 하지 않는다. (2026-10-09) */
+	/** 행동 에너지 자연 회복 타이머를 켠다. 메카 속성 세트(UknightAttributeSet)가 없는 액터는 틱에서 아무것도 하지 않는다. */
 	void StartBoostRecovery();
 
 	/** 타이머마다 호출: 마지막으로 쓴 뒤 BoostRecoveryDelay(메카 속성)초가 지났으면 BoostRecoveryRate만큼 올린다. */
@@ -245,14 +245,14 @@ protected:
 	float BoostRecoveryInterval = 0.1f;
 
 	/**
-	 * (2026-10-13 사용자 결정) 달리는 동안(달리기 키 + 이동 입력, 땅 위, UknightMovementComponent::IsRunning) 행동 에너지 회복을 멈춘다.
+	 * 달리는 동안(달리기 키 + 이동 입력, 땅 위, UknightMovementComponent::IsRunning) 행동 에너지 회복을 멈춘다.
 	 * 전투 여부와 상관없이 적용한다. 깎지는 않고, 회복 대기 시간도 다시 세지 않는다. 끄면 달리는 중에도 회복한다.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Boost")
 	bool bPauseBoostRecoveryWhileRunning = true;
 
 	/**
-	 * (2026-10-26 사용자 결정 '가드 중엔 스테미너 회복량 감소') 가드를 올리고 있는 동안(State.Guarding) 회복 속도에 곱하는 배율.
+	 * 가드 중엔 스테미너 회복을 줄인다: 가드를 올리고 있는 동안(State.Guarding) 회복 속도에 곱하는 배율.
 	 * 0.5 = 절반(초당 25 → 12.5), 0 = 가드 중엔 회복 없음, 1 = 줄이지 않음. 바뀔 수 있는 값.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Boost", meta=(ClampMin=0, ClampMax=1))
@@ -262,7 +262,7 @@ protected:
 	bool IsAvatarRunning() const;
 
 	/**
-	 * (2026-10-16 사용자 결정) 켜면 BoostRecoveryDelay가 지나도 공격이 끝날 때까지 행동 에너지 회복을 미룬다.
+	 * 켜면 BoostRecoveryDelay가 지나도 공격이 끝날 때까지 행동 에너지 회복을 미룬다.
 	 * 끝 = 콤보 창(Window.Combo)과 후딜(AttackRecoveryDashOnlyTime)이 모두 끝나 이동으로 끊을 수 있는 때. 끄면 대기 시간만 본다.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Boost")
@@ -275,7 +275,7 @@ protected:
 	bool IsExclusiveAttackActive() const;
 
 	/**
-	 * (2026-10-14 사용자 결정, 시험 중) 공격 후딜은 퀵스텝만 끊을 수 있다. '게임이 너무 스피디하다'는 의견으로 시험.
+	 * (시험 중) 공격 후딜은 퀵스텝만 끊을 수 있다. 게임이 너무 빠르게 느껴진다는 의견으로 시험.
 	 * 켜면 공격 캔슬 창에서 가드·강공격(탭·차지)·스킬·새 공격(콤보 창 밖)·이동 캔슬이 막히고 퀵스텝만 된다.
 	 * 끄면 예전처럼 캔슬 창에서 무엇이든 공격을 끊는다. 가드·퀵스텝 경직의 캔슬 창은 영향 없음.
 	 */
@@ -283,27 +283,27 @@ protected:
 	bool bOnlyDashCancelsAttackRecovery = true;
 
 	/**
-	 * (2026-10-14 사용자 결정) 후딜 길이 = 공격의 캔슬 창이 열린 뒤 퀵스텝만 끊을 수 있는 시간(초, 실제 시간). 바뀔 수 있는 값.
+	 * 후딜 길이 = 공격의 캔슬 창이 열린 뒤 퀵스텝만 끊을 수 있는 시간(초, 실제 시간). 바뀔 수 있는 값.
 	 * 공격 몽타주의 캔슬 창은 타격 직후부터 몽타주 끝(검을 등 쪽으로 들어 올리는 동작)까지라, 창 전체를 후딜로 잡으면
 	 * 0.7배속에서 1타 기준 2.5초 동안 아무것도 못 했다. 공격 배속과 상관없이 이 시간만큼만 묶인다.
-	 * (2026-10-21 사용자 결정) 0.5 → 0.25: 기계식 타이밍·양손 배속이 들어온 뒤 판정 끝에서 가드·이동까지 약 0.72초라
+	 * 0.5 → 0.25: 기계식 타이밍·양손 배속이 들어온 뒤 판정 끝에서 가드·이동까지 약 0.72초라
 	 * 반응이 너무 늦었다(특히 콤보 창이 없는 4타·대쉬공격·돌진 베기·패링 반격). 0.25면 약 0.47초.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack", meta=(ClampMin=0, Units="s", EditCondition="bOnlyDashCancelsAttackRecovery"))
 	float AttackRecoveryDashOnlyTime = 0.25f;
 
 	/**
-	 * (2026-10-23 사용자 결정) 위 후딜 시간에 퀵스텝뿐 아니라 다음 공격(Ability.Attack)도 허용한다. 가드·이동·점프는 그대로 기다린다.
+	 * 위 후딜 시간에 퀵스텝뿐 아니라 다음 공격(Ability.Attack)도 허용한다. 가드·이동·점프는 그대로 기다린다.
 	 * 1~3타는 콤보 창으로 이미 이어지지만, 콤보 창이 없는 공격(4타·대쉬공격·패링 반격·돌진 베기·점프 공격)은
 	 * 다음 공격까지 판정 끝에서 약 0.47초(양손)가 걸려 느렸다 → 퀵스텝과 같은 약 0.22초. 끄면 예전처럼 퀵스텝만. 바뀔 수 있는 값.
-	 * (2026-10-29 사용자 결정) true → false: 다른 종류의 공격으로 바로 이어지지 않게(4타→1타, 대쉬공격·차지·반격→일반 공격 등)
+	 * true → false: 다른 종류의 공격으로 바로 이어지지 않게(4타→1타, 대쉬공격·차지·반격→일반 공격 등)
 	 *   후딜이 끝난 뒤에 나간다. 같은 콤보의 다음 단계는 계속 이어진다(bOnlyComboStepsInComboWindow).
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack", meta=(EditCondition="bOnlyDashCancelsAttackRecovery"))
 	bool bAttacksCancelAttackRecovery = false;
 
 	/**
-	 * (2026-10-29 사용자 결정) 콤보 창(Window.Combo)과 위 후딜 시간에는 같은 콤보의 다음 단계만 나간다
+	 * 콤보 창(Window.Combo)과 위 후딜 시간에는 같은 콤보의 다음 단계만 나간다
 	 * (발동에 앞 단계의 Combo.Greatsword 태그가 필요한 공격: 1→2→3→4타, 강공격 1→2→3→4).
 	 * 일반 공격 콤보 창에서 강공격·대쉬공격으로 바로 넘어가거나, 4타·대쉬공격·차지·반격 뒤 1타가 바로 나가던 것을 막는다.
 	 * 그런 공격은 후딜이 끝난 뒤(캔슬 창 + AttackRecoveryDashOnlyTime)에 나간다. 끄면 예전처럼 콤보 창에서 어떤 공격이든 이어진다. 바뀔 수 있는 값.
@@ -311,17 +311,17 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack")
 	bool bOnlyComboStepsInComboWindow = true;
 
-	/** (2026-10-14) Window.Cancel 태그 수가 늘 때(창이 열릴 때) 시각을 기록한다. */
+	/** Window.Cancel 태그 수가 늘 때(창이 열릴 때) 시각을 기록한다. */
 	void HandleCancelWindowChanged(const FGameplayTag Tag, int32 NewCount);
 	FDelegateHandle CancelWindowHandle;
 	int32 CancelWindowCount = 0;
 	double CancelWindowOpenedTime = -UE_BIG_NUMBER;
 
 	/**
-	 * (2026-10-14) 공격 몽타주 재생 속도 배율(GetAttackAnimationSpeed). 바뀔 수 있는 값. 시험은 knight.Player.AttackSpeed.
-	 * 1.0 → 0.7: '게임이 너무 스피디하다'는 의견으로 사용자 플레이 테스트 후 결정(10-14). 후딜 0.5초와 함께 정함.
+	 * 공격 몽타주 재생 속도 배율(GetAttackAnimationSpeed). 바뀔 수 있는 값. 시험은 knight.Player.AttackSpeed.
+	 * 1.0 → 0.7: 게임이 너무 빠르게 느껴진다는 플레이 테스트 의견으로 정함. 후딜 0.5초와 함께 정함.
 	 * 0.7 → 1.0: EssentialAnimation 애니로 바꾼 뒤 사용자 요청(10-14). 새 애니는 원래 속도로 재생한다.
-	 * 1.0 → 0.75: 새 애니 기준으로 다시 조금 느리게(10-15 사용자 요청).
+	 * 1.0 → 0.75: 새 애니 기준으로 다시 조금 느리게.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Attack", meta=(ClampMin=0.1))
 	float AttackAnimationSpeed = 0.75f;
@@ -334,15 +334,15 @@ protected:
 	bool bApplyStanceModifiers = true;
 
 	/**
-	 * (2026-10-20 임시값) 한손: 빠르고 가볍다. 피해·그로기는 낮고 행동 에너지를 덜 쓴다.
-	 * (2026-10-28 사용자 결정) 그로기 0.75 → 0.85(피해 보정과 같게). 플레이 로그에서 초당 그로기가 양손 판이 한손 판의 2배를 넘었다.
+	 * (임시값) 한손: 빠르고 가볍다. 피해·그로기는 낮고 행동 에너지를 덜 쓴다.
+	 * 그로기 0.75 → 0.85(피해 보정과 같게). 플레이 로그에서 초당 그로기가 양손 판이 한손 판의 2배를 넘었다.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Stance", meta=(EditCondition="bApplyStanceModifiers"))
 	FknightStanceModifiers OneHandedModifiers = FknightStanceModifiers(0.85f, 0.85f, 1.1f, 0.8f);
 
 	/**
-	 * (2026-10-20 임시값) 양손: 느리고 무겁다. 피해·그로기가 높고 행동 에너지를 더 쓴다.
-	 * (2026-10-28 사용자 결정) 그로기 1.35 → 1.2(피해 보정과 같게). 피해 차이는 적당해서 그대로 둔다.
+	 * (임시값) 양손: 느리고 무겁다. 피해·그로기가 높고 행동 에너지를 더 쓴다.
+	 * 그로기 1.35 → 1.2(피해 보정과 같게). 피해 차이는 적당해서 그대로 둔다.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Stance", meta=(EditCondition="bApplyStanceModifiers"))
 	FknightStanceModifiers TwoHandedModifiers = FknightStanceModifiers(1.2f, 1.2f, 0.92f, 1.25f);
@@ -432,7 +432,7 @@ protected:
 	TArray<FGameplayAbilitySpecHandle> InputHeldSpecHandles;
 
 	/**
-	 * (2026-10-15) 누른 뒤 아직 발동하지 못한 bRetryPressWhileHeld 어빌리티(가드). 키를 누르고 있는 동안 매 프레임 다시 시도한다.
+	 * 누른 뒤 아직 발동하지 못한 bRetryPressWhileHeld 어빌리티(가드). 키를 누르고 있는 동안 매 프레임 다시 시도한다.
 	 * 발동하거나(NotifyAbilityActivated) 키를 떼면 빠진다.
 	 */
 	TArray<FGameplayAbilitySpecHandle> PendingHeldPressHandles;
@@ -440,7 +440,7 @@ protected:
 	/** ProcessAbilityInput이 마지막으로 실행된 뒤 발동한 어빌리티들의 입력 태그. */
 	FGameplayTagContainer RecentlyActivatedInputTags;
 
-	/** (2026-10-20) SetParryCounterTarget 참고. */
+	/** SetParryCounterTarget 참고. */
 	TWeakObjectPtr<AActor> ParryCounterTarget;
 
 	int32 ActivationGroupCounts[static_cast<uint8>(EknightAbilityActivationGroup::MAX)];

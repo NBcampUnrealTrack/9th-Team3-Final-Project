@@ -8,7 +8,7 @@
 
 UknightCameraMode_ThirdPerson::UknightCameraMode_ThirdPerson()
 {
-	// (2026-10-29) 구르는 동안은 카메라가 뒤처진 거리를 그대로 둔다(FreezeLagTags 주석 참고).
+	// 구르는 동안은 카메라가 뒤처진 거리를 그대로 둔다(FreezeLagTags 주석 참고).
 	FreezeLagTags.AddTag(knightGameplayTags::State_Rolling);
 }
 
@@ -52,7 +52,7 @@ void UknightCameraMode_ThirdPerson::UpdateView(float DeltaTime)
 	}
 	else if (IsLagFrozen())
 	{
-		// (2026-10-29) 구르기 등: 지금 뒤처진 거리를 그대로 두고 캐릭터가 움직인 만큼만 같이 옮긴다.
+		// 구르기 등: 지금 뒤처진 거리를 그대로 두고 캐릭터가 움직인 만큼만 같이 옮긴다.
 		LaggedPivot += Pivot - LastPivot;
 	}
 	else

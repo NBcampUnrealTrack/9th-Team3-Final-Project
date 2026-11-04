@@ -54,7 +54,7 @@ public:
 	UknightCameraMode* GetActiveCameraMode() const;
 
 	/**
-	 * (2026-10-23) 공격 휘두르기 카메라 연출. 기계식 타이밍(FknightMechAttackTiming)이 부른다.
+	 * 공격 휘두르기 카메라 연출. 기계식 타이밍(FknightMechAttackTiming)이 부른다.
 	 * Windup = 준비 동작의 락(칼을 젖힌 순간): 시야각을 살짝 조인다. Swing = 휘두르는 순간: 조임을 풀며 시야각이 튀고
 	 * 카메라가 보는 방향으로 밀렸다가 돌아온다. Strength 1 = 한손 기준(양손은 더 크게 넘긴다).
 	 */
@@ -79,16 +79,16 @@ protected:
 	TObjectPtr<UknightCameraFadeHandler> FadeHandler;
 
 	/**
-	 * (2026-10-23 사용자 요청 '휘두르는 건 묵직한데 화면이 너무 정적') 공격 휘두르기 카메라 연출을 쓸지.
+	 * 공격 휘두르기 카메라 연출을 쓸지(휘두르는 건 묵직한데 화면이 너무 정적이라 넣음).
 	 * PIE 콘솔 knight.Camera.AttackKick 0/1로 바로 비교할 수 있다. 아래 값은 모두 바뀔 수 있는 값.
-	 * (2026-10-26 사용자 '공격 때 카메라 흔들림은 일단 빼고') 기본으로 끔. 다시 쓰려면 BP_Knight에서 켜면 된다.
+	 * 기본은 끔(공격 때 카메라 흔들림은 일단 뺌). 다시 쓰려면 BP_Knight에서 켜면 된다.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Camera|Attack Kick")
 	bool bAttackCameraKick = false;
 
 	/**
 	 * 준비 동작(락) 동안 시야각 변화(음수 = 조임). 휘두르면 SwingRiseTime 동안 풀린다.
-	 * (2026-10-26 사용자 '너무 인위적으로 흔들림') 크기를 절반으로(조임 -2 → -1, 튐 4 → 2, 밀기 25 → 12)
+	 * 너무 인위적으로 흔들려서 크기를 절반으로(조임 -2 → -1, 튐 4 → 2, 밀기 25 → 12)
 	 * 하고, 한 프레임에 최대치로 튀던 것을 부드럽게 올라갔다 내려오게 바꿨다.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Camera|Attack Kick", meta=(Units="deg", EditCondition="bAttackCameraKick"))

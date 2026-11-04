@@ -111,7 +111,7 @@ protected:
 	float MaxPoiseGrowth = 0.25f;
 
 	/**
-	 * (2026-10-20 한수현 결정) MaxPoise가 늘어나는 상한 = 처음 MaxPoise의 이 배수. 3이면 100 → 125 → … → 300에서 멈춘다.
+	 * MaxPoise가 늘어나는 상한 = 처음 MaxPoise의 이 배수. 3이면 100 → 125 → … → 300에서 멈춘다.
 	 * 다운이 거듭될수록 그로기가 끝없이 어려워지지 않게 한다. 0이면 상한 없음. 바뀔 수 있는 값.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Reaction|Poise", meta=(EditCondition="bRestorePoise", ClampMin=0))
@@ -145,7 +145,7 @@ private:
 	FGameplayAbilitySpecHandle ReplayHandle;
 	FDelegateHandle ReplayDelegateHandle;
 
-	/** (2026-10-20) 처음 회복할 때의 MaxPoise(상한 기준). 어빌리티는 액터당 하나라 몬스터가 살아 있는 동안 유지된다. */
+	/** 처음 회복할 때의 MaxPoise(상한 기준). 어빌리티는 액터당 하나라 몬스터가 살아 있는 동안 유지된다. */
 	mutable float InitialMaxPoise = -1.f;
 
 	/** 이번 반응에 쓰는 유지 몽타주(방향에 따라 HoldMontage 또는 HoldMontageBack/Left/Right). */

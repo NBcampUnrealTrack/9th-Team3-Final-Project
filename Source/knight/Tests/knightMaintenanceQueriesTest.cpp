@@ -88,7 +88,7 @@ bool FknightMaintenanceQueriesTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("weapon upgrade steps"), Weapon->UpgradeSteps.Num(), 15);
 		for (int32 Level = 0; Level < Weapon->UpgradeSteps.Num(); ++Level)
 		{
-			// (2026-10-27) 1강당 2.6처럼 float으로 정확히 안 떨어지는 값은 누적 합의 차이가 1e-5쯤 어긋나서 허용 오차를 둔다.
+			// 1강당 2.6처럼 float으로 정확히 안 떨어지는 값은 누적 합의 차이가 1e-5쯤 어긋나서 허용 오차를 둔다.
 			TestTrue(FString::Printf(TEXT("level %d quote attack gain uses step data"), Level + 1),
 				FMath::IsNearlyEqual(Weapon->GetWeaponAttackAtLevel(Level + 1)
 					- Weapon->GetWeaponAttackAtLevel(Level), Weapon->UpgradeSteps[Level].AttackIncrease, KINDA_SMALL_NUMBER));

@@ -69,7 +69,7 @@ UknightGameplayAbility_RepairKit::UknightGameplayAbility_RepairKit(const FObject
 	ActivationGroup = EknightAbilityActivationGroup::Exclusive_Replaceable;
 	SetAssetTags(FGameplayTagContainer(knightGameplayTags::Ability_Item_RepairKit));
 	ActivationOwnedTags.AddTag(knightGameplayTags::State_Repairing);
-	// 맞아도 계속(사용자 결정): 작은 피격 경직을 막는다. 피격 경직 어빌리티는 이 어빌리티를 취소하지 않는다.
+	// 맞아도 계속: 작은 피격 경직을 막는다. 피격 경직 어빌리티는 이 어빌리티를 취소하지 않는다.
 	ActivationOwnedTags.AddTag(knightGameplayTags::State_SuperArmor);
 	ActivationBlockedTags.AddTag(knightGameplayTags::State_Dead);
 	ActivationBlockedTags.AddTag(knightGameplayTags::State_HitReact);
@@ -101,7 +101,7 @@ bool UknightGameplayAbility_RepairKit::CanActivateAbility(const FGameplayAbility
 	{
 		return false;
 	}
-	// 풀피면 쓰지 않는다(2026-10-09 사용자 결정, 키트 낭비 방지). 전체 체력이 가득 차 있어도 깎인 부위가 있으면 쓸 수 있다.
+	// 풀피면 쓰지 않는다(키트 낭비 방지). 전체 체력이 가득 차 있어도 깎인 부위가 있으면 쓸 수 있다.
 	const UAbilitySystemComponent* const ASC = ActorInfo ? ActorInfo->AbilitySystemComponent.Get() : nullptr;
 	const UknightCoreAttributeSet* const CoreSet = ASC ? ASC->GetSet<UknightCoreAttributeSet>() : nullptr;
 	if (!CoreSet || CoreSet->GetHealth() < CoreSet->GetMaxHealth())

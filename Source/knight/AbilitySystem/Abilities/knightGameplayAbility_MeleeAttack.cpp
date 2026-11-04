@@ -27,7 +27,7 @@
 
 namespace
 {
-	// 이동 캔슬 검사 간격. 짧게 뗐다 누르는 입력도 놓치지 않게 짧게 둔다. (2026-10-07 0.05 → 0.02)
+	// 이동 캔슬 검사 간격. 짧게 뗐다 누르는 입력도 놓치지 않게 짧게 둔다. (0.05 → 0.02)
 	constexpr float MoveCancelCheckInterval = 0.02f;
 
 	// 락온 상태가 아닐 때 공격하면 화면 중앙(카메라/컨트롤러 수평 방향)을 바라보게 한다.
@@ -65,14 +65,14 @@ UknightGameplayAbility_MeleeAttack::UknightGameplayAbility_MeleeAttack(const FOb
 	SetAssetTags(FGameplayTagContainer(knightGameplayTags::Ability_Attack));
 	ActivationBlockedTags.AddTag(knightGameplayTags::State_Dead);
 	ActivationBlockedTags.AddTag(knightGameplayTags::State_HitReact);
-	// 한 번 휘두를 때 쓰는 행동 에너지. 2026-10-09 임시값(최대 100, 회복 초당 25 기준), 공격 BP마다 조절.
+	// 한 번 휘두를 때 쓰는 행동 에너지. 임시값(최대 100, 회복 초당 25 기준), 공격 BP마다 조절.
 	StaminaCost = 10.f;
 }
 
 void UknightGameplayAbility_MeleeAttack::ApplyCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayAbilityActivationInfo ActivationInfo) const
 {
-	// 검을 뽑기만 하는 누름(bAttackAfterDraw가 꺼져 있을 때)은 행동 에너지를 쓰지 않는다. (2026-10-09)
+	// 검을 뽑기만 하는 누름(bAttackAfterDraw가 꺼져 있을 때)은 행동 에너지를 쓰지 않는다.
 	if (!bDrawOnlyActivation)
 	{
 		Super::ApplyCost(Handle, ActorInfo, ActivationInfo);
@@ -156,7 +156,7 @@ void UknightGameplayAbility_MeleeAttack::ActivateAbility(const FGameplayAbilityS
 		{
 			SetDrawMovementLocked(true);
 		}
-		// 발도도 행동 속도를 따른다. 공격으로 넘어가는 시점(DrawAttackStartTime)도 같은 배속으로 맞춘다. (2026-10-08)
+		// 발도도 행동 속도를 따른다. 공격으로 넘어가는 시점(DrawAttackStartTime)도 같은 배속으로 맞춘다.
 		const float DrawRate = DrawPlayRate * GetActionSpeed();
 		UAbilityTask_PlayMontageAndWait* const DrawTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
 			this, TEXT("Draw"), DrawMontage, DrawRate);
@@ -331,7 +331,7 @@ void UknightGameplayAbility_MeleeAttack::UpdateTrackedWarpTarget()
 
 void UknightGameplayAbility_MeleeAttack::StartAttack()
 {
-	// (2026-10-29 사용자 요청) 선딜레이: 락온 중이면 LockOnStartupDelay, 양손이면 스탠스 감속분(bStanceSlowdownAsStartupDelay)만큼
+	// 선딜레이: 락온 중이면 LockOnStartupDelay, 양손이면 스탠스 감속분(bStanceSlowdownAsStartupDelay)만큼
 	// 첫 자세로 멈춰 예열한 뒤 다시 여기로 온다.
 	if (!bStartupDelayDone && GetWorld())
 	{
@@ -367,7 +367,7 @@ void UknightGameplayAbility_MeleeAttack::StartAttack()
 	bool bLunge = false;
 	if (AActor* const ParriedTarget = GetParriedWarpTarget())
 	{
-		// (2026-10-20) 패링 반격: 락온이 아니어도 패링한 적을 보고 그쪽으로 돌진한다.
+		// 패링 반격: 락온이 아니어도 패링한 적을 보고 그쪽으로 돌진한다.
 		bLunge = UknightCombatLibrary::SetAttackWarpTargetToActor(GetAvatarActorFromActorInfo(), WarpTargetName, ParriedTarget,
 			MaxWarpDistance, WarpStopDistance, WarpLocation, WarpRotation, WarpTravel);
 		if (bLunge)
@@ -377,7 +377,7 @@ void UknightGameplayAbility_MeleeAttack::StartAttack()
 	}
 	else if (ForwardLungeDistance > 0.f)
 	{
-		// (2026-10-29 사용자 결정) 락온 대상으로 끌려가지 않고 앞으로 ForwardLungeDistance만큼(앞에 적·벽이 있으면 그 앞까지).
+		// 락온 대상으로 끌려가지 않고 앞으로 ForwardLungeDistance만큼(앞에 적·벽이 있으면 그 앞까지).
 		FaceScreenCenterIfUnlocked(Cast<ACharacter>(GetAvatarActorFromActorInfo()), GetAbilitySystemComponentFromActorInfo(), bFaceMoveDirectionIfUnlocked);
 		bLunge = SetForwardLungeWarpTarget(WarpLocation, WarpRotation, WarpTravel);
 	}
@@ -394,9 +394,9 @@ void UknightGameplayAbility_MeleeAttack::StartAttack()
 	HitTask->EventReceived.AddDynamic(this, &ThisClass::OnMeleeHitEvent);
 	HitTask->ReadyForActivation();
 
-	// 실제 재생 속도 = PlayRate x 행동 속도. 돌진도 같은 배속을 넘겨야 모션과 같이 끝난다. (2026-10-08)
-	// (2026-10-14) x 공격 배속(ASC AttackAnimationSpeed, 시험 치트 knight.Player.AttackSpeed).
-	// (2026-10-29) 양손 감속을 선딜로 바꾼 공격은 감속을 빼고 재생한다(GetStanceRateCompensation).
+	// 실제 재생 속도 = PlayRate x 행동 속도. 돌진도 같은 배속을 넘겨야 모션과 같이 끝난다.
+	// x 공격 배속(ASC AttackAnimationSpeed, 시험 치트 knight.Player.AttackSpeed).
+	// 양손 감속을 선딜로 바꾼 공격은 감속을 빼고 재생한다(GetStanceRateCompensation).
 	const float Rate = PlayRate * GetAttackSpeed() * GetStanceRateCompensation();
 	UAnimMontage* const Montage = GetStanceAttackMontage();
 	UAbilityTask_PlayMontageAndWait* const MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, Montage, Rate, StartSection);
@@ -420,14 +420,14 @@ void UknightGameplayAbility_MeleeAttack::StartAttack()
 	{
 		UknightCombatLibrary::StartAttackLunge(this, Montage, Rate, WarpLocation, WarpTravel, MaxLungeTime);
 	}
-	// (2026-10-26) 돌진 잔상(대쉬공격): 워프 구간이 끝날 때(첫 판정 직전)까지. 코드 돌진·루트 모션 워프 둘 다 이 구간에 움직인다.
+	// 돌진 잔상(대쉬공격): 워프 구간이 끝날 때(첫 판정 직전)까지. 코드 돌진·루트 모션 워프 둘 다 이 구간에 움직인다.
 	// 멈출 지점(WarpLocation)까지 1m(InRangeDistance) 안이면 기본 공격이 닿는 거리라 남기지 않는다.
 	if (bLunge && bLungeGhostTrail)
 	{
 		AknightGhostTrailActor::StartGhostTrailForAbility(this, LungeGhostTrailSettings,
 			UknightCombatLibrary::GetWarpWindowEnd(Montage) / FMath::Max(Rate, 0.01f), WarpLocation);
 	}
-	// (2026-10-20) 패링 반격은 휘두르기 전(워프 구간 끝)까지 대상을 따라간다.
+	// 패링 반격은 휘두르기 전(워프 구간 끝)까지 대상을 따라간다.
 	TrackWarpEndTime = bWarpToParriedAttacker && bLunge ? UknightCombatLibrary::GetWarpWindowEnd(Montage) : -1.f;
 	if (TrackWarpEndTime > 0.f)
 	{
@@ -548,7 +548,7 @@ void UknightGameplayAbility_MeleeAttack::BeginStartupDelay(const float Delay)
 			: FMath::Clamp(PoseMontage->GetPlayLength() / FMath::Max(Delay, 0.01f), 0.5f, 3.f);
 		if (StartupDelayPoseBlendIn > 0.f)
 		{
-			// (2026-10-29) 달리던 자세에서 버티는 자세로 천천히 들어간다(몽타주 기본 0.1초 직선 블렌드는 툭 바뀌었다).
+			// 달리던 자세에서 버티는 자세로 천천히 들어간다(몽타주 기본 0.1초 직선 블렌드는 툭 바뀌었다).
 			FAlphaBlendArgs BlendIn(StartupDelayPoseBlendIn);
 			BlendIn.BlendOption = EAlphaBlendOption::HermiteCubic;
 			Anim->Montage_PlayWithBlendIn(PoseMontage, BlendIn, PoseRate);
@@ -674,13 +674,13 @@ void UknightGameplayAbility_MeleeAttack::CheckMoveCancel()
 	{
 		return;
 	}
-	// 캔슬 창 밖에서도 새 누름은 계속 추적한다 → 창이 열리기 전에 다시 눌러 둔 것도 창이 열리면 캔슬한다. (2026-10-07)
+	// 캔슬 창 밖에서도 새 누름은 계속 추적한다 → 창이 열리기 전에 다시 눌러 둔 것도 창이 열리면 캔슬한다.
 	MovePress.Update(*Character);
 	if (!ASC->HasMatchingGameplayTag(knightGameplayTags::Window_Cancel))
 	{
 		return;
 	}
-	// (2026-10-14) 공격 후딜은 퀵스텝만 끊는다(ASC bOnlyDashCancelsAttackRecovery) → 이동으로는 끊지 않는다.
+	// 공격 후딜은 퀵스텝만 끊는다(ASC bOnlyDashCancelsAttackRecovery) → 이동으로는 끊지 않는다.
 	if (const UknightAbilitySystemComponent* const KnightASC = GetKnightAbilitySystemComponentFromActorInfo())
 	{
 		if (KnightASC->IsAttackRecoveryDashOnly())
@@ -697,7 +697,7 @@ void UknightGameplayAbility_MeleeAttack::CheckMoveCancel()
 	{
 		return;
 	}
-	// 공격·가드·대시 입력이 버퍼에 남아 있으면 이동 캔슬보다 그 입력을 우선한다. (2026-10-07)
+	// 공격·가드·대시 입력이 버퍼에 남아 있으면 이동 캔슬보다 그 입력을 우선한다.
 	// 방향키를 누른 채 연타하면, 다음 공격이 나가기 전에 이동이 공격을 끊어 1타만 빠르게 반복되던 문제.
 	// 연타를 멈추면(버퍼가 비면) 지금처럼 이동으로 바로 후딜을 캔슬할 수 있다.
 	if (const UknightInputBufferComponent* const InputBuffer = Character->FindComponentByClass<UknightInputBufferComponent>())
@@ -736,7 +736,7 @@ void UknightGameplayAbility_MeleeAttack::EndAbility(const FGameplayAbilitySpecHa
 	}
 	// (2026-10-22) 뽑는 도중 끝나도(피격·사망·다른 어빌리티로 교체) 이동 잠금은 반드시 푼다.
 	SetDrawMovementLocked(false);
-	// (2026-10-29) 예열(락온 선딜레이) 도중 끝나면 이펙트를 끄고, 멈춰 둔 몽타주를 내린다(공격 몽타주가 시작됐으면 비어 있다).
+	// 예열(락온 선딜레이) 도중 끝나면 이펙트를 끄고, 멈춰 둔 몽타주를 내린다(공격 몽타주가 시작됐으면 비어 있다).
 	StopStartupDelay();
 	// 공격 시작 부스터는 보통 정한 시간에 스스로 꺼진다. 공격이 먼저 끝나면(교체·피격 등) 여기서 끈다.
 	StopThrust(AttackStartThrustId);

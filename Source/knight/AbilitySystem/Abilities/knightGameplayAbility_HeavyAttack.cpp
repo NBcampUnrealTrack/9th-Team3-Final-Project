@@ -57,11 +57,11 @@ UknightGameplayAbility_HeavyAttack::UknightGameplayAbility_HeavyAttack(const FOb
 	ActivationBlockedTags.AddTag(knightGameplayTags::State_HitReact);
 	LoopHitParams.MotionValue = 15.f;
 	LoopHitParams.PoiseDamage = 5.f;
-	// (2026-10-26 사용자 결정) 80/40 → 55/25(짧게 누르면 강공격 1~2타 수준). 풀차지는 FullChargeMotionValue·FullChargePoiseDamage(120/60).
+	// 80/40 → 55/25(짧게 누르면 강공격 1~2타 수준). 풀차지는 FullChargeMotionValue·FullChargePoiseDamage(120/60).
 	ReleaseHitParams.MotionValue = 55.f;
 	ReleaseHitParams.PoiseDamage = 25.f;
-	// 차지를 시작할 때 쓰는 행동 에너지. 탭 강공격 콤보는 각 강공격 단계(일반 공격 BP)의 값을 쓴다. 2026-10-09 임시값.
-	// (2026-10-26 사용자 결정) 시작 비용 20 → 0. 대신 모으는 동안 ChargeStaminaCost, 해방할 때 ReleaseStaminaCost를 쓴다.
+	// 차지를 시작할 때 쓰는 행동 에너지. 탭 강공격 콤보는 각 강공격 단계(일반 공격 BP)의 값을 쓴다. 임시값.
+	// 시작 비용 20 → 0. 대신 모으는 동안 ChargeStaminaCost, 해방할 때 ReleaseStaminaCost를 쓴다.
 	StaminaCost = 0.f;
 }
 
@@ -116,13 +116,13 @@ void UknightGameplayAbility_HeavyAttack::OnReleased(float TimeHeld)
 			TapDeadline = (World ? World->GetTimeSeconds() : 0.0) + TapBufferTime;
 			return;
 		}
-		// (2026-10-28) 차지를 기다리다 떼면 아무것도 하지 않는다(예전에 HoldThreshold에서 차지를 못 시작했을 때와 같다).
+		// 차지를 기다리다 떼면 아무것도 하지 않는다(예전에 HoldThreshold에서 차지를 못 시작했을 때와 같다).
 		Finish(false);
 	}
 	else if (Phase == EPhase::Charging)
 	{
 		StopChargeEffects();
-		// (2026-10-26) 마지막 틱 뒤에 모은 몫까지 쓰고 모으기 소모를 멈춘 뒤, 해방(돌진) 비용을 쓴다. 모자라도 쓴다(가불).
+		// 마지막 틱 뒤에 모은 몫까지 쓰고 모으기 소모를 멈춘 뒤, 해방(돌진) 비용을 쓴다. 모자라도 쓴다(가불).
 		TickChargeStamina();
 		Phase = EPhase::Releasing;
 		UWorld* const World = GetWorld();
@@ -132,7 +132,7 @@ void UknightGameplayAbility_HeavyAttack::OnReleased(float TimeHeld)
 		}
 		ApplyStaminaCost(ReleaseStaminaCost);
 
-		// (2026-10-26 사용자 결정) 해방부터는 일반 공격과 같은 캔슬 규칙을 받는다(교체 가능 배타 그룹, 클래스 설명 참고).
+		// 해방부터는 일반 공격과 같은 캔슬 규칙을 받는다(교체 가능 배타 그룹, 클래스 설명 참고).
 		// 모으는 동안 막아 둔 다른 공격도 풀어서, 다음 공격은 그룹 규칙(캔슬 창부터)대로 나간다.
 		ChangeActivationGroupWhileActive(EknightAbilityActivationGroup::Exclusive_Replaceable);
 		if (bAttackBlockApplied)
@@ -153,7 +153,7 @@ void UknightGameplayAbility_HeavyAttack::OnReleased(float TimeHeld)
 		const float FullChargeTime = GetStanceMaxChargeTime();
 		const float Alpha = FMath::Clamp(static_cast<float>(Held) / FullChargeTime, 0.f, 1.f);
 		LastReleaseChargeAlpha = Alpha;
-		// (2026-10-26) 풀차지 값(FullCharge*)이 있으면 ReleaseHitParams 값에서 그 값까지, 없으면 MaxChargeMultiplier배까지 오른다.
+		// 풀차지 값(FullCharge*)이 있으면 ReleaseHitParams 값에서 그 값까지, 없으면 MaxChargeMultiplier배까지 오른다.
 		const float MotionScale = FMath::Lerp(1.f, FullChargeMotionValue > 0.f && ReleaseHitParams.MotionValue > 0.f
 			? FullChargeMotionValue / ReleaseHitParams.MotionValue : MaxChargeMultiplier, Alpha);
 		const float PoiseScale = FMath::Lerp(1.f, FullChargePoiseDamage > 0.f && ReleaseHitParams.PoiseDamage > 0.f
@@ -168,7 +168,7 @@ void UknightGameplayAbility_HeavyAttack::OnReleased(float TimeHeld)
 		{
 			AActor* const Avatar = GetAvatarActorFromActorInfo();
 			FaceScreenCenterForHeavyAttack(Cast<ACharacter>(Avatar), GetAbilitySystemComponentFromActorInfo());
-			// (2026-10-27 사용자 결정) 차지량에 따라 해방 모션이 빨라지고(풀차지 FullChargeReleaseRate배), 락온 중이면 돌진 거리도 는다.
+			// 차지량에 따라 해방 모션이 빨라지고(풀차지 FullChargeReleaseRate배), 락온 중이면 돌진 거리도 는다.
 			ReleaseRateScale = FMath::Lerp(1.f, FullChargeReleaseRate, Alpha);
 			const UAbilitySystemComponent* const OwnerASC = GetAbilitySystemComponentFromActorInfo();
 			const bool bLockedOn = OwnerASC && OwnerASC->HasMatchingGameplayTag(knightGameplayTags::State_LockedOn);
@@ -182,7 +182,7 @@ void UknightGameplayAbility_HeavyAttack::OnReleased(float TimeHeld)
 				&& UknightCombatLibrary::ComputeAttackWarp(Avatar, WarpDistance, WarpStopDistance,
 					bUseSoftTarget, SoftTargetRange, SoftTargetAngle, WarpLocation, WarpRotation, WarpTravel);
 			PlayMontage(ChargeReleaseMontage, TEXT("ChargeRelease"), false);
-			// (2026-10-28 사용자 요청 '공격 전체에 잔상') 해방 시작부터 휘두르기 판정이 끝날 때까지 남긴다(락온·돌진과 상관없이).
+			// 공격 전체에 잔상: 해방 시작부터 휘두르기 판정이 끝날 때까지 남긴다(락온·돌진과 상관없이).
 			// 기계식 타이밍으로 실제 휘두르는 시각이 늦어지므로 시간이 아니라 몽타주 재생 위치(판정 끝)로 멈춘다(지면 균열과 같은 방식).
 			if (bReleaseGhostTrail && bReleaseGhostTrailWholeSwing && Avatar)
 			{
@@ -214,14 +214,14 @@ void UknightGameplayAbility_HeavyAttack::OnReleased(float TimeHeld)
 			}
 			if (bWarp && Avatar)
 			{
-				// 발사 몽타주와 같은 배속(행동 속도 x 해방 배속)을 넘겨야 돌진이 모션과 같이 끝난다. (2026-10-08)
+				// 발사 몽타주와 같은 배속(행동 속도 x 해방 배속)을 넘겨야 돌진이 모션과 같이 끝난다.
 				const float Rate = GetAttackSpeed() * ReleaseRateScale;
-				// (2026-10-27) 먼 돌진이 순간 이동처럼 보이지 않게 거리만큼 시간을 늘린다(최소 0.25초, 휘두르기 직전까지만).
+				// 먼 돌진이 순간 이동처럼 보이지 않게 거리만큼 시간을 늘린다(최소 0.25초, 휘두르기 직전까지만).
 				const float LungeTime = FMath::Max(0.25f, WarpTravel / FMath::Max(ReleaseLungeSpeed, 1.f));
 				TFunction<bool(FVector&)> TrackTarget;
 				if (bTrackTargetDuringLunge)
 				{
-					// (2026-10-27 사용자 결정 '약간의 유도') 돌진하는 동안 대상의 지금 위치 앞으로 목표를 옮긴다.
+					// 약간의 유도: 돌진하는 동안 대상의 지금 위치 앞으로 목표를 옮긴다.
 					// 돌진을 시작한 자리에서 WarpDistance 밖으로는 가지 않는다(UknightGameplayAbility_MeleeAttack::UpdateTrackedWarpTarget과 같은 규칙).
 					const FVector LungeStart = Avatar->GetActorLocation();
 					TrackTarget = [WeakThis = TWeakObjectPtr<ThisClass>(this), LungeStart, WarpDistance](FVector& OutLocation)
@@ -252,7 +252,7 @@ void UknightGameplayAbility_HeavyAttack::OnReleased(float TimeHeld)
 				}
 				UknightCombatLibrary::StartAttackLunge(this, ChargeReleaseMontage, Rate, WarpLocation, WarpTravel, LungeTime, 20.f, MoveTemp(TrackTarget));
 
-				// (2026-10-27 사용자 요청) 돌진 잔상: 실제로 움직이는 동안(돌진 시작 ~ 휘두르기 직전)만 남긴다. 그 전 준비 동작에는 남기지 않는다.
+				// 돌진 잔상: 실제로 움직이는 동안(돌진 시작 ~ 휘두르기 직전)만 남긴다. 그 전 준비 동작에는 남기지 않는다.
 				// 시작·길이는 StartAttackLunge와 같은 계산(워프 구간 끝에 도착하도록 LungeTime만큼).
 				const float WindowSeconds = UknightCombatLibrary::GetWarpWindowEnd(ChargeReleaseMontage) / FMath::Max(Rate, 0.01f);
 				if (bReleaseGhostTrail && !bReleaseGhostTrailWholeSwing && World && WindowSeconds > 0.f)
@@ -329,14 +329,14 @@ bool UknightGameplayAbility_HeavyAttack::CanStartCharge() const
 	{
 		return false;
 	}
-	// (2026-10-26) 시작 비용이 없어도 행동 에너지가 0보다 많아야 모으기 시작한다(0 이하면 행동 불가, 다른 행동과 같은 규칙).
+	// 시작 비용이 없어도 행동 에너지가 0보다 많아야 모으기 시작한다(0 이하면 행동 불가, 다른 행동과 같은 규칙).
 	const FGameplayAttribute Gauge = UknightAttributeSet::GetBoostGaugeAttribute();
 	if (ChargeStaminaCost + ReleaseStaminaCost > 0.f && ASC->HasAttributeSetForAttribute(Gauge) && ASC->GetNumericAttribute(Gauge) <= 0.f)
 	{
 		return false;
 	}
-	// (2026-10-14) 공격 후딜은 퀵스텝만 끊는다 → 그때는 캔슬 창이어도 차지를 시작하지 않는다(아래에서 실행 중인 공격에 걸림).
-	// (2026-10-23) 후딜에 다음 공격을 허용하면(ASC bAttacksCancelAttackRecovery) 차지도 시작할 수 있다.
+	// 공격 후딜은 퀵스텝만 끊는다 → 그때는 캔슬 창이어도 차지를 시작하지 않는다(아래에서 실행 중인 공격에 걸림).
+	// 후딜에 다음 공격을 허용하면(ASC bAttacksCancelAttackRecovery) 차지도 시작할 수 있다.
 	const UknightAbilitySystemComponent* const KnightASC = GetKnightAbilitySystemComponentFromActorInfo();
 	if (ASC->HasMatchingGameplayTag(knightGameplayTags::Window_Cancel) && !(KnightASC && KnightASC->IsAttackRecoveryBlockingAttacks()))
 	{
@@ -379,7 +379,7 @@ void UknightGameplayAbility_HeavyAttack::OnHoldThreshold()
 		StartCharge();
 		return;
 	}
-	// (2026-10-28 사용자 결정) 앞 공격이 아직 캔슬 창 전이면 바로 버리지 않고, 누르고 있는 동안 ChargeWaitTime까지 다시 본다.
+	// 앞 공격이 아직 캔슬 창 전이면 바로 버리지 않고, 누르고 있는 동안 ChargeWaitTime까지 다시 본다.
 	UWorld* const World = GetWorld();
 	if (ChargeWaitTime <= 0.f || !World)
 	{
@@ -441,7 +441,7 @@ void UknightGameplayAbility_HeavyAttack::StartCharge()
 		Finish(true);
 		return;
 	}
-	// 차지를 시작할 때 비용(행동 에너지 StaminaCost)을 낸다. 탭으로 끝나면 이 어빌리티는 비용을 내지 않는다. (2026-10-09)
+	// 차지를 시작할 때 비용(행동 에너지 StaminaCost)을 낸다. 탭으로 끝나면 이 어빌리티는 비용을 내지 않는다.
 	if (!CommitAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo()))
 	{
 		Finish(true);
@@ -465,7 +465,7 @@ void UknightGameplayAbility_HeavyAttack::StartCharge()
 	ASC->AddLooseGameplayTag(knightGameplayTags::State_Charging);
 	bChargeStateApplied = true;
 
-	// (2026-10-26) 모으는 동안 행동 에너지를 조금씩 쓴다(TickChargeStamina).
+	// 모으는 동안 행동 에너지를 조금씩 쓴다(TickChargeStamina).
 	ChargeStaminaSpent = 0.f;
 	LastChargeStaminaTime = ChargeStartTime;
 	if (ChargeStaminaCost > 0.f && GetWorld())
@@ -552,7 +552,7 @@ void UknightGameplayAbility_HeavyAttack::StartChargeEffects()
 
 	if (UWorld* const World = GetWorld())
 	{
-		// (2026-10-28) 풀차지 시간은 스탠스 공격 속도를 따른다(GetStanceMaxChargeTime).
+		// 풀차지 시간은 스탠스 공격 속도를 따른다(GetStanceMaxChargeTime).
 		if (const float FullChargeTime = GetStanceMaxChargeTime(); FullChargeTime > 0.f)
 		{
 			World->GetTimerManager().SetTimer(FullChargeTimer, this, &ThisClass::OnFullChargeReached, FullChargeTime, false);
@@ -777,8 +777,8 @@ void UknightGameplayAbility_HeavyAttack::PlayLoop()
 
 void UknightGameplayAbility_HeavyAttack::PlayMontage(UAnimMontage* Montage, FName TaskName, bool bLoopOnEnd)
 {
-	// 차지 시작·반복·발사 몽타주 모두 행동 속도 배속으로 재생한다. (2026-10-08)
-	// (2026-10-27) 발사(해방)는 차지량에 따른 해방 배속(ReleaseRateScale)을 더 곱한다.
+	// 차지 시작·반복·발사 몽타주 모두 행동 속도 배속으로 재생한다.
+	// 발사(해방)는 차지량에 따른 해방 배속(ReleaseRateScale)을 더 곱한다.
 	const float Rate = GetAttackSpeed() * (Phase == EPhase::Releasing ? ReleaseRateScale : 1.f);
 	UAbilityTask_PlayMontageAndWait* const Task = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, TaskName, Montage, Rate);
 	if (Phase == EPhase::Releasing)
@@ -849,7 +849,7 @@ void UknightGameplayAbility_HeavyAttack::TickChargeStamina()
 		return;
 	}
 	// 풀차지(MaxChargeTime)까지 ChargeStaminaCost를 고르게 나눠 쓴다. 풀차지 뒤에 더 누르고 있어도 더 쓰지 않는다.
-	// (2026-10-28) 풀차지 시간은 스탠스를 따르므로(GetStanceMaxChargeTime) 합은 두 스탠스 모두 ChargeStaminaCost.
+	// 풀차지 시간은 스탠스를 따르므로(GetStanceMaxChargeTime) 합은 두 스탠스 모두 ChargeStaminaCost.
 	const double Now = World->GetTimeSeconds();
 	const float Amount = FMath::Min(ChargeStaminaCost * static_cast<float>(Now - LastChargeStaminaTime) / FMath::Max(GetStanceMaxChargeTime(), 0.1f),
 		ChargeStaminaCost - ChargeStaminaSpent);
@@ -949,7 +949,7 @@ void UknightGameplayAbility_HeavyAttack::EndAbility(const FGameplayAbilitySpecHa
 	}
 	Phase = EPhase::Deciding;
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
-	// (2026-10-26) 해방 때 바꾼 활성화 그룹을 되돌린다. 다음 발동은 다시 독립 그룹으로 시작한다(탭 강공격 단계를 막지 않게).
+	// 해방 때 바꾼 활성화 그룹을 되돌린다. 다음 발동은 다시 독립 그룹으로 시작한다(탭 강공격 단계를 막지 않게).
 	// ASC의 그룹 수는 위 EndAbility가 바뀐 그룹 기준으로 이미 뺐다.
 	ChangeActivationGroupWhileActive(EknightAbilityActivationGroup::Independent);
 }

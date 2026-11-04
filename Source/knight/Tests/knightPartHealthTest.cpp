@@ -70,7 +70,7 @@ bool FknightPartHealthTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("잘못된 부위 번호(7)는 부위를 모르는 피해로 처리: 몸통 -2.5"), H[1], 22.5f, Tolerance);
 	}
 
-	// ---- 수리(DistributeRepair): 체력 비율이 낮은 부위부터 최대치까지, 남은 양은 다음 부위로 (2026-10-09) ----
+	// ---- 수리(DistributeRepair): 체력 비율이 낮은 부위부터 최대치까지, 남은 양은 다음 부위로 ----
 	using knightPartHealth::DistributeRepair;
 	{
 		const float Max[4] = { 25.f, 25.f, 25.f, 25.f };

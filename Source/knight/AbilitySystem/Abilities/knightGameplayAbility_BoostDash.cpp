@@ -28,7 +28,7 @@ UknightGameplayAbility_BoostDash::UknightGameplayAbility_BoostDash(const FObject
 	ActivationPolicy = EknightAbilityActivationPolicy::OnInputTriggered;
 	ActivationGroup = EknightAbilityActivationGroup::Exclusive_Replaceable;
 	SetAssetTags(FGameplayTagContainer(knightGameplayTags::Ability_Boost_Dash));
-	// (2026-10-29 사용자 결정) 구르기로 바꾸며 State.Boosting 대신 State.Rolling을 단다.
+	// 구르기로 바꾸며 State.Boosting 대신 State.Rolling을 단다.
 	// State.Boosting이면 카메라가 Boost 모드(축소)로 바뀐다. State.Rolling 동안은 카메라가 뒤따라오는 거리를 그대로 둔다(knightCameraMode_ThirdPerson).
 	ActivationOwnedTags.AddTag(knightGameplayTags::State_Rolling);
 	ActivationBlockedTags.AddTag(knightGameplayTags::State_Dead);
@@ -39,8 +39,8 @@ UknightGameplayAbility_BoostDash::UknightGameplayAbility_BoostDash(const FObject
 	// 경직 중 대시 캔슬: 실행 중에 다시 발동되면 지금 대시를 끝내고 새로 시작한다. 언제 허용할지는 CanActivateAbility가 정한다.
 	bRetriggerInstancedAbility = true;
 
-	// 퀵스텝은 행동 에너지가 비용만큼 있어야 나간다(2026-10-09 사용자 결정). 비용 값은 BP의 StaminaCost(전에는 Cost GE).
-	// (2026-10-26 사용자 결정) 퀵스텝도 다른 행동처럼 조금이라도 남아 있으면 나가고, 모자란 만큼 가불한다.
+	// 퀵스텝은 행동 에너지가 비용만큼 있어야 나간다. 비용 값은 BP의 StaminaCost(전에는 Cost GE).
+	// 퀵스텝도 다른 행동처럼 조금이라도 남아 있으면 나가고, 모자란 만큼 가불한다.
 	bRequireFullStaminaCost = false;
 
 	// 구르기를 시작하는 순간 구르는 반대쪽으로 짧게 뿜는다. 등은 가운데 한 줄, 발은 그보다 작게 살짝(기본은 발만 켬).
@@ -64,7 +64,7 @@ float UknightGameplayAbility_BoostDash::GetMechAttributeValue(const FGameplayAtt
 bool UknightGameplayAbility_BoostDash::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
 {
-	// (2026-10-29 사용자 결정) 퀵스텝 비활성화 중이면 발동하지 않는다.
+	// 퀵스텝 비활성화 중이면 발동하지 않는다.
 	if (!bQuickstepEnabled)
 	{
 		return false;
@@ -85,7 +85,7 @@ bool UknightGameplayAbility_BoostDash::CanActivateAbility(const FGameplayAbility
 			return false;
 		}
 	}
-	// (2026-10-29 사용자 결정) 구르기는 땅에서만 나간다. 점프·낙하 중에는 눌러도 나가지 않는다.
+	// 구르기는 땅에서만 나간다. 점프·낙하 중에는 눌러도 나가지 않는다.
 	{
 		const ACharacter* const Character = ActorInfo ? Cast<ACharacter>(ActorInfo->AvatarActor.Get()) : nullptr;
 		const UCharacterMovementComponent* const Movement = Character ? Character->GetCharacterMovement() : nullptr;
@@ -154,12 +154,12 @@ void UknightGameplayAbility_BoostDash::StartDash(ACharacter& Character)
 	float MontageYaw = 0.f;
 	UAnimMontage* const Montage = SelectDashMontage(Character, Direction, &MontageYaw);
 
-	// (2026-10-29) 락온 중 대각선: 고른 구르기 방향(MontageYaw)이 실제 이동 방향과 맞도록 몸을 돌린다(대상 기준 최대 45°).
+	// 락온 중 대각선: 고른 구르기 방향(MontageYaw)이 실제 이동 방향과 맞도록 몸을 돌린다(대상 기준 최대 45°).
 	if (bLockedOn && bAlignRollToDirectionWhenLockedOn && bHasInput)
 	{
 		Character.SetActorRotation(FRotator(0.f, Direction.Rotation().Yaw - MontageYaw, 0.f));
 	}
-	// (2026-10-29 사용자 결정) 구르는 동안은 방향키를 받지 않는다(락온 여부와 상관없이 구르기 시작부터 끝까지).
+	// 구르는 동안은 방향키를 받지 않는다(락온 여부와 상관없이 구르기 시작부터 끝까지).
 	// 이동 잠금으로 가속을 0으로 만들어, 비락온 중 방향키 쪽으로 몸이 도는 것(bOrientRotationToMovement)과
 	// 락온 회전(knightMovementComponent)을 모두 멈춘다. 그래서 구르는 도중 애니메이션 방향이 바뀌지 않는다.
 	// 잠금은 입력 방향은 남겨서, 경직 중 다시 구르기 입력은 그대로 받는다. 어빌리티가 끝나면 푼다.
@@ -199,7 +199,7 @@ void UknightGameplayAbility_BoostDash::StartDash(ACharacter& Character)
 	}
 
 	// 거리 = 기본 거리 x 퀵스텝 속도 배율 x 중량 계수. 시간은 고정이라 거리가 늘면 속도도 빨라진다.
-	// (2026-10-21) 중량 계수는 퀵스텝 전용(적재율 50%부터 최대 15%)을 쓴다. 이동용 계수는 0%부터 최대 30%라 회피가 너무 짧아졌다.
+	// 중량 계수는 퀵스텝 전용(적재율 50%부터 최대 15%)을 쓴다. 이동용 계수는 0%부터 최대 30%라 회피가 너무 짧아졌다.
 	const UknightMovementComponent* const KnightMovement = Cast<UknightMovementComponent>(Character.GetCharacterMovement());
 	const float WeightFactor = KnightMovement ? KnightMovement->GetDodgeWeightFactor() : 1.f;
 	const float Distance = DashDistance * GetMechAttributeValue(UknightAttributeSet::GetDodgeSpeedAttribute(), 1.f) * WeightFactor;
@@ -245,7 +245,7 @@ void UknightGameplayAbility_BoostDash::StartDash(ACharacter& Character)
 
 float UknightGameplayAbility_BoostDash::GetMontagePlayRate(const UAnimMontage* Montage) const
 {
-	// (2026-10-29) MontageMoveEndTime이 있으면 몽타주의 이동 구간(0 ~ MontageMoveEndTime)을 DashDuration에 맞춘다.
+	// MontageMoveEndTime이 있으면 몽타주의 이동 구간(0 ~ MontageMoveEndTime)을 DashDuration에 맞춘다.
 	// 나머지(일어나는 동작)는 경직이 시작될 때 OnDashFinished가 RecoveryDuration에 맞춰 배속을 바꾼다.
 	// 등이 닿는 구간은 배속 x ContactPlayRateScale로 재생하므로 그 구간이 그만큼 길어진다. 나머지를 빠르게 해서 이동 구간 전체를 DashDuration에 맞춘다.
 	if (MontageMoveEndTime > 0.f && DashDuration > 0.f)
@@ -301,7 +301,7 @@ UAnimMontage* UknightGameplayAbility_BoostDash::SelectDashMontage(const ACharact
 	// 바라보는 방향 기준 대시 방향 각도(오른쪽 +, -180 ~ 180).
 	const float RelativeYaw = FMath::RadiansToDegrees(FMath::Atan2(RightDot, ForwardDot));
 
-	// (2026-10-29) 한손 스탠스면 한손 칸들을 쓴다. 한손 정면 칸이 비어 있으면 한손에서도 양손 칸을 쓴다.
+	// 한손 스탠스면 한손 칸들을 쓴다. 한손 정면 칸이 비어 있으면 한손에서도 양손 칸을 쓴다.
 	const UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo();
 	const bool bOneHanded = OneHandedDashMontage && !(ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_Stance_TwoHanded));
 	UAnimMontage* const Front = bOneHanded ? OneHandedDashMontage.Get() : DashMontage.Get();
@@ -316,7 +316,7 @@ UAnimMontage* UknightGameplayAbility_BoostDash::SelectDashMontage(const ACharact
 	float MontageYaw = 0.f;
 	if (FMath::Abs(RelativeYaw) >= 135.f)
 	{
-		// (2026-10-29) 뒤: 오른쪽 뒤는 BackRight(BR, 오른쪽으로 몸을 틀며 뒤로), 왼쪽 뒤는 Back(BL).
+		// 뒤: 오른쪽 뒤는 BackRight(BR, 오른쪽으로 몸을 틀며 뒤로), 왼쪽 뒤는 Back(BL).
 		UAnimMontage* const BackPick = RelativeYaw > 0.f && BackRight ? BackRight : Back;
 		if (BackPick)
 		{
@@ -361,7 +361,7 @@ void UknightGameplayAbility_BoostDash::OnDashFinished()
 	}
 	bool bStandUpTimerSet = false;
 
-	// (2026-10-29) 몽타주의 나머지(일어나는 동작)를 경직 시간에 맞춰 재생한다. 남은 길이를 재서 정확히 경직 끝에 맞춘다.
+	// 몽타주의 나머지(일어나는 동작)를 경직 시간에 맞춰 재생한다. 남은 길이를 재서 정확히 경직 끝에 맞춘다.
 	if (MontageMoveEndTime > 0.f)
 	{
 		const ACharacter* const AvatarCharacter = Cast<ACharacter>(GetAvatarActorFromActorInfo());
@@ -376,7 +376,7 @@ void UknightGameplayAbility_BoostDash::OnDashFinished()
 				const float StandUpRate = Remaining / RecoveryDuration;
 				AnimInstance->Montage_SetPlayRate(Montage, StandUpRate);
 
-				// (2026-10-29 사용자 결정) 끝까지 일어나되, 몸이 다 일어선 뒤에는 방향키를 누르면 바로 출발한다.
+				// 끝까지 일어나되, 몸이 다 일어선 뒤에는 방향키를 누르면 바로 출발한다.
 				// 일어선 시각(몽타주 기준)이 될 때부터 매 프레임 방향키를 본다(CheckStandUpMove).
 				const float* const MontageStandUp = MontageStandUpTimes.Find(Montage);
 				const float StandUpTime = MontageStandUp ? *MontageStandUp : MontageStandUpTime;
@@ -459,7 +459,7 @@ void UknightGameplayAbility_BoostDash::OnRecoveryFinished()
 	ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
 	EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, false);
 
-	// (2026-10-29 사용자 결정) 다 일어나는 순간 방향키를 누르고 있으면 가속 구간 없이 바로 그 방향으로 걷기·달리기 속도로 출발한다.
+	// 다 일어나는 순간 방향키를 누르고 있으면 가속 구간 없이 바로 그 방향으로 걷기·달리기 속도로 출발한다.
 	// EndAbility가 이동 잠금을 푼 뒤라 GetMaxSpeed가 달리기 여부까지 반영한다.
 	// 구르기 몽타주는 자동 블렌드 아웃을 꺼서(bEnableAutoBlendOut) 끝까지 일어선 자세를 유지하다가, 여기서 이동과 함께
 	// BlendOut(0.2초)으로 빠진다. 켜 두면 끝나기 직전에 대기 자세가 먼저 섞여 '일어남 → 잠깐 섬 → 출발'로 끊겨 보인다.
@@ -525,7 +525,7 @@ void UknightGameplayAbility_BoostDash::ReleaseRecoveryState()
 			KnightMovement->SetMoveInputLocked(false);
 		}
 	}
-	// (2026-10-29) 락온 중 구르기에 건 회전 고정용 이동 잠금. 풀면 락온 회전이 다시 몸을 대상 쪽으로 돌린다.
+	// 락온 중 구르기에 건 회전 고정용 이동 잠금. 풀면 락온 회전이 다시 몸을 대상 쪽으로 돌린다.
 	if (bFacingLockApplied)
 	{
 		bFacingLockApplied = false;

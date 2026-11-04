@@ -190,7 +190,7 @@ bool UknightPartsComponent::EquipPartUnchecked(const UknightPartItemDefinition* 
 	Equipped.Definition = Part;
 	Equipped.UpgradeLevel = FMath::Clamp(UpgradeLevel, 0, Part->GetMaxUpgradeLevel());
 
-	// 메시 컴포넌트: 스켈레탈 메시(Mesh)가 있으면 그것, 없으면 스태틱 메시(StaticMesh, 2026-10-10).
+	// 메시 컴포넌트: 스켈레탈 메시(Mesh)가 있으면 그것, 없으면 스태틱 메시(StaticMesh).
 	UMeshComponent* PartMesh = nullptr;
 	if (USkeletalMesh* const Mesh = UknightAssetManager::GetAsset(Part->Mesh))
 	{

@@ -70,7 +70,7 @@ bool UknightGameplayAbility_HitReact::ShouldAbilityRespondToEvent(const FGamepla
 	{
 		return false;
 	}
-	// 그로기(기절) 중에는 맞아도 피해만 받고 다른 반응 없이 기절이 이어진다(2026-10-16 사용자 결정).
+	// 그로기(기절) 중에는 맞아도 피해만 받고 다른 반응 없이 기절이 이어진다.
 	if (const UAbilitySystemComponent* const OwnerASC = ActorInfo->AbilitySystemComponent.Get();
 		OwnerASC && OwnerASC->HasMatchingGameplayTag(knightGameplayTags::State_HitReact_Groggy))
 	{
@@ -95,7 +95,7 @@ EknightHitReactType UknightGameplayAbility_HitReact::ResolveType(const FGameplay
 {
 	if (Payload.EventTag == knightGameplayTags::Event_PoiseBroken)
 	{
-		// (2026-10-16) 그로기 반복 몽타주가 있으면 그로기가 0이 될 때 기절한다.
+		// 그로기 반복 몽타주가 있으면 그로기가 0이 될 때 기절한다.
 		if (GroggyLoopMontage)
 		{
 			return EknightHitReactType::Groggy;

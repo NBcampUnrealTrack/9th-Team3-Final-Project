@@ -56,7 +56,7 @@ bool UknightTargetLockComponent::ToggleLockOn()
 
 bool UknightTargetLockComponent::PressLockOn()
 {
-	// (2026-10-19) 기본은 켜기/끄기. 가장 가까운 부위로 다시 잡기는 bReLockNearestOnPress일 때만.
+	// 기본은 켜기/끄기. 가장 가까운 부위로 다시 잡기는 bReLockNearestOnPress일 때만.
 	if (!bReLockNearestOnPress)
 	{
 		return ToggleLockOn();
@@ -381,7 +381,7 @@ void UknightTargetLockComponent::AddSwitchLookInput(const FVector2D& LookInput, 
 		return;
 	}
 
-	// (2026-10-15) 마우스 이동 전환은 기본 끔(bSwitchByMouseMove).
+	// 마우스 이동 전환은 기본 끔(bSwitchByMouseMove).
 	if (!bSwitchByMouseMove)
 	{
 		return;
@@ -668,7 +668,7 @@ void UknightTargetLockComponent::TickComponent(float DeltaTime, ELevelTick TickT
 		ClearLockOn();
 		return;
 	}
-	// 잠근 지점이 락온 지점 목록에서 빠졌으면(잘려 나간 꼬리 등) 같은 대상의 가장 가까운 지점으로 옮긴다. (2026-10-14)
+	// 잠근 지점이 락온 지점 목록에서 빠졌으면(잘려 나간 꼬리 등) 같은 대상의 가장 가까운 지점으로 옮긴다.
 	if (!KeepLockedPointAvailable(Target, TargetLocation))
 	{
 		ClearLockOn();

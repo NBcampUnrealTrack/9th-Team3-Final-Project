@@ -80,7 +80,7 @@ class KNIGHT_API AknightCharacter : public ACharacter, public IAbilitySystemInte
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UknightHitReactionComponent> HitReaction;
 
-	/** (2026-10-14) 내가 상대의 그로기를 일으키면 큰 히트스탑·이펙트(GCN_Hit_Groggy). 값은 이 컴포넌트에서 조절. */
+	/** 내가 상대의 그로기를 일으키면 큰 히트스탑·이펙트(GCN_Hit_Groggy). 값은 이 컴포넌트에서 조절. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UknightGroggyFeedbackComponent> GroggyFeedback;
 
@@ -125,9 +125,9 @@ protected:
 	TObjectPtr<UknightAbilityTagRelationshipMapping> TagRelationshipMapping;
 
 	/**
-	 * (2026-10-16 사용자 결정) 퍼펙트 가드 1번에 차는 수리 키트 게이지(메카 속성 RepairKitGauge, 100이면 키트 +1).
+	 * 퍼펙트 가드 1번에 차는 수리 키트 게이지(메카 속성 RepairKitGauge, 100이면 키트 +1).
 	 * 기본 20 = 퍼펙트 가드 5번에 키트 1개. 키트가 최대 개수(MaxRepairKitCount)면 차지 않는다. 바뀔 수 있는 값.
-	 * (2026-10-22) 충전 보조 소켓 1개마다 필요한 퍼펙트 가드 수가 1번 줄어든다(5번 → 4번, 한 번에 25). 최소 1번.
+	 * 충전 보조 소켓 1개마다 필요한 퍼펙트 가드 수가 1번 줄어든다(5번 → 4번, 한 번에 25). 최소 1번.
 	 * 그래서 실제 한 번 충전량은 100 ÷ 필요 횟수(올림한 100 ÷ 이 값에서 소켓 수를 뺀 것)로 맞춘다.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|RepairKit", meta=(ClampMin=0))
@@ -139,13 +139,13 @@ protected:
 	int32 AppliedSocketRepairBonus = INDEX_NONE;
 	UFUNCTION() void HandleSocketProgressionChanged();
 
-	/** (2026-10-22) 비율 소켓(적재 한도·스테미너 회복) 효과. 끼운 값이 바뀔 때만 다시 건다. */
+	/** 비율 소켓(적재 한도·스테미너 회복) 효과. 끼운 값이 바뀔 때만 다시 건다. */
 	UPROPERTY(Transient) TObjectPtr<UGameplayEffect> SocketStatEffect;
 	FActiveGameplayEffectHandle SocketStatHandle;
 	float AppliedSocketLoadBonus = -1.f;
 	float AppliedSocketStaminaBonus = -1.f;
 
-	/** (2026-10-22) 완전 출력 소켓: 현재 체력이 최대일 때만 공격력 x(1 + 값). 체력이 바뀔 때마다 켜고 끈다. */
+	/** 완전 출력 소켓: 현재 체력이 최대일 때만 공격력 x(1 + 값). 체력이 바뀔 때마다 켜고 끈다. */
 	UPROPERTY(Transient) TObjectPtr<UGameplayEffect> SocketFullHealthAttackEffect;
 	FActiveGameplayEffectHandle SocketFullHealthAttackHandle;
 	float SocketFullHealthAttackBonus = 0.f;
@@ -155,26 +155,26 @@ protected:
 	void HandleHealthChangedForSocket(const FOnAttributeChangeData& Data);
 
 	/**
-	 * (2026-10-20 사용자 결정) 기본 메카 스탯 중 속성 세트 기본값과 다른 것. 파츠를 입히기 전에 기본값(Base)으로 넣는다.
+	 * 기본 메카 스탯 중 속성 세트 기본값과 다른 것. 파츠를 입히기 전에 기본값(Base)으로 넣는다.
 	 * 그로기 자연 회복: 안 맞은 지 ASC의 PoiseRecoveryDelay(BP_Knight 3초)가 지나면 초당 이만큼 오른다. 바뀔 수 있는 값.
 	 * (속성 세트 기본값은 0이고 몬스터도 같은 세트를 써서, 플레이어만 여기서 넣는다.)
-	 * (2026-10-21) 10 → 5, 대기 2 → 3초: 회복이 빨라 가드·피격으로 쌓인 그로기가 금방 비어 기절이 거의 안 났다.
-	 * (2026-10-21) 5 → 2: 체력 150 판에서도 7분 동안 기절 0번(맞는 간격이 평균 14초라 그 사이 다 찼다). 100이 차는 데 50초.
-	 * (2026-10-21) 2 → 1: main 병합 뒤 기본 메카 판에서도 기절 0번. 100이 차는 데 100초.
-	 * (2026-10-27 사용자 결정) 1 → 2: 잔열 공격 그로기를 묶음별로 올려서(약 15·중 25·강 35) 판 내내 쌓이지 않게. 130이 차는 데 65초.
+	 * 10 → 5, 대기 2 → 3초: 회복이 빨라 가드·피격으로 쌓인 그로기가 금방 비어 기절이 거의 안 났다.
+	 * 5 → 2: 체력 150 판에서도 7분 동안 기절 0번(맞는 간격이 평균 14초라 그 사이 다 찼다). 100이 차는 데 50초.
+	 * 2 → 1: main 병합 뒤 기본 메카 판에서도 기절 0번. 100이 차는 데 100초.
+	 * 1 → 2: 잔열 공격 그로기를 묶음별로 올려서(약 15·중 25·강 35) 판 내내 쌓이지 않게. 130이 차는 데 65초.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|BaseStats", meta=(ClampMin=0))
 	float BasePoiseRecoveryRate = 2.f;
 
 	/**
-	 * (2026-10-20 사용자 결정) 기본 가드 효율. 0.8이면 막을 때 피해 0.36배·그로기 0.6배(1.0이면 0.2배·0.5배).
+	 * 기본 가드 효율. 0.8이면 막을 때 피해 0.36배·그로기 0.6배(1.0이면 0.2배·0.5배).
 	 * 막으면 사실상 피해가 없던 것을 낮췄다. 파츠로 올릴 여지를 둔다. 바뀔 수 있는 값.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|BaseStats", meta=(ClampMin=0))
 	float BaseGuardEfficiency = 0.8f;
 
 	/**
-	 * (2026-10-21 사용자 결정) 치명타 피해 배율 1.25 → 1.5. 치명타 확률은 파츠(머리)가 준다. 바뀔 수 있는 값.
+	 * 치명타 피해 배율 1.25 → 1.5. 치명타 확률은 파츠(머리)가 준다. 바뀔 수 있는 값.
 	 * (속성 세트 기본값 1.25는 몬스터도 같이 쓰므로 그대로 두고, 플레이어만 여기서 넣는다.)
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|BaseStats", meta=(ClampMin=1))
@@ -257,8 +257,8 @@ protected:
 
 	/**
 	 * 달리기 입력(InputTag.Run, 기본 LeftShift). 누르고 있는 동안만 달린다.
-	 * (2026-10-08 달리기와 퀵스텝 키 분리: Shift 달리기, Ctrl 퀵스텝, Space는 점프 예정.
-	 *  전에는 Shift를 누르고 있으면 달리고 두 번 탭하면 퀵스텝이었다. 같은 날 달리기 토글 설정은 빼기로 함)
+	 * (달리기와 퀵스텝 키 분리: Shift 달리기, Ctrl 퀵스텝, Space는 점프 예정.
+	 *  전에는 Shift를 누르고 있으면 달리고 두 번 탭하면 퀵스텝이었다. 달리기 토글 설정은 뺌)
 	 */
 	void Input_RunPressed();
 	void Input_RunReleased();
@@ -272,7 +272,7 @@ protected:
 	void HandleOutOfHealth(AActor* DamageInstigator, AActor* DamageCauser, const FGameplayEffectSpec* DamageEffectSpec,
 		float DamageMagnitude, float OldValue, float NewValue);
 
-	/** 퍼펙트 가드 성공(Event.ParrySucceeded): 키트가 최대보다 적으면 수리 키트 게이지를 채우고, 꽉 차면 키트 +1. (2026-10-16) */
+	/** 퍼펙트 가드 성공(Event.ParrySucceeded): 키트가 최대보다 적으면 수리 키트 게이지를 채우고, 꽉 차면 키트 +1. */
 	void HandlePerfectGuard(const FGameplayEventData* Payload);
 
 public:

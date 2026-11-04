@@ -19,15 +19,14 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FknightLockOnTargetChanged, AActor*
  *
  * Debug: knight.Combat.DrawLockOn 1
  *
- * (2026-10-14 추가)
  * - 시점 입력으로 대상 바꾸기: 락온 중 마우스를 휙 움직이거나 패드 오른쪽 스틱을 한쪽으로 튕기면
  *   화면에서 그 방향(상하좌우)에 있는 다른 지점(같은 몬스터의 다른 부위 또는 다른 적)으로 바꾼다. 캐릭터의 시점 입력이
  *   AddSwitchLookInput으로 넘어온다. 휠 전환(SwitchTarget)은 그대로. 조절 값은 Knight|LockOn|Switch.
  * - 잠근 지점이 대상의 락온 지점 목록에서 빠지면(잘려 나간 꼬리 등) 같은 대상의 가장 가까운 지점으로 옮긴다. 남은 지점이 없으면 푼다.
  * - 확인: 출력 로그 LogknightCombat의 "lock-on switch" / "lock-on point ... is gone" 줄.
  *
- * (2026-10-19) 아래 '가장 가까운 부위로 다시 잡기'는 사용자 요청으로 기본 끔(bReLockNearestOnPress). 기본은 누르면 켜기/끄기.
- * (2026-10-15 사용자 결정) 락온 키(PressLockOn, 가운데 버튼):
+ * 아래 '가장 가까운 부위로 다시 잡기'는 기본 끔(bReLockNearestOnPress). 기본은 누르면 켜기/끄기.
+ * 락온 키(PressLockOn, 가운데 버튼):
  * - 락온이 아닐 때: 지금처럼 보고 있는 쪽 대상을 잡는다(TryLockOn).
  * - 락온 중: 카메라 앞쪽(MaxLockAngle 안)에서 플레이어와 가장 가까운 부위로 다시 잡는다. 그게 지금 잡은 부위면 푼다.
  * - LockOnDoublePressTime 안에 두 번 누르면 푼다.
@@ -47,7 +46,7 @@ public:
 	bool ToggleLockOn();
 
 	/**
-	 * (2026-10-15) 락온 키를 한 번 눌렀을 때. 락온이 아니면 TryLockOn, 락온 중이면 플레이어와 가장 가까운 부위로 다시 잡고
+	 * 락온 키를 한 번 눌렀을 때. 락온이 아니면 TryLockOn, 락온 중이면 플레이어와 가장 가까운 부위로 다시 잡고
 	 * (같은 부위면 해제), LockOnDoublePressTime 안에 두 번 누르면 해제. 지금 락온 중이면 true.
 	 */
 	UFUNCTION(BlueprintCallable, Category="Knight|LockOn")
@@ -134,18 +133,18 @@ protected:
 	float MaxLockAngle = 60.f;
 
 	/**
-	 * (2026-10-19 사용자 결정 '락온 중 키 누르면 해제 방식으로 다시') 끄면(기본) 락온 키는 켜기/끄기(ToggleLockOn)다.
-	 * 켜면 10-15 방식: 락온 중 누르면 가장 가까운 부위로 다시 잡고, 같은 부위·두 번 누르기면 해제.
+	 * 끄면(기본) 락온 키는 켜기/끄기(ToggleLockOn)다.
+	 * 켜면 예전 방식: 락온 중 누르면 가장 가까운 부위로 다시 잡고, 같은 부위·두 번 누르기면 해제.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|LockOn")
 	bool bReLockNearestOnPress = false;
 
-	/** (2026-10-15) 락온 키를 이 시간(초, 실제 시간) 안에 두 번 누르면 락온을 푼다. bReLockNearestOnPress일 때만. 바뀔 수 있는 값. */
+	/** 락온 키를 이 시간(초, 실제 시간) 안에 두 번 누르면 락온을 푼다. bReLockNearestOnPress일 때만. 바뀔 수 있는 값. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|LockOn", meta=(ClampMin=0, Units="s", EditCondition="bReLockNearestOnPress"))
 	float LockOnDoublePressTime = 0.3f;
 
 	/**
-	 * (2026-10-19 사용자 결정) 락온 부위 보정 거리(cm). 부위에 락온 중 같은 대상을 맞혔고, 맞은 지점이 락온 지점에서 이 거리 안이면
+	 * 락온 부위 보정 거리(cm). 부위에 락온 중 같은 대상을 맞혔고, 맞은 지점이 락온 지점에서 이 거리 안이면
 	 * 락온 부위에 맞은 것으로 친다(knightCombatLibrary::ApplyMeleeHit). 0이면 보정 없음. 바뀔 수 있는 값.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|LockOn", meta=(ClampMin=0, Units="cm"))
@@ -222,7 +221,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|LockOn|Camera", meta=(Units="deg"))
 	float MaxPitch = 35.f;
 
-	/** 락온 중 시점 입력(마우스·패드 오른쪽 스틱)으로 대상을 바꾼다. 끄면 휠로만 바꾼다. (2026-10-14) */
+	/** 락온 중 시점 입력(마우스·패드 오른쪽 스틱)으로 대상을 바꾼다. 끄면 휠로만 바꾼다. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|LockOn|Switch")
 	bool bSwitchByLookInput = true;
 
@@ -234,7 +233,7 @@ protected:
 	bool bCyclePartsInOrder = true;
 
 	/**
-	 * 마우스 이동으로도 바꿀지. (2026-10-15) '마우스 이동에 락온이 바뀌는 게 너무 불편하다'는 의견으로 기본 끔.
+	 * 마우스 이동으로도 바꿀지. '마우스 이동에 락온이 바뀌는 게 너무 불편하다'는 의견으로 기본 끔.
 	 * 끄면 마우스는 휠·락온 키(가장 가까운 부위)로만 바꾸고, 패드 스틱 전환은 bSwitchByLookInput을 따른다.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|LockOn|Switch", meta=(EditCondition="bSwitchByLookInput"))

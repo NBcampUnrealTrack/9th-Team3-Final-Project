@@ -21,10 +21,10 @@ public:
 	 *   무적         -> Evaded, 아무것도 적용하지 않는다
 	 *   패리 중      -> Parried: 공격자에게 Event.Parried, 패리 큐, 긴 히트 스톱, 피해 없음
 	 *                   (Params.bCanBeParried가 false이거나 공격이 가드 범위(정면) 밖에서 들어오면 패리 대신 아래 경로로 처리.
-	 *                    범위 밖이면 피해 계산에서 가드 감소도 없다 — 2026-10-08)
+	 *                    범위 밖이면 피해 계산에서 가드 감소도 없다)
 	 *   그 외        -> 컨텍스트에 타격 결과를 담은 피해 이펙트(부위 배율 계산에 필요),
 	 *                   타격 또는 약점 큐, 히트 스톱. 가드 중인 타깃에는 Event.Guarded
-	 *                   (2026-10-12: 가드 범위 안에서 막았을 때만. 범위 밖에서 들어오면 가드 중이어도 일반 피격.
+	 *                   (가드 범위 안에서 막았을 때만. 범위 밖에서 들어오면 가드 중이어도 일반 피격.
 	 *                    방향은 Hit.TraceStart(공격이 들어온 지점)에서 재고, 없으면 공격자 위치)
 	 */
 	UFUNCTION(BlueprintCallable, Category="Knight|Combat")
@@ -69,13 +69,13 @@ public:
 		float SoftTargetRange, float SoftTargetAngle, FVector& OutLocation, FRotator& OutRotation, float& OutTravel);
 
 	/**
-	 * (2026-10-20) ComputeAttackWarp와 같은 계산을 락온 대신 정해 준 대상으로 한다(대상 중심에서 반지름만큼 표면까지).
+	 * ComputeAttackWarp와 같은 계산을 락온 대신 정해 준 대상으로 한다(대상 중심에서 반지름만큼 표면까지).
 	 * 패링 반격이 락온 없이 패링한 적에게 돌진할 때 쓴다.
 	 */
 	static bool ComputeAttackWarpToActor(AActor* Attacker, AActor* Target, float MaxDistance, float StopDistance,
 		FVector& OutLocation, FRotator& OutRotation, float& OutTravel);
 
-	/** (2026-10-20) ComputeAttackWarpToActor로 모션 워프 타깃을 맞춘다. 못 하면 워프 타깃을 지우고 false. */
+	/** ComputeAttackWarpToActor로 모션 워프 타깃을 맞춘다. 못 하면 워프 타깃을 지우고 false. */
 	static bool SetAttackWarpTargetToActor(AActor* Attacker, FName WarpTargetName, AActor* Target, float MaxDistance,
 		float StopDistance, FVector& OutLocation, FRotator& OutRotation, float& OutTravel);
 
@@ -83,7 +83,7 @@ public:
 	 * 대검 공격 애니메이션은 거의 제자리(루트 모션 수 cm)라 Skew Warp가 거리를 만들지 못한다. 그래서 몽타주의
 	 * Motion Warping 구간이 끝날 때 Location에 도착하도록, 구간 끝 MaxLungeTime 동안 루트 모션 힘으로 이동시킨다.
 	 * 회전은 몽타주의 워프 구간이 맡는다. Travel이 MinTravel보다 짧으면 아무것도 하지 않는다.
-	 * (2026-10-27) TrackTarget을 주면 돌진하는 동안 매 프레임 불러 목표 지점을 대상의 지금 위치로 바꾼다(false면 이전 목표 유지).
+	 * TrackTarget을 주면 돌진하는 동안 매 프레임 불러 목표 지점을 대상의 지금 위치로 바꾼다(false면 이전 목표 유지).
 	 */
 	static void StartAttackLunge(UGameplayAbility* Ability, const UAnimMontage* Montage, float PlayRate, const FVector& Location,
 		float Travel, float MaxLungeTime = 0.35f, float MinTravel = 20.f, TFunction<bool(FVector&)> TrackTarget = nullptr);

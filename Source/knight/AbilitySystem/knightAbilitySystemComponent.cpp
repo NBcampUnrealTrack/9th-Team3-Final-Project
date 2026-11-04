@@ -44,7 +44,7 @@ namespace knightPoiseRecovery
 	}
 }
 
-// ---- 행동 에너지 자연 회복: 순수 계산 (테스트 대상, 2026-10-09) ----
+// ---- 행동 에너지 자연 회복: 순수 계산 (테스트 대상) ----
 
 namespace knightBoostRecovery
 {
@@ -79,7 +79,7 @@ void UknightAbilitySystemComponent::InitAbilityActorInfo(AActor* InOwnerActor, A
 	StartPoiseRecovery();
 	StartBoostRecovery();
 
-	// (2026-10-14) 공격 후딜 길이를 재려고 캔슬 창이 열린 시각을 기록한다(IsAttackRecoveryDashOnly).
+	// 공격 후딜 길이를 재려고 캔슬 창이 열린 시각을 기록한다(IsAttackRecoveryDashOnly).
 	if (!CancelWindowHandle.IsValid())
 	{
 		CancelWindowHandle = RegisterGameplayTagEvent(knightGameplayTags::Window_Cancel, EGameplayTagEventType::AnyCountChange)
@@ -137,10 +137,10 @@ void UknightAbilitySystemComponent::TickBoostRecovery()
 	const FGameplayAttribute GaugeAttribute = UknightAttributeSet::GetBoostGaugeAttribute();
 	const float CurrentGauge = GetNumericAttributeBase(GaugeAttribute);
 	// 달리는 중이거나 공격이 아직 끝나지 않았으면(콤보 창·후딜) 멈춘다. 멈춘 동안에도 대기 시간은 흘러서,
-	// 대기 시간이 이미 지났으면 행동이 끝나는 순간 바로 차기 시작한다. (2026-10-16)
+	// 대기 시간이 이미 지났으면 행동이 끝나는 순간 바로 차기 시작한다.
 	const bool bPaused = (bPauseBoostRecoveryWhileRunning && IsAvatarRunning())
 		|| (bHoldBoostRecoveryDuringAction && IsActionHoldingBoostRecovery());
-	// (2026-10-26) 가드를 올리고 있으면 회복 속도를 줄인다(GuardBoostRecoveryScale).
+	// 가드를 올리고 있으면 회복 속도를 줄인다(GuardBoostRecoveryScale).
 	const float RecoveryRate = MechSet->GetBoostRecoveryRate()
 		* (HasMatchingGameplayTag(knightGameplayTags::State_Guarding) ? GuardBoostRecoveryScale : 1.f);
 	const float NewGauge = knightBoostRecovery::Step(CurrentGauge, MechSet->GetMaxBoostGauge(), RecoveryRate,
@@ -213,7 +213,7 @@ void UknightAbilitySystemComponent::AbilityInputTagPressed(const FGameplayTag& I
 		{
 			InputPressedSpecHandles.AddUnique(Spec.Handle);
 			InputHeldSpecHandles.AddUnique(Spec.Handle);
-			// 누른 순간 막혀 있으면 누르고 있는 동안 다시 시도한다(가드). 발동하면 NotifyAbilityActivated에서 빠진다. (2026-10-15)
+			// 누른 순간 막혀 있으면 누르고 있는 동안 다시 시도한다(가드). 발동하면 NotifyAbilityActivated에서 빠진다.
 			const UknightGameplayAbility* const AbilityCDO = Cast<UknightGameplayAbility>(Spec.Ability);
 			if (AbilityCDO && AbilityCDO->ShouldRetryPressWhileHeld() && !Spec.IsActive())
 			{
@@ -258,7 +258,7 @@ void UknightAbilitySystemComponent::ProcessAbilityInput(float DeltaTime, bool bG
 		if (Spec && Spec->Ability && !Spec->IsActive())
 		{
 			const UknightGameplayAbility* const AbilityCDO = Cast<UknightGameplayAbility>(Spec->Ability);
-			// (2026-10-15) 누른 순간 막혔던 bRetryPressWhileHeld 어빌리티(가드)도 누르고 있는 동안 다시 시도한다.
+			// 누른 순간 막혔던 bRetryPressWhileHeld 어빌리티(가드)도 누르고 있는 동안 다시 시도한다.
 			if (AbilityCDO && (AbilityCDO->GetActivationPolicy() == EknightAbilityActivationPolicy::WhileInputActive
 				|| PendingHeldPressHandles.Contains(Handle)))
 			{
@@ -281,7 +281,7 @@ void UknightAbilitySystemComponent::ProcessAbilityInput(float DeltaTime, bool bG
 		if (Spec->IsActive())
 		{
 			AbilitySpecInputPressed(*Spec);
-			// 재발동을 허용하는 어빌리티(퀵스텝)는 실행 중에도 발동을 시도한다. 받아들일지는 어빌리티의 CanActivateAbility가 정한다. (2026-10-08)
+			// 재발동을 허용하는 어빌리티(퀵스텝)는 실행 중에도 발동을 시도한다. 받아들일지는 어빌리티의 CanActivateAbility가 정한다.
 			if (bTriggeredByPress && AbilityCDO->CanRetriggerWhileActive())
 			{
 				AbilitiesToActivate.AddUnique(Spec->Handle);
@@ -420,9 +420,9 @@ bool UknightAbilitySystemComponent::IsActivationGroupBlocked(EknightAbilityActiv
 		{
 			return false;
 		}
-		// (2026-10-14) 공격 후딜은 퀵스텝만 끊는다. 콤보 창이 같이 열려 있으면 아래 규칙으로 다음 공격은 이어진다.
-		// (2026-10-23) bAttacksCancelAttackRecovery면 후딜에도 다음 공격을 허용한다(콤보 창이 없는 공격용).
-		// (2026-10-29) 꺼져 있으면 후딜 동안에는 같은 콤보의 다음 단계(bIsComboStep)만 나간다.
+		// 공격 후딜은 퀵스텝만 끊는다. 콤보 창이 같이 열려 있으면 아래 규칙으로 다음 공격은 이어진다.
+		// bAttacksCancelAttackRecovery면 후딜에도 다음 공격을 허용한다(콤보 창이 없는 공격용).
+		// 꺼져 있으면 후딜 동안에는 같은 콤보의 다음 단계(bIsComboStep)만 나간다.
 		if (HasMatchingGameplayTag(knightGameplayTags::Window_Cancel)
 			&& (!IsAttackRecoveryDashOnly() || AbilityTags.HasTag(knightGameplayTags::Ability_Boost_Dash)
 				|| (bAttacksCancelAttackRecovery && AbilityTags.HasTag(knightGameplayTags::Ability_Attack))
@@ -431,7 +431,7 @@ bool UknightAbilitySystemComponent::IsActivationGroupBlocked(EknightAbilityActiv
 			return false;
 		}
 		// 콤보 창: 공격만 이어서 쓸 수 있다. 나머지는 캔슬 창을 기다린다.
-		// (2026-10-29 사용자 결정) bOnlyComboStepsInComboWindow면 같은 콤보의 다음 단계만. 다른 공격은 후딜이 끝난 뒤.
+		// bOnlyComboStepsInComboWindow면 같은 콤보의 다음 단계만. 다른 공격은 후딜이 끝난 뒤.
 		return !(HasMatchingGameplayTag(knightGameplayTags::Window_Combo) && AbilityTags.HasTag(knightGameplayTags::Ability_Attack)
 			&& (bIsComboStep || !bOnlyComboStepsInComboWindow));
 	default:
@@ -565,12 +565,12 @@ bool UknightAbilitySystemComponent::IsExclusiveAttackActive() const
 
 bool UknightAbilitySystemComponent::IsActionHoldingBoostRecovery() const
 {
-	// 다음 콤보를 이어 갈 수 있는 동안(콤보 창)과 후딜(퀵스텝만 되는 시간)에는 회복을 미룬다. (2026-10-16)
+	// 다음 콤보를 이어 갈 수 있는 동안(콤보 창)과 후딜(퀵스텝만 되는 시간)에는 회복을 미룬다.
 	if (HasMatchingGameplayTag(knightGameplayTags::Window_Combo) || IsAttackRecoveryDashOnly())
 	{
 		return true;
 	}
-	// (2026-10-26 사용자 결정) 차지를 모으는 동안(State.Charging, 해방 전이라 아직 독립 그룹)도 회복을 미룬다.
+	// 차지를 모으는 동안(State.Charging, 해방 전이라 아직 독립 그룹)도 회복을 미룬다.
 	// 해방한 뒤에는 교체 가능 배타 공격이 되어 아래 일반 공격 규칙을 받는다.
 	if (HasMatchingGameplayTag(knightGameplayTags::State_Charging) && !IsExclusiveAttackActive())
 	{
@@ -624,7 +624,7 @@ void UknightAbilitySystemComponent::NotifyAbilityActivated(const FGameplayAbilit
 {
 	Super::NotifyAbilityActivated(Handle, Ability);
 
-	// 그 누름으로 발동했으니 더 다시 시도하지 않는다(다른 행동 뒤 자동으로 다시 나가지 않게). (2026-10-15)
+	// 그 누름으로 발동했으니 더 다시 시도하지 않는다(다른 행동 뒤 자동으로 다시 나가지 않게).
 	PendingHeldPressHandles.Remove(Handle);
 
 	const UknightGameplayAbility* const KnightAbility = Cast<UknightGameplayAbility>(Ability);
@@ -645,7 +645,7 @@ void UknightAbilitySystemComponent::NotifyAbilityActivated(const FGameplayAbilit
 	if (Group != EknightAbilityActivationGroup::Independent)
 	{
 		CancelActivationGroupAbilities(EknightAbilityActivationGroup::Exclusive_Replaceable, KnightAbility);
-		// (2026-10-26) 차지를 모으는 중(State.Charging, 해방 전이라 독립 그룹)에 가드·퀵스텝 같은 배타 어빌리티가 나가면 차지를 취소한다.
+		// 차지를 모으는 중(State.Charging, 해방 전이라 독립 그룹)에 가드·퀵스텝 같은 배타 어빌리티가 나가면 차지를 취소한다.
 		// 그대로 두면 차지가 끝나지 않고 새 행동과 같이 돌았다. 해방한 뒤의 차지는 배타 그룹이라 위에서 이미 끊긴다.
 		if (HasMatchingGameplayTag(knightGameplayTags::State_Charging))
 		{

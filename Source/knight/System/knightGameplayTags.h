@@ -77,7 +77,7 @@ namespace knightGameplayTags
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_HitReact_Flinch);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_HitReact_Stagger);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_HitReact_Knockdown);
-	// (2026-10-16) 플레이어 그로기(기절). 그로기가 0이 되면 기절 시작 → 반복 → 끝.
+	// 플레이어 그로기(기절). 그로기가 0이 되면 기절 시작 → 반복 → 끝.
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_HitReact_Groggy);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Monster_Enraged);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Monster_Exhausted);
@@ -170,7 +170,7 @@ namespace knightGameplayTags
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Equipment_Slot_Legs);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Equipment_Slot_Backpack);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Equipment_Slot_Weapon);
-	// 내장 파츠 슬롯 (2026-10-07, 1차 MVP 파츠 구성: 필수 4부위 + 내장 3종). 내장 파츠는 모델링 없이 스탯만 준다.
+	// 내장 파츠 슬롯 (1차 MVP 파츠 구성: 필수 4부위 + 내장 3종). 내장 파츠는 모델링 없이 스탯만 준다.
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Equipment_Slot_Booster);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Equipment_Slot_Generator);
 	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Equipment_Slot_Exterior);

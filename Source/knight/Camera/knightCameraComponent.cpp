@@ -10,7 +10,7 @@
 
 namespace
 {
-	// (2026-10-23) 공격 휘두르기 카메라 연출 켜고 끄기(PIE에서 비교용). BP의 bAttackCameraKick과 둘 다 켜져야 동작한다.
+	// 공격 휘두르기 카메라 연출 켜고 끄기(PIE에서 비교용). BP의 bAttackCameraKick과 둘 다 켜져야 동작한다.
 	TAutoConsoleVariable<int32> CVarAttackCameraKick(TEXT("knight.Camera.AttackKick"), 1,
 		TEXT("1 = 공격 휘두르기 카메라 연출(준비 동작 조임, 휘두를 때 시야각 튐·앞으로 밀기), 0 = 끔."));
 }
@@ -55,7 +55,7 @@ void UknightCameraComponent::EvaluateAttackKick(float& OutFOV, float& OutPush) c
 		return;
 	}
 	// 실제 시간 기준: 히트스탑·그로기 슬로 중에도 연출 길이가 바뀌지 않게.
-	// (2026-10-26) 모든 변화는 SmoothStep(천천히 시작해 천천히 멈춤)으로 — 한 프레임에 튀면 인위적으로 보였다.
+	// 모든 변화는 SmoothStep(천천히 시작해 천천히 멈춤)으로 — 한 프레임에 튀면 인위적으로 보였다.
 	const double Now = World->GetRealTimeSeconds();
 	if (WindupStartTime >= 0.0 && Now - WindupStartTime < WindupTimeout)
 	{
@@ -123,7 +123,7 @@ void UknightCameraComponent::GetCameraView(float DeltaTime, FMinimalViewInfo& De
 		FadeHandler->UpdateFade(GetOwner(), ModeView.PivotLocation, CameraLocation, DeltaTime);
 	}
 
-	// (2026-10-23) 벽에 막혀 당겨진 만큼 시야각을 넓히고, 공격 휘두르기 연출(시야각 + 앞으로 밀기)을 더한다.
+	// 벽에 막혀 당겨진 만큼 시야각을 넓히고, 공격 휘두르기 연출(시야각 + 앞으로 밀기)을 더한다.
 	float KickFOV = 0.f;
 	float KickPush = 0.f;
 	EvaluateAttackKick(KickFOV, KickPush);

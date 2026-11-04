@@ -31,7 +31,7 @@ class USoundBase;
  *   MaxDiveTime 안에 땅에 닿지 않으면(낭떠러지) 원래대로 돌려 놓고 끝낸다.
  *   HoverThrust를 채우면 1·2의 추진기를 발 소켓 대신 나이트의 부스터 컴포넌트 노즐(낙하 공격은 등)로 뿜는다(1 HoverThrust, 2 DiveThrust).
  *   BoostUpSpeed를 낮추고 BoostUpTime을 늘리면 '떠오르기' 대신 '잠깐 떠 있다가 바로 낙하'가 된다.
- * (2026-10-29) bKeepJumpArc(점프 궤적 유지): 1·2 없이 점프 궤적 그대로 떨어지며 칼을 든 자세 → 착지하면 3.
+ * bKeepJumpArc(점프 궤적 유지): 1·2 없이 점프 궤적 그대로 떨어지며 칼을 든 자세 → 착지하면 3.
  */
 UCLASS()
 class KNIGHT_API UknightGameplayAbility_PlungeAttack : public UknightGameplayAbility
@@ -126,7 +126,7 @@ protected:
 	bool bLeapToTarget = false;
 
 	/**
-	 * (2026-10-29 사용자 결정) 켜면 반동·역분사(추진기)로 꽂히지 않고, 누른 순간의 점프 궤적 그대로 떨어진다.
+	 * 켜면 반동·역분사(추진기)로 꽂히지 않고, 누른 순간의 점프 궤적 그대로 떨어진다.
 	 * 떨어지는 동안 StartMontage(칼을 드는 자세) → LoopMontage, 땅에 닿는 순간 EndMontage(내려찍기)와 충격 이펙트·피해.
 	 * 공중 조작은 막는다(누른 순간 속도 그대로). 낙하 공격(GA_Knight_PlungeAttack)이 켠다. bLeapToTarget이 켜져 있으면 그쪽이 먼저. 바뀔 수 있는 값.
 	 */
@@ -175,7 +175,7 @@ protected:
 	float SoftTargetAngle = 60.f;
 
 	/**
-	 * (2026-10-26 사용자 요청) 점프 공격(bLeapToTarget)이 대상 쪽으로 뛰어갈 때 락온 돌진과 같은 잔상을 남긴다(대상이 있을 때만, 착지까지).
+	 * 점프 공격(bLeapToTarget)이 대상 쪽으로 뛰어갈 때 락온 돌진과 같은 잔상을 남긴다(대상이 있을 때만, 착지까지).
 	 * 공중 내려찍기(낙하)에는 남기지 않는다.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Plunge|Ghost Trail")
@@ -252,7 +252,7 @@ protected:
 	FknightMeleeHitParams HitParams;
 
 private:
-	// Fall: (2026-10-29) bKeepJumpArc — 점프 궤적 그대로 떨어지는 중.
+	// Fall: bKeepJumpArc — 점프 궤적 그대로 떨어지는 중.
 	enum class EPhase : uint8 { None, Boost, Dive, Leap, Fall, Land };
 
 	void StartDive();
@@ -290,7 +290,7 @@ private:
 	void OnMeleeHitEvent(FGameplayEventData Payload);
 
 	/**
-	 * (2026-10-20 사용자 결정 '점프 공격은 1타만') 이번 발동에서 이미 맞힌 대상. 시작 베기(MeleeTrace)와 착지 충격(MeleeArea)이
+	 * 점프 공격은 1타만: 이번 발동에서 이미 맞힌 대상. 시작 베기(MeleeTrace)와 착지 충격(MeleeArea)이
 	 * 같은 적을 각각 맞혀 두 번 들어가던 것을 막는다. 먼저 맞힌 쪽만 들어간다.
 	 */
 	TSet<TWeakObjectPtr<AActor>> HitActorsThisAttack;

@@ -80,7 +80,7 @@ UknightWeaponItemDefinition::UknightWeaponItemDefinition()
 	SlotTag = knightGameplayTags::Equipment_Slot_Weapon;
 	MeshComponentTags.Add(TEXT("Weapon"));
 	Attachment.AttachMode = EMechPartAttachMode::Socket;
-	// (2026-10-26) hand_r_weapon → weapon_r. 지금 기사 메시(Knight_v2)에는 hand_r_weapon 소켓·뼈가 없어 무기가 메시 원점에 붙었고,
+	// hand_r_weapon → weapon_r. 지금 기사 메시(Knight_v2)에는 hand_r_weapon 소켓·뼈가 없어 무기가 메시 원점에 붙었고,
 	// '손에 들었는지' 검사(weapon_r)도 실패해 첫 공격 때 검을 뽑았다. 단절(DA_Weapon_Danjeol)은 원래 weapon_r.
 	Attachment.AttachSocket = TEXT("weapon_r");
 }

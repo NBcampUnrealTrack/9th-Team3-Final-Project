@@ -25,7 +25,7 @@ namespace
 	UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_State_Combat_Movement, "State.Combat");
 
 	// 락온 중 뒤로 이동(백스텝)할 때는 Shift를 눌러도 달리지 않고 걷는다.
-	// (2026-10-23) 옆으로만 갈 때도 걷는다: 앞과 MinForwardDot 이상 겹칠 때만 달린다(UknightMovementComponent::LockOnRunMinForwardDot).
+	// 옆으로만 갈 때도 걷는다: 앞과 MinForwardDot 이상 겹칠 때만 달린다(UknightMovementComponent::LockOnRunMinForwardDot).
 	bool IsMovingBackwardWhileLockedOn(const UCharacterMovementComponent& Movement, float MinForwardDot)
 	{
 		const ACharacter* const Character = Movement.GetCharacterOwner();
@@ -50,8 +50,8 @@ UknightMovementComponent::UknightMovementComponent(const FObjectInitializer& Obj
 	// BrakingDecelerationWalking·GroundFriction은 이동 잠금(가드·퀵스텝 경직) 중 정지와 방향 전환에 쓰인다.
 	MaxWalkSpeed = BaseWalkSpeed;
 	MinAnalogWalkSpeed = 20.f;
-	// (2026-10-14) 1200 → 1100: 속도 -10%와 함께 최고 속도까지 걸리는 시간을 원래보다 약 20% 늘림(시간 ∝ 최고 속도 / 가속). 바뀔 수 있는 값.
-	// 처음엔 900이었는데, 같은 날 출발 곡선도 더 느리게 바뀌어(10-13, 아래) 둘이 겹쳐 +50%가 돼서 1100으로 맞췄다(사용자 결정).
+	// 1200 → 1100: 속도 -10%와 함께 최고 속도까지 걸리는 시간을 원래보다 약 20% 늘림(시간 ∝ 최고 속도 / 가속). 바뀔 수 있는 값.
+	// 처음엔 900이었는데, 출발 곡선도 더 느리게 바뀌어(아래) 둘이 겹쳐 +50%가 돼서 1100으로 맞췄다.
 	MaxAcceleration = 1100.f;
 	BrakingDecelerationWalking = 1400.f;
 	GroundFriction = 6.f;

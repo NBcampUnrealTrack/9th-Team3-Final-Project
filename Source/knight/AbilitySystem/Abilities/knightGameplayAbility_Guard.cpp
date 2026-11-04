@@ -28,7 +28,7 @@
 
 namespace
 {
-	// 가드 중 새 이동 입력 검사 간격. 공격 후딜 이동 캔슬과 같은 값. (2026-10-08)
+	// 가드 중 새 이동 입력 검사 간격. 공격 후딜 이동 캔슬과 같은 값.
 	constexpr float GuardMoveCancelCheckInterval = 0.02f;
 }
 
@@ -44,8 +44,8 @@ UknightGameplayAbility_Guard::UknightGameplayAbility_Guard(const FObjectInitiali
 	// 공중(점프·낙하·호버링)에서는 가드를 올리지 않는다. 가드 중에 공중에 뜨면 내린다(OnLeftGround).
 	ActivationBlockedTags.AddTag(knightGameplayTags::State_Airborne);
 	PerfectGuardDamageEffect = UknightGameplayEffect_Damage::StaticClass();
-	// 가드는 행동 에너지를 쓰지 않는다(StaminaCost 0, 2026-10-09 사용자 결정). 막은 피격은 가드 효율에 따라 체력·그로기가 줄어든다(피해 실행).
-	// (2026-10-15 사용자 결정) 공격 후딜 등으로 누른 순간 막혀 있었으면, 키를 누르고 있는 동안 가드할 수 있게 되는 순간 바로 올린다.
+	// 가드는 행동 에너지를 쓰지 않는다(StaminaCost 0). 막은 피격은 가드 효율에 따라 체력·그로기가 줄어든다(피해 실행).
+	// 공격 후딜 등으로 누른 순간 막혀 있었으면, 키를 누르고 있는 동안 가드할 수 있게 되는 순간 바로 올린다.
 	bRetryPressWhileHeld = true;
 }
 
@@ -63,7 +63,7 @@ bool UknightGameplayAbility_Guard::CanActivateAbility(const FGameplayAbilitySpec
 	{
 		return false;
 	}
-	// (2026-10-26) 퍼펙트 가드 없이 내린 직후 ReguardLockoutTime 동안은 다시 못 올린다(가드 연타 막기).
+	// 퍼펙트 가드 없이 내린 직후 ReguardLockoutTime 동안은 다시 못 올린다(가드 연타 막기).
 	// 여기서 막아야 누르고 있는 동안 bRetryPressWhileHeld가 잠금이 풀리는 순간 올려 준다.
 	const UWorld* const World = GetWorld();
 	return !World || LastGuardEndTime < 0.0 || World->GetTimeSeconds() - LastGuardEndTime >= ReguardLockoutTime;
@@ -96,12 +96,12 @@ void UknightGameplayAbility_Guard::ActivateAbility(const FGameplayAbilitySpecHan
 	bGuardRaised = true;
 	bParriedThisGuard = false;
 
-	// 퍼펙트 가드 판정 시간은 누를 때 한 번 읽는다. 가드 도중 스탯이 바뀌면 다음 가드부터 반영된다. (2026-10-08)
-	// (2026-10-15 사용자 결정) 후딜 중 미리 눌러 두었다가 나중에 올라간 가드도 올라간 순간부터 판정 시간 전부를 준다.
+	// 퍼펙트 가드 판정 시간은 누를 때 한 번 읽는다. 가드 도중 스탯이 바뀌면 다음 가드부터 반영된다.
+	// 후딜 중 미리 눌러 두었다가 나중에 올라간 가드도 올라간 순간부터 판정 시간 전부를 준다.
 	// 가드를 올린 순간 맞았는데 퍼펙트가 안 되면 불쾌하기 때문(누른 순간부터 세는 방식은 버림).
 	float PerfectGuardWindow = GetPerfectGuardWindow();
 
-	// (2026-10-26) 퍼펙트 가드 없이 내린 뒤 PerfectGuardRearmTime 안에 다시 올렸으면 판정을 줄인다: 처음 x RearmPerfectGuardScale, 연속 두 번째부터 0.
+	// 퍼펙트 가드 없이 내린 뒤 PerfectGuardRearmTime 안에 다시 올렸으면 판정을 줄인다: 처음 x RearmPerfectGuardScale, 연속 두 번째부터 0.
 	const UWorld* const World = GetWorld();
 	const float SinceLastGuard = World && LastGuardEndTime >= 0.0 ? static_cast<float>(World->GetTimeSeconds() - LastGuardEndTime) : -1.f;
 	QuickReguardCount = SinceLastGuard >= 0.f && SinceLastGuard < PerfectGuardRearmTime ? QuickReguardCount + 1 : 0;
@@ -134,12 +134,12 @@ void UknightGameplayAbility_Guard::ActivateAbility(const FGameplayAbilitySpecHan
 
 	if (GuardMontage)
 	{
-		// 가드 모션은 행동 속도 배속으로 재생한다. 퍼펙트 가드 판정 시간은 난이도가 바뀌지 않게 배속과 무관하게 둔다. (2026-10-08)
+		// 가드 모션은 행동 속도 배속으로 재생한다. 퍼펙트 가드 판정 시간은 난이도가 바뀌지 않게 배속과 무관하게 둔다.
 		UAbilityTask_PlayMontageAndWait* const MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, GuardMontage, GetActionSpeed());
 		MontageTask->ReadyForActivation();
 	}
 
-	// 키를 떼면 퍼펙트 가드 판정 시간 중이라도 바로 가드를 내린다(퍼펙트 가드도 같이 끝남). (2026-10-08 사용자 결정)
+	// 키를 떼면 퍼펙트 가드 판정 시간 중이라도 바로 가드를 내린다(퍼펙트 가드도 같이 끝남).
 	// 전에는 판정 시간이 끝날 때 뗌을 확인해서, 짧게 톡 눌러도 판정 시간 내내 패리가 유지되는 대신 그동안 가드를 내릴 수 없었다.
 	// 입력 버퍼로 늦게 발동했는데 이미 키를 뗀 상태면 바로 끝난다.
 	WaitForRelease();
@@ -191,7 +191,7 @@ void UknightGameplayAbility_Guard::ApplyPerfectGuardPoiseDamage(const AActor* At
 
 void UknightGameplayAbility_Guard::OnParrySucceeded(FGameplayEventData Payload)
 {
-	// 퍼펙트 가드: 공격한 적에게 그로기 피해. ApplyMeleeHit이 Instigator에 공격자를 담아 보낸다. (2026-10-08)
+	// 퍼펙트 가드: 공격한 적에게 그로기 피해. ApplyMeleeHit이 Instigator에 공격자를 담아 보낸다.
 	// (2026-10-27 팀 결정) 패링은 그로기를 깎지 않는다. 예전 규칙은 knight.Combat.ParryBuildsPoise 1.
 	if (UknightCombatLibrary::DoesParryBuildPoise())
 	{
@@ -200,7 +200,7 @@ void UknightGameplayAbility_Guard::OnParrySucceeded(FGameplayEventData Payload)
 
 	if (UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo())
 	{
-		// (2026-10-20 사용자 결정) 패링 반격이 락온 없이도 패링한 적에게 돌진하도록 기억해 둔다.
+		// 패링 반격이 락온 없이도 패링한 적에게 돌진하도록 기억해 둔다.
 		// 지금 투사체(가시 비)는 쏜 몬스터를 공격자로 넘기지만, 투사체 자신이 오면 쏜 쪽(Instigator, 없으면 Owner)으로 바꾼다.
 		if (UknightAbilitySystemComponent* const KnightASC = Cast<UknightAbilitySystemComponent>(ASC))
 		{
@@ -230,7 +230,7 @@ void UknightGameplayAbility_Guard::OnParrySucceeded(FGameplayEventData Payload)
 		}
 	}
 	// End the guard so the attack key can start the counter right away.
-	// (2026-10-26) 패링으로 내려간 가드는 연타 막기(다시 올리기 잠금·판정 감소)를 적용하지 않는다(EndAbility).
+	// 패링으로 내려간 가드는 연타 막기(다시 올리기 잠금·판정 감소)를 적용하지 않는다(EndAbility).
 	bParriedThisGuard = true;
 	ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
 	const AActor* const Attacker = Payload.Instigator.Get();
@@ -382,7 +382,7 @@ void UknightGameplayAbility_Guard::CheckMoveCancel()
 			}
 		}
 	}
-	// (2026-10-26) 이동 입력으로 가드를 내리는 건 bMoveInputCancelsGuard를 켰을 때만.
+	// 이동 입력으로 가드를 내리는 건 bMoveInputCancelsGuard를 켰을 때만.
 	if (!bMoveInputCancelsGuard)
 	{
 		return;
@@ -526,7 +526,7 @@ void UknightGameplayAbility_Guard::EndAbility(const FGameplayAbilitySpecHandle H
 {
 	RemoveParryTag();
 	ExitGuardStance();
-	// (2026-10-26) 가드 연타 막기: 퍼펙트 가드 없이 내린 시각을 기록한다. 패링했으면 처음부터 다시 센다.
+	// 가드 연타 막기: 퍼펙트 가드 없이 내린 시각을 기록한다. 패링했으면 처음부터 다시 센다.
 	if (bGuardRaised)
 	{
 		bGuardRaised = false;

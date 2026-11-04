@@ -170,12 +170,12 @@ void AknightCharacter::InitializeAbilitySystem()
 		}
 	}
 
-	// (2026-10-20) 기본 메카 스탯(속성 세트 기본값과 다른 것). 파츠 능력치는 이 위에 더해진다.
+	// 기본 메카 스탯(속성 세트 기본값과 다른 것). 파츠 능력치는 이 위에 더해진다.
 	AbilitySystemComponent->SetNumericAttributeBase(UknightCoreAttributeSet::GetPoiseRecoveryRateAttribute(), BasePoiseRecoveryRate);
 	AbilitySystemComponent->SetNumericAttributeBase(UknightCoreAttributeSet::GetGuardEfficiencyAttribute(), BaseGuardEfficiency);
 	AbilitySystemComponent->SetNumericAttributeBase(UknightCoreAttributeSet::GetCriticalDamageMultiplierAttribute(), BaseCriticalDamageMultiplier);
 
-	// (2026-10-22) 완전 출력 소켓: 체력·최대 체력이 바뀔 때마다 '가득 찼는지'를 다시 본다(아래 출격 시 가득 채우기도 여기로 들어온다).
+	// 완전 출력 소켓: 체력·최대 체력이 바뀔 때마다 '가득 찼는지'를 다시 본다(아래 출격 시 가득 채우기도 여기로 들어온다).
 	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(UknightCoreAttributeSet::GetHealthAttribute())
 		.AddUObject(this, &ThisClass::HandleHealthChangedForSocket);
 	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(UknightCoreAttributeSet::GetMaxHealthAttribute())
@@ -188,7 +188,7 @@ void AknightCharacter::InitializeAbilitySystem()
 	// 부위 체력은 파츠가 부위 최대 체력을 정한 뒤에 연결해서 MaxHealth 합산이 맞게 한다.
 	PartHealth->InitializeWithAbilitySystem(AbilitySystemComponent);
 
-	// 출격 = 이 캐릭터가 생겨 파츠를 모두 입은 직후 (이 함수는 캐릭터마다 한 번만 끝까지 온다). (2026-10-07)
+	// 출격 = 이 캐릭터가 생겨 파츠를 모두 입은 직후 (이 함수는 캐릭터마다 한 번만 끝까지 온다).
 	// 파츠로 오른 최대치에 맞춰 체력·그로기를 가득 채운다. 최대치가 바뀔 때 현재 체력·그로기를 따라 올리지 않는 것은
 	// 속성 세트의 규칙(전투 중 파츠 교체로 회복 방지)이라 그대로 두고, 출격 시점에만 채운다.
 	AbilitySystemComponent->SetNumericAttributeBase(UknightCoreAttributeSet::GetHealthAttribute(), CoreAttributeSet->GetMaxHealth());
@@ -197,7 +197,7 @@ void AknightCharacter::InitializeAbilitySystem()
 	if (AppliedSocketRepairBonus > 0)
 		AbilitySystemComponent->SetNumericAttributeBase(UknightAttributeSet::GetRepairKitCountAttribute(), MechAttributeSet->GetMaxRepairKitCount());
 
-	// 수리 키트 게이지: 퍼펙트 가드 성공 이벤트(knightCombatLibrary::ApplyMeleeHit이 막은 쪽에 보냄)를 받는다. (2026-10-16)
+	// 수리 키트 게이지: 퍼펙트 가드 성공 이벤트(knightCombatLibrary::ApplyMeleeHit이 막은 쪽에 보냄)를 받는다.
 	static const FGameplayTag ParrySucceededTag = FGameplayTag::RequestGameplayTag(TEXT("Event.ParrySucceeded"), false);
 	if (ParrySucceededTag.IsValid())
 	{
@@ -216,7 +216,7 @@ void AknightCharacter::RefreshSocketEffects()
 	const UknightProgressionSubsystem* const Progression = GetGameInstance()
 		? GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>() : nullptr;
 	const int32 Bonus = Progression ? Progression->GetRepairKitCapacityBonus() : 0;
-	// (2026-10-22) 수리 키트 보너스가 그대로여도 아래 비율 소켓은 따로 갱신해야 해서, 바로 끝내지 않고 이 블록만 건너뛴다.
+	// 수리 키트 보너스가 그대로여도 아래 비율 소켓은 따로 갱신해야 해서, 바로 끝내지 않고 이 블록만 건너뛴다.
 	if (Bonus != AppliedSocketRepairBonus)
 	{
 		if (SocketRepairCapacityHandle.IsValid())
@@ -324,12 +324,12 @@ void AknightCharacter::HandlePerfectGuard(const FGameplayEventData* Payload)
 {
 	const float KitCount = MechAttributeSet->GetRepairKitCount();
 	const float MaxKitCount = MechAttributeSet->GetMaxRepairKitCount();
-	// 키트가 가득이면 게이지가 오르지 않는다(사용자 결정).
+	// 키트가 가득이면 게이지가 오르지 않는다.
 	if (IsDead() || RepairKitGaugePerPerfectGuard <= 0.f || KitCount >= MaxKitCount)
 	{
 		return;
 	}
-	// (2026-10-22 사용자 결정) 충전 보조 소켓(SocketGaugeCharge) 1개마다 키트 하나에 필요한 퍼펙트 가드 수 -1 (기본 5번 → 4번).
+	// 충전 보조 소켓(SocketGaugeCharge) 1개마다 키트 하나에 필요한 퍼펙트 가드 수 -1 (기본 5번 → 4번).
 	// 소켓의 EffectValue(배율)는 쓰지 않고 끼운 개수만 센다. 최소 1번.
 	const UknightProgressionSubsystem* const Progression = GetGameInstance()
 		? GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>() : nullptr;
@@ -422,7 +422,7 @@ void AknightCharacter::Input_LockOn()
 {
 	if (!IsDead())
 	{
-		// (2026-10-15) 락온 중에 누르면 가장 가까운 부위로 다시 잡고, 같은 부위·두 번 누르기면 푼다.
+		// 락온 중에 누르면 가장 가까운 부위로 다시 잡고, 같은 부위·두 번 누르기면 푼다.
 		TargetLock->PressLockOn();
 	}
 }
@@ -469,7 +469,7 @@ void AknightCharacter::LookMouse(const FInputActionValue& Value)
 
 void AknightCharacter::ApplyLookInput(FVector2D LookAxisVector, bool bFromMouse)
 {
-	// 패드의 락온 대상 전환은 감도와 상관없이 스틱 기울기로 본다(Y축 반전만 따름). (2026-10-14)
+	// 패드의 락온 대상 전환은 감도와 상관없이 스틱 기울기로 본다(Y축 반전만 따름).
 	FVector2D StickTilt = LookAxisVector;
 
 	// 개인 설정: 장치별 감도와 Y축 반전.

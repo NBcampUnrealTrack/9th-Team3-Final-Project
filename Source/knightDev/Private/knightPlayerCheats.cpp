@@ -12,7 +12,7 @@
 //   knight.Player.Easing Curve [값...]     출발 곡선을 바꾼다. 값은 속도 0%~100%에 고르게 놓인다
 //                                          (예: Curve 0.35 1 0.6 → 0%, 50%, 100%). 값 없이 쓰면 곡선을 비워 일정한 가속
 //   knight.Player.MoveLog [1|0]            출발·가속·정지에 걸린 시간과 거리를 화면과 로그에 찍는다. 인자가 없으면 켜고 끈다
-//   knight.Player.AttackSpeed [배율]        (2026-10-14) 공격 몽타주 재생 속도 배율을 바꾼다 (예: 0.9). 인자가 없으면 지금 값 출력.
+//   knight.Player.AttackSpeed [배율]        공격 몽타주 재생 속도 배율을 바꾼다 (예: 0.9). 인자가 없으면 지금 값 출력.
 //                                          행동 속도(ActionSpeed)에 곱하며 발도·가드는 그대로. 새로 시작하는 공격부터 적용
 //   knight.Player.RollBackThrust [1|0]     구를 때 등 부스터를 켜고 끈다 (기본 끔). 인자가 없으면 켜고 끄기를 뒤집는다
 //   knight.Player.RollFootThrust [1|0]     구를 때 두 발 부스터를 켜고 끈다 (기본 켬). 인자가 없으면 켜고 끄기를 뒤집는다
@@ -252,7 +252,7 @@ namespace knightPlayerCheats
 		LogMovement(Character, CommandName);
 	}
 
-	// knight.Player.AttackSpeed [배율] (2026-10-14). 공격 몽타주 재생 속도 배율(ASC AttackAnimationSpeed)을 바꾼다.
+	// knight.Player.AttackSpeed [배율]. 공격 몽타주 재생 속도 배율(ASC AttackAnimationSpeed)을 바꾼다.
 	// 인자가 없으면 지금 값만 출력한다. 새로 시작하는 공격부터 적용되고, 지금 PIE의 플레이어에게만 적용된다.
 	static void AttackSpeedCommand(const TArray<FString>& Args, UWorld* World)
 	{
@@ -395,7 +395,7 @@ namespace knightPlayerCheats
 		UE_LOG(LogknightDev, Log, TEXT("%s: PoiseRecoveryRate=%.1f/s  SecondsSinceLastHit=%.2f  MaxHealth=%.1f  AttackPower=%.1f"),
 			CommandName, CoreSet->GetPoiseRecoveryRate(), World->GetTimeSeconds() - CoreSet->GetLastHitTime(),
 			CoreSet->GetMaxHealth(), CoreSet->GetAttackPower());
-		// 받는 쪽 보정 (2026-10-10): 방어력, 받는 피해·그로기 배율(파츠 효과용, 기본 1.0)
+		// 받는 쪽 보정: 방어력, 받는 피해·그로기 배율(파츠 효과용, 기본 1.0)
 		UE_LOG(LogknightDev, Log, TEXT("%s: Defense=%.1f  DamageTakenMultiplier=%.2f  PoiseDamageTakenMultiplier=%.2f"),
 			CommandName, CoreSet->GetDefense(), CoreSet->GetDamageTakenMultiplier(), CoreSet->GetPoiseDamageTakenMultiplier());
 
@@ -411,7 +411,7 @@ namespace knightPlayerCheats
 				*PartText(TEXT("Torso"), MechSet->GetTorsoHealth(), MechSet->GetMaxTorsoHealth(), knightGameplayTags::State_PartBroken_Torso),
 				*PartText(TEXT("Arms"), MechSet->GetArmsHealth(), MechSet->GetMaxArmsHealth(), knightGameplayTags::State_PartBroken_Arms),
 				*PartText(TEXT("Legs"), MechSet->GetLegsHealth(), MechSet->GetMaxLegsHealth(), knightGameplayTags::State_PartBroken_Legs));
-			// 수리 키트 (2026-10-09). 보충: knight.Player.SetStat RepairKitCount 3
+			// 수리 키트. 보충: knight.Player.SetStat RepairKitCount 3
 			UE_LOG(LogknightDev, Log, TEXT("%s: RepairKits=%.0f  RepairEfficiency=%.2f  Repairing=%d"), CommandName,
 				MechSet->GetRepairKitCount(), MechSet->GetRepairEfficiency(), ASC->HasMatchingGameplayTag(knightGameplayTags::State_Repairing));
 		}
