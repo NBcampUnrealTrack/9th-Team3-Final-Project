@@ -347,7 +347,7 @@ int32 UknightCombatLibrary::ApplyAreaMeleeHits(AActor* Attacker, const FVector& 
 		// 메시 충돌 바디가 몸 일부에만 있으면 위에서 내리꽂는 공격도 허리 아래에 닿은 것으로 나온다(패링 불꽃, 맞은 부위가 엉뚱해진다).
 		// 루트 캡슐 표면이 판정 중심에 더 가까우면 그 점을 쓴다.
 		const UPrimitiveComponent* const Root = Cast<UPrimitiveComponent>(Target->GetRootComponent());
-		FVector RootPoint;
+		FVector RootPoint = FVector::ZeroVector;
 		const float RootDistance = Root && Root != Component ? Root->GetClosestPointOnCollision(Center, RootPoint) : -1.f;
 		if (RootDistance >= 0.f && (ClosestDistance < 0.f || RootDistance < ClosestDistance))
 		{
