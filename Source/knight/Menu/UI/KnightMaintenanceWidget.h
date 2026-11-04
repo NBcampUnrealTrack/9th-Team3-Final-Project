@@ -12,6 +12,7 @@ class UCommonButtonStyle;
 class UTexture2D;
 class UCommonTextBlock;
 class UImage;
+class UScaleBox;
 class UBorder;
 class UScrollBox;
 class UTextBlock;
@@ -138,6 +139,7 @@ protected:
 	UPROPERTY(meta=(BindWidget)) TObjectPtr<UCommonButtonBase> Btn_ConfirmCancel;
 
 private:
+	friend class UknightEnhancementPreviewCheckCommandlet;
 	void ApplyCraftingPresentation();
 	void StyleCraftingEntry(UKnightMaintenanceEntryWidget* Entry);
 	void ApplyDestinationLayout();
@@ -157,6 +159,9 @@ private:
 	void RefreshWeaponUpgradePanel();
 	void RebuildEnhancementTarget(bool bRestoreFocus = true);
 	void BuildEnhancementPresentation();
+	UWidget* BuildEnhancementPreview();
+	void CaptureEnhancementIdleTransform();
+	void RestoreEnhancementIdleTransform();
 	void ResetEnhancementBars();
 	void StartEnhancementBars(EKnightWeaponUpgradeOutcome Outcome);
 	void TickEnhancementBars(float DeltaTime);
@@ -232,12 +237,21 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> EnhancementIncrease;
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> EnhancementSuccessSummary;
 	UPROPERTY(Transient) TObjectPtr<UImage> EnhancementWeaponImage;
+	UPROPERTY(Transient) TObjectPtr<UScaleBox> EnhancementIconScale;
+	FWidgetTransform EnhancementIdleIconTransform;
+	FWidgetTransform EnhancementIdleScaleTransform;
+	FVector2D EnhancementIdleIconPivot;
+	FVector2D EnhancementIdleScalePivot;
+	bool bEnhancementIdleCaptured = false;
 	UPROPERTY(Transient) TObjectPtr<UCanvasPanel> EnhancementBarCanvas;
 	UPROPERTY(Transient) TArray<TObjectPtr<UImage>> EnhancementBars;
 	enum class EEnhancementBarPhase : uint8 { Idle, Rising, Trembling, Success, Failure };
 	EEnhancementBarPhase EnhancementBarPhase = EEnhancementBarPhase::Idle;
 	float EnhancementBarElapsed = 0.f;
-	float EnhancementBarResultJitterTime = 0.f;
+	TArray<FVector2D> EnhancementBarPositions;
+	TArray<float> EnhancementBarOpacities;
+	TArray<FVector2D> EnhancementBarResultPositions;
+	TArray<float> EnhancementBarResultOpacities;
 	bool bEnhancementBarsSucceeded = false;
 	UPROPERTY(Transient) TObjectPtr<UImage> EnhancementMaterialImage;
 	UPROPERTY(Transient) TObjectPtr<UVerticalBox> UpgradePanel;

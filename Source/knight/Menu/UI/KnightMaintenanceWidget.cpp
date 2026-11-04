@@ -2061,9 +2061,10 @@ void UKnightMaintenanceWidget::RefreshEnhancementDetails()
 		UTexture2D* Icon = Weapon ? Weapon->Icon.LoadSynchronous() : nullptr;
 		EnhancementWeaponImage->SetBrushFromTexture(Icon, true);
 		EnhancementWeaponImage->SetVisibility(Icon ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Hidden);
+		if (EnhancementBarPhase == EEnhancementBarPhase::Idle) CaptureEnhancementIdleTransform();
 		if (EnhancementBarCanvas)
 			EnhancementBarCanvas->SetVisibility(Icon && EnhancementBarPhase != EEnhancementBarPhase::Idle
-				? ESlateVisibility::HitTestInvisible : Icon ? ESlateVisibility::Hidden : ESlateVisibility::Collapsed);
+				? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 	}
 	TArray<FText> Lines;
 	if (Weapon)

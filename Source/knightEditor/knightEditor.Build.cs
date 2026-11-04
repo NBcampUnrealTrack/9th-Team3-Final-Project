@@ -28,6 +28,7 @@ public class knightEditor : ModuleRules
 			"knightUI",
 			"Slate",
 			"SlateCore",
+			"SlateRHIRenderer",
 			// 몬스터 레시피 생성기(knightMonsterRecipeLibrary).
 			"AIModule",
 			"AnimGraph",
