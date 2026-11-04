@@ -1,5 +1,6 @@
 #include "Animation/knightAnimNotify_GroundImpact.h"
 
+#include "Camera/knightCameraModifier_RoarShockwave.h"
 #include "Camera/knightPlayerCameraManager.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -71,6 +72,8 @@ void UknightAnimNotify_GroundImpact::Notify(USkeletalMeshComponent* MeshComp, UA
 			UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, Dust, Epicenter, FRotator::ZeroRotator, FVector(DustScale), true, true, ENCPoolMethod::AutoRelease);
 		}
 	}
+
+	UknightCameraModifier_RoarShockwave::AddBurstForLocalPlayers(World, Epicenter, ScreenShockwave);
 
 	if (!Shake || ShakeScale <= 0.f || !World->IsGameWorld())
 	{

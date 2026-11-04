@@ -37,7 +37,7 @@ void UknightAnimNotifyState_RoarShockwave::NotifyBegin(USkeletalMeshComponent* M
 		if (UknightCameraModifier_RoarShockwave* const Modifier =
 			Cast<UknightCameraModifier_RoarShockwave>(Camera.FindCameraModifierByClass(UknightCameraModifier_RoarShockwave::StaticClass())))
 		{
-			Modifier->SetRoarStyle(MeshComp, bPulses, Wiggle);
+			Modifier->SetRoarStyle(MeshComp, bPulses, Wiggle, Tint, TintColor);
 		}
 	});
 }
