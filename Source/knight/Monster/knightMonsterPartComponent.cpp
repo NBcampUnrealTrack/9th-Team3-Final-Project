@@ -3,6 +3,7 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
 #include "AnimationRuntime.h"
+#include "Camera/knightCameraModifier_RoarShockwave.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/SkinnedMeshComponent.h"
 #include "GameFramework/Character.h"
@@ -292,6 +293,7 @@ void UknightMonsterPartComponent::BreakPart(int32 PartIndex, AActor* BreakInstig
 	{
 		UGameplayStatics::PlaySoundAtLocation(this, Definition->BreakSound, BreakLocation);
 	}
+	UknightCameraModifier_RoarShockwave::AddBurstForLocalPlayers(GetWorld(), BreakLocation, Definition->BreakScreenShockwave);
 
 	if (UAbilitySystemComponent* const ASC = BoundASC.Get())
 	{

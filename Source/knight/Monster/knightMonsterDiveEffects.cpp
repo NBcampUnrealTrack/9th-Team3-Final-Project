@@ -1,5 +1,6 @@
 #include "Monster/knightMonsterDiveEffects.h"
 
+#include "Camera/knightCameraModifier_RoarShockwave.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
 #include "Environment/knightWaterRippleSubsystem.h"
@@ -167,6 +168,7 @@ void FknightMonsterDiveEffects::FinishDive(ACharacter& Character, bool bImpact)
 	{
 		UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, ImpactEffect, Surface, FRotator(-90.f, DiveDirection.Rotation().Yaw, 0.f), FVector::OneVector,
 			true, true, ENCPoolMethod::AutoRelease);
+		UknightCameraModifier_RoarShockwave::AddBurstForLocalPlayers(World, Surface, ImpactScreenShockwave);
 	}
 }
 

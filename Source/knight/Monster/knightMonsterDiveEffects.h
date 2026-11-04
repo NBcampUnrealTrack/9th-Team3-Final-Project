@@ -110,6 +110,10 @@ struct KNIGHT_API FknightMonsterDiveEffects
 	UPROPERTY(EditAnywhere, Category="Effects|Impact", meta=(ClampMin=0, Units="cm"))
 	float ImpactMaxHeight = 800.f;
 
+	/** 내려꽂힌 자리에서 화면에 퍼지는 충격파 세기(1 = 기본, 0 = 없음). */
+	UPROPERTY(EditAnywhere, Category="Effects|Impact", meta=(ClampMin=0, ClampMax=3))
+	float ImpactScreenShockwave = 1.2f;
+
 	void StartFold(ACharacter& Character);
 	void StartDive(ACharacter& Character, const FVector& Direction);
 	void Tick(ACharacter& Character, float DeltaTime);
