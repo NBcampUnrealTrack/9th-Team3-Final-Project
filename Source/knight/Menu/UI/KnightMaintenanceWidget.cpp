@@ -628,6 +628,9 @@ void UKnightMaintenanceWidget::ApplyDestinationLayout()
 	if (SocketArtwork) SocketArtwork->SetVisibility(bSockets ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 	if (EnhancementColumns) EnhancementColumns->SetVisibility(bEnhancement ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
 	if (EnhancementArtwork) EnhancementArtwork->SetVisibility(bEnhancement ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	// Detached visuals share the destination's visibility; layout is synchronized on the next tick.
+	if (EnhancementPreviewHost) EnhancementPreviewHost->SetVisibility(ESlateVisibility::Hidden);
+	if (EnhancementReadoutBackdropLayer) EnhancementReadoutBackdropLayer->SetVisibility(ESlateVisibility::Hidden);
 	if (UWidget* Hints = WidgetTree ? WidgetTree->FindWidget(TEXT("Panel_Hints")) : nullptr)
 		Hints->SetVisibility(ESlateVisibility::Collapsed);
 	if (!WidgetTree) return;

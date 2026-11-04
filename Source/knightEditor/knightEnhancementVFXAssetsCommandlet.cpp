@@ -18,7 +18,7 @@
 
 namespace
 {
-	const FString Folder = TEXT("/Game/Knight/UI/Menu/Maintenance/Enhancement/VFX/");
+	const FString EnhancementVFXAssetFolder = TEXT("/Game/Knight/UI/Menu/Maintenance/Enhancement/VFX/");
 	bool Save(UObject* Asset)
 	{
 		UPackage* Package = Asset->GetOutermost();
@@ -29,7 +29,7 @@ namespace
 	}
 	template<typename T> T* Asset(const TCHAR* Name)
 	{
-		const FString Path = Folder + Name;
+		const FString Path = EnhancementVFXAssetFolder + Name;
 		if (T* Existing = LoadObject<T>(nullptr, *(Path + TEXT(".") + Name), nullptr, LOAD_NoWarn)) return Existing;
 		T* Created = NewObject<T>(CreatePackage(*Path), Name, RF_Public | RF_Standalone);
 		FAssetRegistryModule::AssetCreated(Created);

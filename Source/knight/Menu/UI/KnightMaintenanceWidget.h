@@ -97,7 +97,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Enhancement VFX", meta=(ClampMin="0.05"))
 	float EnhancementHoldDuration = .28f;
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Enhancement VFX", meta=(ClampMin="0.05"))
-	float EnhancementReleaseDuration = .52f;
+	float EnhancementReleaseDuration = .86f;
 
 	/** Full-height raster surfaces shared by Enhancement and Sockets only. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Industrial Presentation")
@@ -175,6 +175,7 @@ private:
 	void RebuildEnhancementTarget(bool bRestoreFocus = true);
 	void BuildEnhancementPresentation();
 	UWidget* BuildEnhancementPreview();
+	void SyncEnhancementVisualLayout();
 	void CaptureEnhancementIdleTransform();
 	void RestoreEnhancementIdleTransform();
 	void ResetEnhancementBars();
@@ -259,13 +260,18 @@ private:
 	FVector2D EnhancementIdleScalePivot;
 	bool bEnhancementIdleCaptured = false;
 	UPROPERTY(Transient) TObjectPtr<UCanvasPanel> EnhancementBarCanvas;
+	UPROPERTY(Transient) TObjectPtr<UWidget> EnhancementPreviewHost;
+	UPROPERTY(Transient) TObjectPtr<UWidget> EnhancementPreviewAnchor;
+	UPROPERTY(Transient) TObjectPtr<UWidget> EnhancementReadoutAnchor;
+	UPROPERTY(Transient) TObjectPtr<UCanvasPanel> EnhancementReadoutBackdropLayer;
+	UPROPERTY(Transient) TObjectPtr<UImage> EnhancementReadoutBackdrop;
 	UPROPERTY(Transient) TArray<TObjectPtr<UImage>> EnhancementBars;
 	UPROPERTY(Transient) TArray<TObjectPtr<UMaterialInstanceDynamic>> EnhancementFragmentPalettes;
 	TArray<float> EnhancementTrailLengths;
 	TArray<float> EnhancementTrailOpacities;
 	UPROPERTY(Transient) TObjectPtr<UImage> EnhancementFieldGlow;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> EnhancementGlowMID;
-	enum class EEnhancementBarPhase : uint8 { Idle, Rising, Trembling, Success, Failure };
+	enum class EEnhancementBarPhase : uint8 { Idle, Rising, Trembling, Success, Failure, Transparent };
 	EEnhancementBarPhase EnhancementBarPhase = EEnhancementBarPhase::Idle;
 	float EnhancementBarElapsed = 0.f;
 	TArray<FVector2D> EnhancementBarPositions;
