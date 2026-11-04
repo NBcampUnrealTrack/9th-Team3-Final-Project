@@ -52,3 +52,62 @@ bool UknightMontageEditLibrary::SetMontageAnimation(UAnimMontage* Montage, UAnim
 	Montage->MarkPackageDirty();
 	return true;
 }
+
+FString UknightMontageEditLibrary::DumpObjectProperties(UObject* Object)
+{
+	FString Out;
+	if (!Object)
+	{
+		return Out;
+	}
+	for (TFieldIterator<FProperty> It(Object->GetClass()); It; ++It)
+	{
+		const FProperty* const Property = *It;
+		if (Property->HasAnyPropertyFlags(CPF_Transient | CPF_DuplicateTransient))
+		{
+			continue;
+		}
+		for (int32 Index = 0; Index < Property->ArrayDim; ++Index)
+		{
+			FString Value;
+			Property->ExportText_InContainer(Index, Value, Object, nullptr, Object, PPF_None);
+			const FString Name = Property->ArrayDim > 1 ? FString::Printf(TEXT("%s[%d]"), *Property->GetName(), Index) : Property->GetName();
+			// 값 안의 줄바꿈은 한 줄로(이름=값 한 줄 형식 유지)
+			Out += Name + TEXT("=") + Value.Replace(TEXT("\n"), TEXT("\\n")).Replace(TEXT("\r"), TEXT("")) + TEXT("\n");
+		}
+	}
+	return Out;
+}
+
+bool UknightMontageEditLibrary::ImportObjectProperty(UObject* Object, const FString& PropertyName, const FString& ValueText)
+{
+	if (!Object)
+	{
+		return false;
+	}
+	FString Name = PropertyName;
+	int32 Index = 0;
+	int32 Bracket = INDEX_NONE;
+	if (Name.FindChar(TEXT('['), Bracket) && Name.EndsWith(TEXT("]")))
+	{
+		Index = FCString::Atoi(*Name.Mid(Bracket + 1, Name.Len() - Bracket - 2));
+		Name.LeftInline(Bracket);
+	}
+	FProperty* const Property = Object->GetClass()->FindPropertyByName(FName(*Name));
+	if (!Property || Index < 0 || Index >= Property->ArrayDim)
+	{
+		UE_LOG(LogTemp, Error, TEXT("ImportObjectProperty: %s에 칸 %s가 없습니다."), *GetNameSafe(Object), *PropertyName);
+		return false;
+	}
+	Object->Modify();
+	void* const ValuePtr = Property->ContainerPtrToValuePtr<void>(Object, Index);
+	if (!Property->ImportText_Direct(*ValueText, ValuePtr, Object, PPF_None))
+	{
+		UE_LOG(LogTemp, Error, TEXT("ImportObjectProperty: %s.%s 값을 읽지 못했습니다: %s"), *GetNameSafe(Object), *PropertyName, *ValueText);
+		return false;
+	}
+	FPropertyChangedEvent Event(Property, EPropertyChangeType::ValueSet);
+	Object->PostEditChangeProperty(Event);
+	Object->MarkPackageDirty();
+	return true;
+}
