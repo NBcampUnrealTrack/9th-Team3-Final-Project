@@ -81,6 +81,10 @@ struct FknightMonsterTargetEvaluatorInstanceData
 	/** 몬스터 정의의 RecoverRetreatChance. Recover 상태의 물러나기 확률 조건(엔진 Random의 Threshold)에 바인딩한다. */
 	UPROPERTY(EditAnywhere, Category="Output")
 	float RecoverRetreatChance = 0.f;
+
+	/** ChaseStopDistance + 몬스터 정의의 SpacingDistanceSlack. Spacing 상태의 거리 조건에 바인딩한다. */
+	UPROPERTY(EditAnywhere, Category="Output")
+	float SpacingMaxDistance = 1300.f;
 };
 
 USTRUCT(meta=(DisplayName="Knight Monster Target", Category="Knight"))

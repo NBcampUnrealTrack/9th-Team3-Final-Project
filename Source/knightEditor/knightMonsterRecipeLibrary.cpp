@@ -1532,6 +1532,10 @@ namespace knightRecipe
 		{
 			Log.Error(TEXT("공용 StateTree에 공격 사이 상태(Recover)를 만들지 못했습니다."));
 		}
+		if (!UknightMonsterRecipeLibrary::SetupSpacingState(StateTree))
+		{
+			Log.Error(TEXT("공용 StateTree에 간 보기 상태(Spacing)를 만들지 못했습니다."));
+		}
 
 		FStateTreeCompilerLog CompilerLog;
 		if (!UStateTreeEditingSubsystem::CompileStateTree(StateTree, CompilerLog))
@@ -1710,6 +1714,89 @@ bool UknightMonsterRecipeLibrary::SetupRecoverState(UStateTree* StateTree, float
 	const bool bCompiled = UStateTreeEditingSubsystem::CompileStateTree(StateTree, CompilerLog);
 	StateTree->MarkPackageDirty();
 	UE_LOG(LogTemp, Display, TEXT("SetupRecoverState: %s %s."), *GetNameSafe(StateTree), bCompiled ? TEXT("compiled") : TEXT("FAILED to compile"));
+	return bCompiled;
+}
+
+bool UknightMonsterRecipeLibrary::SetupSpacingState(UStateTree* StateTree)
+{
+	UStateTreeEditorData* const EditorData = StateTree ? Cast<UStateTreeEditorData>(StateTree->EditorData) : nullptr;
+	if (!EditorData || EditorData->Evaluators.IsEmpty())
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetupSpacingState: %s has no editor data or Knight Monster Target evaluator."), *GetNameSafe(StateTree));
+		return false;
+	}
+	const FGuid EvaluatorID = EditorData->Evaluators[0].ID;
+	auto Bind = [&](const FGuid& TargetID, FName TargetProperty, FName SourceProperty)
+	{
+		const FPropertyBindingPath Target(TargetID, TargetProperty);
+		EditorData->EditorBindings.RemoveBindings(Target);
+		EditorData->EditorBindings.AddBinding(FPropertyBindingPath(EvaluatorID, SourceProperty), Target);
+	};
+
+	UStateTreeState* Combat = nullptr;
+	UStateTreeState* React = nullptr;
+	TArray<UStateTreeState*> Pending(EditorData->SubTrees);
+	while (!Pending.IsEmpty())
+	{
+		UStateTreeState* const State = Pending.Pop();
+		Combat = State->Name == TEXT("Combat") ? State : Combat;
+		React = State->Name == TEXT("React") ? State : React;
+		Pending.Append(State->Children);
+	}
+	if (!Combat || !React)
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetupSpacingState: %s is missing Combat or React."), *GetNameSafe(StateTree));
+		return false;
+	}
+	EditorData->Modify();
+	Combat->Modify();
+	Combat->Children.RemoveAll([](const UStateTreeState* Child) { return Child && Child->Name == TEXT("Spacing"); });
+
+	UStateTreeState& Spacing = Combat->AddChildState(TEXT("Spacing"));
+	{
+		FStateTreeTransition& ToReact = Spacing.AddTransition(EStateTreeTransitionTrigger::OnTick, EStateTreeTransitionType::GotoState, React);
+		TStateTreeEditorNode<FStateTreeCompareBoolCondition>& Reacting = ToReact.AddConditionWithOuter<FStateTreeCompareBoolCondition>(&Spacing);
+		Reacting.GetInstanceData().bRight = true;
+		Bind(Reacting.ID, TEXT("bLeft"), TEXT("bIsReacting"));
+	}
+
+	// 멀면 둘레를 돌지 말고 Chase로 다가간다.
+	TStateTreeEditorNode<FStateTreeCompareFloatCondition>& Near = Spacing.AddEnterCondition<FStateTreeCompareFloatCondition>(UE::StateTree::EComparisonOperator::LessOrEqual);
+	Bind(Near.ID, TEXT("Left"), TEXT("Distance"));
+	Bind(Near.ID, TEXT("Right"), TEXT("SpacingMaxDistance"));
+
+	// 쓸 수 있는 공격이 하나라도 있으면 간 보지 않고 공격한다. 몸을 돌리면 되는 공격도 있는 것으로 친다(Attack의 Face가 돌린다).
+	TStateTreeEditorNode<FknightStateTreeCanUseAbilityCondition>& NoAttack = Spacing.AddEnterCondition<FknightStateTreeCanUseAbilityCondition>();
+	NoAttack.GetInstanceData().AbilityTags = FGameplayTagContainer(knightGameplayTags::Ability_Attack);
+	NoAttack.GetInstanceData().bIgnoreAngle = true;
+	NoAttack.GetInstanceData().bInvert = true;
+	Bind(NoAttack.ID, TEXT("Target"), TEXT("Target"));
+
+	const FGameplayTagContainer StrafeTags(knightGameplayTags::Ability_Move_Strafe);
+	TStateTreeEditorNode<FknightStateTreeCanUseAbilityCondition>& CanStrafe = Spacing.AddEnterCondition<FknightStateTreeCanUseAbilityCondition>();
+	CanStrafe.GetInstanceData().AbilityTags = StrafeTags;
+	CanStrafe.GetInstanceData().bIgnoreAngle = false;
+	Bind(CanStrafe.ID, TEXT("Target"), TEXT("Target"));
+
+	TStateTreeEditorNode<FknightStateTreeActivateAbilityTask>& Move = Spacing.AddTask<FknightStateTreeActivateAbilityTask>();
+	Move.GetInstanceData().AbilityTags = StrafeTags;
+	Move.GetInstanceData().RetryDelay = 0.f;
+	Move.GetInstanceData().bRestAfterAttack = false;
+	Bind(Move.ID, TEXT("Target"), TEXT("Target"));
+	Spacing.AddTransition(EStateTreeTransitionTrigger::OnStateCompleted, EStateTreeTransitionType::GotoState, Combat);
+
+	// Combat은 자식을 위에서부터 고른다. Chase는 조건 없이 항상 들어가므로 그 앞에 둔다.
+	UStateTreeState* const Added = Combat->Children.Pop();
+	const int32 ChaseIndex = Combat->Children.IndexOfByPredicate([](const UStateTreeState* Child) { return Child && Child->Name == TEXT("Chase"); });
+	Combat->Children.Insert(Added, ChaseIndex == INDEX_NONE ? 0 : ChaseIndex);
+
+	EditorData->ReparentStates();
+	EditorData->RemoveInvalidBindings();
+	FStateTreeCompilerLog CompilerLog;
+	const bool bCompiled = UStateTreeEditingSubsystem::CompileStateTree(StateTree, CompilerLog);
+	StateTree->MarkPackageDirty();
+	UE_LOG(LogTemp, Display, TEXT("SetupSpacingState: %s %s (Spacing at %d)."), *GetNameSafe(StateTree), bCompiled ? TEXT("compiled") : TEXT("FAILED to compile"),
+		Combat->Children.IndexOfByKey(Added));
 	return bCompiled;
 }
 

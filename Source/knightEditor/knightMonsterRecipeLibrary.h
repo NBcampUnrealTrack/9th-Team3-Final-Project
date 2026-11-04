@@ -70,6 +70,14 @@ public:
 	static bool SetupRecoverState(UStateTree* StateTree, float TurnAngle = 100.f);
 
 	/**
+	 * 공용 StateTree의 Combat 아래, Chase 앞에 간 보기 상태(Spacing)를 만들거나 다시 만든다.
+	 * 쓸 수 있는 공격(Ability.Attack)이 하나도 없고, 타깃이 SpacingMaxDistance 안이고, Ability.Move.Strafe 어빌리티를 쓸 수 있으면
+	 * 그 어빌리티(옆걸음, 탐색 비행)로 둘레를 돈 뒤 Combat으로 돌아간다. 공격 쿨다운 동안 서 있지 않게 한다.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
+	static bool SetupSpacingState(UStateTree* StateTree);
+
+	/**
 	 * 시퀀스마다 섹션 하나인 몽타주를 만들거나 고친다(돌진의 Start, Loop, Stop처럼). 섹션은 순서대로 이어지고,
 	 * LoopSection은 자기 자신으로 이어져 어빌리티가 다음 섹션을 정할 때까지 반복한다. 노티파이는 남긴다. 저장은 호출한 쪽.
 	 */

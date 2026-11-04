@@ -94,6 +94,7 @@ void FknightStateTreeMonsterTargetEvaluator::Update(FInstanceDataType& InstanceD
 		InstanceData.RangedMinDistance = Definition->RangedMinDistance;
 		InstanceData.RangedMaxDistance = Definition->RangedMaxDistance;
 		InstanceData.RecoverRetreatChance = Definition->RecoverRetreatChance;
+		InstanceData.SpacingMaxDistance = InstanceData.ChaseStopDistance + Definition->SpacingDistanceSlack;
 	}
 }
 

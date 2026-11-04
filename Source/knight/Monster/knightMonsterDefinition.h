@@ -256,6 +256,13 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="cm"))
 	float AirChaseStopDistance = 0.f;
 
+	/**
+	 * 공용 StateTree의 간 보기(Spacing) 상태가 들어가는 최대 거리 = 추격 멈춤 거리 + 이 값.
+	 * 이보다 멀면 쓸 공격이 없어도 둘레를 돌지 않고 추격한다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="cm"))
+	float SpacingDistanceSlack = 400.f;
+
 	/** 공용 StateTree가 원거리 공격(Ability.Attack.Ranged)으로 넘어가는 거리 구간. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="cm"))
 	float RangedMinDistance = 533.f;
