@@ -59,6 +59,17 @@ public:
 	static bool SetFaceTargetSideAttacks(UStateTree* StateTree, FName StateName, bool bSkip, const FGameplayTagContainer& SideAttackTags);
 
 	/**
+	 * 몬스터 StateTree의 공격 사이 상태(Recover)를 Combat 아래에 다시 만들고 컴파일한다(저장은 호출한 쪽). 예전 Rest 상태는 지운다.
+	 *   Recover ─ Retreat: 확률(몬스터 정의 RecoverRetreatChance)과 Ability.Move.Retreat 어빌리티를 쓸 수 있으면 물러난다
+	 *           ├ Turn:    타깃이 TurnAngle 이상 옆·뒤에 있으면 돌아본다(옆·뒤 공격을 쓸 수 있으면 돌지 않고 바로 공격으로)
+	 *           └ Hold:    몬스터 정의의 AttackRestTime 동안 서서 천천히 노려본다
+	 * Strike·Breath는 공격 Task 안에서 쉬지 않고(bRestAfterAttack 끔) 성공하면 Recover로 간다.
+	 * Combat·Strike·React 상태나 Knight Monster Target 평가기가 없으면 false.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
+	static bool SetupRecoverState(UStateTree* StateTree, float TurnAngle = 100.f);
+
+	/**
 	 * 시퀀스마다 섹션 하나인 몽타주를 만들거나 고친다(돌진의 Start, Loop, Stop처럼). 섹션은 순서대로 이어지고,
 	 * LoopSection은 자기 자신으로 이어져 어빌리티가 다음 섹션을 정할 때까지 반복한다. 노티파이는 남긴다. 저장은 호출한 쪽.
 	 */

@@ -42,6 +42,10 @@ struct FknightMonsterTargetEvaluatorInstanceData
 	UPROPERTY(EditAnywhere, Category="Output")
 	float AngleToTarget = 0.f;
 
+	/** |AngleToTarget|. 엔진 Float 비교 노드로 "옆·뒤에 있다"를 검사할 때 쓴다. */
+	UPROPERTY(EditAnywhere, Category="Output")
+	float AbsAngleToTarget = 0.f;
+
 	/** 타깃 높이에서 몬스터 높이를 뺀 값(cm). */
 	UPROPERTY(EditAnywhere, Category="Output")
 	float HeightDifference = 0.f;
@@ -73,6 +77,10 @@ struct FknightMonsterTargetEvaluatorInstanceData
 
 	UPROPERTY(EditAnywhere, Category="Output")
 	float RangedMaxDistance = 2000.f;
+
+	/** 몬스터 정의의 RecoverRetreatChance. Recover 상태의 물러나기 확률 조건(엔진 Random의 Threshold)에 바인딩한다. */
+	UPROPERTY(EditAnywhere, Category="Output")
+	float RecoverRetreatChance = 0.f;
 };
 
 USTRUCT(meta=(DisplayName="Knight Monster Target", Category="Knight"))
@@ -126,6 +134,13 @@ struct FknightActivateAbilityTaskInstanceData
 	UPROPERTY(EditAnywhere, Category="Parameter", meta=(ClampMin=0, Units="s"))
 	float MaxStopWaitTime = 1.f;
 
+	/**
+	 * 켜면 몬스터 공격이 끝난 뒤 MonsterDefinition의 AttackRestTime만큼 이 Task 안에서 서 있다가 성공한다(예전 방식).
+	 * 끄면 공격(과 연계)이 끝나는 즉시 성공하고, 공격 사이 틈은 다음 상태(Recover)가 맡는다.
+	 */
+	UPROPERTY(EditAnywhere, Category="Parameter")
+	bool bRestAfterAttack = true;
+
 	FGameplayAbilitySpecHandle ActiveHandle;
 	FDelegateHandle EndedDelegateHandle;
 	TWeakObjectPtr<UAbilitySystemComponent> AbilitySystem;
@@ -145,7 +160,8 @@ struct FknightActivateAbilityTaskInstanceData
  * 액터의 GAS 어빌리티 하나를 발동하고, 그 어빌리티가 끝나면 성공한다(취소되었거나 아무것도 시작하지
  * 못하면 실패). 몬스터 공격(UknightGameplayAbility_MonsterAttack)은 Selection이 현재 타깃을 허용하는 것들 중
  * 가중치 랜덤으로 고른다. 조건에 맞는 다른 어빌리티는 가중치 1로 친다.
- * 몬스터 공격은 끝난 뒤 MonsterDefinition의 AttackRestTime(2페이즈는 Phase2AttackRestTime)만큼 더 서 있다가 성공한다.
+ * bRestAfterAttack이면 몬스터 공격이 끝난 뒤 MonsterDefinition의 AttackRestTime(2페이즈는 Phase2AttackRestTime)만큼 더 서 있다가 성공한다.
+ * AbilityTags에 Ability.Move가 없으면 이동 행동(Ability.Move 태그 어빌리티)은 후보에서 뺀다. 이동 행동은 그 태그로 따로 고른다.
  * 끝난 공격에 연계(FollowUpAttacks)가 있으면 쉬지 않고 이어 쓰고, 그 공격이 끝날 때까지 기다린다.
  */
 USTRUCT(meta=(DisplayName="Knight Activate Ability", Category="Knight"))
@@ -246,6 +262,62 @@ private:
 	static bool TryStartTurnMontage(FInstanceDataType& InstanceData);
 	static bool IsTurnMontagePlaying(const FInstanceDataType& InstanceData);
 	static void UpdateTurnWarpTarget(FInstanceDataType& InstanceData);
+};
+
+////////////////////////////////////////////////////////////////////
+
+USTRUCT()
+struct FknightRestTaskInstanceData
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, Category="Context")
+	TObjectPtr<AknightMonsterCharacterBase> Monster;
+
+	/** 보통 Knight Monster Target Evaluator의 Target 출력에 바인딩한다. 비어 있으면 몸을 돌리지 않고 서 있기만 한다. */
+	UPROPERTY(EditAnywhere, Category="Input", meta=(Optional))
+	TObjectPtr<AActor> Target;
+
+	/** 0보다 크면 이 시간만큼 쉰다. 0이면 몬스터 정의의 AttackRestTime(2페이즈는 Phase2AttackRestTime). */
+	UPROPERTY(EditAnywhere, Category="Parameter", meta=(ClampMin=0, Units="s"))
+	float Duration = 0.f;
+
+	/** 쉬는 동안 타깃 쪽으로 도는 속도. 공격 전 조준(Knight Face Target)보다 느리게 두어 노려보는 느낌을 준다. 0이면 돌지 않는다. */
+	UPROPERTY(EditAnywhere, Category="Parameter", meta=(ClampMin=0, Units="deg"))
+	float TurnRate = 45.f;
+
+	/**
+	 * 타깃이 정면에서 이 각도 안에 있을 때만 돈다. 더 벗어나 있으면 발을 디디지 않고 미끄러지며 크게 도는 모습이 되므로 서 있기만 하고,
+	 * 큰 회전은 다음 공격 전 조준(회전 몽타주)에 맡긴다.
+	 */
+	UPROPERTY(EditAnywhere, Category="Parameter", meta=(ClampMin=0, ClampMax=180, Units="deg"))
+	float MaxTurnAngle = 60.f;
+
+	UPROPERTY(EditAnywhere, Category="Parameter", meta=(ClampMin=0, Units="deg"))
+	float Tolerance = 10.f;
+
+	float RemainingTime = 0.f;
+};
+
+/**
+ * 공격 사이 틈. 정해진 시간 동안 서서 타깃 쪽으로 천천히 몸을 돌리고(노려보기), 시간이 다 되면 성공한다.
+ * Recover 상태에서 물러나기·돌아보기 조건에 맞지 않을 때 쓴다. 시간이 0이면 바로 성공한다.
+ */
+USTRUCT(meta=(DisplayName="Knight Rest", Category="Knight"))
+struct KNIGHT_API FknightStateTreeRestTask : public FStateTreeTaskCommonBase
+{
+	GENERATED_BODY()
+
+	FknightStateTreeRestTask()
+	{
+		bShouldCallTick = true;
+	}
+
+	using FInstanceDataType = FknightRestTaskInstanceData;
+	virtual const UStruct* GetInstanceDataType() const override { return FInstanceDataType::StaticStruct(); }
+
+	virtual EStateTreeRunStatus EnterState(FStateTreeExecutionContext& Context, const FStateTreeTransitionResult& Transition) const override;
+	virtual EStateTreeRunStatus Tick(FStateTreeExecutionContext& Context, const float DeltaTime) const override;
 };
 
 ////////////////////////////////////////////////////////////////////

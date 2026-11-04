@@ -22,6 +22,8 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Attack, "Ability.Attack", "Any attack ability.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Attack_Charge, "Ability.Attack.Charge", "Charged greatsword attack.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Attack_Ranged, "Ability.Attack.Ranged", "Monster attack used from range (StateTree ranged branch).");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Move, "Ability.Move", "Monster movement action (step back, strafe). Not drawn with attacks; the StateTree picks it by this tag.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Move_Retreat, "Ability.Move.Retreat", "Monster backs away after an attack (StateTree Recover state).");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Guard, "Ability.Guard", "Guard and parry ability.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Boost_Dash, "Ability.Boost.Dash", "Boost dash ability.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Boost_Flight, "Ability.Boost.Flight", "Boost flight ability.");
