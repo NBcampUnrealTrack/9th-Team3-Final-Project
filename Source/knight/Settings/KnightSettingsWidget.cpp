@@ -106,6 +106,7 @@ namespace
 	FString CurrentGameCulture()
 	{
 		FString Name = FInternationalization::Get().GetCurrentLanguage()->GetName();
+		#if WITH_EDITOR
 		if (GIsEditor)
 		{
 			// 에디터에서 게임 글자는 미리보기를 켰을 때만 번역된다. 끄면 원문(한국어)
@@ -113,6 +114,7 @@ namespace
 			Name = !Loc.IsGameLocalizationPreviewEnabled() ? FString(GameCultures[0].Key)
 				: !EditorPreviewCulture.IsEmpty() ? EditorPreviewCulture : Loc.GetConfiguredGameLocalizationPreviewLanguage();
 		}
+		#endif
 		const TArray<FString> Prioritized = FInternationalization::Get().GetPrioritizedCultureNames(Name);
 		for (const FString& Candidate : Prioritized)
 		{
@@ -674,6 +676,7 @@ void UKnightSettingsWidget::Apply()
 	if (DraftCulture != SavedCulture)
 	{
 		bool bChanged = true;
+		#if WITH_EDITOR
 		if (GIsEditor)
 		{
 			// 에디터(PIE)에서는 에디터 화면 언어는 그대로 두고 게임 글자만 바꾼다(툴바 Preview Game Language와 같음). 저장하지 않는다.
@@ -681,6 +684,7 @@ void UKnightSettingsWidget::Apply()
 			FTextLocalizationManager::Get().EnableGameLocalizationPreview(DraftCulture);
 		}
 		else
+		#endif
 		{
 			// 두 번째 인자 true = GameUserSettings.ini [Internationalization] Culture 에 저장해 다음 실행에도 쓴다
 			bChanged = UKismetInternationalizationLibrary::SetCurrentCulture(DraftCulture, true);

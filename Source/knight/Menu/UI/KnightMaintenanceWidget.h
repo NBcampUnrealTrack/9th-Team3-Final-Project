@@ -10,8 +10,11 @@
 class UCommonButtonBase;
 class UCommonButtonStyle;
 class UTexture2D;
+class UMaterialInterface;
+class UMaterialInstanceDynamic;
 class UCommonTextBlock;
 class UImage;
+class UScaleBox;
 class UBorder;
 class UScrollBox;
 class UTextBlock;
@@ -29,6 +32,7 @@ class UEditableTextBox;
 class UKnightInventoryEntryWidget;
 class UknightItemDefinition;
 class UknightMaterialItemDefinition;
+enum class EKnightWeaponUpgradeOutcome : uint8;
 
 enum class EKnightMaintenanceDestination : uint8
 {
@@ -68,6 +72,7 @@ public:
 protected:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeDestruct() override;
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
 	/** Cooked artwork references, used only by the Enhancement destination. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Enhancement Presentation")
@@ -80,6 +85,19 @@ protected:
 	TSubclassOf<UCommonButtonStyle> EnhancementActionStyle;
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Enhancement Presentation")
 	TSubclassOf<UCommonButtonStyle> EnhancementRowStyle;
+	/** Dedicated UI light masks. Hard references in the maintenance WBP keep them available when cooked. */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Enhancement VFX")
+	TObjectPtr<UMaterialInterface> EnhancementFragmentMaterial;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Enhancement VFX")
+	TObjectPtr<UMaterialInterface> EnhancementEchoMaterial;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Enhancement VFX")
+	TObjectPtr<UMaterialInterface> EnhancementFieldGlowMaterial;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Enhancement VFX", meta=(ClampMin="0.05"))
+	float EnhancementGatherDuration = .46f;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Enhancement VFX", meta=(ClampMin="0.05"))
+	float EnhancementHoldDuration = .28f;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Enhancement VFX", meta=(ClampMin="0.05"))
+	float EnhancementReleaseDuration = .86f;
 
 	/** Full-height raster surfaces shared by Enhancement and Sockets only. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Industrial Presentation")
@@ -136,6 +154,7 @@ protected:
 	UPROPERTY(meta=(BindWidget)) TObjectPtr<UCommonButtonBase> Btn_ConfirmCancel;
 
 private:
+	friend class UknightEnhancementPreviewCheckCommandlet;
 	void ApplyCraftingPresentation();
 	void StyleCraftingEntry(UKnightMaintenanceEntryWidget* Entry);
 	void ApplyDestinationLayout();
@@ -155,6 +174,14 @@ private:
 	void RefreshWeaponUpgradePanel();
 	void RebuildEnhancementTarget(bool bRestoreFocus = true);
 	void BuildEnhancementPresentation();
+	UWidget* BuildEnhancementPreview();
+	void SyncEnhancementVisualLayout();
+	void CaptureEnhancementIdleTransform();
+	void RestoreEnhancementIdleTransform();
+	void ResetEnhancementBars();
+	void StartEnhancementBars(EKnightWeaponUpgradeOutcome Outcome);
+	void TickEnhancementBars(float DeltaTime);
+	void ApplyEnhancementBars();
 	void BuildIndustrialSideSurfaces();
 	void SelectEnhancementWeapon(FPrimaryAssetId WeaponId);
 	void RefreshEnhancementDetails();
@@ -226,6 +253,32 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> EnhancementIncrease;
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> EnhancementSuccessSummary;
 	UPROPERTY(Transient) TObjectPtr<UImage> EnhancementWeaponImage;
+	UPROPERTY(Transient) TObjectPtr<UScaleBox> EnhancementIconScale;
+	FWidgetTransform EnhancementIdleIconTransform;
+	FWidgetTransform EnhancementIdleScaleTransform;
+	FVector2D EnhancementIdleIconPivot;
+	FVector2D EnhancementIdleScalePivot;
+	bool bEnhancementIdleCaptured = false;
+	UPROPERTY(Transient) TObjectPtr<UCanvasPanel> EnhancementBarCanvas;
+	UPROPERTY(Transient) TObjectPtr<UWidget> EnhancementPreviewHost;
+	UPROPERTY(Transient) TObjectPtr<UWidget> EnhancementPreviewAnchor;
+	UPROPERTY(Transient) TObjectPtr<UWidget> EnhancementReadoutAnchor;
+	UPROPERTY(Transient) TObjectPtr<UCanvasPanel> EnhancementReadoutBackdropLayer;
+	UPROPERTY(Transient) TObjectPtr<UImage> EnhancementReadoutBackdrop;
+	UPROPERTY(Transient) TArray<TObjectPtr<UImage>> EnhancementBars;
+	UPROPERTY(Transient) TArray<TObjectPtr<UMaterialInstanceDynamic>> EnhancementFragmentPalettes;
+	TArray<float> EnhancementTrailLengths;
+	TArray<float> EnhancementTrailOpacities;
+	UPROPERTY(Transient) TObjectPtr<UImage> EnhancementFieldGlow;
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> EnhancementGlowMID;
+	enum class EEnhancementBarPhase : uint8 { Idle, Rising, Trembling, Success, Failure, Transparent };
+	EEnhancementBarPhase EnhancementBarPhase = EEnhancementBarPhase::Idle;
+	float EnhancementBarElapsed = 0.f;
+	TArray<FVector2D> EnhancementBarPositions;
+	TArray<float> EnhancementBarOpacities;
+	TArray<FVector2D> EnhancementBarResultPositions;
+	TArray<float> EnhancementBarResultOpacities;
+	bool bEnhancementBarsSucceeded = false;
 	UPROPERTY(Transient) TObjectPtr<UImage> EnhancementMaterialImage;
 	UPROPERTY(Transient) TObjectPtr<UVerticalBox> UpgradePanel;
 	UPROPERTY(Transient) TObjectPtr<UScrollBox> EnhancementDetailPage;
