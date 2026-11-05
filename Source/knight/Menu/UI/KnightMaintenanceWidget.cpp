@@ -1,4 +1,5 @@
 #include "Menu/UI/KnightMaintenanceWidget.h"
+#include "Menu/UI/KnightMaintenanceStateExtension.h"
 #include "Menu/UI/KnightMaintenancePresentation.h"
 
 #include "AbilitySystem/Attributes/knightAttributeSet.h"
@@ -609,6 +610,18 @@ void UKnightMaintenanceWidget::NativeTick(const FGeometry& MyGeometry, float InD
 	Super::NativeTick(MyGeometry, InDeltaTime);
 	TickEnhancementBars(InDeltaTime);
 	UpdateNearbyEquipmentActionLayout();
+}
+
+FReply UKnightMaintenanceWidget::NativeOnMouseMove(const FGeometry& Geometry, const FPointerEvent& MouseEvent)
+{
+	if (!MouseEvent.GetCursorDelta().IsNearlyZero()) bNavigationFeedback = false;
+	return Super::NativeOnMouseMove(Geometry, MouseEvent);
+}
+
+FReply UKnightMaintenanceWidget::NativeOnPreviewMouseButtonDown(const FGeometry& Geometry, const FPointerEvent& MouseEvent)
+{
+	bNavigationFeedback = false;
+	return Super::NativeOnPreviewMouseButtonDown(Geometry, MouseEvent);
 }
 
 UknightProgressionSubsystem* UKnightMaintenanceWidget::GetProgression() const
@@ -1345,6 +1358,11 @@ void UKnightMaintenanceWidget::RebuildEnhancementTarget(bool bRestoreFocus)
 	const FString Profile = Saves ? Saves->GetActiveSlotId() : FString();
 	TArray<FknightItemStack> Owned;
 	if (Progression) bComplete = Progression->GetOwnedWeapons(Owned);
+	TArray<FKnightMainEquipmentSlot> EquipmentSlots;
+	if (Progression) Progression->GetMainEquipmentSlots(EquipmentSlots);
+	const FKnightMainEquipmentSlot* WeaponSlot = EquipmentSlots.FindByPredicate([](const FKnightMainEquipmentSlot& Slot)
+		{ return Slot.SlotTag == knightGameplayTags::Equipment_Slot_Weapon; });
+	const UknightPartItemDefinition* EquippedWeapon = WeaponSlot ? WeaponSlot->Part.Get() : nullptr;
 	const auto RowClass = UKnightMaintenanceEntryWidget::GetSharedWidgetClass();
 	for (const FknightItemStack& Stack : Owned)
 	{
@@ -1353,6 +1371,7 @@ void UKnightMaintenanceWidget::RebuildEnhancementTarget(bool bRestoreFocus)
 		UKnightMaintenanceEntryWidget* Row = CreateWidget<UKnightMaintenanceEntryWidget>(GetOwningPlayer(), RowClass);
 		if (!Row) continue;
 		Row->SetEntry(Item, nullptr, EKnightMaintenanceEntryState::Owned, Stack.Count);
+		UKnightMaintenanceStateExtension::SetEquipped(Row, EquippedWeapon && EquippedWeapon->GetPrimaryAssetId() == Item->GetPrimaryAssetId());
 		if (EnhancementRowStyle) Row->SetStyle(EnhancementRowStyle);
 		const FPrimaryAssetId Id = Item->GetPrimaryAssetId();
 		Row->OnClicked().AddWeakLambda(this, [this, Id, Profile]()
@@ -1745,6 +1764,12 @@ void UKnightMaintenanceWidget::OpenEquipmentPicker()
 void UKnightMaintenanceWidget::RebuildEquipmentPicker()
 {
 	if (!bEquipmentPickerOpen || !EquipmentPickerList || !WidgetTree) return;
+	const float Scroll = EquipmentPickerList->GetScrollOffset();
+	const UknightPartItemDefinition* FocusedPart = nullptr;
+	for (int32 Index = 0; Index < EquipmentPickerButtons.Num(); ++Index)
+		if (EquipmentPickerParts.IsValidIndex(Index) && EquipmentPickerButtons[Index]
+			&& (EquipmentPickerButtons[Index]->HasAnyUserFocus() || EquipmentPickerButtons[Index]->HasFocusedDescendants()))
+			FocusedPart = EquipmentPickerParts[Index];
 	EquipmentPickerList->ClearChildren();
 	EquipmentPickerButtons.Reset();
 	EquipmentPickerParts.Reset();
@@ -1783,6 +1808,9 @@ void UKnightMaintenanceWidget::RebuildEquipmentPicker()
 		EquipmentPickerList->AddChild(Message);
 	}
 	RefreshEquipmentPickerPreview();
+	EquipmentPickerList->SetScrollOffset(Scroll);
+	for (int32 Index = 0; Index < EquipmentPickerParts.Num(); ++Index)
+		if (EquipmentPickerParts[Index] == FocusedPart) { EquipmentPickerButtons[Index]->SetFocus(); break; }
 }
 
 void UKnightMaintenanceWidget::RefreshEquipmentPickerPreview()
@@ -1795,6 +1823,9 @@ void UKnightMaintenanceWidget::RefreshEquipmentPickerPreview()
 		SetSelected(EquipmentPickerButtons[Index], EquipmentPickerCandidate == EquipmentPickerParts[Index]);
 	bool bSlotComplete = false;
 	const UknightPartItemDefinition* const Equipped = GetEquippedInSelectedSlot(bSlotComplete);
+	for (int32 Index = 0; Index < EquipmentPickerButtons.Num() && Index < EquipmentPickerParts.Num(); ++Index)
+		UKnightMaintenanceStateExtension::SetEquipped(EquipmentPickerButtons[Index], bSlotComplete && Equipped
+			&& EquipmentPickerParts[Index] && Equipped->GetPrimaryAssetId() == EquipmentPickerParts[Index]->GetPrimaryAssetId());
 	const UknightPartItemDefinition* const Candidate = EquipmentPickerCandidate.Get();
 	if (Txt_ConfirmBody)
 	{
@@ -1823,14 +1854,8 @@ void UKnightMaintenanceWidget::RefreshEquipmentPickerPreview()
 	SetButtonLocked(Btn_ConfirmOk, !bComplete || !bSlotComplete || !Candidate || Candidate == Equipped
 		|| !Saves || !Saves->CanStartAtomicTransaction(),
 		LOCTEXT("EquipmentPickerBlocked", "장비 선택·보유 상태·저장 상태를 확인하세요."));
-	if (Candidate)
-		for (int32 Index = 0; Index < EquipmentPickerParts.Num() && Index < EquipmentPickerButtons.Num(); ++Index)
-			if (EquipmentPickerParts[Index] == Candidate) { EquipmentPickerButtons[Index]->SetFocus(); break; }
-	else if (Panel_Confirm && Panel_Confirm->IsVisible())
-	{
-		if (!EquipmentPickerButtons.IsEmpty()) EquipmentPickerButtons[0]->SetFocus();
-		else if (Btn_ConfirmCancel) Btn_ConfirmCancel->SetFocus();
-	}
+	// Refresh does not move focus off an explicit confirmation/cancel action.
+	// Open and rebuild restore focus deliberately; inspection never equips.
 }
 
 void UKnightMaintenanceWidget::CloseEquipmentPicker(bool bRestoreFocus)

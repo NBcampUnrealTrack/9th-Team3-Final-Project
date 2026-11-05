@@ -2,6 +2,8 @@
 #include "Menu/UI/KnightMaintenanceWidget.h"
 #include "Menu/UI/KnightMaintenanceEntryWidget.h"
 #include "Menu/UI/KnightMaintenancePresentation.h"
+#include "Menu/UI/KnightMaintenanceStateExtension.h"
+#include "Menu/UI/KnightButtonFillExtension.h"
 #include "Blueprint/WidgetTree.h"
 #include "CommonButtonBase.h"
 #include "CommonTextBlock.h"
@@ -42,7 +44,7 @@
 int32 UknightEquipmentActionCheckCommandlet::Main(const FString& Params)
 {
 	FString Namespace, Out, UserDir;
-	if (!FParse::Value(FCommandLine::Get(), TEXT("KnightSaveTestNamespace="), Namespace) || Namespace.IsEmpty()
+	if (!FParse::Value(FCommandLine::Get(), TEXT("KnightSaveTestNamespace="), Namespace) || Namespace.IsEmpty() || Namespace.Len() > 32
 		|| !FParse::Value(FCommandLine::Get(), TEXT("UserDir="), UserDir) || UserDir.IsEmpty()
 		|| !FParse::Value(*Params, TEXT("Out="), Out)
 		|| !FParse::Param(FCommandLine::Get(), TEXT("AllowCommandletRendering"))) return 1;
@@ -83,9 +85,22 @@ int32 UknightEquipmentActionCheckCommandlet::Main(const FString& Params)
 		Check(Saves->CanStartAtomicTransaction(), TEXT("normal async save completed"));
 	};
 	const FString RunId = FGuid::NewGuid().ToString(EGuidFormats::Digits).Left(12);
-	Check(Saves->SelectSlot(TEXT("EquipmentAction") + RunId), TEXT("fresh isolated profile"));
+	const bool bProfileSelected = Saves->SelectSlot(TEXT("EquipmentAction") + RunId);
+	Check(bProfileSelected, TEXT("fresh isolated profile"));
+	if (!bProfileSelected)
+	{
+		GI->Shutdown(); GEngine->DestroyWorldContext(World); World->DestroyWorld(false); GI->RemoveFromRoot();
+		return 1;
+	}
 	const auto* Catalog = UknightEquipmentSettings::LoadCatalog();
 	if (!Catalog) return 1;
+	if (FParse::Param(*Params, TEXT("PresentationOnly")))
+	{
+		const int32 Result = CheckPresentation(Player, Out);
+		DrainSave();
+		GI->Shutdown(); GEngine->DestroyWorldContext(World); World->DestroyWorld(false); GI->RemoveFromRoot();
+		return Result || Failures ? 1 : 0;
+	}
 	const TArray<FGameplayTag> Tags = { knightGameplayTags::Equipment_Slot_Weapon, knightGameplayTags::Equipment_Slot_Head,
 		knightGameplayTags::Equipment_Slot_Torso, knightGameplayTags::Equipment_Slot_Arms, knightGameplayTags::Equipment_Slot_Legs };
 	TArray<const UknightPartItemDefinition*> Candidates;
@@ -114,6 +129,12 @@ int32 UknightEquipmentActionCheckCommandlet::Main(const FString& Params)
 			Check(Progression->SetEquippedPart((*PreviousRecipe)->Result), TEXT("seed distinct owned armor for replacement fixture"));
 		}
 	}
+	const UknightPartItemDefinition* ThirdWeapon = nullptr;
+	for (const UknightCraftRecipeDefinition* Recipe : Catalog->Recipes)
+		if (Recipe && Recipe->Result && Recipe->Result->SlotTag == Tags[0]
+			&& Recipe->GetName().Contains(TEXT("Janhyang")) && Recipe->Result != Candidates[0])
+		{ ThirdWeapon = Recipe->Result; Progression->AddItem(ThirdWeapon, 1); break; }
+	Check(ThirdWeapon != nullptr, TEXT("third owned weapon for independent input/inspection/equipment states"));
 	DrainSave();
 	UKnightMaintenanceWidget* Widget = CreateWidget<UKnightMaintenanceWidget>(Player, UKnightMaintenanceWidget::GetSharedWidgetClass());
 	if (!Widget) return 1;
@@ -124,6 +145,7 @@ int32 UknightEquipmentActionCheckCommandlet::Main(const FString& Params)
 	const TSharedRef<SWidget> SlateWidget = Widget->TakeWidget();
 	const TSharedRef<SVirtualWindow> Window = SNew(SVirtualWindow);
 	Window->SetContent(SlateWidget);
+	FSlateApplication::Get().RegisterVirtualWindow(Window);
 	FHittestGrid HitTestGrid;
 	UTextureRenderTarget2D* Target = nullptr;
 	FIntPoint Size; float Scale = 1.f;
@@ -168,6 +190,16 @@ int32 UknightEquipmentActionCheckCommandlet::Main(const FString& Params)
 		});
 	};
 	auto Center = [](FSlateRect Bounds) { return FVector2D((Bounds.Left + Bounds.Right) * .5f, (Bounds.Top + Bounds.Bottom) * .5f); };
+	auto EquippedBadge = [](const UCommonButtonBase* Row)
+	{
+		const auto* State = Row ? Row->GetExtension<UKnightMaintenanceStateExtension>() : nullptr;
+		return State && State->IsEquipped();
+	};
+	auto VisibleLayer = [](UCommonButtonBase* Row, const TCHAR* Name)
+	{
+		const UWidget* Layer = Row ? Row->GetWidgetFromName(Name) : nullptr;
+		return Layer && Layer->IsVisible();
+	};
 	auto ValidateLayout = [&](int32 Selected)
 	{
 		Draw(); Draw();
@@ -254,6 +286,62 @@ int32 UknightEquipmentActionCheckCommandlet::Main(const FString& Params)
 	}
 	SetRenderSize(FIntPoint(1920,1080), 1.25f); Widget->SelectEquipmentSlot(Tags[0]); ValidateLayout(0); Capture(TEXT("Weapon_UI125"));
 	SetRenderSize(FIntPoint(1920,1080), 1.f);
+	// State combinations use the production picker, real ownership and Slate focus.
+	if (Widget->SelectedEquipmentSlot != Tags[0]) Widget->SelectEquipmentSlot(Tags[0]);
+	Widget->EquipmentReplaceButton->SetFocus(); Draw(); Draw();
+	Check(Widget->EquipmentSlotButtons[0]->GetSelected() && VisibleLayer(Widget->EquipmentSlotButtons[0], TEXT("MaintenanceSelectionEdge"))
+		&& !EquippedBadge(Widget->EquipmentSlotButtons[0]), TEXT("selected slot retains accent with focus on external action, without redundant equipped badge"));
+	Capture(TEXT("States_SlotSelected_ActionFocused"));
+	Widget->RequestNearbyEquipmentReplacement(); Draw(); Draw();
+	const auto EquippedBefore = knightEquipmentStats::ReadLoadout(Progression, Catalog).FindRef(Tags[0]);
+	const int32 A = Widget->EquipmentPickerParts.IndexOfByKey(EquippedBefore);
+	const int32 B = Widget->EquipmentPickerParts.IndexOfByKey(Candidates[0]);
+	const int32 C = Widget->EquipmentPickerParts.IndexOfByKey(ThirdWeapon);
+	Check(A != INDEX_NONE && B != INDEX_NONE && C != INDEX_NONE, TEXT("three distinct owned weapons in actual picker"));
+	if (A != INDEX_NONE && B != INDEX_NONE && C != INDEX_NONE)
+	{
+		UCommonButtonBase* RowA = Widget->EquipmentPickerButtons[A];
+		UCommonButtonBase* RowB = Widget->EquipmentPickerButtons[B];
+		UCommonButtonBase* RowC = Widget->EquipmentPickerButtons[C];
+		RowB->OnClicked().Broadcast(); RowC->SetFocus(); Draw(); Draw();
+		Check(EquippedBadge(RowA) && !EquippedBadge(RowB) && !EquippedBadge(RowC), TEXT("equipped marker follows active loadout, not candidate or focus"));
+		Check(RowB->GetSelected() && !RowA->GetSelected() && !RowC->GetSelected()
+			&& VisibleLayer(RowB, TEXT("MaintenanceSelectionEdge")), TEXT("inspection B remains selected while C receives focus"));
+		Check(VisibleLayer(RowC, TEXT("MaintenanceFocusOutline")), TEXT("third item has restrained navigation outline"));
+		Check(knightEquipmentStats::ReadLoadout(Progression, Catalog).FindRef(Tags[0]) == EquippedBefore, TEXT("selection and focus do not equip"));
+		Capture(TEXT("States_EquippedA_SelectedB_FocusedC"));
+		const FPointerEvent Move(0, FVector2D(100,100), FVector2D(99,100), TSet<FKey>(), EKeys::Invalid, 0.f, FModifierKeysState());
+		Widget->NativeOnMouseMove(Widget->GetCachedGeometry(), Move); Draw(); Draw();
+		Check(!VisibleLayer(RowC, TEXT("MaintenanceFocusOutline")) && VisibleLayer(RowB, TEXT("MaintenanceSelectionEdge"))
+			&& EquippedBadge(RowA), TEXT("pointer input suppresses stale keyboard focus without clearing selected or equipped"));
+		const auto HoverPath = HitTestGrid.GetBubblePath(Center(Rect(RowC)), 0.f, false);
+		for (const FWidgetAndPointer& Node : HoverPath) Node.Widget->OnMouseEnter(Node.Geometry, Move);
+		Draw(); Draw();
+		Check(RowC->IsHovered() && !VisibleLayer(RowC, TEXT("MaintenanceFocusOutline")) && !RowC->GetSelected(), TEXT("Slate mouse hover gives third item temporary feedback only"));
+		Capture(TEXT("States_EquippedA_SelectedB_HoveredC"));
+		for (const FWidgetAndPointer& Node : HoverPath) Node.Widget->OnMouseLeave(Move);
+		Draw(); Draw();
+		Check(!RowC->IsHovered() && RowB->GetSelected() && EquippedBadge(RowA), TEXT("Slate mouse leave clears hover only"));
+		const auto BadgeBounds = Rect(RowA->GetWidgetFromName(TEXT("MaintenanceEquippedLabel")));
+		const auto LabelBounds = Rect(RowA->GetWidgetFromName(TEXT("Txt_Label")));
+		Check(BadgeBounds.Left >= LabelBounds.Right || BadgeBounds.Bottom <= LabelBounds.Top,
+			TEXT("equipped badge does not overlap item name or ownership count"));
+		const auto EdgeBounds = Rect(RowB->GetWidgetFromName(TEXT("MaintenanceSelectionEdge")));
+		Check(EdgeBounds.Left - Rect(RowB).Left < 20.f * Scale && EdgeBounds.Right - EdgeBounds.Left <= 3.1f * Scale,
+			TEXT("persistent accent is a slim row edge, not a text highlight"));
+		const auto* Fill = RowB->GetExtension<UKnightButtonFillExtension>();
+		Check(!Fill || !Fill->IsEnabled(), TEXT("maintenance remains static without animated fill"));
+		Widget->NativeOnPreviewKeyDown(Widget->GetCachedGeometry(), FKeyEvent(EKeys::Down, FModifierKeysState(), 0, false, 0, 0));
+		RowA->OnClicked().Broadcast(); RowA->SetFocus(); Draw(); Draw();
+		Check(EquippedBadge(RowA) && VisibleLayer(RowA, TEXT("MaintenanceEquippedLabel"))
+			&& VisibleLayer(RowA, TEXT("MaintenanceSelectionEdge")), TEXT("selected plus equipped indicators coexist"));
+		Check(Widget->Btn_ConfirmOk->GetLocked() && Widget->Btn_ConfirmOk->GetRenderOpacity() == 1.f,
+			TEXT("already equipped action unavailable without double-dimming its label"));
+		Capture(TEXT("States_SelectedAndEquipped_DisabledAction"));
+		Widget->Btn_ConfirmCancel->SetFocus(); Widget->RefreshEquipmentPickerPreview(); Draw(); Draw();
+		Check(Widget->Btn_ConfirmCancel->HasAnyUserFocus() || Widget->Btn_ConfirmCancel->HasFocusedDescendants(), TEXT("preview refresh preserves cancel focus"));
+	}
+	Widget->CloseEquipmentPicker(true);
 	for (int32 Index = 0; Index < Tags.Num(); ++Index)
 	{
 		if (Widget->SelectedEquipmentSlot != Tags[Index]) Widget->SelectEquipmentSlot(Tags[Index]);
@@ -281,11 +369,16 @@ int32 UknightEquipmentActionCheckCommandlet::Main(const FString& Params)
 		Check(Widget->Txt_PartName->GetText().EqualTo(Candidates[Index]->DisplayName)
 			&& Widget->Img_Selected->GetBrush().GetResourceObject() == Candidates[Index]->Icon.LoadSynchronous(), TEXT("existing detail name and icon refreshed"));
 		DrainSave();
+		Widget->RequestNearbyEquipmentReplacement();
+		for (int32 Row = 0; Row < Widget->EquipmentPickerButtons.Num(); ++Row)
+			Check(EquippedBadge(Widget->EquipmentPickerButtons[Row]) == (Widget->EquipmentPickerParts[Row] == Candidates[Index]), TEXT("replacement refresh updates actual equipped badge"));
+		Widget->CloseEquipmentPicker(true);
 		Widget->UnequipSelection(); DrainSave();
 		Check(Cast<UTextBlock>(Widget->EquipmentReplaceButton->GetWidgetFromName(TEXT("Txt_Label")))->GetText().ToString() == TEXT("장착"), TEXT("empty slot exposes Equip"));
 		ValidateLayout(Index);
 		if (Index == 0) Capture(TEXT("EmptyWeapon"));
 		Widget->EquipmentReplaceButton->OnClicked().Broadcast();
+		for (const UCommonButtonBase* Row : Widget->EquipmentPickerButtons) Check(!EquippedBadge(Row), TEXT("explicitly empty slot has no equipped item badge"));
 		const int32 EmptyPick = Widget->EquipmentPickerParts.IndexOfByKey(Candidates[Index]);
 		Check(EmptyPick != INDEX_NONE, TEXT("empty slot uses same compatible picker"));
 		if (EmptyPick != INDEX_NONE) { Widget->EquipmentPickerButtons[EmptyPick]->OnClicked().Broadcast(); Widget->Btn_ConfirmOk->OnClicked().Broadcast(); }
@@ -322,6 +415,13 @@ int32 UknightEquipmentActionCheckCommandlet::Main(const FString& Params)
 		&& Progression->GetItemCount(ShortcutWeapon) == OwnedBeforeShortcut,
 		TEXT("inspection alone changes no money, level or inventory"));
 	Check(!Widget->IsEnhancementNavigationBlocked(), TEXT("idle enhancement screen permits Back"));
+	for (UKnightMaintenanceEntryWidget* Row : Widget->EnhancementWeaponRows)
+		Check(EquippedBadge(Row) == (Row->GetPart() == ShortcutWeapon), TEXT("enhancement list badge comes from equipped identity"));
+	Widget->SelectEnhancementWeapon(ThirdWeapon->GetPrimaryAssetId()); Draw(); Draw();
+	Capture(TEXT("States_Enhancement_EquippedAndInspected"));
+	for (UKnightMaintenanceEntryWidget* Row : Widget->EnhancementWeaponRows)
+		Check(Row->GetSelected() == (Row->GetPart() == ThirdWeapon) && EquippedBadge(Row) == (Row->GetPart() == ShortcutWeapon), TEXT("enhancement inspection independent of actual equipment"));
+	Widget->SelectEnhancementWeapon(ShortcutWeapon->GetPrimaryAssetId());
 	// Exercise one real isolated upgrade transaction, then the same return path.
 	if (ShortcutQuote.MoneyCost > 0 && ShortcutQuote.TargetLevel > ShortcutQuote.CurrentLevel)
 	{
@@ -363,7 +463,14 @@ int32 UknightEquipmentActionCheckCommandlet::Main(const FString& Params)
 	Check(Saves->SelectSlot(TEXT("EquipmentOther") + RunId), TEXT("second isolated profile"));
 	Widget->EquipmentReplaceButton->OnClicked().Broadcast();
 	Check(!Widget->EquipmentReplaceTarget.IsValid() && !Widget->bEquipmentPickerOpen, TEXT("profile switch invalidates action"));
+	Widget->Open(EKnightMaintenanceDestination::Enhancement); Draw(); Draw();
+	TArray<FKnightMainEquipmentSlot> NewSlots; Progression->GetMainEquipmentSlots(NewSlots);
+	const auto* NewWeapon = NewSlots.FindByPredicate([&](const FKnightMainEquipmentSlot& Slot) { return Slot.SlotTag == Tags[0]; });
+	for (UKnightMaintenanceEntryWidget* Row : Widget->EnhancementWeaponRows)
+		Check(!Row->GetSelected() && EquippedBadge(Row) == (NewWeapon && Row->GetPart() == NewWeapon->Part), TEXT("profile switch clears old inspection and equipped indicators"));
+	Capture(TEXT("States_NewProfile"));
 	Widget->Close(); Widget->RemoveFromRoot();
+	FSlateApplication::Get().UnregisterVirtualWindow(Window);
 	BeginCleanup(Renderer); FlushRenderingCommands(); if (Target) Target->RemoveFromRoot();
 	GI->Shutdown(); GEngine->DestroyWorldContext(World); World->DestroyWorld(false); GI->RemoveFromRoot();
 	UE_LOG(LogTemp, Display, TEXT("EquipmentAction COMPLETE failures=%d output=%s"), Failures, *Out);

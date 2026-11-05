@@ -168,6 +168,9 @@ FReply UKnightMaintenanceWidget::HandleCraftResultKey(const FKeyEvent& Event)
 
 FReply UKnightMaintenanceWidget::NativeOnPreviewKeyDown(const FGeometry& Geometry, const FKeyEvent& KeyEvent)
 {
+	const FKey Key = KeyEvent.GetKey();
+	if (Key.IsGamepadKey() || Key == EKeys::Tab || Key == EKeys::Up || Key == EKeys::Down || Key == EKeys::Left || Key == EKeys::Right)
+		bNavigationFeedback = true;
 	return IsCraftResultOpen() ? HandleCraftResultKey(KeyEvent) : Super::NativeOnPreviewKeyDown(Geometry, KeyEvent);
 }
 

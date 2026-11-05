@@ -4007,8 +4007,8 @@ msgstr "강화 대상"
 #. SourceLocation:	Source/knight/Menu/UI/KnightMaintenanceEnhancement.cpp(158)
 #: Source/knight/Menu/UI/KnightMaintenanceEnhancement.cpp(158)
 msgctxt "KnightEnhancementPresentation,Probability"
-msgid "이번 시도 성공률"
-msgstr "이번 시도 성공률"
+msgid "성공률"
+msgstr "성공률"
 
 #. Key:	Materials
 #. SourceLocation:	Source/knight/Menu/UI/KnightMaintenanceEnhancement.cpp(161)

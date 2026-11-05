@@ -563,6 +563,9 @@ void UKnightMainMenuWidget::EnsureMaintenanceWidget()
 		// Navigation actions are not a persistent selection group.
 		Button->SetIsSelectable(false);
 		KnightMaintenancePresentation::ConfigureButton(Button, false);
+		// These compact navigation choices keep their authored frame. Focus brightens
+		// the text instead of adding the maintenance list's second, inset outline.
+		UKnightMaintenanceStateExtension::SetFocusOutlineEnabled(Button, false);
 		USizeBox* const Height = WidgetTree->ConstructWidget<USizeBox>();
 		Height->SetHeightOverride(60.f);
 		Height->AddChild(Button);

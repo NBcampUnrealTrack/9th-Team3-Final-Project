@@ -70,6 +70,8 @@ public:
 	bool IsCraftResultOpen() const { return CraftedPart != nullptr; }
 	FReply HandleCraftResultKey(const FKeyEvent& KeyEvent);
 	UWidget* GetFocusButton() const;
+	bool UsesNavigationFeedback() const { return bNavigationFeedback; }
+	void NotifyNavigationInput() { bNavigationFeedback = true; }
 
 	/** 탭·부위 선택 시 카메라 이동용. Open에서는 안 보냄(전신 시작). */
 	FKnightMaintenanceSlotFocused OnSlotFocused;
@@ -81,6 +83,9 @@ protected:
 	virtual void NativeDestruct() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 	virtual FReply NativeOnPreviewKeyDown(const FGeometry& Geometry, const FKeyEvent& KeyEvent) override;
+	virtual FReply NativeOnMouseMove(const FGeometry& Geometry, const FPointerEvent& MouseEvent) override;
+	virtual FReply NativeOnPreviewMouseButtonDown(const FGeometry& Geometry, const FPointerEvent& MouseEvent) override;
+	bool bNavigationFeedback = true;
 
 	/** Cooked artwork references, used only by the Enhancement destination. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Enhancement Presentation")

@@ -41,6 +41,7 @@ UCLASS()
 class KNIGHT_API UKnightMainMenuWidget : public UKnightMenuWidgetBase
 {
 	GENERATED_BODY()
+	friend class UknightEquipmentActionCheckCommandlet;
 
 public:
 	UFUNCTION(BlueprintPure, Category="Knight|Menu")

@@ -19,7 +19,7 @@ void UknightButtonBase::ConfigureMaintenanceButton(bool bInSelectable, bool bMai
 	SetIsInteractableWhenSelected(true);
 	FocusedTextStyle = nullptr;
 	HoverScale = 1.f;
-	PressedScale = 0.99f;
+	PressedScale = 1.f;
 	const TCHAR* Path = bMainTab
 		? TEXT("/Game/Knight/UI/Style/BS_Knight_CraftingMainTab.BS_Knight_CraftingMainTab_C")
 		: TEXT("/Game/Knight/UI/Style/BS_Knight_CraftingControl.BS_Knight_CraftingControl_C");
@@ -150,6 +150,8 @@ void UknightButtonBase::HandleFocusReceived()
 void UknightButtonBase::NativeOnAddedToFocusPath(const FFocusEvent& InFocusEvent)
 {
 	Super::NativeOnAddedToFocusPath(InFocusEvent);
+	if (bMaintenancePresentation && InFocusEvent.GetCause() == EFocusCause::Navigation)
+		UKnightMaintenanceStateExtension::NavigationFocus(this);
 
 	// The style plays the hover sound for the mouse only. Keyboard navigation gets the same sound here; focus set
 	// by code (a screen opening) or by a click stays silent, so nothing plays twice.
@@ -175,12 +177,21 @@ void UknightButtonBase::HandleFocusLost()
 
 void UknightButtonBase::HandleLockClicked()
 {
+	if (bMaintenancePresentation) return;
 	ShakeTimeLeft = ShakeDuration;
 	StartAnimating();
 }
 
 void UknightButtonBase::RefreshTargets()
 {
+	if (bMaintenancePresentation)
+	{
+		StopAnimating();
+		CurrentScale = TargetScale = 1.f;
+		BracketAlpha = TargetBracketAlpha = ShakeTimeLeft = 0.f;
+		ApplyMotion();
+		return; // Static outline/edge and label feedback are owned by the maintenance extension.
+	}
 	// Locked buttons still react to hover (cursor, tooltip) but never grow or open their brackets.
 	const bool bInteractive = GetIsEnabled() && !GetLocked();
 	const bool bHot = bInteractive && (IsHovered() || bFocusedVisual);
@@ -203,7 +214,7 @@ void UknightButtonBase::RefreshTargets()
 void UknightButtonBase::RefreshLockVisual()
 {
 	const bool bLockedNow = GetLocked();
-	SetRenderOpacity(bLockedNow ? LockedOpacity : 1.f);
+	SetRenderOpacity(bLockedNow && !bMaintenancePresentation ? LockedOpacity : 1.f);
 	SetCursor(bLockedNow ? EMouseCursor::SlashedCircle : EMouseCursor::Hand);
 	SetToolTipText(bLockedNow ? LockReason : FText::GetEmpty());
 	ApplyLabelStyle();
