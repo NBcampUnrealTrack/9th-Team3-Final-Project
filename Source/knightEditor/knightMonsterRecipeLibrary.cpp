@@ -1588,6 +1588,86 @@ bool UknightMonsterRecipeLibrary::SetFaceTargetSideAttacks(UStateTree* StateTree
 	return false;
 }
 
+namespace knightRecipePunish
+{
+	UStateTreeState* FindState(UStateTreeEditorData* EditorData, FName Name)
+	{
+		TArray<UStateTreeState*> Pending(EditorData->SubTrees);
+		while (!Pending.IsEmpty())
+		{
+			UStateTreeState* const State = Pending.Pop();
+			if (State->Name == Name)
+			{
+				return State;
+			}
+			Pending.Append(State->Children);
+		}
+		return nullptr;
+	}
+
+	// Punish와 다른 상태 사이의 전이를 지금 트리에 맞게 다시 잇는다. Punish가 없으면 아무것도 안 한다.
+	// Recover·Spacing을 따로 다시 만들면 그 상태가 새 ID로 바뀌어, 거기 달린 끼어들기 전이와 Strike → Recover 전이가 끊긴다.
+	// 그래서 세 Setup 함수가 모두 끝에서 부른다.
+	void Relink(UStateTreeEditorData* EditorData)
+	{
+		UStateTreeState* const Punish = FindState(EditorData, TEXT("Punish"));
+		if (!Punish)
+		{
+			return;
+		}
+		const FGuid EvaluatorID = EditorData->Evaluators[0].ID;
+
+		if (UStateTreeState* const Recover = FindState(EditorData, TEXT("Recover")))
+		{
+			for (UStateTreeState* const Group : Punish->Children)
+			{
+				if (!Group)
+				{
+					continue;
+				}
+				for (UStateTreeState* const Strike : Group->Children)
+				{
+					if (!Strike || !Strike->Name.ToString().EndsWith(TEXT("Strike")))
+					{
+						continue;
+					}
+					for (FStateTreeTransition& Transition : Strike->Transitions)
+					{
+						if (Transition.Trigger == EStateTreeTransitionTrigger::OnStateSucceeded)
+						{
+							Strike->Modify();
+							Transition.State = Recover->GetLinkToState();
+						}
+					}
+				}
+			}
+		}
+
+		// 노려보기·돌아보기·간 보기·추격 중에도 바로 끼어든다. 고를 응징 공격이 없으면(쿨다운) Punish 선택이 실패해 원래 상태를 이어 간다.
+		// 물러나기(Retreat)에는 달지 않는다. 뒷걸음이 시작되자마자 끊겨 몽타주가 튄다. 물러난 뒤 Combat에서 다시 본다.
+		for (const TCHAR* Name : { TEXT("Recover"), TEXT("Retreat"), TEXT("Turn"), TEXT("Hold"), TEXT("Spacing"), TEXT("Chase") })
+		{
+			UStateTreeState* const State = FindState(EditorData, Name);
+			if (!State)
+			{
+				continue;
+			}
+			State->Modify();
+			State->Transitions.RemoveAll([](const FStateTreeTransition& Transition) { return Transition.State.Name == TEXT("Punish"); });
+			if (State->Name == TEXT("Recover") || State->Name == TEXT("Retreat"))
+			{
+				continue;
+			}
+			FStateTreeTransition& Transition = State->AddTransition(EStateTreeTransitionTrigger::OnTick, EStateTreeTransitionType::GotoState, Punish);
+			TStateTreeEditorNode<FStateTreeCompareBoolCondition>& Condition = Transition.AddConditionWithOuter<FStateTreeCompareBoolCondition>(State);
+			Condition.GetInstanceData().bRight = true;
+			const FPropertyBindingPath Target(Condition.ID, TEXT("bLeft"));
+			EditorData->EditorBindings.RemoveBindings(Target);
+			EditorData->EditorBindings.AddBinding(FPropertyBindingPath(EvaluatorID, TEXT("bPunishAny")), Target);
+		}
+	}
+}
+
 bool UknightMonsterRecipeLibrary::SetupRecoverState(UStateTree* StateTree, float TurnAngle)
 {
 	UStateTreeEditorData* const EditorData = StateTree ? Cast<UStateTreeEditorData>(StateTree->EditorData) : nullptr;
@@ -1712,6 +1792,7 @@ bool UknightMonsterRecipeLibrary::SetupRecoverState(UStateTree* StateTree, float
 	{
 		RouteToRecover(*Breath);
 	}
+	knightRecipePunish::Relink(EditorData);
 
 	EditorData->ReparentStates();
 	EditorData->RemoveInvalidBindings();
@@ -1794,6 +1875,7 @@ bool UknightMonsterRecipeLibrary::SetupSpacingState(UStateTree* StateTree)
 	UStateTreeState* const Added = Combat->Children.Pop();
 	const int32 ChaseIndex = Combat->Children.IndexOfByPredicate([](const UStateTreeState* Child) { return Child && Child->Name == TEXT("Chase"); });
 	Combat->Children.Insert(Added, ChaseIndex == INDEX_NONE ? 0 : ChaseIndex);
+	knightRecipePunish::Relink(EditorData);
 
 	EditorData->ReparentStates();
 	EditorData->RemoveInvalidBindings();
@@ -1910,23 +1992,7 @@ bool UknightMonsterRecipeLibrary::SetupPunishState(UStateTree* StateTree)
 	// Combat은 자식을 위에서부터 고른다. 맨 앞에 둬서 다른 판단보다 먼저 본다.
 	UStateTreeState* const Added = Combat->Children.Pop();
 	Combat->Children.Insert(Added, 0);
-
-	// 노려보기·돌아보기·간 보기·추격 중에도 바로 끼어든다. 고를 응징 공격이 없으면(쿨다운) Punish 선택이 실패해 원래 상태를 이어 간다.
-	// 물러나기(Retreat)에는 달지 않는다. 뒷걸음이 시작되자마자 끊겨 몽타주가 튄다. 물러난 뒤 Combat에서 다시 본다.
-	for (const TCHAR* Name : { TEXT("Recover"), TEXT("Retreat"), TEXT("Turn"), TEXT("Hold"), TEXT("Spacing"), TEXT("Chase") })
-	{
-		UStateTreeState* const State = FindState(Name);
-		if (!State)
-		{
-			continue;
-		}
-		State->Modify();
-		State->Transitions.RemoveAll([](const FStateTreeTransition& Transition) { return Transition.State.Name == TEXT("Punish"); });
-		if (State->Name != TEXT("Recover") && State->Name != TEXT("Retreat"))
-		{
-			AddBoolTransition(*State, &Punish, TEXT("bPunishAny"));
-		}
-	}
+	knightRecipePunish::Relink(EditorData);
 
 	EditorData->ReparentStates();
 	EditorData->RemoveInvalidBindings();
