@@ -30,6 +30,11 @@
 #include "Monster/knightMonsterCharacterBase.h"
 #include "HAL/IConsoleManager.h"
 
+namespace knightCombat
+{
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Event_KnockedDown, "Event.KnockedDown", "(2026-11-04) A bKnockdown attack hit the target cleanly (not guarded, parried or evaded). The player's hit react plays a knockdown.");
+}
+
 namespace knightParryRules
 {
 	// (2026-10-27 팀 투표: 퍼펙트 패링의 그로기 피해 삭제) 0 = 패링은 그로기를 깎지 않는다, 1 = 예전 규칙.
@@ -297,6 +302,18 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 		// (2026-10-21) 나이트 전용 타격 이펙트·소리(몬스터 ASC는 비어 있어 아무것도 안 한다).
 		// (2026-10-29) 타격 종류별 소리(무거운 타격·장갑 부위)를 고르도록 그로기 피해와 부위 피해 배율도 넘긴다.
 		KnightSourceASC->PlayAttackImpactEffects(Hit, false, bWeakpointHit, Params.PoiseDamage, PartMultiplier);
+	}
+	// (2026-11-04) 넘어뜨리는 공격: 피해·그로기 반응(위에서 피해를 적용할 때 이미 나감) 뒤에 다운을 보내 그 반응을 다운으로 바꾼다.
+	if (Params.bKnockdown && !TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_Dead))
+	{
+		FGameplayEventData KnockdownPayload;
+		KnockdownPayload.EventTag = knightCombat::Event_KnockedDown;
+		KnockdownPayload.Instigator = Attacker;
+		KnockdownPayload.Target = Target;
+		KnockdownPayload.EventMagnitude = Params.PoiseDamage;
+		KnockdownPayload.ContextHandle = Context;
+		TargetASC->HandleGameplayEvent(KnockdownPayload.EventTag, &KnockdownPayload);
+		UE_LOG(LogknightCombat, Log, TEXT("%s knocked down %s."), *GetNameSafe(Attacker), *GetNameSafe(Target));
 	}
 	// 전투는 소리가 난다. 아직 전투를 알아채지 못한 몬스터도 이 소리를 들을 수 있다.
 	UAISense_Hearing::ReportNoiseEvent(Attacker, Hit.ImpactPoint, 1.f, Attacker, 0.f, TEXT("Hit"));

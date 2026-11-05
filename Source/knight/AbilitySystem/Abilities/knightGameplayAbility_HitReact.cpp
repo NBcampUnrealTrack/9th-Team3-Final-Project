@@ -20,6 +20,7 @@
 #include "GameplayEffect.h"
 #include "System/knightGameplayTags.h"
 #include "Monster/knightMonsterGuardPushComponent.h"
+#include "Combat/knightCombatTypes.h"
 #include "knight.h"
 
 UAnimMontage* FknightDirectionalMontages::Pick(const FVector& AvatarForward, const FVector& AvatarRight, const FVector& ToInstigator) const
@@ -59,7 +60,7 @@ UknightGameplayAbility_HitReact::UknightGameplayAbility_HitReact(const FObjectIn
 
 	// (2026-11-02) Event.GuardBroken: 몬스터의 가드 브레이크 공격을 막았다(UknightMonsterGuardPushComponent).
 	for (const FGameplayTag& EventTag : { knightGameplayTags::Event_Damaged.GetTag(), knightGameplayTags::Event_PoiseBroken.GetTag(), knightGameplayTags::Event_Parried.GetTag(),
-		knightMonsterGuardPush::Event_GuardBroken.GetTag() })
+		knightMonsterGuardPush::Event_GuardBroken.GetTag(), knightCombat::Event_KnockedDown.GetTag() })
 	{
 		FAbilityTriggerData Trigger;
 		Trigger.TriggerTag = EventTag;
@@ -75,10 +76,18 @@ bool UknightGameplayAbility_HitReact::ShouldAbilityRespondToEvent(const FGamepla
 		return false;
 	}
 	// 그로기(기절) 중에는 맞아도 피해만 받고 다른 반응 없이 기절이 이어진다(2026-10-16 사용자 결정).
+	// (2026-11-04) 단, 넘어뜨리는 공격(Event.KnockedDown)은 기절 중에도 다운시킨다(같은 타격으로 그로기가 0이 된 경우 포함).
 	if (const UAbilitySystemComponent* const OwnerASC = ActorInfo->AbilitySystemComponent.Get();
-		OwnerASC && OwnerASC->HasMatchingGameplayTag(knightGameplayTags::State_HitReact_Groggy))
+		OwnerASC && OwnerASC->HasMatchingGameplayTag(knightGameplayTags::State_HitReact_Groggy)
+		&& Payload->EventTag != knightCombat::Event_KnockedDown)
 	{
 		return false;
+	}
+	// (2026-11-04) 이미 다운 중이면 넘어뜨리는 공격을 또 맞아도 다운을 처음부터 다시 하지 않는다(눕힌 채 계속 눕히는 무한 다운 방지).
+	if (Payload->EventTag == knightCombat::Event_KnockedDown)
+	{
+		const UAbilitySystemComponent* const OwnerASC = ActorInfo->AbilitySystemComponent.Get();
+		return !(OwnerASC && OwnerASC->HasMatchingGameplayTag(knightGameplayTags::State_HitReact_Knockdown));
 	}
 	if (Payload->EventTag != knightGameplayTags::Event_Damaged)
 	{
@@ -114,11 +123,40 @@ EknightHitReactType UknightGameplayAbility_HitReact::ResolveType(const FGameplay
 	{
 		return EknightHitReactType::GuardBreak;
 	}
+	// (2026-11-04) 넘어뜨리는 공격(FknightMeleeHitParams::bKnockdown).
+	if (Payload.EventTag == knightCombat::Event_KnockedDown)
+	{
+		return EknightHitReactType::Knockdown;
+	}
 	return EknightHitReactType::Flinch;
 }
 
 const FknightDirectionalMontages& UknightGameplayAbility_HitReact::GetMontages(EknightHitReactType Type) const
 {
+	// (2026-11-04) 한손 스탠스면 한손 피격 동작. 한손 쪽 Front가 비어 있으면 아래 양손 쪽으로 넘어간다.
+	if (!UknightGameplayAbility_StanceSwitch::IsTwoHanded(GetAbilitySystemComponentFromActorInfo()))
+	{
+		const FknightDirectionalMontages* OneHanded = nullptr;
+		switch (Type)
+		{
+		case EknightHitReactType::Stagger:
+			OneHanded = &OneHandedStaggerMontages;
+			break;
+		case EknightHitReactType::Knockdown:
+			OneHanded = &OneHandedKnockdownMontages;
+			break;
+		case EknightHitReactType::GuardBreak:
+			OneHanded = OneHandedGuardBreakMontages.Front ? &OneHandedGuardBreakMontages : &OneHandedStaggerMontages;
+			break;
+		default:
+			OneHanded = &OneHandedFlinchMontages;
+			break;
+		}
+		if (OneHanded && OneHanded->Front)
+		{
+			return *OneHanded;
+		}
+	}
 	switch (Type)
 	{
 	case EknightHitReactType::Stagger:

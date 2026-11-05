@@ -125,6 +125,23 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Hit React")
 	FknightDirectionalMontages KnockdownMontages;
 
+	/**
+	 * (2026-11-04) 한손 스탠스(검을 뽑은 기본 상태)의 피격 동작. 위 세 개는 양손 스탠스용이다.
+	 * 한손으로 맞았는데 양손 피격 동작(대검을 두 손으로 쥔 자세)이 나오던 것. Front가 비어 있으면 양손 쪽을 그대로 쓴다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Hit React|One Handed")
+	FknightDirectionalMontages OneHandedFlinchMontages;
+
+	UPROPERTY(EditDefaultsOnly, Category="Hit React|One Handed")
+	FknightDirectionalMontages OneHandedStaggerMontages;
+
+	UPROPERTY(EditDefaultsOnly, Category="Hit React|One Handed")
+	FknightDirectionalMontages OneHandedKnockdownMontages;
+
+	/** 한손 가드 브레이크. 비어 있으면 한손 강경직(OneHandedStaggerMontages). */
+	UPROPERTY(EditDefaultsOnly, Category="Hit React|One Handed")
+	FknightDirectionalMontages OneHandedGuardBreakMontages;
+
 	/** Health lost below this does not flinch. */
 	UPROPERTY(EditDefaultsOnly, Category="Hit React", meta=(ClampMin=0))
 	float MinFlinchDamage = 1.f;

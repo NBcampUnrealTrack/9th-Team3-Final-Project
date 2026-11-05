@@ -2,10 +2,20 @@
 
 #include "CoreMinimal.h"
 #include "Engine/EngineTypes.h"
+#include "NativeGameplayTags.h"
 #include "Templates/SubclassOf.h"
 #include "knightCombatTypes.generated.h"
 
 class UGameplayEffect;
+
+namespace knightCombat
+{
+	/**
+	 * (2026-11-04) bKnockdown 공격에 그냥 맞았을 때(가드·패링·회피가 아님) 맞은 쪽에 보내는 이벤트.
+	 * 플레이어 피격(GA_Knight_HitReact)은 이걸 받으면 그로기와 상관없이 다운된다.
+	 */
+	KNIGHT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_KnockedDown);
+}
 
 /** Weapon trace shape for one swing. Sampled along the line between two sockets. */
 USTRUCT(BlueprintType)
@@ -64,6 +74,13 @@ struct KNIGHT_API FknightMeleeHitParams
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Damage")
 	float PoiseDamage = 10.f;
+
+	/**
+	 * (2026-11-04) 넘어뜨리는 공격(몸통 낙하 등). 켜면 그냥 맞았을 때(가드·패링·회피가 아님) 맞은 쪽에 Event.KnockedDown을 보내
+	 * 그로기와 상관없이 다운시킨다. 지금은 플레이어 피격만 이 이벤트를 받는다. 기본은 꺼짐(지금과 같음).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Damage")
+	bool bKnockdown = false;
 
 	/** False for attacks too big to deflect (breath, slams, body checks). A parry attempt then counts as a guard. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Defense")
