@@ -83,7 +83,7 @@ void UknightDamageVisualComponent::Refresh()
 	}
 	AppliedDamage = Damage;
 
-	// 나이트 본체(스켈레탈) + 파츠 메시(스켈레탈·스태틱, 2026-10-10).
+	// 나이트 본체(스켈레탈) + 파츠 메시(스켈레탈·스태틱).
 	TArray<UMeshComponent*> Meshes;
 	if (const ACharacter* const Character = Cast<ACharacter>(GetOwner()))
 	{

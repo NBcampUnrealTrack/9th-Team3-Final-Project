@@ -9,6 +9,7 @@
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
+#include "Abilities/Tasks/AbilityTask_WaitGameplayTag.h"
 #include "Abilities/Tasks/AbilityTask_WaitInputRelease.h"
 #include "Character/knightMovementComponent.h"
 #include "Combat/knightCombatLibrary.h"
@@ -30,7 +31,7 @@
 
 namespace
 {
-	// 가드 중 새 이동 입력 검사 간격. 공격 후딜 이동 캔슬과 같은 값. (2026-10-08)
+	// 가드 중 새 이동 입력 검사 간격. 공격 후딜 이동 캔슬과 같은 값.
 	constexpr float GuardMoveCancelCheckInterval = 0.02f;
 }
 
@@ -43,9 +44,11 @@ UknightGameplayAbility_Guard::UknightGameplayAbility_Guard(const FObjectInitiali
 	ActivationOwnedTags.AddTag(knightGameplayTags::State_Guarding);
 	ActivationBlockedTags.AddTag(knightGameplayTags::State_Dead);
 	ActivationBlockedTags.AddTag(knightGameplayTags::State_HitReact);
+	// 공중(점프·낙하·호버링)에서는 가드를 올리지 않는다. 가드 중에 공중에 뜨면 내린다(OnLeftGround).
+	ActivationBlockedTags.AddTag(knightGameplayTags::State_Airborne);
 	PerfectGuardDamageEffect = UknightGameplayEffect_Damage::StaticClass();
-	// 가드는 행동 에너지를 쓰지 않는다(StaminaCost 0, 2026-10-09 사용자 결정). 막은 피격은 가드 효율에 따라 체력·그로기가 줄어든다(피해 실행).
-	// (2026-10-15 사용자 결정) 공격 후딜 등으로 누른 순간 막혀 있었으면, 키를 누르고 있는 동안 가드할 수 있게 되는 순간 바로 올린다.
+	// 가드는 행동 에너지를 쓰지 않는다(StaminaCost 0). 막은 피격은 가드 효율에 따라 체력·그로기가 줄어든다(피해 실행).
+	// 공격 후딜 등으로 누른 순간 막혀 있었으면, 키를 누르고 있는 동안 가드할 수 있게 되는 순간 바로 올린다.
 	bRetryPressWhileHeld = true;
 }
 
@@ -63,7 +66,7 @@ bool UknightGameplayAbility_Guard::CanActivateAbility(const FGameplayAbilitySpec
 	{
 		return false;
 	}
-	// (2026-10-26) 퍼펙트 가드 없이 내린 직후 ReguardLockoutTime 동안은 다시 못 올린다(가드 연타 막기).
+	// 퍼펙트 가드 없이 내린 직후 ReguardLockoutTime 동안은 다시 못 올린다(가드 연타 막기).
 	// 여기서 막아야 누르고 있는 동안 bRetryPressWhileHeld가 잠금이 풀리는 순간 올려 준다.
 	const UWorld* const World = GetWorld();
 	return !World || LastGuardEndTime < 0.0 || World->GetTimeSeconds() - LastGuardEndTime >= ReguardLockoutTime;
@@ -96,12 +99,12 @@ void UknightGameplayAbility_Guard::ActivateAbility(const FGameplayAbilitySpecHan
 	bGuardRaised = true;
 	bParriedThisGuard = false;
 
-	// 퍼펙트 가드 판정 시간은 누를 때 한 번 읽는다. 가드 도중 스탯이 바뀌면 다음 가드부터 반영된다. (2026-10-08)
-	// (2026-10-15 사용자 결정) 후딜 중 미리 눌러 두었다가 나중에 올라간 가드도 올라간 순간부터 판정 시간 전부를 준다.
+	// 퍼펙트 가드 판정 시간은 누를 때 한 번 읽는다. 가드 도중 스탯이 바뀌면 다음 가드부터 반영된다.
+	// 후딜 중 미리 눌러 두었다가 나중에 올라간 가드도 올라간 순간부터 판정 시간 전부를 준다.
 	// 가드를 올린 순간 맞았는데 퍼펙트가 안 되면 불쾌하기 때문(누른 순간부터 세는 방식은 버림).
 	float PerfectGuardWindow = GetPerfectGuardWindow();
 
-	// (2026-10-26) 퍼펙트 가드 없이 내린 뒤 PerfectGuardRearmTime 안에 다시 올렸으면 판정을 줄인다: 처음 x RearmPerfectGuardScale, 연속 두 번째부터 0.
+	// 퍼펙트 가드 없이 내린 뒤 PerfectGuardRearmTime 안에 다시 올렸으면 판정을 줄인다: 처음 x RearmPerfectGuardScale, 연속 두 번째부터 0.
 	const UWorld* const World = GetWorld();
 	const float SinceLastGuard = World && LastGuardEndTime >= 0.0 ? static_cast<float>(World->GetTimeSeconds() - LastGuardEndTime) : -1.f;
 	QuickReguardCount = SinceLastGuard >= 0.f && SinceLastGuard < PerfectGuardRearmTime ? QuickReguardCount + 1 : 0;
@@ -140,20 +143,30 @@ void UknightGameplayAbility_Guard::ActivateAbility(const FGameplayAbilitySpecHan
 	PushTask->EventReceived.AddDynamic(this, &ThisClass::OnGuardPushed);
 	PushTask->ReadyForActivation();
 
-	// 키를 떼면 퍼펙트 가드 판정 시간 중이라도 바로 가드를 내린다(퍼펙트 가드도 같이 끝남). (2026-10-08 사용자 결정)
+	// 키를 떼면 퍼펙트 가드 판정 시간 중이라도 바로 가드를 내린다(퍼펙트 가드도 같이 끝남).
 	// 전에는 판정 시간이 끝날 때 뗌을 확인해서, 짧게 톡 눌러도 판정 시간 내내 패리가 유지되는 대신 그동안 가드를 내릴 수 없었다.
 	// 입력 버퍼로 늦게 발동했는데 이미 키를 뗀 상태면 바로 끝난다.
 	WaitForRelease();
+
+	// 가드 중에 공중에 뜨면(점프·낭떠러지) 가드를 내린다. 키를 누르고 있으면 착지해서 다시 올릴 수 있게 되는 순간 올라간다(bRetryPressWhileHeld).
+	UAbilityTask_WaitGameplayTagAdded* const AirborneTask = UAbilityTask_WaitGameplayTagAdded::WaitGameplayTagAdd(this, knightGameplayTags::State_Airborne, nullptr, true);
+	AirborneTask->Added.AddDynamic(this, &ThisClass::OnLeftGround);
+	AirborneTask->ReadyForActivation();
 }
 
 void UknightGameplayAbility_Guard::PlayGuardPose()
 {
 	if (GuardMontage)
 	{
-		// 가드 모션은 행동 속도 배속으로 재생한다. 퍼펙트 가드 판정 시간은 난이도가 바뀌지 않게 배속과 무관하게 둔다. (2026-10-08)
+		// 가드 모션은 행동 속도 배속으로 재생한다. 퍼펙트 가드 판정 시간은 난이도가 바뀌지 않게 배속과 무관하게 둔다.
 		UAbilityTask_PlayMontageAndWait* const MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, GuardMontage, GetActionSpeed());
 		MontageTask->ReadyForActivation();
 	}
+}
+
+void UknightGameplayAbility_Guard::OnLeftGround()
+{
+	EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, true);
 }
 
 void UknightGameplayAbility_Guard::OnGuardPushed(FGameplayEventData Payload)
@@ -267,7 +280,7 @@ void UknightGameplayAbility_Guard::ApplyPerfectGuardPoiseDamage(const AActor* At
 
 void UknightGameplayAbility_Guard::OnParrySucceeded(FGameplayEventData Payload)
 {
-	// 퍼펙트 가드: 공격한 적에게 그로기 피해. ApplyMeleeHit이 Instigator에 공격자를 담아 보낸다. (2026-10-08)
+	// 퍼펙트 가드: 공격한 적에게 그로기 피해. ApplyMeleeHit이 Instigator에 공격자를 담아 보낸다.
 	// (2026-10-27 팀 결정) 패링은 그로기를 깎지 않는다. 예전 규칙은 knight.Combat.ParryBuildsPoise 1.
 	if (UknightCombatLibrary::DoesParryBuildPoise())
 	{
@@ -276,7 +289,7 @@ void UknightGameplayAbility_Guard::OnParrySucceeded(FGameplayEventData Payload)
 
 	if (UAbilitySystemComponent* const ASC = GetAbilitySystemComponentFromActorInfo())
 	{
-		// (2026-10-20 사용자 결정) 패링 반격이 락온 없이도 패링한 적에게 돌진하도록 기억해 둔다.
+		// 패링 반격이 락온 없이도 패링한 적에게 돌진하도록 기억해 둔다.
 		// 지금 투사체(가시 비)는 쏜 몬스터를 공격자로 넘기지만, 투사체 자신이 오면 쏜 쪽(Instigator, 없으면 Owner)으로 바꾼다.
 		if (UknightAbilitySystemComponent* const KnightASC = Cast<UknightAbilitySystemComponent>(ASC))
 		{
@@ -306,7 +319,7 @@ void UknightGameplayAbility_Guard::OnParrySucceeded(FGameplayEventData Payload)
 		}
 	}
 	// End the guard so the attack key can start the counter right away.
-	// (2026-10-26) 패링으로 내려간 가드는 연타 막기(다시 올리기 잠금·판정 감소)를 적용하지 않는다(EndAbility).
+	// 패링으로 내려간 가드는 연타 막기(다시 올리기 잠금·판정 감소)를 적용하지 않는다(EndAbility).
 	bParriedThisGuard = true;
 	ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
 	const AActor* const Attacker = Payload.Instigator.Get();
@@ -408,6 +421,7 @@ void UknightGameplayAbility_Guard::ExitGuardStance()
 		World->GetTimerManager().ClearTimer(MoveCancelTimer);
 		World->GetTimerManager().ClearTimer(GuardPushLockTimer);
 	}
+	StopStepTurn(false);
 	// 크게 밀려 잠시 닫아 둔 캔슬 창은 이미 태그가 빠져 있다.
 	bCancelWindowSuspended = false;
 	if (bCancelWindowApplied)
@@ -440,7 +454,15 @@ void UknightGameplayAbility_Guard::CheckMoveCancel()
 	// 비락온 중에는 가드하는 동안 카메라 시선(화면 중앙)을 따라 몸을 돌린다.
 	if (GuardLockOnTurnRate > 0.f)
 	{
-		if (!FaceLockedTarget(GuardLockOnTurnRate * GuardMoveCancelCheckInterval))
+		if (FaceLockedTarget(GuardLockOnTurnRate * GuardMoveCancelCheckInterval))
+		{
+			StopStepTurn(true);
+		}
+		else if (bStepTurnWhenUnlocked)
+		{
+			UpdateStepTurn(*Character);
+		}
+		else
 		{
 			if (const AController* const Controller = Character->GetController())
 			{
@@ -452,7 +474,7 @@ void UknightGameplayAbility_Guard::CheckMoveCancel()
 			}
 		}
 	}
-	// (2026-10-26) 이동 입력으로 가드를 내리는 건 bMoveInputCancelsGuard를 켰을 때만.
+	// 이동 입력으로 가드를 내리는 건 bMoveInputCancelsGuard를 켰을 때만.
 	if (!bMoveInputCancelsGuard)
 	{
 		return;
@@ -461,6 +483,100 @@ void UknightGameplayAbility_Guard::CheckMoveCancel()
 	if (MovePress.HasFreshPress() && !Character->GetLastMovementInputVector().IsNearlyZero())
 	{
 		EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, false);
+	}
+}
+
+void UknightGameplayAbility_Guard::UpdateStepTurn(ACharacter& Character)
+{
+	UAnimInstance* const Anim = Character.GetMesh() ? Character.GetMesh()->GetAnimInstance() : nullptr;
+	if (!Anim)
+	{
+		return;
+	}
+	// 도는 동안에는 몽타주의 루트 회전이 몸을 돌린다(여기서 회전을 건드리면 축발이 미끄러진다).
+	// 돌기 몽타주는 자동 블렌드 아웃을 꺼 두어 끝 프레임에 멈춘다(재생은 끝났는데 아직 내려가지 않은 상태) → 다 돌았으니 가드 자세로 넘긴다.
+	// 끝 프레임 = 가드 대기 자세라 이어 붙인 티가 나지 않는다.
+	if (bStepTurning)
+	{
+		UAnimMontage* const Montage = ActiveStepTurnMontage.Get();
+		// 일시정지(재생 멈춤)와 헷갈리지 않게 위치가 끝에 닿았는지도 본다.
+		if (Montage && Anim->GetActiveInstanceForMontage(Montage) && !Anim->Montage_IsPlaying(Montage)
+			&& Anim->Montage_GetPosition(Montage) >= Montage->GetPlayLength() - 0.02f)
+		{
+			bStepTurning = false;
+			ActiveStepTurnMontage.Reset();
+			PlayGuardPose();
+		}
+		return;
+	}
+	const AController* const Controller = Character.GetController();
+	if (!Controller)
+	{
+		return;
+	}
+	const float Delta = FMath::FindDeltaAngleDegrees(Character.GetActorRotation().Yaw, Controller->GetControlRotation().Yaw);
+	if (FMath::Abs(Delta) <= StepTurnAngle)
+	{
+		return;
+	}
+	// 가드 자세가 아닌 다른 몽타주(가드 피격·패링 주춤 등) 중이면 돌지 않는다.
+	const UAnimMontage* const Current = Anim->GetCurrentActiveMontage();
+	if (Current && Current != GuardMontage)
+	{
+		return;
+	}
+	// 요(Yaw)가 커지면 오른쪽으로 도는 것이다.
+	const bool bRight = Delta > 0.f;
+	UAnimMontage* const TurnMontage = FMath::Abs(Delta) > Turn180Angle
+		? (bRight ? TurnRight180Montage.Get() : TurnLeft180Montage.Get())
+		: (bRight ? TurnRight90Montage.Get() : TurnLeft90Montage.Get());
+	if (!TurnMontage || Anim->Montage_Play(TurnMontage, StepTurnPlayRate * GetActionSpeed()) <= 0.f)
+	{
+		return;
+	}
+	bStepTurning = true;
+	ActiveStepTurnMontage = TurnMontage;
+	FOnMontageBlendingOutStarted BlendingOut;
+	BlendingOut.BindUObject(this, &ThisClass::OnStepTurnBlendingOut);
+	Anim->Montage_SetBlendingOutDelegate(BlendingOut, TurnMontage);
+}
+
+void UknightGameplayAbility_Guard::OnStepTurnBlendingOut(UAnimMontage* Montage, bool bInterrupted)
+{
+	if (Montage != ActiveStepTurnMontage.Get())
+	{
+		return;
+	}
+	bStepTurning = false;
+	ActiveStepTurnMontage.Reset();
+	// 다른 몽타주가 끼어들었으면 그 몽타주에 맡긴다. 끊긴 게 아니면 몽타주의 자동 블렌드 아웃이 켜져 있는 것(그러면 몇 도 덜 돈다) → 가드 자세로 이어 간다.
+	if (!bInterrupted && IsActive())
+	{
+		PlayGuardPose();
+	}
+}
+
+void UknightGameplayAbility_Guard::StopStepTurn(bool bResumeGuardPose)
+{
+	bStepTurning = false;
+	UAnimMontage* const Montage = ActiveStepTurnMontage.Get();
+	// 먼저 비워서 아래에서 몽타주를 멈출 때 오는 알림(OnStepTurnBlendingOut)을 무시하게 한다.
+	ActiveStepTurnMontage.Reset();
+	const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	UAnimInstance* const Anim = Character && Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr;
+	// 끝 프레임에 멈춰 있는 돌기 몽타주(재생은 끝났지만 아직 내려가지 않음)도 내려야 하므로 Montage_IsPlaying이 아니라 활성 여부로 본다.
+	if (!Montage || !Anim || !Anim->GetActiveInstanceForMontage(Montage))
+	{
+		return;
+	}
+	if (bResumeGuardPose && IsActive())
+	{
+		// 가드 자세 몽타주가 같은 슬롯의 돌기 몽타주를 밀어낸다.
+		PlayGuardPose();
+	}
+	else
+	{
+		Anim->Montage_Stop(0.2f, Montage);
 	}
 }
 
@@ -492,7 +608,7 @@ void UknightGameplayAbility_Guard::EndAbility(const FGameplayAbilitySpecHandle H
 {
 	RemoveParryTag();
 	ExitGuardStance();
-	// (2026-10-26) 가드 연타 막기: 퍼펙트 가드 없이 내린 시각을 기록한다. 패링했으면 처음부터 다시 센다.
+	// 가드 연타 막기: 퍼펙트 가드 없이 내린 시각을 기록한다. 패링했으면 처음부터 다시 센다.
 	if (bGuardRaised)
 	{
 		bGuardRaised = false;

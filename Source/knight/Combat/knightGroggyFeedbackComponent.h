@@ -1,10 +1,10 @@
-// 그로기 연출 컴포넌트 (2026-10-14)
+// 그로기 연출 컴포넌트
 //
 // 플레이어(나이트)가 상대의 그로기(Poise 붕괴)를 일으킨 순간, 일반 타격보다 큰 히트스탑과 이펙트를 낸다.
 // 일반 공격·강공격·스킬·퍼펙트 가드(패링) 그로기 모두 상대의 UknightHitReactionComponent가 Event.PoiseBroken을 보내는
 // 한 곳을 지나므로(OnAnyPoiseBroken), 공격마다 따로 넣지 않는다. 그로기가 났는지와 반응(다운 모션)은 바꾸지 않는다.
 //
-// 흐름 (2026-10-14 사용자 결정 '더 역동적으로' = 멈춤 후 쾅 + 슬로모션으로 풀기, 전체 0.4초 → 0.5초):
+// 흐름(더 역동적으로 = 멈춤 후 쾅 + 슬로모션으로 풀기, 전체 0.4초 → 0.5초):
 //   1. 멈춤 FreezeTime(0.2초): 플레이어·상대가 거의 정지(히트스탑 컴포넌트). 타격 지점에 GroggyCueTag(번개).
 //   2. 풀리는 순간: ReleaseCueTag(충격파·불꽃·강한 흔들림) = '쾅'.
 //   3. 슬로모션 SlowReleaseTime(0.3초): SlowReleaseStartSpeed(0.2배속)에서 점점 빨라져 정상 속도로(처음 천천히, 끝에 빨리).
@@ -51,7 +51,7 @@ public:
 
 	/**
 	 * Watch an already playing attack montage; the trace notify's lead-in gates prediction.
-	 * (2026-10-20) AlreadyHitTargets: 같은 어빌리티가 앞 몽타주에서 이미 맞혀 이번 몽타주에서는 맞지 않을 대상(점프 공격 1타 뒤 착지).
+	 * AlreadyHitTargets: 같은 어빌리티가 앞 몽타주에서 이미 맞혀 이번 몽타주에서는 맞지 않을 대상(점프 공격 1타 뒤 착지).
 	 * 이 대상들은 예측하지 않는다. 전에는 착지 때 슬로우만 걸리고 타격은 없었다.
 	 */
 	void WatchAttack(UGameplayAbility* Attack, UAnimMontage* Montage, const FknightMeleeHitParams& HitParams,
@@ -106,8 +106,8 @@ protected:
 
 	/**
 	 * 거의 멈춰 있는 시간(초). 히트스탑 컴포넌트로 건다(같은 순간의 일반 타격·패링 히트스탑보다 길면 늘어남).
-	 * (2026-10-14) 처음엔 0.35초 통째로 멈췄는데, '0.4초로, 더 역동적으로' → 0.15초 멈춤 + 0.25초 슬로모션.
-	 * 같은 날 '0.5초로 더 늘리자' → 비율을 유지해 0.2초 멈춤 + 0.3초 슬로모션.
+	 * 처음엔 0.35초 통째로 멈췄는데, 더 역동적으로 0.4초 = 0.15초 멈춤 + 0.25초 슬로모션으로 바꿨다.
+	 * 그 뒤 0.5초로 늘리며 비율을 유지해 0.2초 멈춤 + 0.3초 슬로모션.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy", meta=(ClampMin=0, Units="s"))
 	float FreezeTime = 0.2f;
@@ -173,12 +173,12 @@ protected:
 
 	/**
 	 * Maximum real-time lead effect; a hit ends it immediately.
-	 * (2026-10-19 사용자 '그로기 슬로우 시간이 너무 길다') 1.5 → 0.6초. 바뀔 수 있는 값.
+	 * 그로기 슬로우가 너무 길어서 1.5 → 0.6초. 바뀔 수 있는 값.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0, Units="s"))
 	float PredictionMaxTime = 0.6f;
 
-	/** 예측 슬로우 배속. (2026-10-19 같은 이유로 0.25 → 0.4, 덜 느리게) 바뀔 수 있는 값. */
+	/** 예측 슬로우 배속. (같은 이유로 0.25 → 0.4, 덜 느리게) 바뀔 수 있는 값. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Groggy|Prediction", meta=(ClampMin=0.02, ClampMax=1))
 	float PredictionSlowSpeed = 0.4f;
 

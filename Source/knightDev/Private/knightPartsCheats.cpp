@@ -1,4 +1,4 @@
-// 파츠 장착·해제 테스트용 콘솔 명령 (개발 빌드 전용, 치트 명령, 2026-10-07)
+// 파츠 장착·해제 테스트용 콘솔 명령 (개발 빌드 전용, 치트 명령)
 // 대장간·장비 화면이 연결되기 전에 파츠 효과(스탯·중량·적재 한도)를 확인하려고 만들었다.
 // 세이브(UknightProgressionSubsystem)는 바꾸지 않는다 → 다음 플레이에서는 저장된 로드아웃으로 돌아간다.
 //
@@ -8,12 +8,12 @@
 //                                                이름은 에셋 이름(대소문자 무시, 일부만 써도 하나로 정해지면 됨) 또는 /Game/... 경로
 //   knight.Player.UnequipPart <슬롯>              슬롯을 비운다 (예: knight.Player.UnequipPart Torso)
 //                                                슬롯: Head Torso Arms Legs Booster Generator Exterior Weapon
-//   knight.Player.PartsWatch [1|0]                (2026-10-13) 장착 이벤트(OnEquipmentChanged)를 순서대로 로그로 남긴다.
+//   knight.Player.PartsWatch [1|0]                장착 이벤트(OnEquipmentChanged)를 순서대로 로그로 남긴다.
 //                                                켤 때 슬롯별 현재 장착을 한 번 조회한다. 인자가 없으면 켜기/끄기를 바꾼다.
 //   knight.Player.Weapon [이름]                    (2026-10-27) 무기만 바로 바꾼다 (예: knight.Player.Weapon Janhyang).
 //                                                이름은 무기 에셋 이름의 일부(Janyeol, Janhyang, Heukgwan...). 인자가 없으면 무기 목록을 찍는다.
 //                                                검을 등에 메고 있었으면 등에, 들고 있었으면 손에 그대로 붙인다.
-//   knight.Player.PartsCompare                    (2026-10-13) 정비 화면 계산(knightEquipmentStats::Calculate)과 실제 적용된 스탯,
+//   knight.Player.PartsCompare                    정비 화면 계산(knightEquipmentStats::Calculate)과 실제 적용된 스탯,
 //                                                저장된 로드아웃과 실제 장착을 나란히 찍고 다른 곳을 표시한다. 로비(폰 없음)에서는 계산만 찍는다.
 //
 // 확인 흐름: EquipPart → 파츠 능력치(StatModifiers)로 만든 GE·AbilitySet으로 스탯 변화 + 중량 합이 Weight 스탯으로 → 이동 속도의 중량 계수가 바뀜
@@ -146,7 +146,7 @@ namespace knightPartsCheats
 			Mech->GetMaxBoostGauge(), Mech->GetBoostRecoveryRate());
 	}
 
-	// (2026-10-13) 장착 이벤트 한 줄에 붙일 짧은 스탯: 중량, 방어력, 공격력, 현재/최대 체력, 걷기 속도 배율.
+	// 장착 이벤트 한 줄에 붙일 짧은 스탯: 중량, 방어력, 공격력, 현재/최대 체력, 걷기 속도 배율.
 	// 현재 체력을 같이 보는 이유: 교체할 때 최대치가 잠깐 내려갔다 올라가면서 현재 체력이 깎이는지 확인하려고.
 	static FString ShortStats(const AActor* Owner)
 	{
@@ -350,7 +350,7 @@ namespace knightPartsCheats
 			OldSocket.IsNone() ? TEXT("default") : *OldSocket.ToString());
 	}
 
-	// knight.Player.PartsWatch [1|0] (2026-10-13). 플레이어 폰에 UknightPartsWatchComponent를 붙이거나 뗀다.
+	// knight.Player.PartsWatch [1|0]. 플레이어 폰에 UknightPartsWatchComponent를 붙이거나 뗀다.
 	// 인자가 없으면 지금 상태를 뒤집는다. 다시 켜면 이벤트 번호를 1부터 다시 센다.
 	static void PartsWatchCommand(const TArray<FString>& Args, UWorld* World)
 	{
@@ -381,7 +381,7 @@ namespace knightPartsCheats
 		Watch->StartWatching(Parts);
 	}
 
-	// knight.Player.PartsCompare (2026-10-13).
+	// knight.Player.PartsCompare.
 	// 1) 슬롯별로 저장된 로드아웃(정비 화면이 보여 주는 것)과 실제 장착을 나란히 찍는다.
 	// 2) 실제 장착을 정비 화면과 같은 계산(knightEquipmentStats::Calculate)에 넣은 값과, ASC에 실제로 적용된 값을 비교한다.
 	//    둘이 다르면 정비 화면의 숫자(현재·예상)가 실제와 어긋난다는 뜻이다. 오차 0.01까지는 같은 값으로 본다.

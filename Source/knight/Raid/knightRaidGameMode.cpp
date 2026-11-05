@@ -121,7 +121,7 @@ void AknightRaidGameMode::StartPlay()
 		}
 	}
 
-	// (2026-10-19) 월드가 안정될 때까지 로딩 화면(단계 None)과 일시정지를 유지한 뒤 출격한다.
+	// 월드가 안정될 때까지 로딩 화면(단계 None)과 일시정지를 유지한 뒤 출격한다.
 	if (bHoldLoadingUntilReady)
 	{
 		LoadingHoldStartTime = FPlatformTime::Seconds();

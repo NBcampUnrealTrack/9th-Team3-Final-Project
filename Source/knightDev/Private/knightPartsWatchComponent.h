@@ -1,4 +1,4 @@
-// 파츠 장착 이벤트 확인용 컴포넌트 (개발 빌드 전용, 2026-10-13)
+// 파츠 장착 이벤트 확인용 컴포넌트 (개발 빌드 전용)
 //
 // 사용법: PIE 중 콘솔에서 knight.Player.PartsWatch 1 → 플레이어 폰에 붙어 OnEquipmentChanged를 순서대로 로그로 남긴다.
 //         knight.Player.PartsWatch 0 → 떼어 낸다. 폰과 함께 사라지므로 다시 출격하면 다시 켠다.

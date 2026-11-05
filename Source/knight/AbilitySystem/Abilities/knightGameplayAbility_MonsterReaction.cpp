@@ -309,7 +309,7 @@ void UknightGameplayAbility_MonsterReaction::RestorePoise() const
 		InitialMaxPoise = CurrentMaxPoise;
 	}
 	float NewMaxPoise = CurrentMaxPoise * (1.f + MaxPoiseGrowth);
-	// (2026-10-20) 처음 MaxPoise의 MaxPoiseGrowthLimit배에서 멈춘다(이미 넘었으면 줄이지 않는다).
+	// 처음 MaxPoise의 MaxPoiseGrowthLimit배에서 멈춘다(이미 넘었으면 줄이지 않는다).
 	if (MaxPoiseGrowthLimit > 0.f)
 	{
 		NewMaxPoise = FMath::Max(CurrentMaxPoise, FMath::Min(NewMaxPoise, InitialMaxPoise * MaxPoiseGrowthLimit));

@@ -56,7 +56,7 @@ struct KNIGHT_API FknightUpgradeStep
 };
 
 /**
- * 파츠 능력치 한 줄 (2026-10-07): 어떤 스탯을 얼마나 바꾸는지.
+ * 파츠 능력치 한 줄: 어떤 스탯을 얼마나 바꾸는지.
  * 장착하면 UknightPartsComponent가 파츠의 목록으로 무한 지속 GE를 메모리에서 만들어 적용하고, 해제하면 회수한다.
  * 능력치만 있는 파츠는 이것만 채우면 되고 GE·AbilitySet 에셋을 따로 만들지 않는다.
  */
@@ -109,7 +109,7 @@ enum class EKnightSocketEffect : uint8
 	RepairKitCapacity,
 	AttackStaminaCost,
 	SocketGaugeCharge,
-	// (2026-10-22) 아래 3개는 EffectValue가 비율(0.2 = +20%)이고, 효과는 AknightCharacter::RefreshSocketEffects가 건다.
+	// 아래 3개는 EffectValue가 비율(0.2 = +20%)이고, 효과는 AknightCharacter::RefreshSocketEffects가 건다.
 	LoadCapacity,       // 적재 한도 x(1 + 값). 정비소 장착 판정(knightEquipmentStats)에도 들어간다.
 	StaminaRecovery,    // 행동 에너지(스테미너) 회복 속도 x(1 + 값)
 	FullHealthAttack    // 현재 체력이 최대일 때만 공격력 x(1 + 값)
@@ -128,7 +128,7 @@ public:
 
 	/**
 	 * Repair: flat kit capacity. Attack: fractional cost reduction. Gauge: fractional charge increase.
-	 * (2026-10-22) Gauge는 이제 배율 대신 끼운 개수만큼 퍼펙트 가드 필요 횟수 -1(값은 안 씀). LoadCapacity·StaminaRecovery·FullHealthAttack: 비율.
+	 * Gauge는 이제 배율 대신 끼운 개수만큼 퍼펙트 가드 필요 횟수 -1(값은 안 씀). LoadCapacity·StaminaRecovery·FullHealthAttack: 비율.
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Socket", meta=(ClampMin=0))
 	float EffectValue = 0.f;
@@ -158,7 +158,7 @@ public:
 	int32 GetMaxUpgradeLevel() const { return UpgradeSteps.Num(); }
 
 	/**
-	 * 장착 부위. (2026-10-11) AssetRegistrySearchable: 값이 에셋 목록 정보에 저장되어, Mech Parts Workbench가
+	 * 장착 부위. AssetRegistrySearchable: 값이 에셋 목록 정보에 저장되어, Mech Parts Workbench가
 	 * 파츠를 열지 않고 부위별로 걸러 보여 준다.
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, AssetRegistrySearchable, Category="Part", meta=(Categories="Equipment.Slot"))
@@ -169,7 +169,7 @@ public:
 	FGameplayTag SetTag;
 
 	/**
-	 * 파츠 중량 (2026-10-07). 장착한 파츠 중량의 합이 메카의 Weight 스탯이 되어 이동·퀵스텝 속도를 낮추고,
+	 * 파츠 중량. 장착한 파츠 중량의 합이 메카의 Weight 스탯이 되어 이동·퀵스텝 속도를 낮추고,
 	 * 합이 적재 한도(LoadCapacity 스탯)를 넘는 장착은 거부된다 (UknightPartsComponent::CanEquipPart).
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Part", meta=(ClampMin=0))
@@ -180,7 +180,7 @@ public:
 	TSoftObjectPtr<USkeletalMesh> Mesh;
 
 	/**
-	 * 스태틱 메시 파츠(SM_, 2026-10-10). 팀원이 모델링한 파츠는 대부분 이것이다. Mesh가 비어 있을 때 쓴다.
+	 * 스태틱 메시 파츠(SM_). 팀원이 모델링한 파츠는 대부분 이것이다. Mesh가 비어 있을 때 쓴다.
 	 * 뼈대가 없어서 Attachment는 Socket 모드로(붙일 뼈·소켓 + 위치·회전·크기) 지정한다. 값은 Mech Parts Workbench에서 맞춘다.
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Part")
@@ -195,7 +195,7 @@ public:
 	TArray<FName> MeshComponentTags;
 
 	/**
-	 * 장착하는 동안의 능력치 (2026-10-07). 능력치는 여기에 적고, 아래 AbilitySet은 스킬·특수 효과가 있는 파츠만 쓴다.
+	 * 장착하는 동안의 능력치. 능력치는 여기에 적고, 아래 AbilitySet은 스킬·특수 효과가 있는 파츠만 쓴다.
 	 * 무기 강화 공격력은 이 기본 목록과 별도로 장착·미리보기 양쪽에 합성한다.
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Part", meta=(TitleProperty="Attribute"))
@@ -230,7 +230,7 @@ public:
 };
 
 /**
- * (2026-10-20) 기본 장착 목록 = 새 게임의 시작 메카가 세이브에 없는 슬롯에 입는 파츠.
+ * 기본 장착 목록 = 새 게임의 시작 메카가 세이브에 없는 슬롯에 입는 파츠.
  * 나이트(UknightPartsComponent::DefaultLoadoutAsset)와 정비 카탈로그(UknightMaintenanceCatalog::DefaultLoadout)가
  * 같은 에셋을 가리켜서 한 곳에서만 고친다.
  * 만든 이유: 정비소가 기본 장착을 알려고 BP_Knight 클래스를 통째로 읽었는데, 그때 딸려 오는 에셋이 1,000개(약 550MB)가 넘어

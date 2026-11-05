@@ -42,7 +42,7 @@ knightEquipmentStats::FLoadout knightEquipmentStats::ReadLoadout(
 	const UknightProgressionSubsystem* Progression, const UknightMaintenanceCatalog* Catalog)
 {
 	FLoadout Result;
-	// (2026-10-20) 기본 장착 에셋이 있으면 그것만 읽는다. 아래 캐릭터 클래스 로드는 BP_Knight 전체를 읽어 정비소 첫 진입이 멈췄다.
+	// 기본 장착 에셋이 있으면 그것만 읽는다. 아래 캐릭터 클래스 로드는 BP_Knight 전체를 읽어 정비소 첫 진입이 멈췄다.
 	if (Catalog && Catalog->DefaultLoadout)
 	{
 		for (const UknightPartItemDefinition* Part : Catalog->DefaultLoadout->Parts)
@@ -156,7 +156,7 @@ FknightEquipmentStats knightEquipmentStats::Calculate(const FLoadout& Loadout, c
 			}
 		}
 	}
-	// (2026-10-22) 적재 보강 소켓: 출격한 캐릭터와 같은 방식(MultiplyAdditive 1 + 값)으로 적재 한도에 곱해, 정비소 장착 판정에도 들어가게 한다.
+	// 적재 보강 소켓: 출격한 캐릭터와 같은 방식(MultiplyAdditive 1 + 값)으로 적재 한도에 곱해, 정비소 장착 판정에도 들어가게 한다.
 	if (Progression)
 	{
 		const float LoadBonus = Progression->GetSocketEffectTotal(EKnightSocketEffect::LoadCapacity);

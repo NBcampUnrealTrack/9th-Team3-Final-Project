@@ -76,7 +76,7 @@ void UknightGameplayAbility::ApplyCost(const FGameplayAbilitySpecHandle Handle, 
 		UknightGameplayEffect_StaminaCost::StaticClass());
 	if (SpecHandle.IsValid())
 	{
-		// 남은 양보다 많아도 그대로 뺀다. (2026-10-26) 모자란 만큼 음수가 된다(가불, 속성 세트 ClampAttribute).
+		// 남은 양보다 많아도 그대로 뺀다. 모자란 만큼 음수가 된다(가불, 속성 세트 ClampAttribute).
 		SpecHandle.Data->SetSetByCallerMagnitude(knightGameplayTags::SetByCaller_BoostCost, -Cost);
 		ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, SpecHandle);
 	}
@@ -92,7 +92,7 @@ void UknightGameplayAbility::ApplyStaminaCost(float Amount) const
 	const FGameplayEffectSpecHandle SpecHandle = MakeOutgoingGameplayEffectSpec(UknightGameplayEffect_StaminaCost::StaticClass());
 	if (SpecHandle.IsValid())
 	{
-		// 남은 양보다 많아도 그대로 뺀다. (2026-10-26) 모자란 만큼 음수가 된다(가불, 속성 세트 ClampAttribute).
+		// 남은 양보다 많아도 그대로 뺀다. 모자란 만큼 음수가 된다(가불, 속성 세트 ClampAttribute).
 		SpecHandle.Data->SetSetByCallerMagnitude(knightGameplayTags::SetByCaller_BoostCost, -Amount);
 		ApplyGameplayEffectSpecToOwner(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), SpecHandle);
 	}
@@ -213,7 +213,7 @@ void UknightGameplayAbility::TryActivateAbilityOnSpawn(const FGameplayAbilityAct
 bool UknightGameplayAbility::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
 {
-	// (2026-10-29) 꺼 둔 어빌리티(bAbilityEnabled)는 발동하지 않는다.
+	// 꺼 둔 어빌리티(bAbilityEnabled)는 발동하지 않는다.
 	if (!bAbilityEnabled || !ActorInfo || !ActorInfo->AbilitySystemComponent.IsValid())
 	{
 		return false;
@@ -223,7 +223,7 @@ bool UknightGameplayAbility::CanActivateAbility(const FGameplayAbilitySpecHandle
 		return false;
 	}
 	const UknightAbilitySystemComponent* const ASC = Cast<UknightAbilitySystemComponent>(ActorInfo->AbilitySystemComponent.Get());
-	// (2026-10-29) 같은 콤보의 다음 단계 = 발동에 앞 단계의 콤보 태그(Combo.Greatsword 계열)가 필요한 공격(예: 2타는 Combo.Greatsword.1).
+	// 같은 콤보의 다음 단계 = 발동에 앞 단계의 콤보 태그(Combo.Greatsword 계열)가 필요한 공격(예: 2타는 Combo.Greatsword.1).
 	// 콤보 창·후딜에서는 이것만 이어진다(ASC bOnlyComboStepsInComboWindow).
 	static const FGameplayTag ComboFamily = FGameplayTag::RequestGameplayTag(TEXT("Combo.Greatsword"), false);
 	const bool bComboStep = ComboFamily.IsValid() && ActivationRequiredTags.HasTag(ComboFamily);

@@ -22,32 +22,32 @@ class UGameplayEffect;
  * requires) for ParryCounterWindow seconds, applies the optional ParryCounterEffect, and ends, so the attack key
  * can start the counter.
  *
- * (2026-10-08) 행동 속도(ActionSpeed): GuardMontage는 행동 속도 배속으로 재생한다. ParryWindow는 초 단위 그대로.
+ * 행동 속도(ActionSpeed): GuardMontage는 행동 속도 배속으로 재생한다. ParryWindow는 초 단위 그대로.
  *
- * (2026-10-08) 퍼펙트 가드 = 이 클래스의 패리(Parry). 태그·이벤트 이름은 그대로 Parry를 쓴다.
+ * 퍼펙트 가드 = 이 클래스의 패리(Parry). 태그·이벤트 이름은 그대로 Parry를 쓴다.
  *   판정 시간: 메카 속성 PerfectGuardWindow(기본 0.25초, 파츠로 변경 가능)를 가드를 누를 때 읽는다. 메카 속성이 없으면 ParryWindow.
  *   판정: 패리 가능한 공격(bCanBeParried)을 가드 범위(정면) 안에서 막았을 때만 (UknightCombatLibrary::ApplyMeleeHit). 그 외는 일반 가드·피격.
  *   결과: 받는 피해 0 + 반격 창(위) + 공격한 적에게 그로기 피해
  *         그로기 = (PerfectGuardPoiseDamage + 내 공격력 x PerfectGuardPoiseMotionValue / 100) x 내 경직치(StaggerPower)
- *         (2026-10-09) 몬스터도 Event.Parried를 받으면 스스로 '최대 그로기 x ParriedPoiseDamageRatio'를 깎으므로 둘이 더해진다.
+ *         몬스터도 Event.Parried를 받으면 스스로 '최대 그로기 x ParriedPoiseDamageRatio'를 깎으므로 둘이 더해진다.
  *         몬스터별 기본은 몬스터 쪽, 여기는 공격력 보너스만 맡도록 PerfectGuardPoiseDamage 기본값을 0으로 내렸다.
  *         피해 실행(UknightDamageExecution)을 그대로 거치므로 적의 그로기가 0이 되면 평소처럼 그로기 반응이 나온다.
  *   ParrySucceededEventTag가 비어 있으면 반격 창과 그로기 피해 둘 다 없다(같은 이벤트로 받는다).
- *   키를 떼면 판정 시간 중이라도 바로 가드를 내린다(사용자 결정). 전에는 판정 시간이 끝날 때까지 가드가 유지됐다(짧게 눌러도 패리 유지).
+ *   키를 떼면 판정 시간 중이라도 바로 가드를 내린다. 전에는 판정 시간이 끝날 때까지 가드가 유지됐다(짧게 눌러도 패리 유지).
  *
- * (2026-10-08) 가드 중 다른 입력 (사용자 결정):
+ * 가드 중 다른 입력:
  *   - 가드 중에는 Window.Cancel을 켜 두어 공격·강공격·퀵스텝(나중에 점프 어빌리티)이 바로 가드를 대신한다.
  *   - 가드 중에는 이동을 잠근다(제자리, 몸도 돌지 않음). 새로 누른 이동 입력이 들어오면 가드를 내리고 이동한다.
- *     (2026-10-26) 기본은 이동 입력으로 가드가 풀리지 않는다(bMoveInputCancelsGuard). 가드 키를 떼거나 퀵스텝·공격·점프로 끊는다.
+ *     기본은 이동 입력으로 가드가 풀리지 않는다(bMoveInputCancelsGuard). 가드 키를 떼거나 퀵스텝·공격·점프로 끊는다.
  *     가드를 올릴 때 누르고 있던 방향키는 새 입력이 아니다: 그 방향을 바로 바라보는 데에만 쓴다(락온 중 제외).
  *   - 가드 키를 누른 채 다른 행동을 하고 나도 가드는 자동으로 다시 올라가지 않는다
  *     (자동으로 올라가면 키를 새로 누르지 않아도 퍼펙트 가드 판정 시간이 다시 생기므로).
  *
- * (2026-10-15 사용자 결정) 누른 순간 막혀 있던 가드(공격 후딜 등)는 키를 누르고 있는 동안 가드할 수 있게 되는 순간 올린다
+ * 누른 순간 막혀 있던 가드(공격 후딜 등)는 키를 누르고 있는 동안 가드할 수 있게 되는 순간 올린다
  *   (bRetryPressWhileHeld, 한 번 올라가면 그 누름은 끝이라 위 규칙은 그대로). 퍼펙트 가드 판정 시간은 가드가 올라간 순간부터
- *   전부 준다(미리 눌러 둔 가드도 같음. 올린 순간 맞았는데 퍼펙트가 안 되면 불쾌하다는 사용자 판단).
+ *   전부 준다(미리 눌러 둔 가드도 같음. 올린 순간 맞았는데 퍼펙트가 안 되면 불쾌하므로).
  *
- * (2026-10-26 사용자 결정) 가드 연타 막기 — 누르고·떼고·누르기를 반복해 퍼펙트 가드 판정을 계속 새로 받던 것:
+ * 가드 연타 막기 — 누르고·떼고·누르기를 반복해 퍼펙트 가드 판정을 계속 새로 받던 것:
  *   - 퍼펙트 가드 없이 가드를 내린 뒤 ReguardLockoutTime(0.15초) 동안은 다시 올릴 수 없다(CanActivateAbility).
  *     그동안 누르고 있으면 위 bRetryPressWhileHeld로 잠금이 풀리는 순간 올라간다.
  *   - 내린 뒤 PerfectGuardRearmTime(0.3초) 안에 다시 올리면 퍼펙트 가드 판정이 RearmPerfectGuardScale(0.5)배,
@@ -81,7 +81,7 @@ public:
 protected:
 	/**
 	 * Seconds after the press during which an incoming hit is parried. Zero disables parrying.
-	 * (2026-10-08) 메카 속성 PerfectGuardWindow가 있으면(플레이어) 그 값을 쓰고, 이 값은 속성 세트가 없을 때만 쓰는 예비값이다.
+	 * 메카 속성 PerfectGuardWindow가 있으면(플레이어) 그 값을 쓰고, 이 값은 속성 세트가 없을 때만 쓰는 예비값이다.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Guard", meta=(ClampMin=0, Units="s"))
 	float ParryWindow = 0.2f;
@@ -94,7 +94,7 @@ protected:
 	float GuardLockOnTurnRate = 540.f;
 
 	/**
-	 * (2026-10-26 사용자 결정 '비숙련자는 가드 중 움직이면 가드가 풀리는 게 불편') 켜면 가드 중 새로 누른 이동 입력이 가드를 내리고 이동한다(예전 동작).
+	 * 켜면 가드 중 새로 누른 이동 입력이 가드를 내리고 이동한다(예전 동작). 익숙하지 않으면 움직일 때 가드가 풀리는 게 불편해서 기본은 끈다.
 	 * 끄면(기본) 가드 키를 누르고 있는 동안 방향키를 눌러도 가드가 유지된다. 몸 방향은 그대로 카메라·락온 대상을 따라간다.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Guard")
@@ -103,6 +103,50 @@ protected:
 	/** Optional looping guard pose. The ability ends on input release, not when this montage ends. */
 	UPROPERTY(EditDefaultsOnly, Category="Guard")
 	TObjectPtr<UAnimMontage> GuardMontage;
+
+	/**
+	 * 락온이 아닐 때 가드 중 몸 돌리기를 제자리 돌기로 한다. 가드 몽타주가 다리까지 덮어서, 카메라를 따라 계속 돌면
+	 * 다리가 그대로인 채 제자리에서 미끄러지듯 돌았다.
+	 * 카메라와 몸 방향 차이가 StepTurnAngle 안이면 몸은 그대로 두고, 넘으면 가드 자세 제자리 돌기 몽타주를 한 번 튼다
+	 * (90°, 차이가 Turn180Angle을 넘으면 180°). 몸은 몽타주의 루트 회전(루트 모션)이 돌리므로 축발이 바닥에 붙어 있다.
+	 * 다 돌면 가드 자세(GuardMontage)로 이어 간다. 끄면 GuardLockOnTurnRate로 카메라를 계속 따라 돈다.
+	 * 락온 중에는 그대로 대상을 따라 돈다. 숫자는 바뀔 수 있는 값.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Guard|Step Turn")
+	bool bStepTurnWhenUnlocked = true;
+
+	/** 카메라와 몸 방향 차이가 이 각도를 넘으면 돈다. 한 번에 90°를 도니 45°보다 커야 돈 뒤 반대쪽으로 다시 돌지 않는다. */
+	UPROPERTY(EditDefaultsOnly, Category="Guard|Step Turn", meta=(ClampMin=46, ClampMax=180, Units="deg", EditCondition="bStepTurnWhenUnlocked"))
+	float StepTurnAngle = 60.f;
+
+	/** 차이가 이 각도를 넘으면 90° 대신 180°를 돈다. */
+	UPROPERTY(EditDefaultsOnly, Category="Guard|Step Turn", meta=(ClampMin=90, ClampMax=180, Units="deg", EditCondition="bStepTurnWhenUnlocked"))
+	float Turn180Angle = 135.f;
+
+	/**
+	 * 제자리 돌기 몽타주 배속(행동 속도와 곱한다). 몽타주가 1.48초(앞 0.15초는 돌기 전 가드 자세)라 1.5면 한 번 도는 데 약 1초.
+	 * 앞 준비 구간은 블렌드 인이 끝난 뒤 돌기 시작하게 둔 것이다(플레이어 ABP는 루트 모션을 가중치로 섞어서 블렌드 인 중엔 덜 돈다).
+	 * 배속 x 몽타주 블렌드 인(0.08초)이 0.15를 넘으면 그만큼 덜 돈다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Guard|Step Turn", meta=(ClampMin=0.1, EditCondition="bStepTurnWhenUnlocked"))
+	float StepTurnPlayRate = 1.5f;
+
+	/**
+	 * 가드 자세 제자리 돌기 몽타주(루트 모션으로 정확히 90°/180° 돈다). 비어 있는 쪽은 돌지 않는다.
+	 * 자동 블렌드 아웃(Enable Auto Blend Out)은 꺼 둔다: 엔진은 몽타주가 빠져나가기 시작하면 루트 모션을 끊어서
+	 * 켜 두면 마지막 블렌드 아웃 시간만큼(몇 도) 덜 돈다. 끝 프레임에 멈추면 가드 자세(GuardMontage)로 넘긴다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Guard|Step Turn", meta=(EditCondition="bStepTurnWhenUnlocked"))
+	TObjectPtr<UAnimMontage> TurnLeft90Montage;
+
+	UPROPERTY(EditDefaultsOnly, Category="Guard|Step Turn", meta=(EditCondition="bStepTurnWhenUnlocked"))
+	TObjectPtr<UAnimMontage> TurnRight90Montage;
+
+	UPROPERTY(EditDefaultsOnly, Category="Guard|Step Turn", meta=(EditCondition="bStepTurnWhenUnlocked"))
+	TObjectPtr<UAnimMontage> TurnLeft180Montage;
+
+	UPROPERTY(EditDefaultsOnly, Category="Guard|Step Turn", meta=(EditCondition="bStepTurnWhenUnlocked"))
+	TObjectPtr<UAnimMontage> TurnRight180Montage;
 
 	/** Event sent to the defender when a parry lands. Empty disables the counter. */
 	UPROPERTY(EditDefaultsOnly, Category="Guard|Parry Counter", meta=(Categories="Event"))
@@ -137,16 +181,16 @@ protected:
 	float ParryRecoilTime = 0.15f;
 
 	/**
-	 * 퍼펙트 가드 때 공격한 적에게 주는 기본 그로기 피해. (2026-10-08 임시값 20 → 2026-10-09 0)
+	 * 퍼펙트 가드 때 공격한 적에게 주는 기본 그로기 피해. (임시값 20 → 0)
 	 * 몬스터도 퍼펙트 가드를 당하면 스스로 '최대 그로기 x 몬스터별 비율'을 깎는다(MonsterDefinition.ParriedPoiseDamageRatio, Samooyang).
-	 * 그래서 몬스터별 기본은 몬스터 쪽이 맡고, 여기서는 아래 공격력 몫만 보너스로 준다(사용자 결정: 역할 나눠 둘 다 유지).
+	 * 그래서 몬스터별 기본은 몬스터 쪽이 맡고, 여기서는 아래 공격력 몫만 보너스로 준다(역할을 나눠 둘 다 유지).
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Guard|Perfect Guard", meta=(ClampMin=0))
 	float PerfectGuardPoiseDamage = 0.f;
 
 	/**
 	 * 퍼펙트 가드 그로기에 더하는 공격력 계수(%). 그로기 += 내 공격력 x 이 값 / 100.
-	 * 피해 공식의 모션 계수와 같은 방식. 일반 공격 모션 계수 기본값(30)으로 시작 (2026-10-08 임시값, 조정 대상).
+	 * 피해 공식의 모션 계수와 같은 방식. 일반 공격 모션 계수 기본값(30)으로 시작 (임시값, 조정 대상).
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Guard|Perfect Guard", meta=(ClampMin=0))
 	float PerfectGuardPoiseMotionValue = 30.f;
@@ -155,15 +199,15 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Guard|Perfect Guard")
 	TSubclassOf<UGameplayEffect> PerfectGuardDamageEffect;
 
-	/** (2026-10-26) 퍼펙트 가드 없이 가드를 내린 뒤 다시 올릴 수 없는 시간. 0이면 끈다. 바뀔 수 있는 값. */
+	/** 퍼펙트 가드 없이 가드를 내린 뒤 다시 올릴 수 없는 시간. 0이면 끈다. 바뀔 수 있는 값. */
 	UPROPERTY(EditDefaultsOnly, Category="Guard|Reguard", meta=(ClampMin=0, Units="s"))
 	float ReguardLockoutTime = 0.15f;
 
-	/** (2026-10-26) 가드를 내린 뒤 이 시간 안에 다시 올리면 퍼펙트 가드 판정을 줄인다(아래 배율, 연속 두 번째부터 0). 0이면 끈다. 바뀔 수 있는 값. */
+	/** 가드를 내린 뒤 이 시간 안에 다시 올리면 퍼펙트 가드 판정을 줄인다(아래 배율, 연속 두 번째부터 0). 0이면 끈다. 바뀔 수 있는 값. */
 	UPROPERTY(EditDefaultsOnly, Category="Guard|Reguard", meta=(ClampMin=0, Units="s"))
 	float PerfectGuardRearmTime = 0.3f;
 
-	/** (2026-10-26) 위 시간 안에 처음 다시 올린 가드의 퍼펙트 가드 판정 배율. 바뀔 수 있는 값. */
+	/** 위 시간 안에 처음 다시 올린 가드의 퍼펙트 가드 판정 배율. 바뀔 수 있는 값. */
 	UPROPERTY(EditDefaultsOnly, Category="Guard|Reguard", meta=(ClampMin=0, ClampMax=1))
 	float RearmPerfectGuardScale = 0.5f;
 
@@ -224,6 +268,10 @@ private:
 	UFUNCTION()
 	void OnGuardReleased(float TimeHeld);
 
+	/** 가드 중에 공중에 떴다(State.Airborne). 가드를 내린다. */
+	UFUNCTION()
+	void OnLeftGround();
+
 	void RemoveParryTag();
 	void WaitForRelease();
 
@@ -239,6 +287,22 @@ private:
 	/** 가드 중 몸 돌리기(락온 대상·카메라), 그리고 bMoveInputCancelsGuard면 새로 누른 이동 입력에 가드를 내린다(잠금이 풀리며 그대로 이동). */
 	void CheckMoveCancel();
 
+	/**
+	 * 비락온 제자리 돌기: 돌고 있지 않으면 카메라와의 차이를 보고 제자리 돌기 몽타주를 튼다(도는 동안은 루트 모션이 돌린다).
+	 * 돌고 있으면 몽타주가 끝 프레임에 멈췄는지 보고, 멈췄으면 가드 자세로 넘긴다.
+	 */
+	void UpdateStepTurn(ACharacter& Character);
+	/**
+	 * 제자리 돌기 몽타주가 빠져나가기 시작했다(다른 몽타주가 끼어들었거나 자동 블렌드 아웃): 다음 돌기를 받을 수 있게 한다.
+	 * 끊긴 게 아니면(자동 블렌드 아웃이 켜져 있으면) 가드 자세로 이어 간다.
+	 */
+	void OnStepTurnBlendingOut(UAnimMontage* Montage, bool bInterrupted);
+	/** 도는 중이면 멈춘다. bResumeGuardPose면 가드 자세로 이어 가고(락온이 걸렸을 때), 아니면 몽타주만 내린다(가드가 끝날 때). */
+	void StopStepTurn(bool bResumeGuardPose);
+
+	bool bStepTurning = false;
+	TWeakObjectPtr<UAnimMontage> ActiveStepTurnMontage;
+
 	bool bParryTagApplied = false;
 	bool bCancelWindowApplied = false;
 	bool bMoveLockApplied = false;
@@ -251,7 +315,7 @@ private:
 	FknightMovePressTracker MovePress;
 	FTimerHandle MoveCancelTimer;
 
-	/** (2026-10-26) 가드 연타 막기: 퍼펙트 가드 없이 가드를 내린 시각(없으면 -1), 빨리 다시 올린 연속 횟수, 이번 가드가 올라갔는지·패링했는지. */
+	/** 가드 연타 막기: 퍼펙트 가드 없이 가드를 내린 시각(없으면 -1), 빨리 다시 올린 연속 횟수, 이번 가드가 올라갔는지·패링했는지. */
 	double LastGuardEndTime = -1.0;
 	int32 QuickReguardCount = 0;
 	bool bGuardRaised = false;

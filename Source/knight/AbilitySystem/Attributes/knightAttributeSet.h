@@ -10,9 +10,9 @@
  * 피해 계산이 읽는 속성은 여기에 두지 않는다: 몬스터에는 이 세트가 없고,
  * 세트가 없는 ASC에서 속성을 읽으려 하면 GAS가 크래시한다.
  *
- * 행동 에너지(BoostGauge, 스테미너) 비용은 어빌리티 BP의 StaminaCost로 낸다(UknightGameplayAbility, SetByCaller.BoostCost). (2026-10-09)
+ * 행동 에너지(BoostGauge, 스테미너) 비용은 어빌리티 BP의 StaminaCost로 낸다(UknightGameplayAbility, SetByCaller.BoostCost).
  * 회복은 UknightAbilitySystemComponent가 처리한다: 마지막으로 줄어든 뒤 BoostRecoveryDelay초가 지나면 초당 BoostRecoveryRate만큼 찬다.
- * (2026-10-09 전에는 주기형 무한 GE GE_Knight_BoostRecovery로 회복했다. 사용 후 회복 지연을 넣으려고 그로기 회복과 같은 방식으로 옮김)
+ * (전에는 주기형 무한 GE GE_Knight_BoostRecovery로 회복했다. 사용 후 회복 지연을 넣으려고 그로기 회복과 같은 방식으로 옮김)
  */
 UCLASS()
 class KNIGHT_API UknightAttributeSet : public UknightAttributeSetBase
@@ -62,7 +62,7 @@ public:
 	KNIGHT_ATTRIBUTE_ACCESSORS(UknightAttributeSet, MaxRepairKitCount);
 	KNIGHT_ATTRIBUTE_ACCESSORS(UknightAttributeSet, RepairKitGauge);
 
-	/** 수리 키트 게이지가 이만큼 차면 키트가 1개 생긴다. (2026-10-16) */
+	/** 수리 키트 게이지가 이만큼 차면 키트가 1개 생긴다. */
 	static constexpr float RepairKitGaugeFull = 100.f;
 
 	/** BoostGauge가 0이 됐을 때. 부스트 어빌리티가 이를 받아 State.Overheated를 건다. */
@@ -93,7 +93,7 @@ private:
 
 	/**
 	 * 행동 에너지를 쓴 뒤 회복이 시작되기까지의 시간(초). 쓸 때마다 다시 센다. 0이면 바로 회복.
-	 * 기본 1.2초(2026-10-13 사용자 결정, 전에는 1.5초). 파츠·강화로 바뀔 수 있다.
+	 * 기본 1.2초(전에는 1.5초). 파츠·강화로 바뀔 수 있다.
 	 * 달리는 동안에는 이 시간과 별개로 회복이 멈춘다(UknightAbilitySystemComponent::bPauseBoostRecoveryWhileRunning).
 	 */
 	UPROPERTY(BlueprintReadOnly, Category="Knight|Mech", meta=(AllowPrivateAccess=true))
@@ -172,8 +172,8 @@ private:
 
 	/**
 	 * 퀵스텝을 다시 쓰기까지 기다리는 시간(초, 소수점 가능). 대시 이동이 끝난 시점부터 센다.
-	 * (2026-10-28 사용자 결정) 기본 0.5 → 0: 스테미너가 허용하는 한 연속으로 쓴다(경직 캔슬·선입력). 파츠로 다시 늘릴 수 있게 스탯은 남긴다.
-	 * (2026-10-29 사용자 결정) 0 → 0.3: 연속 퀵스텝 사이 후딜 0.3초. 그동안 누른 퀵스텝은 입력 버퍼(0.5초)에 남았다가 끝나는 순간 나간다.
+	 * 기본 0.5 → 0: 스테미너가 허용하는 한 연속으로 쓴다(경직 캔슬·선입력). 파츠로 다시 늘릴 수 있게 스탯은 남긴다.
+	 * 0 → 0.3: 연속 퀵스텝 사이 후딜 0.3초. 그동안 누른 퀵스텝은 입력 버퍼(0.5초)에 남았다가 끝나는 순간 나간다.
 	 *   공격·가드는 지금처럼 경직(0.1초)부터 퀵스텝을 끊을 수 있다. 바뀔 수 있는 값.
 	 */
 	UPROPERTY(BlueprintReadOnly, Category="Knight|Mech|Speed", meta=(AllowPrivateAccess=true))
@@ -184,7 +184,7 @@ private:
 	/**
 	 * 퍼펙트 가드 판정 시간(초). 가드를 누른 뒤 이 시간 동안 정면에서 막은 패리 가능한 공격은 퍼펙트 가드가 된다
 	 * (피해 0, 공격한 적에게 그로기 피해). 그 뒤는 일반 가드. 0이면 퍼펙트 가드 없음.
-	 * 기본 0.25초(2026-10-08 사용자 결정). 파츠·강화로 바뀔 수 있다. 가드를 누를 때 읽는다(knightGameplayAbility_Guard).
+	 * 기본 0.25초. 파츠·강화로 바뀔 수 있다. 가드를 누를 때 읽는다(knightGameplayAbility_Guard).
 	 */
 	UPROPERTY(BlueprintReadOnly, Category="Knight|Mech|Defense", meta=(AllowPrivateAccess=true))
 	FGameplayAttributeData PerfectGuardWindow;
@@ -197,22 +197,22 @@ private:
 
 	/**
 	 * 남은 수리 키트 개수(정수로 쓴다). 수리 키트 어빌리티(knightGameplayAbility_RepairKit)가 사용할 때 1 줄인다.
-	 * 스탯이 아니라 소모품 개수지만, HUD가 다른 값처럼 어트리뷰트 변경 알림으로 읽을 수 있게 여기 둔다(2026-10-09).
-	 * 기본 3 = 기획 문서 '출격당 3개' → 2026-10-19 사용자 결정 5개. 출격할 때마다 새 캐릭터라 5개로 시작한다. 보유 수량·상점 연결은 인벤토리 담당이 정해진 뒤.
+	 * 스탯이 아니라 소모품 개수지만, HUD가 다른 값처럼 어트리뷰트 변경 알림으로 읽을 수 있게 여기 둔다.
+	 * 기획 문서는 '출격당 3개', 지금 기본은 5개. 출격할 때마다 새 캐릭터라 5개로 시작한다. 보유 수량·상점 연결은 인벤토리 담당이 정해진 뒤.
 	 * 테스트 보충: knight.Player.SetStat RepairKitCount 3
 	 */
 	UPROPERTY(BlueprintReadOnly, Category="Knight|Mech", meta=(AllowPrivateAccess=true))
 	FGameplayAttributeData RepairKitCount;
 
 	/**
-	 * (2026-10-16) 수리 키트 최대 개수. 기본 5(2026-10-19, 3 → 5) = 출격 시작 개수. 이보다 적을 때만 퍼펙트 가드로 수리 키트 게이지가 찬다.
+	 * 수리 키트 최대 개수. 기본 5(3 → 5) = 출격 시작 개수. 이보다 적을 때만 퍼펙트 가드로 수리 키트 게이지가 찬다.
 	 * 바뀔 수 있는 값(파츠·업그레이드로 늘릴 수 있게 스탯으로 둠).
 	 */
 	UPROPERTY(BlueprintReadOnly, Category="Knight|Mech", meta=(AllowPrivateAccess=true))
 	FGameplayAttributeData MaxRepairKitCount;
 
 	/**
-	 * (2026-10-16 사용자 결정) 수리 키트 게이지(0 ~ RepairKitGaugeFull 100). 키트가 최대 개수보다 적을 때 퍼펙트 가드에 성공하면
+	 * 수리 키트 게이지(0 ~ RepairKitGaugeFull 100). 키트가 최대 개수보다 적을 때 퍼펙트 가드에 성공하면
 	 * 차고(AknightCharacter::RepairKitGaugePerPerfectGuard, 기본 20 = 퍼펙트 가드 5번), 꽉 차면 키트 +1에 0으로 돌아간다.
 	 * 출격할 때마다 0에서 시작한다. HUD는 RepairKitCount처럼 어트리뷰트 변경 알림으로 읽는다.
 	 */

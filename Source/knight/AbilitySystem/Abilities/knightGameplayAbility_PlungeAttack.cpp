@@ -105,7 +105,7 @@ void UknightGameplayAbility_PlungeAttack::ActivateAbility(const FGameplayAbility
 
 	if (bKeepJumpArc)
 	{
-		// (2026-10-29 사용자 결정) 반동·역분사 없이 점프 궤적 그대로: 중력·속도는 건드리지 않고 공중 조작만 막는다.
+		// 반동·역분사 없이 점프 궤적 그대로: 중력·속도는 건드리지 않고 공중 조작만 막는다.
 		Movement->AirControl = 0.f;
 		UAbilityTask_WaitGameplayEvent* const FallHitTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, knightGameplayTags::Event_Melee_Hit, nullptr, false, true);
 		FallHitTask->EventReceived.AddDynamic(this, &ThisClass::OnMeleeHitEvent);
@@ -187,6 +187,15 @@ void UknightGameplayAbility_PlungeAttack::SpawnThrusters(float Scale)
 {
 	StopThrusters();
 	const ACharacter* const Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	// 부스터 컴포넌트 분사를 쓰면 발 소켓에 직접 뿜지 않는다. 체공이면 HoverThrust, 역분사(낙하)면 DiveThrust.
+	if (!HoverThrust.Nozzles.IsEmpty())
+	{
+		if (UknightThrusterComponent* const Thrusters = Character ? Character->FindComponentByClass<UknightThrusterComponent>() : nullptr)
+		{
+			ComponentThrustId = Thrusters->StartThrust(bThrustersReversed ? DiveThrust : HoverThrust);
+		}
+		return;
+	}
 	USkeletalMeshComponent* const Mesh = Character ? Character->GetMesh() : nullptr;
 	if (!Mesh || !ThrusterEffect)
 	{
@@ -212,6 +221,15 @@ void UknightGameplayAbility_PlungeAttack::SpawnThrusters(float Scale)
 
 void UknightGameplayAbility_PlungeAttack::StopThrusters()
 {
+	if (ComponentThrustId != 0)
+	{
+		const AActor* const Avatar = GetAvatarActorFromActorInfo();
+		if (UknightThrusterComponent* const Thrusters = Avatar ? Avatar->FindComponentByClass<UknightThrusterComponent>() : nullptr)
+		{
+			Thrusters->StopThrust(ComponentThrustId);
+		}
+		ComponentThrustId = 0;
+	}
 	for (UNiagaraComponent* const Jet : ThrusterComponents)
 	{
 		if (Jet)
@@ -373,7 +391,7 @@ void UknightGameplayAbility_PlungeAttack::StartLeap()
 	// 뛰어가는 동안은 점프 자세, 도착 지점에서 LeapSwingDistance 안으로 들어오면 휘두른다.
 	bLeapSwingStarted = !ActiveLeapPoseMontage || GetLeapRemainingDistance() <= LeapSwingDistance;
 	PlayMontage(bLeapSwingStarted ? ActiveStartMontage.Get() : ActiveLeapPoseMontage.Get(), false);
-	// (2026-10-26) 대상 쪽으로 뛰어갈 때만 락온 돌진과 같은 잔상. 휘두르기가 시작되거나(bLeapSwingStarted) 도착 지점 1m 안이면
+	// 대상 쪽으로 뛰어갈 때만 락온 돌진과 같은 잔상. 휘두르기가 시작되거나(bLeapSwingStarted) 도착 지점 1m 안이면
 	// 멈추고, 처음부터 휘두르는 거리면 남기지 않는다(몬스터에 붙어 있을 때). 착지(Time)나 어빌리티가 끝나도 멈춘다.
 	if (bLeapGhostTrail && bHasLeapTarget && !bLeapSwingStarted)
 	{
@@ -453,7 +471,7 @@ void UknightGameplayAbility_PlungeAttack::TickPlunge()
 	}
 	case EPhase::Fall:
 	{
-		// (2026-10-29) 점프 궤적 그대로 떨어진다. 땅에 닿으면 내려찍기.
+		// 점프 궤적 그대로 떨어진다. 땅에 닿으면 내려찍기.
 		if (!Movement->IsFalling())
 		{
 			StartLand();
@@ -710,7 +728,7 @@ void UknightGameplayAbility_PlungeAttack::OnMontageInterrupted()
 void UknightGameplayAbility_PlungeAttack::OnMeleeHitEvent(FGameplayEventData Payload)
 {
 	const FHitResult* const Hit = Payload.TargetData.Num() > 0 && Payload.TargetData.Get(0) ? Payload.TargetData.Get(0)->GetHitResult() : nullptr;
-	// (2026-10-20) 한 번 발동에 대상마다 한 번만(시작 베기와 착지 충격이 둘 다 맞히던 것).
+	// 한 번 발동에 대상마다 한 번만(시작 베기와 착지 충격이 둘 다 맞히던 것).
 	if (Hit && Hit->GetActor() && !HitActorsThisAttack.Contains(Hit->GetActor()))
 	{
 		HitActorsThisAttack.Add(Hit->GetActor());

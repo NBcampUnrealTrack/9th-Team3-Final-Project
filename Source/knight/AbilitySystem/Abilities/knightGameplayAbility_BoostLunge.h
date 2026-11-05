@@ -27,7 +27,7 @@ class USoundBase;
  *   2. 베기: 도착하면 StrikeMontage를 재생한다. 몽타주의 Knight Melee Trace가 보내는 Event.Melee.Hit를 HitParams로 처리한다.
  *            시작할 때 모션 워프 타깃(WarpTargetName)을 락온 대상 쪽으로 맞춰 몽타주의 워프 구간이 방향을 돌린다.
  *   몽타주가 끝나면 어빌리티가 끝난다. 피격 등으로 끊기면 부스터·이동도 같이 멈춘다.
- *   (2026-10-29) 0. 예열(선딜레이): 돌진 전에 StartupDelay초 동안 대상 쪽으로 돌아 돌진 자세로 멈추고 등 부스터를 먼저 켠다.
+ *   0. 예열(선딜레이): 돌진 전에 StartupDelay초 동안 대상 쪽으로 돌아 돌진 자세로 멈추고 등 부스터를 먼저 켠다.
  *            이동 입력은 막고, 돌진 방향·거리는 예열이 끝날 때 다시 잰다.
  */
 UCLASS()
@@ -64,14 +64,14 @@ protected:
 
 	/**
 	 * 돌진할 수 있는 최대 거리(대상 표면 기준 도착 지점까지). 더 멀면 이 거리만큼만 간다.
-	 * (2026-10-18 사용자 결정 '돌진 사거리 감소') 1800 → 900, (2026-10-19 '조금 더') 900 → 700. 바뀔 수 있는 값(BP에서 시험 후 조절).
+	 * 사거리를 줄여 1800 → 900 → 700. 바뀔 수 있는 값(BP에서 시험 후 조절).
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Lunge|Motion", meta=(ClampMin=0, Units="cm"))
 	float MaxLungeDistance = 700.f;
 
 	/**
-	 * (2026-10-29 사용자 요청) 선딜레이: 돌진하기 전에 돌진 자세로 멈춰 등 부스터를 예열하는 시간(초, 실제 시간). 0이면 예전처럼 바로 돌진.
-	 * 공중 돌진(bAirLunge)에는 쓰지 않는다. 바뀔 수 있는 값. (같은 날 사용자 결정) 0.4 → 0.2.
+	 * 선딜레이: 돌진하기 전에 돌진 자세로 멈춰 등 부스터를 예열하는 시간(초, 실제 시간). 0이면 예전처럼 바로 돌진.
+	 * 공중 돌진(bAirLunge)에는 쓰지 않는다. 바뀔 수 있는 값. 0.4 → 0.2.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Lunge|Motion", meta=(ClampMin=0, Units="s"))
 	float StartupDelay = 0.2f;
@@ -81,7 +81,7 @@ protected:
 	float StopDistance = 170.f;
 
 	/**
-	 * 돌진 속도. (2026-10-29 사용자 결정) GA_Knight_BoostLunge 2600 → 1300(절반) → 1000('좀 더'):
+	 * 돌진 속도. GA_Knight_BoostLunge 2600 → 1300(절반) → 1000:
 	 * 최대 7m를 0.27초 → 0.7초에 간다(MaxLungeTime도 0.6 → 0.75로 올려 먼 거리도 느려지게). 바뀔 수 있는 값.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Lunge|Motion", meta=(ClampMin=100, Units="CentimetersPerSecond"))
@@ -90,7 +90,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Lunge|Motion", meta=(ClampMin=0.05, Units="s"))
 	float MinLungeTime = 0.18f;
 
-	/** 돌진 시간 상한. (2026-10-29) GA_Knight_BoostLunge 0.6 → 0.75: 돌진 속도를 1000으로 줄여도 7m(0.7초)가 잘리지 않게. */
+	/** 돌진 시간 상한. GA_Knight_BoostLunge 0.6 → 0.75: 돌진 속도를 1000으로 줄여도 7m(0.7초)가 잘리지 않게. */
 	UPROPERTY(EditDefaultsOnly, Category="Lunge|Motion", meta=(ClampMin=0.05, Units="s"))
 	float MaxLungeTime = 0.6f;
 
@@ -106,7 +106,7 @@ protected:
 	TObjectPtr<UAnimMontage> StrikeMontage;
 
 	/**
-	 * 베기 몽타주 배속(행동 속도·공격 배속·스탠스를 곱함). (2026-10-29 사용자 결정) GA_Knight_BoostLunge 1.15 → 1.25 → 1.37:
+	 * 베기 몽타주 배속(행동 속도·공격 배속·스탠스를 곱함). GA_Knight_BoostLunge 1.15 → 1.25 → 1.37:
 	 * 한 번에 약 0.2초씩, 베기가 끝나는 시점이 처음보다 한손 약 0.37초·양손 약 0.45초 빨라졌다(2.5초 몽타주, 공격 배속 0.75 기준). 바뀔 수 있는 값.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Lunge|Montage", meta=(ClampMin=0.01))
@@ -207,17 +207,17 @@ protected:
 	FLinearColor TwoHandedGhostColor = FLinearColor(3.2f, 0.22f, 0.08f, 1.f);
 
 	/**
-	 * (2026-10-26 사용자 요청 '몬스터와 붙어 있을 때는 잔상 없이') 돌진이 멈출 지점까지 남은 거리가 이 값 이하면 잔상을 남기지 않는다
+	 * 돌진이 멈출 지점까지 남은 거리가 이 값 이하면(몬스터와 붙어 있으면) 잔상을 남기지 않는다
 	 * (이미 기본 공격이 닿는 거리). 돌진하다 이 안으로 들어와도 멈춘다. 점프 공격·대쉬공격(FknightGhostTrailSettings)과 같은 값. 바뀔 수 있는 값.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Lunge|Ghost Trail", meta=(ClampMin=0, Units="cm", EditCondition="bSpawnGhostTrail"))
 	float GhostInRangeDistance = 100.f;
 
 private:
-	/** (2026-10-29) 예열이 끝나면(또는 예열 없이 바로) 돌진 방향을 다시 재고 돌진을 시작한다. */
+	/** 예열이 끝나면(또는 예열 없이 바로) 돌진 방향을 다시 재고 돌진을 시작한다. */
 	void StartLunge();
 
-	/** (2026-10-29) 예열 동안 이동 입력을 막는다(컨트롤러 SetIgnoreMoveInput, 내가 건 만큼만 푼다). */
+	/** 예열 동안 이동 입력을 막는다(컨트롤러 SetIgnoreMoveInput, 내가 건 만큼만 푼다). */
 	void SetStartupMoveLocked(bool bLock);
 
 	FTimerHandle StartupDelayTimer;
@@ -261,7 +261,7 @@ private:
 	FTimerHandle BackThrusterTimer;
 	FTimerHandle BackThrusterStopTimer;
 	FTimerHandle GhostTrailTimer;
-	/** (2026-10-26) 돌진이 멈출 지점. 잔상은 여기까지 GhostInRangeDistance 안으로 들어오면 멈춘다. */
+	/** 돌진이 멈출 지점. 잔상은 여기까지 GhostInRangeDistance 안으로 들어오면 멈춘다. */
 	FVector GhostStopLocation = FVector::ZeroVector;
 
 	/** 이번 돌진 방향(수평 단위 벡터). */

@@ -29,7 +29,7 @@ struct FknightRepairWeldPoint
 };
 
 /**
- * 수리 키트 (2026-10-09, 기획 문서 '부위 체력' 규칙 + 사용자 결정).
+ * 수리 키트(기획 문서 '부위 체력' 규칙 기준).
  *
  * 사용법: GA_Knight_RepairKit(이 클래스의 BP)를 어빌리티 세트에 InputTag.Item.Use(기본 R 키, IA_UseItem)로 넣는다.
  *
@@ -38,12 +38,12 @@ struct FknightRepairWeldPoint
  *   회복량 = 최대 체력 x HealRatio x 수리 효율(메카 속성 RepairEfficiency).
  *     전체 체력은 회복량만큼(HealEffect), 부위 체력은 같은 양을 체력 비율이 낮은 부위부터(UknightPartHealthComponent::ApplyRepair).
  *
- * 사용 중 (사용자 결정):
+ * 사용 중:
  *   - 걷기만 된다. 달리기 키를 눌러도 걷기 속도(줄지 않음, 무브먼트 SetRunLocked).
  *     공격·가드·퀵스텝은 활성화 그룹(교체 가능 + 캔슬 창 없음) 때문에 나가지 않는다.
  *   - 맞아도 계속된다. State.SuperArmor로 작은 피격 경직이 나오지 않는다.
  *     그로기 붕괴(비틀거림·다운) 반응은 나오지만 수리는 이어서 끝난다. 사망하면 모든 어빌리티가 취소되어 회복하지 않는다.
- * 풀피(전체 체력이 가득 차 있고 깎인 부위도 없음)면 나가지 않는다(키트 낭비 방지, 2026-10-09 사용자 결정).
+ * 풀피(전체 체력이 가득 차 있고 깎인 부위도 없음)면 나가지 않는다(키트 낭비 방지).
  * 연출: 수리 중 GameplayCue.Repair.Loop(반복, 끝나면 제거), 회복 순간 GameplayCue.Repair.Finish(한 번).
  *   2026-10-27: GCN_Repair_Loop의 한 번 터지는 이펙트(NS_Hit_Scifi)를 비웠다(시작·끝 두 번 반짝여 끝이 안 보인다는 팀 피드백).
  *     대신 진행도 스캔 링(Scan, 발→머리로 사용 시간 동안 상승)을 코드에서 띄운다.
@@ -79,7 +79,7 @@ public:
 		const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
 
 protected:
-	/** 파괴된 부위가 없을 때의 사용 시간. 기본 1.5초 (2026-10-09 사용자 결정, 바뀔 수 있는 값). */
+	/** 파괴된 부위가 없을 때의 사용 시간. 기본 1.5초(바뀔 수 있는 값). */
 	UPROPERTY(EditDefaultsOnly, Category="Repair Kit", meta=(ClampMin=0, Units="s"))
 	float BaseUseTime = 1.5f;
 

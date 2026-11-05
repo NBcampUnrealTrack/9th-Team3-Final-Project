@@ -190,7 +190,7 @@ bool UknightPartsComponent::EquipPartUnchecked(const UknightPartItemDefinition* 
 	Equipped.Definition = Part;
 	Equipped.UpgradeLevel = FMath::Clamp(UpgradeLevel, 0, Part->GetMaxUpgradeLevel());
 
-	// 메시 컴포넌트: 스켈레탈 메시(Mesh)가 있으면 그것, 없으면 스태틱 메시(StaticMesh, 2026-10-10).
+	// 메시 컴포넌트: 스켈레탈 메시(Mesh)가 있으면 그것, 없으면 스태틱 메시(StaticMesh).
 	UMeshComponent* PartMesh = nullptr;
 	if (USkeletalMesh* const Mesh = UknightAssetManager::GetAsset(Part->Mesh))
 	{
@@ -433,6 +433,25 @@ void UknightPartsComponent::GetPartMeshes(TArray<UMeshComponent*>& OutMeshes) co
 		if (RegionMesh)
 		{
 			OutMeshes.Add(RegionMesh);
+		}
+	}
+}
+
+void UknightPartsComponent::GetMeshesForBodyRegion(const int32 RegionFlags, const FGameplayTag SlotTag, TArray<UMeshComponent*>& OutMeshes) const
+{
+	for (const TPair<FGameplayTag, FknightEquippedPart>& Entry : EquippedParts)
+	{
+		const UknightPartItemDefinition* const Part = Entry.Value.Definition.Get();
+		if (Entry.Value.MeshComponent && Part && (Entry.Key == SlotTag || (Part->Attachment.ReplaceRegions & RegionFlags) != 0))
+		{
+			OutMeshes.AddUnique(Entry.Value.MeshComponent);
+		}
+	}
+	for (int32 Index = 0; Index < BodyRegionMeshes.Num(); ++Index)
+	{
+		if (BodyRegionMeshes[Index] && (BodyRegionFlags[Index] & RegionFlags) != 0)
+		{
+			OutMeshes.AddUnique(BodyRegionMeshes[Index]);
 		}
 	}
 }
