@@ -27,6 +27,8 @@ namespace knightMonsterLeap
 UknightGameplayAbility_MonsterLeapAttack::UknightGameplayAbility_MonsterLeapAttack(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
+	// 직접 타깃을 겨누며 움직인다. 발동할 때 따로 몸을 돌리지 않는다.
+	bAutoFaceTarget = false;
 	Selection.MinRange = 2500.f;
 	Selection.MaxRange = 5000.f;
 	Selection.MaxAngle = 30.f;

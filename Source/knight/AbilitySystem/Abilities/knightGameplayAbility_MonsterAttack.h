@@ -191,7 +191,19 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Turn")
 	bool bStartTurnToTarget = false;
 
-	UPROPERTY(EditDefaultsOnly, Category="Attack|Turn", meta=(ClampMin=1, EditCondition="StartTurnYaw != 0 || bStartTurnToTarget"))
+	/**
+	 * 정면 공격(옆·뒤 전용이 아니고 둘레 전체를 덮지 않는 공격)이 발동할 때 타깃이 AutoFaceMinAngle 이상 벗어나 있으면
+	 * bStartTurnToTarget처럼 타깃 쪽으로 돈다. 목이 타깃을 따라보는(Look At) 이동 행동 뒤에 몸이 덜 돈 채 바로 공격이 나오면
+	 * 머리만 타깃을 보고 공격은 몸 정면으로 나가 빗나가기 때문이다. 이동 행동, 공중 상태에서는 돌지 않는다.
+	 * 직접 조준하며 움직이는 공격(돌진, 도약, 활공 등)은 생성자에서 끈다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Turn")
+	bool bAutoFaceTarget = true;
+
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Turn", meta=(ClampMin=0, ClampMax=90, Units="deg", EditCondition="bAutoFaceTarget"))
+	float AutoFaceMinAngle = 8.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Turn", meta=(ClampMin=1, EditCondition="StartTurnYaw != 0 || bStartTurnToTarget || bAutoFaceTarget"))
 	float StartTurnRate = 180.f;
 
 	UPROPERTY(EditDefaultsOnly, Category="Attack|Turn", meta=(ClampMin=0, Units="s", EditCondition="StartTurnYaw != 0 || bStartTurnToTarget"))
@@ -257,6 +269,8 @@ private:
 
 	UFUNCTION()
 	void HandleStartTurnTick(int32 ActionNumber);
+	/** 정면 공격이라 발동할 때 타깃 쪽으로 몸을 돌려야 하는지(bAutoFaceTarget). */
+	bool ShouldAutoFaceTarget() const;
 
 	TWeakObjectPtr<UAbilityTask_Repeat> StartTurnTask;
 	double LastActivationTime = -1.e9;

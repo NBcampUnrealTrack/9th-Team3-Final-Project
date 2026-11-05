@@ -30,6 +30,8 @@ namespace knightMonsterGlide
 UknightGameplayAbility_MonsterGlideAttack::UknightGameplayAbility_MonsterGlideAttack(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
+	// 직접 타깃을 겨누며 움직인다. 발동할 때 따로 몸을 돌리지 않는다.
+	bAutoFaceTarget = false;
 	Selection.MinRange = 1000.f;
 	Selection.MaxRange = 2500.f;
 	Selection.MaxAngle = 180.f;

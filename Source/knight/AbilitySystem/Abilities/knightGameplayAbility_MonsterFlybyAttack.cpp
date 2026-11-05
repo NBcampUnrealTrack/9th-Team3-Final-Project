@@ -124,6 +124,8 @@ namespace knightMonsterFlyby
 UknightGameplayAbility_MonsterFlybyAttack::UknightGameplayAbility_MonsterFlybyAttack(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
+	// 직접 타깃을 겨누며 움직인다. 발동할 때 따로 몸을 돌리지 않는다.
+	bAutoFaceTarget = false;
 	Selection.MinRange = 800.f;
 	Selection.MaxRange = 3000.f;
 	Selection.MaxAngle = 180.f;
