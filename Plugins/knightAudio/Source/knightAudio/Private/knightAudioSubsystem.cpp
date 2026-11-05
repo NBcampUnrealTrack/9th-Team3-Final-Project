@@ -341,3 +341,19 @@ void UknightAudioSubsystem::SetMusicState(int32 State)
 		Current->SetIntParameter(GetDefault<UknightAudioSettings>()->MusicStateParameter, State);
 	}
 }
+
+void UknightAudioSubsystem::SetMusicFloatParameter(FName Name, float Value)
+{
+	if (UAudioComponent* const Current = MusicComponent.Get())
+	{
+		Current->SetFloatParameter(Name, Value);
+	}
+}
+
+void UknightAudioSubsystem::TriggerMusicParameter(FName Name)
+{
+	if (UAudioComponent* const Current = MusicComponent.Get())
+	{
+		Current->SetTriggerParameter(Name);
+	}
+}

@@ -468,11 +468,17 @@ void AknightMonsterCharacterBase::UpdateEnrageStart()
 void AknightMonsterCharacterBase::HandleDamaged(AActor* DamageInstigator, AActor* DamageCauser, const FGameplayEffectSpec* EffectSpec,
 	float Magnitude, float OldValue, float NewValue)
 {
-	AddRageFromDamage(Magnitude, DamageInstigator);
+	// 이 타격으로 죽으면 분노·2페이즈를 쌓지 않는다. 사망 처리(IsDead)는 이 알림 뒤라서, 큰 한 방이 분노를 채우면
+	// 쓰러지는 몸으로 분노 포효(잔향 공명해방)가 시작됐다.
+	const bool bLethal = NewValue <= 0.f;
+	if (!bLethal)
+	{
+		AddRageFromDamage(Magnitude, DamageInstigator);
+	}
 	TriggerHitFlinch(DamageInstigator, EffectSpec, Magnitude);
 
 	const float Ratio = MonsterDefinition ? MonsterDefinition->Phase2HealthRatio : 0.f;
-	if (bInPhase2 || bPhase2Pending || IsDead() || Ratio <= 0.f
+	if (bLethal || bInPhase2 || bPhase2Pending || IsDead() || Ratio <= 0.f
 		|| CoreAttributeSet->GetHealth() >= CoreAttributeSet->GetMaxHealth() * Ratio)
 	{
 		return;

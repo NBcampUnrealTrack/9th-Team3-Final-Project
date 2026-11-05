@@ -67,6 +67,14 @@ public:
 	UFUNCTION(BlueprintPure, Category="Knight|Audio")
 	int32 GetMusicState() const { return MusicState; }
 
+	/** 지금 음악(MetaSound)의 입력 값을 바꾼다. 그 입력이 없는 음악(사운드 웨이브 등)은 그냥 무시한다. */
+	UFUNCTION(BlueprintCallable, Category="Knight|Audio")
+	void SetMusicFloatParameter(FName Name, float Value);
+
+	/** 지금 음악(MetaSound)의 트리거 입력을 실행한다. */
+	UFUNCTION(BlueprintCallable, Category="Knight|Audio")
+	void TriggerMusicParameter(FName Name);
+
 private:
 	void HandlePostLoadMap(UWorld* LoadedWorld);
 	void HandleWorldInitialized(const struct FActorsInitializedParams& Params);

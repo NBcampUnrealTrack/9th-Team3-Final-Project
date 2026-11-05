@@ -11,6 +11,7 @@
 class AknightMonsterCharacterBase;
 class AknightRaidGameState;
 class UknightRaidDefinition;
+class UknightAudioSubsystem;
 class USoundBase;
 struct FStreamableHandle;
 
@@ -137,6 +138,8 @@ private:
 	/** Picks the music state from the raid phase and the target monsters' rage, and the combat track (see CombatMusic). */
 	void UpdateMusic();
 	void UpdateCombatMusic(EknightRaidPhase Phase);
+	/** 보스 BGM(bCombatMusicDynamic): 대상 몬스터가 2페이즈나 분노면 Enrage 곡으로, 아니면 Normal로 크로스페이드한다. */
+	void UpdateCombatMusicIntensity(UknightAudioSubsystem& Audio);
 	void HandleMonsterHealthChanged(const FOnAttributeChangeData& Data);
 
 	virtual void ReturnToMainMenu() override;
@@ -155,6 +158,8 @@ private:
 	TObjectPtr<USoundBase> PlayingCombatTrack;
 	bool bCombatMusicLowHealth = false;
 	bool bCombatMusicEnded = false;
+	/** 보스 BGM MetaSound에 마지막으로 보낸 Intensity. -1이면 아직 안 보냄. */
+	float CombatMusicIntensity = -1.f;
 	FGameplayTagContainer BrokenParts;
 	FTimerHandle PhaseTimer;
 	FTimerHandle TimeLimitTimer;

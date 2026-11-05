@@ -139,6 +139,23 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation|Combat Music", meta=(ClampMin=0, Units="s"))
 	float CombatMusicSwitchFadeTime = 3.f;
 
+	/**
+	 * 전투 음악이 보스 BGM MetaSound(MS_BGM_*)일 때 켠다. 인트로 → 루프 → 엔딩과 Normal ↔ Enrage 전환을 MetaSound가 맡고,
+	 * 여기서는 입력만 바꾼다: Intensity(0/1), IntensityFadeTime, Ending(0/1), PlayEnding(트리거).
+	 * 대상 몬스터가 2페이즈(State.Monster.Phase2)이거나 분노(State.Monster.Enraged, 잔향 공명해방 포함)면 Enrage 곡.
+	 * 레이드 성공 때는 끄지 않고 그 상태의 엔딩을 끝까지 튼다. 켜면 CombatMusicLoopGap은 0으로 둔다(엔딩 뒤 다시 틀지 않게).
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation|Combat Music")
+	bool bCombatMusicDynamic = false;
+
+	/** Normal → Enrage 크로스페이드. 포효 소리가 전환 순간을 덮는다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation|Combat Music", meta=(ClampMin=0, Units="s", EditCondition="bCombatMusicDynamic"))
+	float CombatMusicEnrageFadeTime = 2.5f;
+
+	/** Enrage → Normal 크로스페이드(분노가 풀릴 때). 천천히 가라앉게 길게 둔다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation|Combat Music", meta=(ClampMin=0, Units="s", EditCondition="bCombatMusicDynamic"))
+	float CombatMusicCalmFadeTime = 5.f;
+
 	/** Cues loaded when the raid starts so their first use shows (GameplayCue.Hit, GameplayCue.PartBreak, the monster's cues). */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation", meta=(Categories="GameplayCue"))
 	FGameplayTagContainer PreloadGameplayCues;
