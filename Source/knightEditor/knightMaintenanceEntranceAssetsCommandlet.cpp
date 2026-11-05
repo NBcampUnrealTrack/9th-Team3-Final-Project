@@ -87,11 +87,15 @@ int32 UknightMaintenanceEntranceAssetsCommandlet::Main(const FString& Params)
 float4 panel = Texture2DSample(Texture, TextureSampler, UV);
 float x = OriginX + UV.x * Width;
 float mask = smoothstep(-max(Softness, 1.0), max(Softness, 1.0), (ScanX - x) * Direction);
+float screenX = x + ScreenOffset;
+float boundary = smoothstep(0.0, 48.0, screenX) * smoothstep(0.0, 48.0, ViewWidth - screenX);
+mask *= lerp(1.0, boundary, BoundaryStrength);
 // Retainer colors are premultiplied; fade color and alpha together.
 return panel * mask;
 )HLSL"), true);
 	Reveal.Scalar(TEXT("OriginX"), 0); Reveal.Scalar(TEXT("Width"), 400);
 	Reveal.Scalar(TEXT("Direction"), 1); Reveal.Scalar(TEXT("Softness"), 28); Reveal.Scalar(TEXT("ScanX"), 500);
+	Reveal.Scalar(TEXT("ScreenOffset"), 0); Reveal.Scalar(TEXT("ViewWidth"), 1920); Reveal.Scalar(TEXT("BoundaryStrength"), 0);
 	Reveal.Material->PostEditChange();
 	FEntranceMaterial Scan(TEXT("M_UI_MaintenanceScan"), TEXT(R"HLSL(
 float2 p = UV * float2(Width, Height);
@@ -111,12 +115,15 @@ float trails = 0;
 // Quad includes a wide margin; fade well before its hard edge.
 float edge = smoothstep(0.0, 18.0, p.y) * smoothstep(0.0, 18.0, Height - p.y);
 edge *= smoothstep(0.0, 12.0, p.x) * smoothstep(0.0, 12.0, Width - p.x);
+float boundary = smoothstep(0.0, 48.0, OriginX + p.x) * smoothstep(0.0, 48.0, ViewWidth - OriginX - p.x);
+edge *= lerp(1.0, boundary, BoundaryStrength);
 return edge * Intensity * (float3(1.0, 0.56, 0.09) * (core + trails * TrailStrength)
     + float3(1.0, 0.19, 0.005) * halo);
 )HLSL"), false);
 	Scan.Scalar(TEXT("Width"), 600); Scan.Scalar(TEXT("Height"), 1000); Scan.Scalar(TEXT("ScanX"), 300);
 	Scan.Scalar(TEXT("Direction"), 1); Scan.Scalar(TEXT("CoreWidth"), 2); Scan.Scalar(TEXT("GlowWidth"), 24);
 	Scan.Scalar(TEXT("Intensity"), .8f); Scan.Scalar(TEXT("TrailStrength"), .45f);
+	Scan.Scalar(TEXT("OriginX"), 0); Scan.Scalar(TEXT("ViewWidth"), 1920); Scan.Scalar(TEXT("BoundaryStrength"), 0);
 	Scan.Material->PostEditChange();
 	GShaderCompilingManager->FinishAllCompilation();
 	for (UMaterial* M : { Reveal.Material, Scan.Material })
@@ -139,6 +146,16 @@ return edge * Intensity * (float3(1.0, 0.56, 0.09) * (core + trails * TrailStren
 		P->SetObjectPropertyValue_InContainer(CDO, Value); return true;
 	};
 	if (!Bind(TEXT("EntranceRevealMaterial"), Reveal.Material) || !Bind(TEXT("EntranceScanMaterial"), Scan.Material)) return 1;
+	// Migrate only exit tuning; retain all authored entrance values and other UI defaults.
+	if (auto* Settings = FindFProperty<FStructProperty>(CDO->GetClass(), TEXT("EntranceSettings")))
+	{
+		void* Data = Settings->ContainerPtrToValuePtr<void>(CDO);
+		const TPair<const TCHAR*, float> Values[] = {
+			{ TEXT("ExitDuration"), .28f }, { TEXT("ExitFadeEndFraction"), .78f },
+			{ TEXT("ExitGlowMultiplier"), .14f }, { TEXT("HomeRevealDuration"), .20f }, { TEXT("HomeRevealDelayFraction"), .60f } };
+		for (const auto& Value : Values)
+			if (auto* P = FindFProperty<FFloatProperty>(Settings->Struct, Value.Key)) P->SetPropertyValue_InContainer(Data, Value.Value);
+	}
 	FBlueprintEditorUtils::MarkBlueprintAsModified(BP);
 	FCompilerResultsLog Results;
 	FKismetEditorUtilities::CompileBlueprint(BP, EBlueprintCompileOptions::SkipGarbageCollection, &Results);

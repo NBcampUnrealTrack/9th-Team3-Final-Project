@@ -30,16 +30,54 @@ void UKnightMaintenanceTransition::Begin(UKnightMaintenanceWidget* InOwner, UWid
 	if (Footer) { Footer->SetRenderOpacity(0.f); Footer->SetVisibility(ESlateVisibility::HitTestInvisible); }
 }
 
-void UKnightMaintenanceTransition::BeginExit(UKnightMaintenanceWidget* InOwner, UWidget* InFooter, FSimpleDelegate Finished)
+void UKnightMaintenanceTransition::BeginExit(UKnightMaintenanceWidget* InOwner, UWidget* InFooter, UCanvasPanel* InHome, FSimpleDelegate Finished)
 {
 	if (IsExiting()) return;
-	if (!IsActive()) SaveOwner(InOwner, InFooter);
+	bExitFromEntrance = IsActive();
+	if (!IsActive())
+	{
+		SaveOwner(InOwner, InFooter);
+		if (PrepareLayers()) UpdateEntrance(1.f);
+	}
 	OnFinished = MoveTemp(Finished);
 	ExitStartOpacity = Owner->GetRenderOpacity();
 	ExitFooterOpacity = Footer ? Footer->GetRenderOpacity() : 0.f;
+	ExitStartOffset = PanelOffset;
+	ExitScanIntensity = bExitFromEntrance ? ScanIntensity : 0.f;
+	// A partially revealed entrance has less readable content and less remaining
+	// travel. Reveal Home earlier instead of leaving a gap after those fragments.
+	HomeRevealStartTime = Settings.ExitDuration * Settings.HomeRevealDelayFraction
+		* (bExitFromEntrance ? FMath::Clamp(Progress, 0.f, 1.f) : 1.f);
 	Owner->SetVisibility(ESlateVisibility::HitTestInvisible);
 	if (Footer) Footer->SetVisibility(ESlateVisibility::HitTestInvisible);
+	PrepareHome(InHome);
 	Phase = EPhase::Exiting; Elapsed = 0.f;
+}
+
+void UKnightMaintenanceTransition::PrepareHome(UCanvasPanel* InHome)
+{
+	Home = InHome;
+	UWidgetTree* Tree = Home ? Home->GetTypedOuter<UWidgetTree>() : nullptr;
+	UCanvasPanel* Root = Tree ? Cast<UCanvasPanel>(Tree->RootWidget) : nullptr;
+	UCanvasPanelSlot* PagesSlot = Home && Home->GetParent() ? Cast<UCanvasPanelSlot>(Home->GetParent()->Slot) : nullptr;
+	if (!Root || !PagesSlot) return;
+	HomeOverlay = Tree->ConstructWidget<UCanvasPanel>();
+	HomeOverlay->SetVisibility(ESlateVisibility::HitTestInvisible);
+	HomeOverlay->SetRenderOpacity(0.f);
+	UCanvasPanelSlot* OverlaySlot = Root->AddChildToCanvas(HomeOverlay);
+	OverlaySlot->SetLayout(PagesSlot->GetLayout()); OverlaySlot->SetZOrder(PagesSlot->GetZOrder() + 1);
+	for (UWidget* Child : Home->GetAllChildren())
+	{
+		UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(Child->Slot);
+		if (!Slot) continue;
+		FKnightMovingPanelLayer Layer;
+		Layer.Widget = Child; Layer.Parent = Home; Layer.Layout = Slot->GetLayout();
+		Layer.Z = Slot->GetZOrder(); Layer.bAutoSize = Slot->GetAutoSize(); HomeChildren.Add(Layer);
+		const TSharedRef<SWidget> KeepSlateAlive = Child->TakeWidget();
+		Child->RemoveFromParent(); Slot = HomeOverlay->AddChildToCanvas(Child);
+		Slot->SetLayout(Layer.Layout); Slot->SetZOrder(Layer.Z); Slot->SetAutoSize(Layer.bAutoSize);
+	}
+	HomeOverlay->ForceLayoutPrepass();
 }
 
 void UKnightMaintenanceTransition::AddLayer(UWidget* Widget, bool bRight)
@@ -145,6 +183,7 @@ void UKnightMaintenanceTransition::UpdateEntrance(float T)
 	const float Reveal = 1.f - FMath::Pow(1.f - T, 1.4f);
 	const float LeftX = FMath::Lerp(LeftBounds.Min.X - Settings.RevealSoftness, LeftBounds.Max.X + Settings.RevealSoftness, Reveal);
 	const float RightX = FMath::Lerp(RightBounds.Max.X + Settings.RevealSoftness, RightBounds.Min.X - Settings.RevealSoftness, Reveal);
+	ScanPosition = FVector2D(LeftX, RightX);
 	for (FKnightMovingPanelLayer& Layer : Layers)
 	{
 		if (Layer.Widget == Footer)
@@ -164,11 +203,18 @@ void UKnightMaintenanceTransition::UpdateEntrance(float T)
 		Layer.Retainer->RequestRender();
 	}
 	for (const FKnightFadingCenterLayer& Layer : Centers) if (Layer.Widget) Layer.Widget->SetRenderOpacity(Layer.Opacity * Fade);
-	const float ScanAlpha = Smooth(T / .12f) * (1.f - Smooth((T - .63f) / .37f));
+	UpdateScan(Settings.GlowIntensity * Smooth(T / .12f) * (1.f - Smooth((T - .63f) / .37f)));
+}
+
+void UKnightMaintenanceTransition::UpdateScan(float Intensity, float BoundaryStrength)
+{
+	ScanIntensity = Intensity;
+	const float Pad = Settings.GlowWidth * 4.f + 8.f;
 	for (bool bRight : { false, true })
 	{
 		UImage* Scan = bRight ? RightScan : LeftScan;
 		UMaterialInstanceDynamic* Material = bRight ? RightScanMaterial : LeftScanMaterial;
+		if (!Scan || !Material) continue;
 		const FBox2D& Bounds = bRight ? RightBounds : LeftBounds;
 		const float Offset = bRight ? PanelOffset.Y : PanelOffset.X;
 		const FVector2D Origin(Bounds.Min.X - Pad, Bounds.Min.Y - 24.f);
@@ -177,12 +223,60 @@ void UKnightMaintenanceTransition::UpdateEntrance(float T)
 		Slot->SetPosition(Origin + FVector2D(Offset, 0.f)); Slot->SetSize(Size);
 		Material->SetScalarParameterValue(TEXT("Width"), Size.X);
 		Material->SetScalarParameterValue(TEXT("Height"), Size.Y);
-		Material->SetScalarParameterValue(TEXT("ScanX"), (bRight ? RightX : LeftX) - Origin.X);
+		Material->SetScalarParameterValue(TEXT("ScanX"), (bRight ? ScanPosition.Y : ScanPosition.X) - Origin.X);
 		Material->SetScalarParameterValue(TEXT("Direction"), bRight ? -1.f : 1.f);
 		Material->SetScalarParameterValue(TEXT("CoreWidth"), Settings.EdgeWidth);
 		Material->SetScalarParameterValue(TEXT("GlowWidth"), Settings.GlowWidth);
-		Material->SetScalarParameterValue(TEXT("Intensity"), Settings.GlowIntensity * ScanAlpha);
+		Material->SetScalarParameterValue(TEXT("Intensity"), Intensity);
 		Material->SetScalarParameterValue(TEXT("TrailStrength"), Settings.TrailStrength);
+		Material->SetScalarParameterValue(TEXT("OriginX"), Origin.X + Offset);
+		Material->SetScalarParameterValue(TEXT("ViewWidth"), RootSize.X);
+		Material->SetScalarParameterValue(TEXT("BoundaryStrength"), BoundaryStrength);
+	}
+}
+
+void UKnightMaintenanceTransition::UpdateExit(float T)
+{
+	Progress = T;
+	const float Ease = T < .5f ? 4.f * T * T * T : 1.f - FMath::Pow(-2.f * T + 2.f, 3.f) * .5f;
+	const float Fade = 1.f - Smooth(T / FMath::Max(.01f, Settings.ExitFadeEndFraction));
+	const float Boundary = Smooth(T / .18f);
+	if (!Layers.IsEmpty())
+	{
+		const float Pad = Settings.GlowWidth * 4.f + 8.f;
+		PanelOffset = FMath::Lerp(ExitStartOffset,
+			FVector2D(-LeftBounds.Max.X - Pad, RootSize.X - RightBounds.Min.X + Pad), Ease);
+		for (FKnightMovingPanelLayer& Layer : Layers)
+		{
+			const float Offset = Layer.bRight ? PanelOffset.Y : PanelOffset.X;
+			if (Layer.Widget == Footer)
+			{
+				FWidgetTransform Transform = FooterTransform; Transform.Translation.X += Offset * Layer.ParentScale;
+				Footer->SetRenderTransform(Transform);
+				const float Edge = Smooth((RootSize.X - Layer.Origin.X - Layer.Size.X - Offset) / 48.f);
+				Footer->SetRenderOpacity(ExitFooterOpacity * Fade * FMath::Lerp(1.f, Edge, Boundary));
+				continue;
+			}
+			Layer.Retainer->SetRenderTranslation(FVector2D(Offset * Layer.ParentScale, 0.f));
+			if (Layer.Material)
+			{
+				Layer.Material->SetScalarParameterValue(TEXT("ScreenOffset"), Offset);
+				Layer.Material->SetScalarParameterValue(TEXT("ViewWidth"), RootSize.X);
+				Layer.Material->SetScalarParameterValue(TEXT("BoundaryStrength"), Boundary);
+			}
+			Layer.Retainer->RequestRender();
+		}
+		const float Light = bExitFromEntrance ? ExitScanIntensity * (1.f - Smooth(T / .45f))
+			: Settings.GlowIntensity * Settings.ExitGlowMultiplier * Smooth(T / .18f) * (1.f - Smooth(T / .70f));
+		UpdateScan(Light * Fade, Boundary);
+	}
+	else if (Footer) Footer->SetRenderOpacity(ExitFooterOpacity * Fade);
+	Owner->SetRenderOpacity(ExitStartOpacity * Fade);
+	if (HomeOverlay)
+	{
+		const float HomeT = FMath::Clamp((Elapsed - HomeRevealStartTime)
+			/ FMath::Max(.01f, Settings.HomeRevealDuration), 0.f, 1.f);
+		HomeOverlay->SetRenderOpacity(1.f - FMath::Pow(1.f - HomeT, 3.f));
 	}
 }
 
@@ -211,21 +305,26 @@ void UKnightMaintenanceTransition::Tick(float DeltaTime)
 	else
 	{
 		const float T = FMath::Clamp(Elapsed / FMath::Max(.01f, Settings.ExitDuration), 0.f, 1.f);
-		const float Fade = 1.f - Smooth(T);
-		Owner->SetRenderOpacity(ExitStartOpacity * Fade);
-		if (Footer) Footer->SetRenderOpacity(ExitFooterOpacity * Fade);
-		if (T >= 1.f)
+		UpdateExit(T);
+		const float End = FMath::Max(Settings.ExitDuration, HomeRevealStartTime + Settings.HomeRevealDuration);
+		if (Elapsed >= End)
 		{
-			// Both operations finish before paint. Let navigation set the final
-			// footer/page visibility AFTER restoration (Home hides its Back button).
 			FSimpleDelegate Finished = MoveTemp(OnFinished);
-			Restore(); Finished.ExecuteIfBound();
+			Restore(true); Finished.ExecuteIfBound();
+			// Navigation has hidden the maintenance page. Restore its authored
+			// visibility now so the next entrance starts from clean defaults.
+			if (Owner) Owner->SetVisibility(OriginalVisibility);
 		}
 	}
 }
 
-void UKnightMaintenanceTransition::Restore()
+void UKnightMaintenanceTransition::Restore(bool bKeepOutgoingHidden)
 {
+	if (bKeepOutgoingHidden)
+	{
+		if (Owner) Owner->SetVisibility(ESlateVisibility::Collapsed);
+		if (Footer) Footer->SetVisibility(ESlateVisibility::Collapsed);
+	}
 	for (FKnightMovingPanelLayer& Layer : Layers)
 		if (Layer.Widget && Layer.Parent && Layer.Retainer)
 		{
@@ -242,8 +341,18 @@ void UKnightMaintenanceTransition::Restore()
 	Centers.Reset();
 	if (LeftScan) LeftScan->SetVisibility(ESlateVisibility::Collapsed);
 	if (RightScan) RightScan->SetVisibility(ESlateVisibility::Collapsed);
-	if (Owner) { Owner->SetRenderOpacity(OriginalOpacity); Owner->SetVisibility(OriginalVisibility); }
-	if (Footer) { Footer->SetRenderOpacity(FooterOpacity); Footer->SetVisibility(FooterVisibility); Footer->SetRenderTransform(FooterTransform); }
+	if (Owner) { Owner->SetRenderOpacity(OriginalOpacity); if (!bKeepOutgoingHidden) Owner->SetVisibility(OriginalVisibility); }
+	if (Footer) { Footer->SetRenderOpacity(FooterOpacity); if (!bKeepOutgoingHidden) Footer->SetVisibility(FooterVisibility); Footer->SetRenderTransform(FooterTransform); }
+	for (const FKnightMovingPanelLayer& Layer : HomeChildren)
+	{
+		const TSharedRef<SWidget> KeepSlateAlive = Layer.Widget->TakeWidget();
+		Layer.Widget->RemoveFromParent();
+		UCanvasPanelSlot* Slot = Layer.Parent->AddChildToCanvas(Layer.Widget);
+		Slot->SetLayout(Layer.Layout); Slot->SetZOrder(Layer.Z); Slot->SetAutoSize(Layer.bAutoSize);
+	}
+	HomeChildren.Reset();
+	if (HomeOverlay) { HomeOverlay->SetVisibility(ESlateVisibility::Collapsed); HomeOverlay->RemoveFromParent(); HomeOverlay->ReleaseSlateResources(true); HomeOverlay = nullptr; }
+	if (Home) Home->ForceLayoutPrepass();
 	// Completion runs in the widget tick (after this frame's normal prepass).
 	// Reparenting reconstructs Slate children; measure them immediately so the
 	// completion frame cannot briefly paint zero-sized art and overlapping text.

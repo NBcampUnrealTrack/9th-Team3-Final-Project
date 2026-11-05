@@ -8,4 +8,6 @@ class UknightMaintenanceEntranceCheckCommandlet : public UCommandlet
 	GENERATED_BODY()
 public:
 	virtual int32 Main(const FString& Params) override;
+private:
+	int32 CheckExit(class APlayerController* Player, const FString& Out);
 };

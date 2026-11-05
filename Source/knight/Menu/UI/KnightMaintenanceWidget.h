@@ -64,7 +64,8 @@ public:
 	bool IsMaterialQuantityInputFocused() const;
 	void Close();
 	void BeginEntrance(UWidget* Footer, FSimpleDelegate Finished);
-	void BeginExit(UWidget* Footer, FSimpleDelegate Finished);
+	void BeginExit(UWidget* Footer, UCanvasPanel* Home, FSimpleDelegate Finished);
+	void TickExit(float DeltaTime);
 	void CancelTransition();
 	bool IsTransitionActive() const { return EntranceTransition && EntranceTransition->IsActive(); }
 	bool IsTransitionExiting() const { return EntranceTransition && EntranceTransition->IsExiting(); }

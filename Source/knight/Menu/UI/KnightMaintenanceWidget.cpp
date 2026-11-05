@@ -611,7 +611,7 @@ void UKnightMaintenanceWidget::NativeTick(const FGeometry& MyGeometry, float InD
 	Super::NativeTick(MyGeometry, InDeltaTime);
 	TickEnhancementBars(InDeltaTime);
 	if (!EntranceTransition || EntranceTransition->GetRetainerCount() == 0) UpdateNearbyEquipmentActionLayout();
-	if (IsTransitionActive()) EntranceTransition->Tick(InDeltaTime);
+	if (IsTransitionActive() && !IsTransitionExiting()) EntranceTransition->Tick(InDeltaTime);
 }
 
 void UKnightMaintenanceWidget::BeginEntrance(UWidget* Footer, FSimpleDelegate Finished)
@@ -620,10 +620,17 @@ void UKnightMaintenanceWidget::BeginEntrance(UWidget* Footer, FSimpleDelegate Fi
 	EntranceTransition->Begin(this, Footer, MoveTemp(Finished));
 }
 
-void UKnightMaintenanceWidget::BeginExit(UWidget* Footer, FSimpleDelegate Finished)
+void UKnightMaintenanceWidget::BeginExit(UWidget* Footer, UCanvasPanel* Home, FSimpleDelegate Finished)
 {
 	if (!EntranceTransition) EntranceTransition = NewObject<UKnightMaintenanceTransition>(this);
-	EntranceTransition->BeginExit(this, Footer, MoveTemp(Finished));
+	EntranceTransition->BeginExit(this, Footer, Home, MoveTemp(Finished));
+}
+
+void UKnightMaintenanceWidget::TickExit(float DeltaTime)
+{
+	// The parent menu ticks before its root canvas is arranged. Restoring the
+	// Home contents here prevents a one-frame hole when the switcher changes.
+	if (IsTransitionExiting()) EntranceTransition->Tick(DeltaTime);
 }
 
 void UKnightMaintenanceWidget::CancelTransition()

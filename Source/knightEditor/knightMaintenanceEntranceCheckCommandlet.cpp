@@ -59,6 +59,12 @@ int32 UknightMaintenanceEntranceCheckCommandlet::Main(const FString& Params)
 	APlayerController* Player = World->SpawnActor<APlayerController>(); World->AddController(Player); Player->SetPlayer(LocalPlayer);
 	auto* Saves = GI->GetSubsystem<UknightSaveSubsystem>(); auto* Progression = GI->GetSubsystem<UknightProgressionSubsystem>();
 	if (!Saves || !Progression || !Saves->SelectSlot(TEXT("Entrance") + FGuid::NewGuid().ToString(EGuidFormats::Digits).Left(12))) return 1;
+	if (FParse::Param(*Params, TEXT("ExitOnly")))
+	{
+		const int32 Result = CheckExit(Player, Out);
+		GI->Shutdown(); GEngine->DestroyWorldContext(World); World->DestroyWorld(false); GI->RemoveFromRoot();
+		return Result;
+	}
 	const int64 InitialMoney = Progression->GetMoney();
 	TArray<FknightItemStack> InitialItems; Progression->GetOwnedItems(InitialItems);
 	const auto Class = LoadClass<UKnightMainMenuWidget>(nullptr, TEXT("/Game/Knight/UI/Menu/WBP_KnightMainMenu.WBP_KnightMainMenu_C"));
@@ -77,6 +83,7 @@ int32 UknightMaintenanceEntranceCheckCommandlet::Main(const FString& Params)
 	auto Draw = [&](float Dt = 0.f)
 	{
 		++GFrameCounter;
+		Menu->NativeTick(Menu->GetCachedGeometry(), Dt);
 		Renderer->DrawWindow(Target, Grid, Window, Scale, FVector2D(Size), Dt); FlushRenderingCommands();
 	};
 	auto SetSize = [&](FIntPoint NewSize, float ExtraScale = 1.f)
@@ -162,8 +169,8 @@ int32 UknightMaintenanceEntranceCheckCommandlet::Main(const FString& Params)
 		UE_LOG(LogTemp, Display, TEXT("MaintenanceEntrance destination=%d final/baseline changed pixels=%d"), Index, Different);
 		Check(After.Num() == Baseline.Num() && Different < After.Num() / 100, TEXT("final rendered appearance matches no-transition baseline within one percent focus tolerance"));
 		Menu->HandleBackRequested(); Check(Widget->IsTransitionExiting(), TEXT("Back starts short return fade"));
-		Draw(.06f); Capture(Prefix + TEXT("_ExitHalf")); Draw(.07f); Draw();
-		Check(Menu->GetCurrentPage() == EKnightMainMenuPage::Home && !Widget->IsTransitionActive(), TEXT("return finishes on original submenu with input restored"));
+		Draw(.14f); Capture(Prefix + TEXT("_ExitHalf")); Draw(.25f); Draw();
+		Check(Menu->GetCurrentPage() == EKnightMainMenuPage::Home && !Widget->IsTransitionActive(), TEXT("return finishes on main menu with input restored"));
 		Check(!Menu->Button_Back->IsVisible(), TEXT("maintenance footer stays hidden after returning Home"));
 	}
 	// Geometry and input at a different DPI, including the external equipment action group.
@@ -187,7 +194,8 @@ int32 UknightMaintenanceEntranceCheckCommandlet::Main(const FString& Params)
 		Check(!Hits.ContainsByPredicate([&](const FWidgetAndPointer& Entry) { return Entry.Widget == Widget->EquipmentReplaceButton->GetCachedWidget(); }), TEXT("incoming action cannot receive unintended click"));
 		Check(Widget->HandleConfirmKey(), TEXT("keyboard confirmation consumed during entry"));
 		Menu->NativeOnPreviewKeyDown(FGeometry(), FKeyEvent(EKeys::Escape, FModifierKeysState(), 0, false, 0, 0));
-		Draw(.13f); Draw();
+		Draw(.39f); Draw();
+		Menu->NativeOnKeyUp(FGeometry(), FKeyEvent(EKeys::Escape, FModifierKeysState(), 0, false, 0, 0));
 		Check(ObsoleteCallback == 0 && Menu->GetCurrentPage() == EKnightMainMenuPage::Home && !Widget->IsTransitionActive(), TEXT("Esc cancels entrance callback and cleanly returns without obsolete refocus"));
 		Check(!Menu->Button_Back->IsVisible(), TEXT("interrupted return does not resurrect maintenance footer"));
 		Menu->OpenMaintenanceDestination(EKnightMaintenanceDestination::Crafting); Draw(); Draw(); Draw(); Draw(.4f); Draw();
