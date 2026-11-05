@@ -83,6 +83,15 @@ void FAnimNode_knightLookAt::PreUpdate(const UAnimInstance* InAnimInstance)
 		return;
 	}
 	ActorToComponent = Mesh->GetComponentQuat().Inverse() * Monster->GetActorQuat();
+	// 공격이 머리 방향을 직접 정하면(브레스 쓸기) 공격 중이어도 그 각도로 돌린다. 위아래는 공격 모션 그대로 둔다.
+	float AimYaw = 0.f;
+	if (!Monster->IsDead() && Monster->GetHeadAimYaw(AimYaw))
+	{
+		DesiredYaw = FMath::Clamp(AimYaw, -MaxYaw, MaxYaw);
+		DesiredPitch = 0.f;
+		bWantLook = true;
+		return;
+	}
 	if (!WantsToLook(*Monster, bDisableWhenAirborne))
 	{
 		return;

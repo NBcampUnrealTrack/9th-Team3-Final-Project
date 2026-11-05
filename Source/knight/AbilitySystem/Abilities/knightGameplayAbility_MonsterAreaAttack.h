@@ -129,6 +129,33 @@ protected:
 	FVector ConeOrigin = FVector::ZeroVector;
 
 	/**
+	 * 켜면 판정이 유지되는 동안(WindupTime부터 ActiveTime 동안) 몸은 그대로 두고 고개만 타깃 쪽으로 천천히 돌려 쓴다(브레스).
+	 * 몸 정면에서 시작해 초당 AimSweepRate도로 따라가고 좌우 AimSweepMaxYaw를 넘지 않는다. 범위·원뿔·바닥 이펙트가 이 방향을
+	 * 따르고, 머리는 Look At 노드가 같은 각도로 돌린다(입에 붙은 이펙트가 함께 돈다). Impacts를 쓰는 공격에는 쓰지 않는다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Aim Sweep")
+	bool bAimSweep = false;
+
+	/** 고개가 타깃을 따라가는 속도. 플레이어가 옆으로 달리면 벗어나고, 가만히 있으면 맞을 만큼. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Aim Sweep", meta=(ClampMin=0, Units="deg", EditCondition="bAimSweep"))
+	float AimSweepRate = 20.f;
+
+	/** 몸 정면 기준 최대 각도. Look At 노드의 MaxYaw(잔열 45도)보다 크면 머리는 거기서 멈춘다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Aim Sweep", meta=(ClampMin=0, ClampMax=90, Units="deg", EditCondition="bAimSweep"))
+	float AimSweepMaxYaw = 45.f;
+
+	/** 선택 사항. 고개가 AimSweepGroundFXStep도 돌 때마다 그 방향 바닥에 남기는 이펙트(브레스 그을림). 처음 방향은 몽타주 노티파이가 남긴다. */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Aim Sweep", meta=(EditCondition="bAimSweep"))
+	TObjectPtr<UNiagaraSystem> AimSweepGroundFX;
+
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Aim Sweep", meta=(ClampMin=1, Units="deg", EditCondition="bAimSweep"))
+	float AimSweepGroundFXStep = 15.f;
+
+	/** 몸 위치에서 고개 방향으로 이만큼 앞 바닥에 남긴다(월드 cm). */
+	UPROPERTY(EditDefaultsOnly, Category="Attack|Aim Sweep", meta=(ClampMin=0, Units="cm", EditCondition="bAimSweep"))
+	float AimSweepGroundFXDistance = 1500.f;
+
+	/**
 	 * 0보다 크면 돌진한다. 구체 중심(AreaOffset.X 앞)이 타깃에 오도록 타깃까지 거리 - AreaOffset.X만큼 가되 이 거리를 넘지 않는다.
 	 * 가까우면 제자리에서 친다.
 	 */
@@ -223,6 +250,12 @@ private:
 
 	FVector GetAreaCenter() const;
 	bool IsInsideCone(const AActor& Avatar, const FVector& Point) const;
+	/** 공격 방향 기준 변환: 액터 변환에 고개 쓸기 각도(AimYaw)를 더한다. 쓸지 않으면 액터 변환 그대로다. */
+	FTransform GetAimTransform(const AActor& Avatar) const;
+	/** 고개 쓸기 각도를 몬스터 시간 DeltaTime만큼 타깃 쪽으로 돌리고, 머리와 바닥 이펙트에 반영한다. */
+	void UpdateAimSweep(float DeltaTime);
+	void StopAimSweep();
+	void SpawnAimGroundFX() const;
 
 	/** 이번 발동에서 이미 맞은 대상. 판정이 유지되는 동안 같은 대상을 다시 때리지 않는다. 앞발 판정이 여러 번이어도 한 번만 맞는다. */
 	TSet<TWeakObjectPtr<AActor>> HitActors;
@@ -239,6 +272,11 @@ private:
 	bool bWindupDone = false;
 	bool bHitAreaEffectsPlayed = false;
 	bool bWindupEffectStarted = false;
+	/** 고개 쓸기 각도(몸 정면 기준, 오른쪽 +). */
+	float AimYaw = 0.f;
+	/** 마지막으로 바닥 이펙트를 남긴 고개 각도. */
+	float LastGroundFXYaw = 0.f;
+	bool bAimSweeping = false;
 	TWeakObjectPtr<UNiagaraComponent> WindupEffectComponent;
 	TWeakObjectPtr<UAudioComponent> WindupSoundComponent;
 };
