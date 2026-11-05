@@ -8,6 +8,7 @@
 #include "Monster/knightMonsterCharacterBase.h"
 #include "Monster/knightMonsterDefinition.h"
 #include "Monster/knightMonsterPartData.h"
+#include "Monster/knightMonsterPartShellComponent.h"
 #include "System/knightGameplayTags.h"
 
 void UknightVM_PlayerStatus::Bind(UAbilitySystemComponent* InASC, UknightTargetLockComponent* InTargetLock)
@@ -263,6 +264,18 @@ void UknightVM_PlayerStatus::HandleLockOnChanged(AActor* NewTarget, FGameplayTag
 	UknightMonsterPartComponent* const Parts = Monster && PartTag.IsValid() ? Monster->FindComponentByClass<UknightMonsterPartComponent>() : nullptr;
 	BindParts(Parts);
 	LockedPartTag = Parts ? PartTag : FGameplayTag();
+
+	// 부위 셸은 락온한 부위 하나만 몸 위에 그린다.
+	UknightMonsterPartShellComponent* const Shell = Monster ? Monster->GetPartShell() : nullptr;
+	if (UknightMonsterPartShellComponent* const OldShell = ShellTarget.Get(); OldShell && OldShell != Shell)
+	{
+		OldShell->SetLockedPart(FGameplayTag());
+	}
+	ShellTarget = Shell;
+	if (Shell)
+	{
+		Shell->SetLockedPart(LockedPartTag);
+	}
 
 	// Part fields first: widgets refresh on bLockedOn and should already see the new part.
 	UE_MVVM_SET_PROPERTY_VALUE(LockedPartCondition, Parts ? Parts->GetPartCondition(PartTag) : EknightPartCondition::Unbreakable);

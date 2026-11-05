@@ -168,6 +168,8 @@ private:
 	TWeakObjectPtr<UAbilitySystemComponent> BoundASC;
 	TWeakObjectPtr<UknightTargetLockComponent> BoundTargetLock;
 	TWeakObjectPtr<UknightMonsterPartComponent> BoundParts;
+	/** 락온 셸을 켜 둔 몬스터. 락온이 다른 몬스터로 옮기거나 풀리면 끈다. */
+	TWeakObjectPtr<class UknightMonsterPartShellComponent> ShellTarget;
 	FGameplayTag LockedPartTag;
 	TArray<TPair<FGameplayAttribute, FDelegateHandle>> AttributeHandles;
 	FDelegateHandle OverheatedHandle;

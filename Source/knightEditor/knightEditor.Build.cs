@@ -51,7 +51,15 @@ public class knightEditor : ModuleRules
 			"NiagaraShader",
 			"RenderCore",
 			"RHI",
-			"VectorVM"
+			"VectorVM",
+			// 부위 와이어프레임 셸 굽기(knightPartShellBaker): 메시 단순화와 스켈레탈 메시 생성.
+			"AnimationCore",
+			"DynamicMesh",
+			"GeometryCore",
+			"MeshConversion",
+			"MeshDescription",
+			"ModelingComponentsEditorOnly",
+			"SkeletalMeshDescription"
 		});
 
 		PrivateIncludePaths.Add(System.IO.Path.Combine(GetModuleDirectory("Niagara"), "Internal"));

@@ -23,6 +23,7 @@
 #include "Monster/knightMonsterDefinition.h"
 #include "Monster/knightMonsterMovementComponent.h"
 #include "Monster/knightMonsterPartComponent.h"
+#include "Monster/knightMonsterPartShellComponent.h"
 #include "Monster/knightMonsterAirTurnComponent.h"
 #include "Monster/knightMonsterGuardPushComponent.h"
 #include "Monster/knightMonsterHitStopComponent.h"
@@ -60,6 +61,7 @@ AknightMonsterCharacterBase::AknightMonsterCharacterBase(const FObjectInitialize
 	MonsterAttributeSet = CreateDefaultSubobject<UknightMonsterAttributeSet>(TEXT("MonsterAttributeSet"));
 
 	PartComponent = CreateDefaultSubobject<UknightMonsterPartComponent>(TEXT("PartComponent"));
+	PartShell = CreateDefaultSubobject<UknightMonsterPartShellComponent>(TEXT("PartShell"));
 	TargetingComponent = CreateDefaultSubobject<UknightMonsterTargetingComponent>(TEXT("TargetingComponent"));
 	MeleeTrace = CreateDefaultSubobject<UknightMeleeTraceComponent>(TEXT("MeleeTrace"));
 	HitStop = CreateDefaultSubobject<UknightMonsterHitStopComponent>(TEXT("HitStop"));

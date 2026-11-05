@@ -132,7 +132,7 @@ void UknightHUDLockOnMarker::RefreshPart()
 {
 	const UknightVM_PlayerStatus* const VM = ViewModel.Get();
 	const bool bHasPart = VM && VM->HasLockedPart();
-	const ESlateVisibility FrameVisibility = bHasPart ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed;
+	const ESlateVisibility FrameVisibility = bHasPart && bShowPartFrame ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed;
 	if (PartFrame)
 	{
 		PartFrame->SetVisibility(FrameVisibility);
