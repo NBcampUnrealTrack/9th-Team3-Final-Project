@@ -367,6 +367,8 @@ bool UKnightMainMenuWidget::HandleBackRequested()
 
 FReply UKnightMainMenuWidget::NativeOnPreviewKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
 {
+	if (IsMaintenanceDestinationOpen() && MaintenanceWidget && MaintenanceWidget->IsCraftResultOpen())
+		return MaintenanceWidget->HandleCraftResultKey(InKeyEvent);
 	if (InKeyEvent.GetKey() == EKeys::I && !InKeyEvent.IsRepeat() && !IsTravelPending())
 	{
 		// Preview handlers run before an editable quantity field receives its typed character.

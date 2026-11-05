@@ -64,6 +64,8 @@ public:
 	bool HandleConfirmKey();
 	/** Esc: 제작 확인 창 먼저 닫기. 닫을 게 없으면 false. */
 	bool HandleBack();
+	bool IsCraftResultOpen() const { return CraftedPart != nullptr; }
+	FReply HandleCraftResultKey(const FKeyEvent& KeyEvent);
 	UWidget* GetFocusButton() const;
 
 	/** 탭·부위 선택 시 카메라 이동용. Open에서는 안 보냄(전신 시작). */
@@ -73,6 +75,7 @@ protected:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeDestruct() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+	virtual FReply NativeOnPreviewKeyDown(const FGeometry& Geometry, const FKeyEvent& KeyEvent) override;
 
 	/** Cooked artwork references, used only by the Enhancement destination. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Enhancement Presentation")
@@ -155,6 +158,22 @@ protected:
 
 private:
 	friend class UknightEnhancementPreviewCheckCommandlet;
+	friend class UknightCraftResultCheckCommandlet;
+	void BuildCraftResultDialog();
+	void OpenCraftResult(const UknightPartItemDefinition* Part);
+	void CloseCraftResult(bool bRestoreFocus);
+	void EquipCraftResult();
+	void RefreshCraftingAfterTransaction();
+	bool TryEquipOwnedPart(const UknightPartItemDefinition* Part, FText& FailureReason);
+	UPROPERTY(Transient) TObjectPtr<UWidget> CraftResultPanel;
+	UPROPERTY(Transient) TObjectPtr<UImage> CraftResultIcon;
+	UPROPERTY(Transient) TObjectPtr<UTextBlock> CraftResultName;
+	UPROPERTY(Transient) TObjectPtr<UTextBlock> CraftResultError;
+	UPROPERTY(Transient) TObjectPtr<UCommonButtonBase> CraftResultEquip;
+	UPROPERTY(Transient) TObjectPtr<UCommonButtonBase> CraftResultBack;
+	UPROPERTY(Transient) TObjectPtr<const UknightPartItemDefinition> CraftedPart;
+	FString CraftedProfileId;
+	TMap<TWeakObjectPtr<UWidget>, bool> CraftResultBlockedWidgets;
 	void ApplyCraftingPresentation();
 	void StyleCraftingEntry(UKnightMaintenanceEntryWidget* Entry);
 	void ApplyDestinationLayout();

@@ -567,7 +567,7 @@ void UKnightMaintenanceWidget::NativeOnInitialized()
 	{
 		if (bEquipmentPickerOpen) ConfirmEquipmentReplacement();
 		else if (bMaterialSaleConfirmOpen) ConfirmMaterialSale();
-		else { ShowConfirm(false); ExecuteSelection(); }
+		else if (Panel_Confirm && Panel_Confirm->IsVisible() && !IsCraftResultOpen()) { ShowConfirm(false); ExecuteSelection(); }
 	});
 	if (Btn_ConfirmCancel) Btn_ConfirmCancel->OnClicked().AddWeakLambda(this, [this]()
 	{
@@ -577,6 +577,7 @@ void UKnightMaintenanceWidget::NativeOnInitialized()
 	});
 	ShowConfirm(false);
 	ApplyCraftingPresentation();
+	BuildCraftResultDialog();
 	if (UknightProgressionSubsystem* Progression = GetProgression())
 		Progression->OnProgressionChanged.AddUniqueDynamic(this, &ThisClass::HandleProgressionChanged);
 	if (UGameInstance* const GI = GetGameInstance())
@@ -589,6 +590,7 @@ void UKnightMaintenanceWidget::NativeOnInitialized()
 
 void UKnightMaintenanceWidget::NativeDestruct()
 {
+	CloseCraftResult(false);
 	ResetEnhancementBars();
 	if (UknightProgressionSubsystem* Progression = GetProgression())
 		Progression->OnProgressionChanged.RemoveDynamic(this, &ThisClass::HandleProgressionChanged);
@@ -696,6 +698,7 @@ void UKnightMaintenanceWidget::ApplyDestinationLayout()
 
 void UKnightMaintenanceWidget::Open(EKnightMaintenanceDestination InDestination, bool bStartInMaterials)
 {
+	CloseCraftResult(false);
 	ResetEnhancementBars();
 	SelectedSocketSlot = INDEX_NONE;
 	SelectedSocketItem = nullptr;
@@ -745,6 +748,7 @@ bool UKnightMaintenanceWidget::IsMaterialQuantityInputFocused() const
 
 void UKnightMaintenanceWidget::Close()
 {
+	CloseCraftResult(false);
 	ResetEnhancementBars();
 	SelectedSocketCandidateId = FPrimaryAssetId();
 	SocketSelectionProfileId.Reset();
@@ -783,6 +787,7 @@ void UKnightMaintenanceWidget::Close()
 
 UWidget* UKnightMaintenanceWidget::GetFocusButton() const
 {
+	if (IsCraftResultOpen()) return CraftResultBack;
 	if (Destination == EKnightMaintenanceDestination::Crafting)
 		return Category == 4 ? Btn_Armor.Get() : Category == 2 ? Btn_Weapon.Get() : Btn_Craft.Get();
 	if (Category == 3) return SocketListButtons.IsEmpty() ? static_cast<UWidget*>(Btn_Execute.Get()) : SocketListButtons[0].Get();
@@ -792,6 +797,7 @@ UWidget* UKnightMaintenanceWidget::GetFocusButton() const
 
 void UKnightMaintenanceWidget::SetCategory(int32 NewCategory, bool bFromPlayer)
 {
+	if (IsCraftResultOpen()) return;
 	if ((bEquipmentPickerOpen || bMaterialSaleConfirmOpen) && bFromPlayer) return;
 	if (Destination == EKnightMaintenanceDestination::Crafting && NewCategory != 0 && NewCategory != 2 && NewCategory != 4) return;
 	if (Destination == EKnightMaintenanceDestination::Enhancement && NewCategory != 1) return;
@@ -856,6 +862,7 @@ void UKnightMaintenanceWidget::SetCategory(int32 NewCategory, bool bFromPlayer)
 
 void UKnightMaintenanceWidget::SetSlot(FGameplayTag NewSlot, bool bFromPlayer)
 {
+	if (IsCraftResultOpen()) return;
 	if (Category != 0) return;
 	Slot = NewSlot;
 	SelectedPart = nullptr;
@@ -869,6 +876,7 @@ void UKnightMaintenanceWidget::SetSlot(FGameplayTag NewSlot, bool bFromPlayer)
 
 void UKnightMaintenanceWidget::SetInfoTab(int32 NewTab)
 {
+	if (IsCraftResultOpen()) return;
 	if (Category == 1) return; // Enhancement owns its separate quote page.
 	InfoTab = Category == 0 ? (NewTab == InfoSpec ? InfoSpec : InfoMaterial)
 		: Category == 1 && NewTab == InfoSet ? InfoSet : InfoSpec;
@@ -1883,6 +1891,7 @@ void UKnightMaintenanceWidget::RefreshSocketDetails()
 
 void UKnightMaintenanceWidget::SelectEntry(UKnightMaintenanceEntryWidget* Entry)
 {
+	if (IsCraftResultOpen()) return;
 	if (Category == 0 && Entry && IsExcludedCraftingRecipe(Entry->GetRecipe())) Entry = nullptr;
 	if (SelectedPart != (Entry ? Entry->GetPart() : nullptr)) UpgradeResultMessage = FText::GetEmpty();
 	const bool bDifferentRecipe = Category == 0 && SelectedRecipe != (Entry ? Entry->GetRecipe() : nullptr);
@@ -1907,6 +1916,7 @@ void UKnightMaintenanceWidget::HandleEntryFocused(UKnightMaintenanceEntryWidget*
 
 bool UKnightMaintenanceWidget::HandleConfirmKey()
 {
+	if (IsCraftResultOpen()) return true;
 	if (Panel_Confirm && Panel_Confirm->IsVisible()) return false;
 	if (Category == 1)
 	{
@@ -1936,6 +1946,7 @@ bool UKnightMaintenanceWidget::HandleConfirmKey()
 
 bool UKnightMaintenanceWidget::HandleBack()
 {
+	if (IsCraftResultOpen()) { if (!bBusy) CloseCraftResult(true); return true; }
 	if (bMaterialSaleConfirmOpen) { CloseMaterialSaleConfirmation(true); return true; }
 	if (bEquipmentPickerOpen) { CloseEquipmentPicker(true); return true; }
 	if (!Panel_Confirm || !Panel_Confirm->IsVisible()) return false;
@@ -1962,6 +1973,7 @@ void UKnightMaintenanceWidget::ShowConfirm(bool bShow)
 
 void UKnightMaintenanceWidget::RequestExecute()
 {
+	if (IsCraftResultOpen() || (Panel_Confirm && Panel_Confirm->IsVisible())) return;
 	if (Category == 4)
 	{
 		OpenMaterialSaleConfirmation();
@@ -1993,6 +2005,8 @@ void UKnightMaintenanceWidget::RequestExecute()
 		if (Txt_Status) Txt_Status->SetText(ExecuteLockReason.IsEmpty() ? LOCTEXT("CannotCraft", "아직 제작할 수 없습니다.") : ExecuteLockReason);
 		return;
 	}
+	SetButtonLabel(Btn_ConfirmOk, LOCTEXT("CraftConfirmExecute", "제작"));
+	SetButtonLabel(Btn_ConfirmCancel, LOCTEXT("CraftConfirmCancel", "취소"));
 	// 제작만 확인 (재료 소모). 장착·해제는 바로 실행.
 	TArray<FText> Costs;
 	for (const FknightItemCost& Cost : SelectedRecipe->Costs)
@@ -2308,7 +2322,9 @@ void UKnightMaintenanceWidget::RefreshDetails()
 		else if (Shown && SelectedRecipe)
 		{
 			const bool bCan = Progression && Progression->CanCraftPart(SelectedRecipe);
-			State = bCan ? LOCTEXT("StateCraftable", "제작 가능") : LOCTEXT("StateMissing", "재료 부족");
+			const int32 Owned = Progression ? Progression->GetItemCount(Shown) : 0;
+			State = Owned > 0 ? FText::Format(LOCTEXT("StateOwned", "보유 {0}"), Owned)
+				: bCan ? LOCTEXT("StateCraftable", "제작 가능") : LOCTEXT("StateMissing", "재료 부족");
 			Color = bCan ? Frost : DimColor;
 		}
 		else if (Shown) State = FText::Format(LOCTEXT("StateOwned", "보유 {0}"), Progression ? Progression->GetItemCount(Shown) : 0);
@@ -2551,6 +2567,7 @@ void UKnightMaintenanceWidget::RefreshEquipmentDetails()
 
 void UKnightMaintenanceWidget::ExecuteSelection()
 {
+	if (IsCraftResultOpen()) return;
 	if (Category == 3)
 	{
 		RequestSocketEquip();
@@ -2565,43 +2582,17 @@ void UKnightMaintenanceWidget::ExecuteSelection()
 	if (Category == 0) bSuccess = SelectedRecipe && Progression->CraftPart(SelectedRecipe);
 	else if (Progression->GetItemCount(ActionPart) > 0)
 	{
-		UknightPartsComponent* LiveParts = GetOwningPlayerPawn() ? GetOwningPlayerPawn()->FindComponentByClass<UknightPartsComponent>() : nullptr;
-		bool bCanEquip = LiveParts && LiveParts->CanEquipPart(ActionPart);
-		if (!LiveParts)
-		{
-			// 로비에는 폰이 없음. 저장 전 적재 한도 직접 확인.
-			const UknightMaintenanceCatalog* Catalog = UknightEquipmentSettings::LoadCatalog();
-			if (Catalog)
-			{
-				const knightEquipmentStats::FLoadout Loadout = knightEquipmentStats::ReadLoadout(Progression, Catalog);
-				const FknightEquipmentStats Stats = knightEquipmentStats::Calculate(Loadout, Catalog, Progression);
-				float TotalWeight = 0.f;
-				for (const auto& Entry : Loadout)
-					if (Entry.Value) TotalWeight += Entry.Value->Weight;
-				const UknightPartItemDefinition* Replaced = Loadout.FindRef(ActionPart->SlotTag);
-				const float Capacity = Stats.Values.FindRef(UknightAttributeSet::GetLoadCapacityAttribute());
-				bCanEquip = Stats.bComplete && knightPartsLoad::FitsLoadCapacity(
-					TotalWeight, Replaced ? Replaced->Weight : 0.f, ActionPart->Weight, Capacity);
-			}
-		}
-		if (bCanEquip)
-		{
-			const UknightPartItemDefinition* PreviousLivePart = LiveParts ? LiveParts->GetEquippedPart(ActionPart->SlotTag) : nullptr;
-			bSuccess = !LiveParts || LiveParts->EquipPart(ActionPart, Progression->GetUpgradeLevel(ActionPart));
-			if (bSuccess && !Progression->SetEquippedPart(ActionPart))
-			{
-				if (LiveParts)
-				{
-					if (PreviousLivePart) LiveParts->EquipPart(PreviousLivePart, Progression->GetUpgradeLevel(PreviousLivePart));
-					else LiveParts->UnequipSlot(ActionPart->SlotTag);
-				}
-				bSuccess = false;
-			}
-		}
+		FText FailureReason;
+		bSuccess = TryEquipOwnedPart(ActionPart, FailureReason);
 	}
 	bBusy = false;
 	if (Category == 2 && bSuccess) CloseEquipmentPicker(true);
-	RebuildList();
+	if (Category == 0)
+	{
+		RefreshCraftingAfterTransaction();
+		if (bSuccess) OpenCraftResult(ActionPart);
+	}
+	else RebuildList();
 	if (Txt_Status)
 	{
 		Txt_Status->SetText(!bSuccess ? LOCTEXT("ActionFailed", "요청 실패: 재료·소유 상태·적재 한도를 확인하세요.")
@@ -2611,6 +2602,7 @@ void UKnightMaintenanceWidget::ExecuteSelection()
 
 void UKnightMaintenanceWidget::UnequipSelection()
 {
+	if (IsCraftResultOpen()) return;
 	if (bEquipmentPickerOpen) return;
 	if (Category == 3)
 	{
@@ -2638,11 +2630,13 @@ void UKnightMaintenanceWidget::HandleProgressionChanged()
 {
 	RefreshCurrency();
 	if (bBusy) return;
-	RebuildList();
+	if (Category == 0) RefreshCraftingAfterTransaction();
+	else RebuildList();
 }
 
 void UKnightMaintenanceWidget::HandleActiveSlotChanged(const FString& SlotId)
 {
+	CloseCraftResult(false);
 	ResetEnhancementBars();
 	SelectedSocketCandidateId = FPrimaryAssetId();
 	SocketSelectionProfileId.Reset();
