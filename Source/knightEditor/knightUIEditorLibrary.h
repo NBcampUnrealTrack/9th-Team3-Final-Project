@@ -23,6 +23,10 @@ class UknightUIEditorLibrary : public UBlueprintFunctionLibrary
 	GENERATED_BODY()
 
 public:
+	/** 위젯 블루프린트의 레이아웃을 비운다. Build* 함수는 빈 블루프린트에만 만들므로, 다시 만들 때 먼저 부른다. */
+	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
+	static bool ClearLayout(UWidgetBlueprint* WidgetBlueprint);
+
 	/** WBP_KnightButton: Overlay 아래 Txt_Label(가운데)과 Bracket_L/Bracket_R(양 끝). */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
 	static bool BuildKnightButtonLayout(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> BracketClass, TSubclassOf<UCommonTextStyle> LabelStyle);
@@ -124,7 +128,7 @@ public:
 	static bool BuildPauseMenu(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> ButtonClass, TSubclassOf<UCommonButtonStyle> SecondaryButtonStyle,
 		TSubclassOf<UCommonTextStyle> TitleStyle, TSubclassOf<UCommonTextStyle> CaptionStyle);
 
-	/** WBP_KnightRaidResult: 어두운 막 + 가로 배너(성공/실패) + 가운데 보고 패널(시간, 최고 기록, 부위 파괴, 보상, 귀환 카운트다운, 지금 귀환). */
+	/** WBP_KnightRaidResult: 어두운 막 + 판독 창(HUD) 아래의 홀로그램 보고 패널(작전 이름, 시간, 최고 기록, 부위 파괴 또는 실패 사유, 보상, 귀환 카운트다운, 지금 귀환). 라벨은 자간 넓은 영문(프로젝트 폰트). */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
 	static bool BuildRaidResult(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> ButtonClass, TSubclassOf<UCommonTextStyle> DisplayStyle,
 		TSubclassOf<UCommonTextStyle> TitleStyle, TSubclassOf<UCommonTextStyle> SubheadStyle, TSubclassOf<UCommonTextStyle> BodyStyle,

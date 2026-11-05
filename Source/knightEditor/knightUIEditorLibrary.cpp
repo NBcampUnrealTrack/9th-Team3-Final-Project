@@ -18,6 +18,8 @@
 #include "Components/SizeBox.h"
 #include "Components/Spacer.h"
 #include "Components/Slider.h"
+#include "Components/TextBlock.h"
+#include "Engine/Font.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Components/WidgetSwitcher.h"
@@ -912,6 +914,28 @@ bool UknightUIEditorLibrary::BuildPauseMenu(UWidgetBlueprint* WidgetBlueprint, T
 	return true;
 }
 
+bool UknightUIEditorLibrary::ClearLayout(UWidgetBlueprint* WidgetBlueprint)
+{
+	if (!WidgetBlueprint || !WidgetBlueprint->WidgetTree)
+	{
+		return false;
+	}
+	WidgetBlueprint->Modify();
+	WidgetBlueprint->WidgetTree->Modify();
+	TArray<UWidget*> Widgets;
+	WidgetBlueprint->WidgetTree->GetAllWidgets(Widgets);
+	for (UWidget* const Widget : Widgets)
+	{
+		// 같은 이름으로 다시 만들 수 있게 트리 밖으로 옮긴다.
+		const FName Name = Widget->GetFName();
+		WidgetBlueprint->OnVariableRemoved(Name);
+		Widget->Rename(nullptr, GetTransientPackage(), REN_DontCreateRedirectors | REN_NonTransactional);
+	}
+	WidgetBlueprint->WidgetTree->RootWidget = nullptr;
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBlueprint);
+	return true;
+}
+
 bool UknightUIEditorLibrary::BuildRaidResult(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> ButtonClass, TSubclassOf<UCommonTextStyle> DisplayStyle,
 	TSubclassOf<UCommonTextStyle> TitleStyle, TSubclassOf<UCommonTextStyle> SubheadStyle, TSubclassOf<UCommonTextStyle> BodyStyle,
 	TSubclassOf<UCommonTextStyle> BodyDimStyle, TSubclassOf<UCommonTextStyle> NumberStyle, TSubclassOf<UCommonTextStyle> CaptionStyle)
@@ -927,44 +951,51 @@ bool UknightUIEditorLibrary::BuildRaidResult(UWidgetBlueprint* WidgetBlueprint, 
 	// C++가 투명도를 0에서 1로 올린다.
 	UImage* const Dim = NewWidget<UImage>(WidgetBlueprint, TEXT("Img_Dim"), true);
 	Dim->SetBrush(SolidBrush(FLinearColor::White));
-	Dim->SetColorAndOpacity(FLinearColor(0.f, 0.f, 0.f, 0.6f));
+	Dim->SetColorAndOpacity(FLinearColor(0.f, 0.f, 0.f, 0.5f));
 	AddToOverlay(Root, Dim, HAlign_Fill, VAlign_Fill);
 
-	// 1단계: 화면을 가로지르는 배너. 강조색(성공 주황 / 실패 빨강)은 C++가 칠한다.
-	UBorder* const Banner = NewWidget<UBorder>(WidgetBlueprint, TEXT("Banner"), true);
-	Banner->SetBrush(FrameBrush(0.88f));
-	Banner->SetPadding(FMargin(0.f, 28.f));
-	Banner->SetHorizontalAlignment(HAlign_Center);
-	Banner->SetRenderTransformPivot(FVector2D(0.5f, 0.5f));
-	AddToOverlay(Root, Banner, HAlign_Fill, VAlign_Center);
-	UVerticalBox* const BannerColumn = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("VerticalBox_Banner"));
-	Banner->SetContent(BannerColumn);
-	AddToColumn(BannerColumn, NewText(WidgetBlueprint, TEXT("Txt_BannerCaption"), CaptionStyle, INVTEXT("MISSION COMPLETE"), true), HAlign_Center);
-	AddToColumn(BannerColumn, NewHUDImage(WidgetBlueprint, TEXT("Img_Accent"), Ember, FVector2D(48.f, 2.f), true), HAlign_Center, FMargin(0.f, 10.f, 0.f, 12.f));
-	AddToColumn(BannerColumn, NewText(WidgetBlueprint, TEXT("Txt_BannerTitle"), DisplayStyle, NSLOCTEXT("knightUI", "ResultSuccess", "토벌 완료"), true), HAlign_Center);
-	AddToColumn(BannerColumn, NewText(WidgetBlueprint, TEXT("Txt_BannerReason"), SubheadStyle, NSLOCTEXT("knightUI", "FailKnightDestroyed", "기체 대파"), true), HAlign_Center, FMargin(0.f, 6.f, 0.f, 0.f));
+	// 판독 창(HUD)과 같은 자간 넓은 영문 라벨. 프로젝트 UI 폰트(IBM Plex Sans KR)를 쓴다.
+	UFont* const LabelFontObject = LoadObject<UFont>(nullptr, TEXT("/Game/Knight/UI/Style/Fonts/F_Knight_PlexKR.F_Knight_PlexKR"));
+	const FLinearColor LabelColor(FColor(0x8F, 0xA3, 0xBF));
+	const auto NewSpacedLabel = [&](const FName Name, const FText& Text, int32 Size, bool bVariable)
+	{
+		UTextBlock* const Label = NewWidget<UTextBlock>(WidgetBlueprint, Name, bVariable);
+		FSlateFontInfo Font(LabelFontObject, Size, TEXT("Medium"));
+		Font.LetterSpacing = 200;
+		Label->SetFont(Font);
+		Label->SetColorAndOpacity(LabelColor);
+		Label->SetText(Text);
+		return Label;
+	};
 
-	// 2단계: 보고 패널.
-	USizeBox* const Report = NewSizeBox(WidgetBlueprint, TEXT("Report"), 640.f, 0.f);
+	// 보고 패널: 올라간 판독 창(위 끝 64, 높이 200 x 0.8) 바로 아래에서 시작한다. 바탕판만 여기서 칠하고,
+	// 주사선·모서리 브래킷·켜질 때 훑는 선은 UknightRaidResultScreen이 그린다.
+	USizeBox* const Report = NewSizeBox(WidgetBlueprint, TEXT("Report"), 600.f, 0.f);
 	Report->bIsVariable = true;
-	AddToOverlay(Root, Report, HAlign_Center, VAlign_Center);
+	AddToOverlay(Root, Report, HAlign_Center, VAlign_Top, FMargin(0.f, 256.f, 0.f, 0.f));
 	UBorder* const Frame = NewWidget<UBorder>(WidgetBlueprint, TEXT("Border_Frame"));
-	Frame->SetBrush(FrameBrush(0.94f));
-	Frame->SetPadding(FMargin(40.f, 32.f, 40.f, 28.f));
+	Frame->SetBrush(SolidBrush(FLinearColor(FColor(0x0A, 0x11, 0x1D, 0xC8))));
+	Frame->SetPadding(FMargin(36.f, 26.f, 36.f, 24.f));
 	Report->AddChild(Frame);
 	UVerticalBox* const Column = NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("VerticalBox_Report"));
 	Frame->SetContent(Column);
 
-	AddToColumn(Column, NewText(WidgetBlueprint, TEXT("Txt_ReportCaption"), CaptionStyle, INVTEXT("RAID REPORT"), false), HAlign_Left);
-	AddToColumn(Column, NewHUDImage(WidgetBlueprint, TEXT("Img_ReportAccent"), Frost, FVector2D(32.f, 2.f)), HAlign_Left, FMargin(0.f, 10.f, 0.f, 14.f));
-	AddToColumn(Column, NewText(WidgetBlueprint, TEXT("Txt_StageName"), TitleStyle, NSLOCTEXT("knightUI", "ResultStagePlaceholder", "잔열 토벌"), true), HAlign_Left);
+	// 위: 작전 이름 + RAID REPORT.
+	UHorizontalBox* const Header = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("HorizontalBox_Header"));
+	UHorizontalBoxSlot* const StageSlot = Header->AddChildToHorizontalBox(NewText(WidgetBlueprint, TEXT("Txt_StageName"), TitleStyle,
+		NSLOCTEXT("knightUI", "ResultStagePlaceholder", "잔열 토벌"), true));
+	StageSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+	StageSlot->SetVerticalAlignment(VAlign_Center);
+	Header->AddChildToHorizontalBox(NewSpacedLabel(TEXT("Txt_ReportCaption"), INVTEXT("RAID REPORT"), 11, false))->SetVerticalAlignment(VAlign_Center);
+	AddToColumn(Column, Header, HAlign_Fill);
+	AddToColumn(Column, NewHUDImage(WidgetBlueprint, TEXT("Img_ReportAccent"), Frost, FVector2D(32.f, 1.f), true), HAlign_Fill, FMargin(0.f, 12.f, 0.f, 6.f));
 
-	// 왼쪽 항목 이름, 오른쪽 값. 첫 줄만 위 여백을 크게.
-	int32 RowIndex = 0;
-	const auto AddStatRow = [&](const TCHAR* RowName, const FText& Label, std::initializer_list<UWidget*> Values)
+	// 왼쪽 라벨, 오른쪽 값.
+	// 실패면 C++가 CLEAR TIME 라벨을 ELAPSED로 바꾸므로 라벨도 변수로 둔다.
+	const auto AddStatRow = [&](const TCHAR* RowName, const FText& Label, std::initializer_list<UWidget*> Values, bool bVariable)
 	{
-		UHorizontalBox* const Row = NewWidget<UHorizontalBox>(WidgetBlueprint, RowName);
-		UHorizontalBoxSlot* const LabelSlot = Row->AddChildToHorizontalBox(NewText(WidgetBlueprint, *FString::Printf(TEXT("Txt_%sLabel"), RowName + 14), BodyDimStyle, Label, false));
+		UHorizontalBox* const Row = NewWidget<UHorizontalBox>(WidgetBlueprint, RowName, bVariable);
+		UHorizontalBoxSlot* const LabelSlot = Row->AddChildToHorizontalBox(NewSpacedLabel(*FString::Printf(TEXT("Txt_%sLabel"), RowName + 4), Label, 11, true));
 		LabelSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 		LabelSlot->SetVerticalAlignment(VAlign_Center);
 		bool bFirstValue = true;
@@ -975,33 +1006,32 @@ bool UknightUIEditorLibrary::BuildRaidResult(UWidgetBlueprint* WidgetBlueprint, 
 			ValueSlot->SetPadding(FMargin(bFirstValue ? 0.f : 12.f, 0.f, 0.f, 0.f));
 			bFirstValue = false;
 		}
-		AddToColumn(Column, Row, HAlign_Fill, FMargin(0.f, RowIndex++ == 0 ? 28.f : 10.f, 0.f, 0.f));
+		AddToColumn(Column, Row, HAlign_Fill, FMargin(0.f, 8.f, 0.f, 0.f));
 	};
-	AddStatRow(TEXT("HorizontalBox_ClearTime"), NSLOCTEXT("knightUI", "ResultClearTime", "작전 시간"),
-		{ NewText(WidgetBlueprint, TEXT("Txt_ClearTime"), NumberStyle, INVTEXT("03:42.15"), true) });
+	AddStatRow(TEXT("Row_ClearTime"), INVTEXT("CLEAR TIME"), { NewText(WidgetBlueprint, TEXT("Txt_ClearTime"), NumberStyle, INVTEXT("03:42.15"), true) }, false);
 	UCommonTextBlock* const NewRecord = NewText(WidgetBlueprint, TEXT("Txt_NewRecord"), CaptionStyle, INVTEXT("NEW RECORD"), true);
 	NewRecord->SetColorAndOpacity(Ember);
-	AddStatRow(TEXT("HorizontalBox_BestTime"), NSLOCTEXT("knightUI", "ResultBestTime", "최고 기록"),
-		{ NewRecord, NewText(WidgetBlueprint, TEXT("Txt_BestTime"), NumberStyle, INVTEXT("03:42.15"), true) });
-	AddStatRow(TEXT("HorizontalBox_BrokenParts"), NSLOCTEXT("knightUI", "ResultBrokenParts", "부위 파괴"),
-		{ NewText(WidgetBlueprint, TEXT("Txt_BrokenParts"), BodyStyle, NSLOCTEXT("knightUI", "ResultBrokenPartsPlaceholder", "2곳"), true) });
+	AddStatRow(TEXT("Row_BestTime"), INVTEXT("BEST"), { NewRecord, NewText(WidgetBlueprint, TEXT("Txt_BestTime"), NumberStyle, INVTEXT("03:42.15"), true) }, false);
+	AddStatRow(TEXT("Row_BrokenParts"), INVTEXT("PARTS BROKEN"),
+		{ NewText(WidgetBlueprint, TEXT("Txt_BrokenParts"), BodyStyle, NSLOCTEXT("knightUI", "ResultBrokenPartsPlaceholder", "2곳"), true) }, true);
+	AddStatRow(TEXT("Row_FailReason"), INVTEXT("REASON"),
+		{ NewText(WidgetBlueprint, TEXT("Txt_FailReason"), BodyStyle, NSLOCTEXT("knightUI", "FailKnightDestroyed", "기체 대파"), true) }, true);
 
-	AddToColumn(Column, NewHUDImage(WidgetBlueprint, TEXT("Img_Divider"), FrostDim, FVector2D(32.f, 1.f)), HAlign_Fill, FMargin(0.f, 20.f, 0.f, 16.f));
-	AddToColumn(Column, NewText(WidgetBlueprint, TEXT("Txt_RewardsLabel"), BodyDimStyle, NSLOCTEXT("knightUI", "ResultRewards", "획득 보상"), false), HAlign_Left);
+	AddToColumn(Column, NewHUDImage(WidgetBlueprint, TEXT("Img_Divider"), FrostDim, FVector2D(32.f, 1.f)), HAlign_Fill, FMargin(0.f, 18.f, 0.f, 14.f));
+	AddToColumn(Column, NewSpacedLabel(TEXT("Txt_RewardsLabel"), INVTEXT("REWARDS"), 11, false), HAlign_Left);
 	// 보상 줄은 C++가 런타임에 채운다 (WBP의 RewardTextStyle 사용).
 	AddToColumn(Column, NewWidget<UVerticalBox>(WidgetBlueprint, TEXT("Box_Rewards"), true), HAlign_Fill, FMargin(0.f, 10.f, 0.f, 0.f));
 	AddToColumn(Column, NewText(WidgetBlueprint, TEXT("Txt_NoRewards"), BodyDimStyle, NSLOCTEXT("knightUI", "ResultNoRewards", "획득한 보상이 없습니다."), true), HAlign_Left, FMargin(0.f, 10.f, 0.f, 0.f));
 
 	// 아래: 카운트다운 + 지금 귀환.
 	UHorizontalBox* const Footer = NewWidget<UHorizontalBox>(WidgetBlueprint, TEXT("HorizontalBox_Footer"));
-	UHorizontalBoxSlot* const CountdownSlot = Footer->AddChildToHorizontalBox(NewText(WidgetBlueprint, TEXT("Txt_Countdown"), CaptionStyle,
-		NSLOCTEXT("knightUI", "ResultCountdownPlaceholder", "20초 후 기지로 귀환"), true));
+	UHorizontalBoxSlot* const CountdownSlot = Footer->AddChildToHorizontalBox(NewSpacedLabel(TEXT("Txt_Countdown"), INVTEXT("RETURN IN 20s"), 11, true));
 	CountdownSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 	CountdownSlot->SetVerticalAlignment(VAlign_Center);
 	UknightButtonBase* const Return = NewWidget<UknightButtonBase>(WidgetBlueprint, TSubclassOf<UknightButtonBase>(ButtonClass), TEXT("Btn_Return"), true);
 	Return->SetButtonText(NSLOCTEXT("knightUI", "ResultReturn", "지금 귀환"));
 	Footer->AddChildToHorizontalBox(Return)->SetVerticalAlignment(VAlign_Center);
-	AddToColumn(Column, Footer, HAlign_Fill, FMargin(0.f, 32.f, 0.f, 0.f));
+	AddToColumn(Column, Footer, HAlign_Fill, FMargin(0.f, 26.f, 0.f, 0.f));
 
 	EndBuild(WidgetBlueprint);
 	return true;
