@@ -263,6 +263,22 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="cm"))
 	float SpacingDistanceSlack = 400.f;
 
+	/**
+	 * 공용 StateTree의 플레이어 상태 반응(Punish). 조건이 맞고 해당 태그(Ability.Punish.*)의 공격을 지금 쓸 수 있으면
+	 * 쉬기·간 보기·추격을 끊고 그 공격을 쓴다. 공격 쿨다운은 그대로 지킨다.
+	 * 긴 가드: 타깃이 가드를 이 시간(초) 이상 계속 올리고 있다. 0이면 반응하지 않는다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI|Punish", meta=(ClampMin=0, Units="s"))
+	float PunishGuardTime = 2.f;
+
+	/** 도망 추격: 타깃이 이 시간(초) 이상 계속 멀어지고 있다. 0이면 반응하지 않는다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI|Punish", meta=(ClampMin=0, Units="s"))
+	float PunishFleeTime = 1.5f;
+
+	/** 도망 추격: 타깃이 이 거리 이상 떨어져 있다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI|Punish", meta=(ClampMin=0, Units="cm"))
+	float PunishFleeDistance = 1500.f;
+
 	/** 공용 StateTree가 원거리 공격(Ability.Attack.Ranged)으로 넘어가는 거리 구간. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="cm"))
 	float RangedMinDistance = 533.f;

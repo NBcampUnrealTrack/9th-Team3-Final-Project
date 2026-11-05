@@ -52,6 +52,12 @@ public:
 	/** 현재 타깃이 등 뒤(정면에서 BehindAngle 이상)에 계속 머문 시간(초). 평가 간격(EvaluationInterval)마다 갱신한다. */
 	float GetTargetBehindTime() const;
 
+	/** 현재 타깃이 가드(State.Guarding)를 계속 올리고 있는 시간(초). 평가 간격마다 갱신한다. 긴 가드 응징(Punish)에 쓴다. */
+	float GetTargetGuardTime() const;
+
+	/** 현재 타깃이 몬스터 반대쪽으로 AwaySpeed 이상 계속 움직이고 있는 시간(초). 평가 간격마다 갱신한다. 도망 추격(Punish)에 쓴다. */
+	float GetTargetAwayTime() const;
+
 	UPROPERTY(BlueprintAssignable, Category="Knight|Monster")
 	FknightMonsterTargetChanged OnTargetChanged;
 
@@ -101,6 +107,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Monster", meta=(ClampMin=0, ClampMax=180, Units="deg"))
 	float BehindAngle = 120.f;
 
+	/**
+	 * 평가 간격 사이 타깃 자신의 이동 중 몬스터 반대쪽 성분이 이 속도 이상이면 멀어지는 중으로 본다(GetTargetAwayTime).
+	 * 몬스터의 이동(날아오르기, 물러나기)은 세지 않는다. 몬스터가 스스로 멀어진 것을 도망으로 보지 않기 위해서다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Monster", meta=(ClampMin=0, Units="cm/s"))
+	float AwaySpeed = 150.f;
+
 private:
 	struct FCandidate
 	{
@@ -120,6 +133,7 @@ private:
 	bool IsCandidateValid(const FCandidate& Candidate, double Now) const;
 	void SetCurrentTarget(AActor* NewTarget);
 	void UpdateTargetBehind(double Now);
+	void UpdateTargetGuardAndAway(double Now);
 
 	TArray<FCandidate> Candidates;
 	TWeakObjectPtr<AActor> CurrentTarget;
@@ -128,5 +142,13 @@ private:
 	double LastEvaluationTime = 0.0;
 	/** 현재 타깃이 등 뒤로 들어간 월드 시간. 등 뒤가 아니면 음수. */
 	double TargetBehindSince = -1.0;
+	/** 현재 타깃이 가드를 올린 월드 시간. 가드 중이 아니면 음수. */
+	double TargetGuardSince = -1.0;
+	/** 현재 타깃이 멀어지기 시작한 월드 시간. 멀어지는 중이 아니면 음수. */
+	double TargetAwaySince = -1.0;
+	/** 지난 평가 때 타깃 위치와 시간. bHasLastTargetLocation이 거짓이면 아직 없다. */
+	FVector LastTargetLocation = FVector::ZeroVector;
+	double LastTargetLocationTime = 0.0;
+	bool bHasLastTargetLocation = false;
 	bool bStopped = false;
 };

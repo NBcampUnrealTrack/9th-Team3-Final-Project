@@ -25,6 +25,9 @@ namespace knightGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Move, "Ability.Move", "Monster movement action (step back, strafe). Not drawn with attacks; the StateTree picks it by this tag.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Move_Retreat, "Ability.Move.Retreat", "Monster backs away after an attack (StateTree Recover state).");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Move_Strafe, "Ability.Move.Strafe", "Monster circles the target while every attack is on cooldown (StateTree Spacing state).");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Punish_Repair, "Ability.Punish.Repair", "Monster attack used to punish a repairing target (StateTree Punish state). Still a normal attack too.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Punish_Flee, "Ability.Punish.Flee", "Monster gap closer used when the target keeps running away (StateTree Punish state). Still a normal attack too.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Punish_Guard, "Ability.Punish.Guard", "Guard-breaking monster attack used when the target holds guard too long (StateTree Punish state). Still a normal attack too.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Guard, "Ability.Guard", "Guard and parry ability.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Boost_Dash, "Ability.Boost.Dash", "Boost dash ability.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Boost_Flight, "Ability.Boost.Flight", "Boost flight ability.");

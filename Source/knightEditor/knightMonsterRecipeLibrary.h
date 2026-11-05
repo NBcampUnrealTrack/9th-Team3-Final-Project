@@ -78,6 +78,14 @@ public:
 	static bool SetupSpacingState(UStateTree* StateTree);
 
 	/**
+	 * 공용 StateTree의 Combat 맨 앞에 플레이어 상태 반응(Punish)을 만들거나 다시 만든다. 자식은 위에서부터 Repair, Flee, Guard.
+	 * 각각 평가기의 bPunishRepair·bPunishFlee·bPunishGuard가 참이고 Ability.Punish.* 공격을 쓸 수 있으면 몸을 돌린 뒤 그 공격을 쓰고 Recover로 간다.
+	 * Recover의 Turn·Hold, Spacing, Chase에는 bPunishAny로 Punish에 끼어드는 전이를 단다. 공격 중과 물러나기 중에는 끊지 않는다.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
+	static bool SetupPunishState(UStateTree* StateTree);
+
+	/**
 	 * 시퀀스마다 섹션 하나인 몽타주를 만들거나 고친다(돌진의 Start, Loop, Stop처럼). 섹션은 순서대로 이어지고,
 	 * LoopSection은 자기 자신으로 이어져 어빌리티가 다음 섹션을 정할 때까지 반복한다. 노티파이는 남긴다. 저장은 호출한 쪽.
 	 */
