@@ -341,6 +341,14 @@ bool UKnightMainMenuWidget::HandleBackRequested()
 	if (CurrentPage == EKnightMainMenuPage::Maintenance)
 	{
 		if (IsMaintenanceDestinationOpen() && MaintenanceWidget && MaintenanceWidget->HandleBack()) return true;
+		if (bReturnToWeaponEquipment && IsMaintenanceDestinationOpen() && MaintenanceWidget
+			&& MaintenanceWidget->GetDestination() == EKnightMaintenanceDestination::Enhancement)
+		{
+			if (MaintenanceWidget->IsEnhancementNavigationBlocked()) return true;
+			OpenMaintenanceDestination(EKnightMaintenanceDestination::Crafting);
+			MaintenanceWidget->RestoreWeaponEquipmentSelection();
+			return true;
+		}
 		if (bMaterialsShortcutEntry)
 		{
 			bRestoreMaterialsShortcutFocus = true;
@@ -582,6 +590,13 @@ void UKnightMainMenuWidget::EnsureMaintenanceWidget()
 	{
 		if (MaintenanceCameraRig.IsValid()) MaintenanceCameraRig->FocusSlot(FocusedSlot);
 	});
+	MaintenanceWidget->OnEnhancementShortcutRequested.BindWeakLambda(this, [this](FPrimaryAssetId WeaponId)
+	{
+		if (!IsMaintenanceDestinationOpen() || MaintenanceWidget->GetDestination() != EKnightMaintenanceDestination::Crafting) return;
+		OpenMaintenanceDestination(EKnightMaintenanceDestination::Enhancement);
+		if (IsMaintenanceDestinationOpen() && MaintenanceWidget->OpenEnhancementWeapon(WeaponId))
+			bReturnToWeaponEquipment = true;
+	});
 }
 
 bool UKnightMainMenuWidget::IsMaintenanceDestinationOpen() const
@@ -637,6 +652,7 @@ void UKnightMainMenuWidget::OpenMaintenanceDestination(EKnightMaintenanceDestina
 	if (IsTravelPending() || !MaintenanceSwitcher || !MaintenanceWidget) return;
 	if (CurrentPage != EKnightMainMenuPage::Home && CurrentPage != EKnightMainMenuPage::Maintenance) return;
 	if (!ApplyPage(EKnightMainMenuPage::Maintenance, false)) return;
+	bReturnToWeaponEquipment = false;
 	bMaterialsShortcutEntry = bStartInMaterials;
 	MaintenanceWidget->Open(Destination, bStartInMaterials);
 	ApplyMaintenanceBackPresentation(true);

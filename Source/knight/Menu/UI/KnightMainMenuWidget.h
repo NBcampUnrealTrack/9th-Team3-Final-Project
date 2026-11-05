@@ -234,6 +234,7 @@ private:
 	TWeakObjectPtr<UWidget> FocusBeforeMaterialsShortcut;
 	bool bRestoreMaterialsShortcutFocus = false;
 	bool bMaterialsShortcutEntry = false;
+	bool bReturnToWeaponEquipment = false;
 	TWeakObjectPtr<AKnightMaintenanceCameraRig> MaintenanceCameraRig;
 	bool bRestoreMaintenanceFocus = false;
 	bool bRestoreCodexFocus = false;

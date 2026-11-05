@@ -54,6 +54,9 @@ class KNIGHT_API UKnightMaintenanceWidget : public UUserWidget
 public:
 	static TSubclassOf<UKnightMaintenanceWidget> GetSharedWidgetClass();
 	void Open(EKnightMaintenanceDestination InDestination, bool bStartInMaterials = false);
+	bool OpenEnhancementWeapon(FPrimaryAssetId WeaponId);
+	void RestoreWeaponEquipmentSelection();
+	bool IsEnhancementNavigationBlocked() const;
 	bool IsMaterialsViewOpen() const { return Destination == EKnightMaintenanceDestination::Crafting && Category == 4; }
 	bool IsMaterialQuantityInputFocused() const;
 	void Close();
@@ -70,6 +73,8 @@ public:
 
 	/** 탭·부위 선택 시 카메라 이동용. Open에서는 안 보냄(전신 시작). */
 	FKnightMaintenanceSlotFocused OnSlotFocused;
+	DECLARE_DELEGATE_OneParam(FEnhancementShortcutRequested, FPrimaryAssetId);
+	FEnhancementShortcutRequested OnEnhancementShortcutRequested;
 
 protected:
 	virtual void NativeOnInitialized() override;
@@ -159,6 +164,7 @@ protected:
 private:
 	friend class UknightEnhancementPreviewCheckCommandlet;
 	friend class UknightCraftResultCheckCommandlet;
+	friend class UknightEquipmentActionCheckCommandlet;
 	void BuildCraftResultDialog();
 	void OpenCraftResult(const UknightPartItemDefinition* Part);
 	void CloseCraftResult(bool bRestoreFocus);
@@ -217,6 +223,11 @@ private:
 	void RequestWeaponUpgrade();
 	void RefreshTabButtons();
 	void RebuildEquipmentSlots(bool bRestoreFocus);
+	void RefreshNearbyEquipmentAction(bool bOccupied);
+	void ResetNearbyEquipmentAction();
+	void UpdateNearbyEquipmentActionLayout();
+	void RequestNearbyEquipmentReplacement();
+	void RequestNearbyWeaponEnhancement();
 	void SelectEquipmentSlot(FGameplayTag SlotTag);
 	void RefreshEquipmentDetails();
 	void OpenEquipmentPicker();
@@ -331,6 +342,11 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> PreviewStatusText;
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> SelectedSetFooterText;
 	UPROPERTY(Transient) TArray<TObjectPtr<UCommonButtonBase>> EquipmentSlotButtons;
+	UPROPERTY(Transient) TObjectPtr<UCommonButtonBase> EquipmentReplaceButton;
+	UPROPERTY(Transient) TObjectPtr<UCommonButtonBase> EquipmentEnhanceButton;
+	FGameplayTag EquipmentReplaceTarget;
+	FString EquipmentReplaceProfile;
+	FPrimaryAssetId EquipmentEnhanceWeaponId;
 	UPROPERTY(Transient) TArray<TObjectPtr<UCommonButtonBase>> EquipmentPickerButtons;
 	UPROPERTY(Transient) TArray<TObjectPtr<const UknightPartItemDefinition>> EquipmentPickerParts;
 	UPROPERTY(Transient) TObjectPtr<UScrollBox> EquipmentPickerList;
