@@ -93,8 +93,13 @@ namespace
 		{
 			const TObjectPtr<UMaterialInterface> Decal = Volley.WarningDecal;
 			const float FadeIn = FMath::Min(Volley.WarningTime, LandDelay);
-			const FTimerDelegate ShowWarning = FTimerDelegate::CreateWeakLambda(World, [World, Decal, Impact, FadeIn]()
+			const FTimerDelegate ShowWarning = FTimerDelegate::CreateWeakLambda(World, [World, Decal, Impact, FadeIn, Monster = Volley.Monster]()
 			{
+				// 예약된 가시는 월드 타이머라 어빌리티가 취소돼도 남는다. 몬스터가 죽었으면 새 경고와 가시를 만들지 않는다.
+				if (AknightMonsterCharacterBase::IsDefeatedMonster(Monster.Get()))
+				{
+					return;
+				}
 				if (UDecalComponent* const Warning = UGameplayStatics::SpawnDecalAtLocation(World, Decal,
 					FVector(300.f, Impact.HitRadius, Impact.HitRadius), Impact.Landing, FRotator(-90.f, 0.f, 0.f), FadeIn + 0.05f))
 				{
@@ -117,6 +122,10 @@ namespace
 		const float Fall = FMath::Min(Volley.FallTime, LandDelay);
 		const FTimerDelegate Drop = FTimerDelegate::CreateWeakLambda(World, [World, Volley, Impact, Fall]()
 		{
+			if (AknightMonsterCharacterBase::IsDefeatedMonster(Volley.Monster.Get()))
+			{
+				return;
+			}
 			FActorSpawnParameters FallParams;
 			FallParams.Owner = Volley.Monster.Get();
 			FallParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
@@ -241,6 +250,10 @@ void UknightGameplayAbility_MonsterSpikeRain::HandleFire()
 		const float LandDelay = LandTime - PlaceTime;
 		const FTimerDelegate Place = FTimerDelegate::CreateWeakLambda(World, [World, Volley, SpikeImpact = ImpactFor(Index), WeakTarget, Center, Jitter, GroundZ, LandDelay]()
 		{
+			if (AknightMonsterCharacterBase::IsDefeatedMonster(Volley.Monster.Get()))
+			{
+				return;
+			}
 			const AActor* const Goal = WeakTarget.Get();
 			const FVector2D Offset = FMath::RandPointInCircle(Jitter);
 			FknightSpikeImpact Impact = SpikeImpact;

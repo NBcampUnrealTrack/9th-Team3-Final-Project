@@ -2,10 +2,12 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
+#include "Engine/Scene.h"
 #include "GameplayTagContainer.h"
 #include "knightInventoryTypes.h"
 #include "knightRaidDefinition.generated.h"
 
+class UNiagaraSystem;
 class USoundBase;
 class UknightItemDefinition;
 class UknightMonsterDefinition;
@@ -34,6 +36,142 @@ struct KNIGHT_API FknightRaidMusicStates
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Music")
 	int32 Failed = 4;
+};
+
+/**
+ * 처치 연출 슬로모션의 카메라 한 컷. 몬스터 몸(메시 경계) 중심을 바라본다. 방향은 몬스터 정면 기준이다(Yaw 0 = 몬스터 얼굴 앞).
+ * 컷은 끊김 없이 이어진다: 한 번 쓰러지는 동작을 각도만 바꿔 보여 준다.
+ */
+USTRUCT(BlueprintType)
+struct KNIGHT_API FknightRaidFinishShot
+{
+	GENERATED_BODY()
+
+	/** 몬스터 정면에서 돈 각도(도). 90 = 몬스터 오른쪽 옆. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Shot", meta=(Units="deg"))
+	float Yaw = 0.f;
+
+	/** 위에서 내려다보는 각도(도). 음수면 아래에서 올려다본다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Shot", meta=(Units="deg"))
+	float Pitch = 10.f;
+
+	/** 몸 중심에서 카메라까지 거리 = 몸 경계 반지름 × 이 값. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Shot", meta=(ClampMin=0.2))
+	float Distance = 1.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Shot", meta=(ClampMin=10, ClampMax=120, Units="deg"))
+	float FieldOfView = 50.f;
+
+	/** 컷 동안 몬스터 둘레를 도는 각도(도). 느린 카메라 이동. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Shot", meta=(Units="deg"))
+	float DriftYaw = 10.f;
+
+	/** 컷 동안 다가가는 비율(0.1 = 거리의 10%만큼 다가감). 음수면 멀어진다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Shot")
+	float DriftIn = 0.08f;
+
+	/** 바라보는 높이. 0 = 몸 경계 중심, 1 = 경계 꼭대기, -1 = 바닥. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Shot", meta=(ClampMin=-1, ClampMax=1))
+	float FocusHeight = 0.f;
+};
+
+/**
+ * 마지막 대상 몬스터를 처치했을 때의 연출(UknightRaidFinishPresentation).
+ * 막타 히트스톱 → 여러 각도의 슬로모션(Shots, SlowTime) → 원래 속도와 플레이어 시점으로 복귀(ReturnTime) → 몬스터가 땅에 닿는 순간 쿵
+ * (ImpactTime) → 정적(SettleTime) → 토벌 확인 배너(BannerTime) → 여운(LingerTime) → 결과 화면.
+ * 시간은 모두 실제 초다. ImpactTime만 몬스터가 죽은 뒤의 게임 시간(사망 몽타주 위치)이다.
+ */
+USTRUCT(BlueprintType)
+struct KNIGHT_API FknightRaidFinishSettings
+{
+	GENERATED_BODY()
+
+	FknightRaidFinishSettings();
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Finish")
+	bool bEnabled = true;
+
+	/** 막타 순간 시간이 거의 멈추는 길이(실제 초). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Finish|Hit", meta=(ClampMin=0, Units="s"))
+	float HitStopTime = 0.12f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Finish|Hit", meta=(ClampMin=0, ClampMax=1))
+	float HitStopDilation = 0.03f;
+
+	/** 막타 순간 흰 섬광의 세기(0..1)와 사라지는 시간(실제 초). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Finish|Hit", meta=(ClampMin=0, ClampMax=1))
+	float FlashAlpha = 0.6f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Finish|Hit", meta=(ClampMin=0, Units="s"))
+	float FlashTime = 0.35f;
+
+	/**
+	 * 몬스터가 죽은 뒤 몸이 땅에 닿는 게임 시간(사망 몽타주 위치, 초). 공중에서 죽어 떨어지면 떨어지는 시간과 비교해 늦은 쪽을 쓴다.
+	 * 슬로모션 배율은 이 순간이 복귀 뒤 원래 속도에서 오도록 정해진다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Finish|Timing", meta=(ClampMin=0, Units="s"))
+	float ImpactTime = 2.2f;
+
+	/** 슬로모션 길이(실제 초). Shots가 이 시간을 똑같이 나눈다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Finish|Timing", meta=(ClampMin=0.5, Units="s"))
+	float SlowTime = 4.5f;
+
+	/** 슬로모션 배율의 범위. 쓰러지는 시간이 짧거나 길어 범위를 벗어나면 슬로모션 길이가 줄거나 땅에 닿는 순간이 늦어진다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Finish|Timing", meta=(ClampMin=0.02, ClampMax=1))
+	float MinSlowDilation = 0.12f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Finish|Timing", meta=(ClampMin=0.02, ClampMax=1))
+	float MaxSlowDilation = 0.5f;
+
+	/** 원래 속도와 플레이어 시점으로 돌아오는 시간(실제 초). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Finish|Timing", meta=(ClampMin=0.1, Units="s"))
+	float ReturnTime = 1.0f;
+
+	/** 복귀가 끝난 뒤 땅에 닿기까지 원래 속도로 보여 주는 시간(게임 초). 플레이어 눈앞에서 쓰러지는 것을 보는 시간. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Finish|Timing", meta=(ClampMin=0, Units="s"))
+	float NormalSpeedLead = 0.4f;
+
+	/** 쿵 뒤 배너까지의 정적(실제 초). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Finish|Timing", meta=(ClampMin=0, Units="s"))
+	float SettleTime = 2.5f;
+
+	/** 배너가 떠 있는 시간과 그 뒤 결과 화면까지의 여운(실제 초). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Finish|Timing", meta=(ClampMin=0, Units="s"))
+	float BannerTime = 3.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Finish|Timing", meta=(ClampMin=0, Units="s"))
+	float LingerTime = 1.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Finish|Camera", meta=(TitleProperty="Yaw"))
+	TArray<FknightRaidFinishShot> Shots;
+
+	/** 슬로모션 카메라의 화면비. 화면보다 넓으면 위아래가 검은 띠로 가려진다(레터박스). 0이면 끈다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Finish|Camera", meta=(ClampMin=0))
+	float LetterboxAspectRatio = 2.39f;
+
+	/** 슬로모션 카메라의 화면 효과(채도·비네트·색수차·그레인). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Finish|Camera")
+	FPostProcessSettings SlowPostProcess;
+
+	/** 슬로모션 동안 효과음(SC_Knight_SFX와 하위)의 음량과 음높이. 소리가 무겁게 늘어진다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Finish|Sound", meta=(ClampMin=0, ClampMax=1))
+	float SlowSFXVolume = 0.55f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Finish|Sound", meta=(ClampMin=0.2, ClampMax=2))
+	float SlowSFXPitch = 0.7f;
+
+	/** 쿵: 카메라 흔들림 세기(무거운 충격 흔들림의 배수), 몬스터 발치의 이펙트와 소리. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Finish|Impact", meta=(ClampMin=0))
+	float ImpactShake = 1.6f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Finish|Impact")
+	TSoftObjectPtr<UNiagaraSystem> ImpactEffect;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Finish|Impact", meta=(ClampMin=0))
+	float ImpactEffectScale = 1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Finish|Impact")
+	TSoftObjectPtr<USoundBase> ImpactSound;
 };
 
 /** One possible reward line. Each line is rolled independently on a successful raid. */
@@ -159,4 +297,8 @@ public:
 	/** Cues loaded when the raid starts so their first use shows (GameplayCue.Hit, GameplayCue.PartBreak, the monster's cues). */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation", meta=(Categories="GameplayCue"))
 	FGameplayTagContainer PreloadGameplayCues;
+
+	/** 마지막 대상 몬스터를 처치했을 때의 슬로모션·카메라·토벌 확인 연출. 끄면 처치 즉시 결과 화면이 열린다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation|Finish")
+	FknightRaidFinishSettings FinishPresentation;
 };

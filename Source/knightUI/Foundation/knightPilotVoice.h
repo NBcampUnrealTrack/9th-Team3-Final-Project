@@ -19,6 +19,7 @@ struct FStreamableHandle;
  *   EnemyDetected   - the first time the raid enters combat.
  *   CombatMode      - when the Knight draws the sword (CombatStateTag added), at most once per cooldown.
  *   HealthWarning   - once, when health first drops to the warning ratio or below. Jumps the queue.
+ *   RaidSuccess     - 처치 연출의 토벌 확인 배너가 뜰 때(AknightRaidGameState 처치 연출 단계 Banner). 줄을 앞지른다.
  * Owned by UknightUISubsystem, which binds it with the possessed pawn and the raid like the HUD view models.
  */
 UCLASS()
@@ -45,6 +46,7 @@ private:
 
 	UFUNCTION()
 	void HandleRaidPhaseChanged(EknightRaidPhase OldPhase, EknightRaidPhase NewPhase);
+	void HandleFinishStageChanged(EknightRaidFinishStage Stage);
 
 	void Play(const TSoftObjectPtr<USoundBase>& Voice, bool bUrgent = false) const;
 
@@ -54,6 +56,7 @@ private:
 	FGameplayTag BoundCombatTag;
 	FDelegateHandle CombatStateHandle;
 	FDelegateHandle HealthHandle;
+	FDelegateHandle FinishStageHandle;
 
 	bool bSystemActivatedPlayed = false;
 	bool bEnemyDetectedPlayed = false;

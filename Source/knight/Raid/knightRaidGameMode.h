@@ -12,6 +12,7 @@ class AknightMonsterCharacterBase;
 class AknightRaidGameState;
 class UknightRaidDefinition;
 class UknightAudioSubsystem;
+class UknightRaidFinishPresentation;
 class USoundBase;
 struct FStreamableHandle;
 
@@ -141,6 +142,18 @@ private:
 	/** 보스 BGM(bCombatMusicDynamic): 대상 몬스터가 2페이즈나 분노면 Enrage 곡으로, 아니면 Normal로 크로스페이드한다. */
 	void UpdateCombatMusicIntensity(UknightAudioSubsystem& Audio);
 	void HandleMonsterHealthChanged(const FOnAttributeChangeData& Data);
+
+	/** 마지막 대상이 쓰러지면 처치 연출(RaidDefinition->FinishPresentation)을 시작한다. 연출 중에는 결과 화면·귀환 타이머·BGM 엔딩을 미룬다. */
+	void StartFinishPresentation(AknightMonsterCharacterBase& Monster);
+	void HandleFinishImpact();
+	void HandleFinishDone();
+	bool IsFinishPresentationPlaying() const;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UknightRaidFinishPresentation> FinishPresentation;
+
+	/** 처치 연출이 끝나면 걸 귀환 타이머(초). */
+	float PendingReturnDelay = 0.f;
 
 	virtual void ReturnToMainMenu() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;

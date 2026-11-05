@@ -54,6 +54,10 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category="Pilot Voice")
 	TSoftObjectPtr<USoundBase> HealthWarningVoice;
 
+	/** 마지막 대상 몬스터를 처치한 뒤 토벌 확인 배너가 뜰 때("목표 생명 반응 소실 확인. 토벌 성공입니다."). */
+	UPROPERTY(EditAnywhere, Config, Category="Pilot Voice")
+	TSoftObjectPtr<USoundBase> RaidSuccessVoice;
+
 	/** Tag the combat stance ability adds while the sword is drawn. */
 	UPROPERTY(EditAnywhere, Config, Category="Pilot Voice", meta=(Categories="State"))
 	FGameplayTag CombatStateTag;
