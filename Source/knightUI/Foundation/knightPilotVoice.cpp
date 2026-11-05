@@ -16,7 +16,7 @@ void UknightPilotVoice::Preload()
 	const UknightUISettings* const Settings = GetDefault<UknightUISettings>();
 	TArray<FSoftObjectPath> Paths;
 	for (const TSoftObjectPtr<USoundBase>* const Voice : { &Settings->SystemActivatedVoice, &Settings->EnemyDetectedVoice,
-		&Settings->CombatModeVoice, &Settings->HealthWarningVoice })
+		&Settings->CombatModeVoice, &Settings->HealthWarningVoice, &Settings->RaidSuccessVoice })
 	{
 		if (!Voice->IsNull())
 		{
@@ -67,6 +67,7 @@ void UknightPilotVoice::BindRaid(AknightRaidGameState* InRaidState)
 	if (InRaidState)
 	{
 		InRaidState->OnRaidPhaseChanged.AddUniqueDynamic(this, &ThisClass::HandleRaidPhaseChanged);
+		FinishStageHandle = InRaidState->OnFinishStageChanged.AddUObject(this, &ThisClass::HandleFinishStageChanged);
 	}
 }
 
@@ -96,7 +97,9 @@ void UknightPilotVoice::UnbindRaid()
 	if (AknightRaidGameState* const RaidState = BoundRaidState.Get())
 	{
 		RaidState->OnRaidPhaseChanged.RemoveDynamic(this, &ThisClass::HandleRaidPhaseChanged);
+		RaidState->OnFinishStageChanged.Remove(FinishStageHandle);
 	}
+	FinishStageHandle.Reset();
 	BoundRaidState.Reset();
 }
 
@@ -153,6 +156,14 @@ void UknightPilotVoice::HandleRaidPhaseChanged(EknightRaidPhase OldPhase, Eknigh
 	{
 		bEnemyDetectedPlayed = true;
 		Play(GetDefault<UknightUISettings>()->EnemyDetectedVoice);
+	}
+}
+
+void UknightPilotVoice::HandleFinishStageChanged(EknightRaidFinishStage Stage)
+{
+	if (Stage == EknightRaidFinishStage::Banner)
+	{
+		Play(GetDefault<UknightUISettings>()->RaidSuccessVoice, true);
 	}
 }
 

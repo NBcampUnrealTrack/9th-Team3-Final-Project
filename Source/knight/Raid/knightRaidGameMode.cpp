@@ -26,6 +26,7 @@
 #include "Monster/knightMonsterPartComponent.h"
 #include "Monster/knightMonsterTargetingComponent.h"
 #include "Raid/knightRaidDefinition.h"
+#include "Raid/knightRaidFinishPresentation.h"
 #include "Raid/knightRaidGameState.h"
 #include "Raid/knightRaidSubsystem.h"
 #include "System/knightAssetManager.h"
@@ -344,6 +345,12 @@ void AknightRaidGameMode::UpdateCombatMusic(EknightRaidPhase Phase)
 	{
 		if (PlayingCombatTrack && Phase == EknightRaidPhase::Success && RaidDefinition->bCombatMusicDynamic)
 		{
+			// 처치 연출 중에는 몸이 땅에 닿을 때(HandleFinishImpact)까지 지금 곡을 이어 간다.
+			const AknightRaidGameState* const RaidState = GetRaidGameState();
+			if (RaidState && RaidState->IsFinishPresentationPlaying() && RaidState->GetFinishStage() < EknightRaidFinishStage::Impact)
+			{
+				return;
+			}
 			// 끄지 않고 지금 상태(Normal/Enrage)의 엔딩으로 넘어간다. 엔딩이 끝나면 MetaSound가 스스로 끝난다.
 			Audio->SetMusicFloatParameter(TEXT("Ending"), 1.f);
 			Audio->TriggerMusicParameter(TEXT("PlayEnding"));
@@ -408,6 +415,11 @@ void AknightRaidGameMode::UpdateCombatMusicIntensity(UknightAudioSubsystem& Audi
 
 void AknightRaidGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (FinishPresentation)
+	{
+		FinishPresentation->Stop();
+		FinishPresentation = nullptr;
+	}
 	if (LoadingHoldTicker.IsValid())
 	{
 		FTSTicker::GetCoreTicker().RemoveTicker(LoadingHoldTicker);
@@ -544,7 +556,54 @@ void AknightRaidGameMode::HandleMonsterDefeated(AknightMonsterCharacterBase* Mon
 			return;
 		}
 	}
+	if (Monster)
+	{
+		StartFinishPresentation(*Monster);
+	}
 	FinishRaid(true, EknightRaidFailReason::None);
+}
+
+void AknightRaidGameMode::StartFinishPresentation(AknightMonsterCharacterBase& Monster)
+{
+	AknightRaidGameState* const RaidState = GetRaidGameState();
+	APlayerController* const PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
+	const EknightRaidPhase Phase = RaidState ? RaidState->GetRaidPhase() : EknightRaidPhase::None;
+	if (!RaidDefinition || !RaidState || !PC || IsMapTestMode() || FinishPresentation
+		|| Phase == EknightRaidPhase::Success || Phase == EknightRaidPhase::Failed || Phase == EknightRaidPhase::Returning)
+	{
+		return;
+	}
+	UknightRaidFinishPresentation* const Presentation = NewObject<UknightRaidFinishPresentation>(this);
+	Presentation->OnImpact = [this]() { HandleFinishImpact(); };
+	Presentation->OnDone = [this]() { HandleFinishDone(); };
+	if (Presentation->Start(Monster, *PC, *RaidState, RaidDefinition->FinishPresentation))
+	{
+		FinishPresentation = Presentation;
+	}
+}
+
+bool AknightRaidGameMode::IsFinishPresentationPlaying() const
+{
+	const AknightRaidGameState* const RaidState = GetRaidGameState();
+	return RaidState && RaidState->IsFinishPresentationPlaying();
+}
+
+void AknightRaidGameMode::HandleFinishImpact()
+{
+	// 쓰러져 땅에 닿는 순간 보스 BGM 엔딩으로 넘어간다.
+	UpdateCombatMusic(EknightRaidPhase::Success);
+}
+
+void AknightRaidGameMode::HandleFinishDone()
+{
+	if (PendingReturnDelay > 0.f)
+	{
+		GetWorldTimerManager().SetTimer(PhaseTimer, this, &ThisClass::ReturnToMainMenu, PendingReturnDelay, false);
+	}
+	else
+	{
+		ReturnToMainMenu();
+	}
 }
 
 void AknightRaidGameMode::HandlePlayerDeath(AController* PlayerController)
@@ -627,6 +686,12 @@ void AknightRaidGameMode::FinishRaid(bool bSuccess, EknightRaidFailReason FailRe
 	if (FailReason == EknightRaidFailReason::Abandoned)
 	{
 		Delay = 0.f;
+	}
+	if (bSuccess && IsFinishPresentationPlaying())
+	{
+		// 귀환 대기는 처치 연출이 끝나고 결과 화면이 열릴 때부터 센다.
+		PendingReturnDelay = Delay;
+		return;
 	}
 	if (Delay > 0.f)
 	{
