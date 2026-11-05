@@ -14,7 +14,8 @@ class USkeletalMeshComponent;
  * 부위 와이어프레임 셸. 부위 데이터의 PartShellMesh(몬스터 메시를 단순화해 파괴 가능한 부위만 남긴 메시)를 몬스터 메시에
  * 리더 포즈로 붙여, 몸 윤곽을 따라가는 각진 선으로 부위를 그린다. 선 색이 부위 상태(정상 · 빈사 · 파괴)를 보여 준다.
  *
- * 평소에는 락온한 부위 하나만 보인다. 파괴할 수 없는 부위는 셸이 없다. 스캔이 몬스터에 닿으면 RevealTime 동안
+ * 락온하면 그 부위 셸이 LockShowTime 동안 보였다가 꺼진다. 부위 상태가 바뀌면(빈사, 파괴) 그 부위가 StateChangeShowTime 동안
+ * 다시 보인다. 파괴할 수 없는 부위는 셸이 없다. 스캔이 몬스터에 닿으면 RevealTime 동안
  * 모든 부위 셸이 벽 너머로도 보인다. 첫 조우(처음 플레이어를 타깃으로 잡을 때)에 그 자리에서 스캔을 쏜다.
  *
  * 셸 메시는 knightPartShellBaker.BakePartShell로 굽는다. 머티리얼은 부위 번호(UV1.x)로 부위마다 불투명도와 색을 고른다.
@@ -27,7 +28,7 @@ class KNIGHT_API UknightMonsterPartShellComponent : public UActorComponent
 public:
 	UknightMonsterPartShellComponent();
 
-	/** 락온한 부위. 셸이 없는 부위(파괴 불가)나 빈 태그면 락온 셸을 끈다. */
+	/** 락온한 부위. LockShowTime 동안 셸을 보여 준다. 셸이 없는 부위(파괴 불가)나 빈 태그면 락온 셸을 끈다. */
 	void SetLockedPart(FGameplayTag PartTag);
 
 	/** 모든 부위 셸을 RevealTime 동안 벽 너머로도 보인다. 스캔 링이 몬스터에 닿을 때 부른다. */
@@ -83,6 +84,14 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Knight|PartShell", meta=(ClampMin=0, ClampMax=1))
 	float FillOpacity = 0.05f;
 
+	/** 락온한 부위 셸을 보여 주는 시간(페이드 아웃 포함). 계속 켜 두면 몸을 가려 번잡하다. */
+	UPROPERTY(EditAnywhere, Category="Knight|PartShell", meta=(ClampMin=0, Units="s"))
+	float LockShowTime = 3.5f;
+
+	/** 부위 상태가 바뀌었을 때(빈사, 파괴) 그 부위 셸을 다시 보여 주는 시간. 락온하지 않은 부위도 보인다. */
+	UPROPERTY(EditAnywhere, Category="Knight|PartShell", meta=(ClampMin=0, Units="s"))
+	float StateChangeShowTime = 2.5f;
+
 	/** 스캔으로 모든 부위를 보여 주는 시간(페이드 아웃 포함). */
 	UPROPERTY(EditAnywhere, Category="Knight|PartShell", meta=(ClampMin=0, Units="s"))
 	float RevealTime = 3.f;
@@ -119,6 +128,8 @@ private:
 		FGameplayTag Tag;
 		EknightPartCondition Condition = EknightPartCondition::Normal;
 		float Opacity = 0.f;
+		/** 락온·상태 변화로 이 부위를 보여 줄 남은 시간. */
+		float ShowRemaining = 0.f;
 	};
 
 	UFUNCTION()
@@ -132,6 +143,8 @@ private:
 	void ApplyColors();
 	FLinearColor GetConditionColor(EknightPartCondition Condition) const;
 	UMaterialInstanceDynamic* GetActiveMaterial() const;
+	/** Tag 부위를 Duration 동안 보여 준다(이미 더 길게 남아 있으면 그대로). */
+	void ShowPart(FGameplayTag Tag, float Duration);
 
 	UPROPERTY(Transient)
 	TObjectPtr<USkeletalMeshComponent> ShellMesh;
