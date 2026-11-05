@@ -6,6 +6,7 @@
 #include "knightMonsterRecipeLibrary.generated.h"
 
 class AknightMonsterCharacterBase;
+class UAnimBlueprint;
 class UAnimMontage;
 class UAnimSequence;
 class UBlendSpace;
@@ -84,6 +85,14 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
 	static bool SetupPunishState(UStateTree* StateTree);
+
+	/**
+	 * 애님 Blueprint에 Knight Look At 노드를 넣거나(없으면 컴포넌트 공간 → 로컬 공간 변환 바로 앞) 값을 고친 뒤 컴파일한다.
+	 * Bones는 목뿌리 → 머리 순서, Weights는 같은 길이(합 1 권장). 저장은 부른 쪽이 한다.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
+	static bool SetupLookAt(UAnimBlueprint* AnimBlueprint, const TArray<FName>& Bones, const TArray<float>& Weights,
+		float MaxYaw = 60.f, float MaxPitch = 25.f, bool bDisableWhenAirborne = true);
 
 	/**
 	 * 시퀀스마다 섹션 하나인 몽타주를 만들거나 고친다(돌진의 Start, Loop, Stop처럼). 섹션은 순서대로 이어지고,
