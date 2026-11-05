@@ -5,6 +5,7 @@
 #include "GameplayTagContainer.h"
 #include "UObject/PrimaryAssetId.h"
 #include "Types/SlateEnums.h"
+#include "Menu/UI/KnightMaintenanceTransition.h"
 #include "KnightMaintenanceWidget.generated.h"
 
 class UCommonButtonBase;
@@ -51,6 +52,8 @@ UCLASS()
 class KNIGHT_API UKnightMaintenanceWidget : public UUserWidget
 {
 	GENERATED_BODY()
+	friend class UKnightMaintenanceTransition;
+	friend class UknightMaintenanceEntranceCheckCommandlet;
 public:
 	static TSubclassOf<UKnightMaintenanceWidget> GetSharedWidgetClass();
 	void Open(EKnightMaintenanceDestination InDestination, bool bStartInMaterials = false);
@@ -60,6 +63,11 @@ public:
 	bool IsMaterialsViewOpen() const { return Destination == EKnightMaintenanceDestination::Crafting && Category == 4; }
 	bool IsMaterialQuantityInputFocused() const;
 	void Close();
+	void BeginEntrance(UWidget* Footer, FSimpleDelegate Finished);
+	void BeginExit(UWidget* Footer, FSimpleDelegate Finished);
+	void CancelTransition();
+	bool IsTransitionActive() const { return EntranceTransition && EntranceTransition->IsActive(); }
+	bool IsTransitionExiting() const { return EntranceTransition && EntranceTransition->IsExiting(); }
 	EKnightMaintenanceDestination GetDestination() const { return Destination; }
 	/** Q/E, LB/RB. 제작이 아니면 재료 탭 건너뜀. */
 	void CycleInfoTab(int32 Direction);
@@ -79,6 +87,10 @@ public:
 	FEnhancementShortcutRequested OnEnhancementShortcutRequested;
 
 protected:
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Entrance") FKnightMaintenanceEntranceSettings EntranceSettings;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Entrance") TObjectPtr<UMaterialInterface> EntranceRevealMaterial;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Entrance") TObjectPtr<UMaterialInterface> EntranceScanMaterial;
+	UPROPERTY(Transient) TObjectPtr<UKnightMaintenanceTransition> EntranceTransition;
 	virtual void NativeOnInitialized() override;
 	virtual void NativeDestruct() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;

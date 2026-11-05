@@ -112,6 +112,10 @@ int32 UknightEquipmentActionCheckCommandlet::CheckPresentation(APlayerController
 	UKnightMaintenanceWidget* Widget = Menu->MaintenanceWidget;
 	Menu->OpenMaintenanceDestination(EKnightMaintenanceDestination::Enhancement);
 	SetView(Widget, FIntPoint(1920,1080), 1.f);
+	// Full-screen entry now intentionally blocks transactions until its final layout.
+	// Exercise the original upgrade path only once the player can activate it.
+	for (int32 Frame = 0; Frame < 60 && Widget->IsTransitionActive(); ++Frame) Draw();
+	Check(!Widget->IsTransitionActive(), TEXT("entrance completes before upgrade transaction check"));
 	auto CheckLabel = [&]()
 	{
 		const auto* Label = Cast<UTextBlock>(Widget->GetWidgetFromName(TEXT("EnhancementChanceLabel")));

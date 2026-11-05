@@ -591,6 +591,7 @@ void UKnightMaintenanceWidget::NativeOnInitialized()
 
 void UKnightMaintenanceWidget::NativeDestruct()
 {
+	CancelTransition();
 	ResetNearbyEquipmentAction();
 	CloseCraftResult(false);
 	ResetEnhancementBars();
@@ -609,7 +610,25 @@ void UKnightMaintenanceWidget::NativeTick(const FGeometry& MyGeometry, float InD
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
 	TickEnhancementBars(InDeltaTime);
-	UpdateNearbyEquipmentActionLayout();
+	if (!EntranceTransition || EntranceTransition->GetRetainerCount() == 0) UpdateNearbyEquipmentActionLayout();
+	if (IsTransitionActive()) EntranceTransition->Tick(InDeltaTime);
+}
+
+void UKnightMaintenanceWidget::BeginEntrance(UWidget* Footer, FSimpleDelegate Finished)
+{
+	if (!EntranceTransition) EntranceTransition = NewObject<UKnightMaintenanceTransition>(this);
+	EntranceTransition->Begin(this, Footer, MoveTemp(Finished));
+}
+
+void UKnightMaintenanceWidget::BeginExit(UWidget* Footer, FSimpleDelegate Finished)
+{
+	if (!EntranceTransition) EntranceTransition = NewObject<UKnightMaintenanceTransition>(this);
+	EntranceTransition->BeginExit(this, Footer, MoveTemp(Finished));
+}
+
+void UKnightMaintenanceWidget::CancelTransition()
+{
+	if (EntranceTransition) EntranceTransition->Cancel();
 }
 
 FReply UKnightMaintenanceWidget::NativeOnMouseMove(const FGeometry& Geometry, const FPointerEvent& MouseEvent)
@@ -713,6 +732,7 @@ void UKnightMaintenanceWidget::ApplyDestinationLayout()
 
 void UKnightMaintenanceWidget::Open(EKnightMaintenanceDestination InDestination, bool bStartInMaterials)
 {
+	CancelTransition();
 	ResetNearbyEquipmentAction();
 	CloseCraftResult(false);
 	ResetEnhancementBars();
@@ -786,6 +806,7 @@ bool UKnightMaintenanceWidget::IsMaterialQuantityInputFocused() const
 
 void UKnightMaintenanceWidget::Close()
 {
+	CancelTransition();
 	ResetNearbyEquipmentAction();
 	CloseCraftResult(false);
 	ResetEnhancementBars();
@@ -926,6 +947,7 @@ void UKnightMaintenanceWidget::SetInfoTab(int32 NewTab)
 
 void UKnightMaintenanceWidget::CycleInfoTab(int32 Direction)
 {
+	if (IsTransitionActive()) return;
 	if (Direction == 0 || Category != 0 || bEquipmentPickerOpen || (Panel_Confirm && Panel_Confirm->IsVisible())) return;
 	SetInfoTab(InfoTab == InfoMaterial ? InfoSpec : InfoMaterial);
 }
@@ -2190,6 +2212,7 @@ void UKnightMaintenanceWidget::HandleEntryFocused(UKnightMaintenanceEntryWidget*
 
 bool UKnightMaintenanceWidget::HandleConfirmKey()
 {
+	if (IsTransitionActive()) return true;
 	if (IsCraftResultOpen()) return true;
 	if (Panel_Confirm && Panel_Confirm->IsVisible()) return false;
 	if (Category == 1)
@@ -2247,6 +2270,7 @@ void UKnightMaintenanceWidget::ShowConfirm(bool bShow)
 
 void UKnightMaintenanceWidget::RequestExecute()
 {
+	if (IsTransitionActive()) return;
 	if (IsCraftResultOpen() || (Panel_Confirm && Panel_Confirm->IsVisible())) return;
 	if (Category == 4)
 	{
@@ -2460,6 +2484,7 @@ void UKnightMaintenanceWidget::RefreshWeaponUpgradePanel()
 
 void UKnightMaintenanceWidget::RequestWeaponUpgrade()
 {
+	if (IsTransitionActive()) return;
 	if (bBusy || EnhancementBarPhase != EEnhancementBarPhase::Idle || Category != 1
 		|| (Panel_Confirm && Panel_Confirm->IsVisible())) return;
 	ResetEnhancementBars();
@@ -2912,6 +2937,7 @@ void UKnightMaintenanceWidget::HandleProgressionChanged()
 
 void UKnightMaintenanceWidget::HandleActiveSlotChanged(const FString& SlotId)
 {
+	CancelTransition();
 	ResetNearbyEquipmentAction();
 	CloseCraftResult(false);
 	ResetEnhancementBars();

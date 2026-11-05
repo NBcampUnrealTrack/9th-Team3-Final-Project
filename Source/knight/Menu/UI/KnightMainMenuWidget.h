@@ -42,6 +42,7 @@ class KNIGHT_API UKnightMainMenuWidget : public UKnightMenuWidgetBase
 {
 	GENERATED_BODY()
 	friend class UknightEquipmentActionCheckCommandlet;
+	friend class UknightMaintenanceEntranceCheckCommandlet;
 
 public:
 	UFUNCTION(BlueprintPure, Category="Knight|Menu")
@@ -202,6 +203,7 @@ private:
 	void PlaceMaintenanceSubmenu();
 	void OpenMaintenanceDestination(EKnightMaintenanceDestination Destination, bool bStartInMaterials = false);
 	bool IsMaintenanceDestinationOpen() const;
+	void LeaveMaintenance(bool bShowSubmenu);
 	void EnsureQuestWidget();
 
 	UPROPERTY(Transient)
