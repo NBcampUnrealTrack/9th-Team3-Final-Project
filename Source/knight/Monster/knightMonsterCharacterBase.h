@@ -24,6 +24,7 @@ class UknightMonsterHoverComponent;
 class UknightMonsterAirTurnComponent;
 class UknightMonsterMovementComponent;
 class UknightMonsterPartComponent;
+class UknightMonsterPartShellComponent;
 class UknightMonsterPushOutComponent;
 class UknightMonsterTargetingComponent;
 class UMotionWarpingComponent;
@@ -92,6 +93,7 @@ public:
 
 	UknightAbilitySystemComponent* GetKnightAbilitySystemComponent() const { return AbilitySystemComponent; }
 	UknightMonsterPartComponent* GetPartComponent() const { return PartComponent; }
+	UknightMonsterPartShellComponent* GetPartShell() const { return PartShell; }
 	UknightMonsterTargetingComponent* GetTargetingComponent() const { return TargetingComponent; }
 	UknightMonsterMovementComponent* GetMonsterMovementComponent() const;
 	const UknightMonsterDefinition* GetMonsterDefinition() const { return MonsterDefinition; }
@@ -158,6 +160,10 @@ private:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UknightMonsterPartComponent> PartComponent;
+
+	/** 부위 와이어프레임 셸. 락온한 부위와 첫 조우 스캔 때 부위를 몸 위에 그린다. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UknightMonsterPartShellComponent> PartShell;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UknightMonsterTargetingComponent> TargetingComponent;

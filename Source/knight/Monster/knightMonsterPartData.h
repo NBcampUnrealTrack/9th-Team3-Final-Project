@@ -9,6 +9,7 @@ class AknightMonsterBreakPiece;
 class UGameplayEffect;
 class USoundBase;
 class UStaticMesh;
+class USkeletalMesh;
 
 /** One hittable region of a monster (head, foreleg, tail) and its hitzone and break rules. */
 USTRUCT(BlueprintType)
@@ -143,6 +144,17 @@ public:
 	/** 부위가 부서질 때마다 확인한다. 부위 하나의 봉인은 GrantedTagsOnBreak로 충분하다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Parts")
 	TArray<FknightMonsterPartBreakCombo> BreakCombos;
+
+	/**
+	 * 부위 와이어프레임 셸 메시. 몬스터 메시를 단순화해 파괴 가능한 부위만 남긴 스켈레탈 메시로, 몬스터 메시를 리더 포즈로 따라간다.
+	 * knightPartShellBaker.BakePartShell로 굽는다. 비어 있으면 셸을 그리지 않는다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Part Shell")
+	TSoftObjectPtr<USkeletalMesh> PartShellMesh;
+
+	/** 셸 메시의 부위 순서. 셸 메시 UV1.x가 이 배열의 인덱스다(최대 8개). 굽기가 채운다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Part Shell", meta=(Categories="Monster.Part"))
+	TArray<FGameplayTag> PartShellParts;
 
 #if WITH_EDITOR
 	virtual EDataValidationResult IsDataValid(class FDataValidationContext& Context) const override;

@@ -80,6 +80,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Knight|HUD")
 	TObjectPtr<USoundBase> PartConditionSound;
 
+	/** 화면 부위 틀을 보인다. 부위 상태는 몬스터 몸 위의 부위 셸이 보여 주므로 기본은 끈다(부위 이름은 그대로). */
+	UPROPERTY(EditAnywhere, Category="Knight|HUD|Part")
+	bool bShowPartFrame = false;
+
 	UPROPERTY(EditAnywhere, Category="Knight|HUD|Part")
 	FLinearColor NormalColor = FLinearColor(FColor(0xFF, 0x3B, 0x30));
 
