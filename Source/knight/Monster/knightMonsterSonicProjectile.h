@@ -58,6 +58,8 @@ struct FknightSonicImpactEffects
  *
  * 끝날 때는 결과(맞음·가드·패링·벽·물)에 맞는 ImpactEffects를 그 자리에 남긴다. 회피로 통과한 대상에는 남기지 않는다.
  *
+ * 쏜 몬스터가 죽으면 더는 맞히지 않고, 이펙트를 꺼 가며 DisarmedLifeTime 안에 사라진다.
+ *
  * DeafenTime이 있으면 맞은(가드·패링·회피가 아닌) 플레이어의 소리가 줄었다가 그 시간 동안 돌아온다.
  *
  * 외형은 선택 사항이다: Effect(나이아가라)가 있으면 스케일 1인 루트에 붙여 재생하고(로컬 +X가 날아가는 방향), 없으면 판정
@@ -109,6 +111,10 @@ private:
 	float Radius = 100.f;
 	float RemainingDistance = 0.f;
 	float DeafenTime = 0.f;
+
+	/** 쏜 몬스터가 죽어 판정을 끈 뒤. 이펙트가 꺼지는 동안만 남는다. */
+	bool bDisarmed = false;
+	static constexpr float DisarmedLifeTime = 1.5f;
 
 	UPROPERTY()
 	FknightSonicImpactEffects ImpactEffects;

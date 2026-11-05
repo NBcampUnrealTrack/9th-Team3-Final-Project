@@ -7,6 +7,7 @@
 #include "GameFramework/Character.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Monster/knightMonsterCharacterBase.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "TimerManager.h"
@@ -149,7 +150,15 @@ void UknightGameplayAbility_MonsterGroundEruption::StopWarning()
 {
 	if (UDecalComponent* const Decal = WarningDecalComponent.Get())
 	{
-		Decal->DestroyComponent();
+		// 처치로 끊기면(처치 연출) 경고 원을 바로 지우지 않고 옅어지게 한다. 판정은 어빌리티와 함께 이미 꺼졌다.
+		if (AknightMonsterCharacterBase::IsDefeatedMonster(GetAvatarActorFromActorInfo()))
+		{
+			Decal->SetFadeOut(0.f, 0.6f, false);
+		}
+		else
+		{
+			Decal->DestroyComponent();
+		}
 	}
 	WarningDecalComponent.Reset();
 	for (const TWeakObjectPtr<UNiagaraComponent>& Effect : WarningEffectComponents)

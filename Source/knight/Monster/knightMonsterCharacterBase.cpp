@@ -4,6 +4,8 @@
 #include "BrainComponent.h"
 #include "AbilitySystem/Abilities/knightGameplayAbility_MonsterAttack.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
+#include "AbilitySystem/Effects/knightGameplayEffect_Burn.h"
+#include "AbilitySystemGlobals.h"
 #include "AbilitySystem/Attributes/knightMonsterAttributeSet.h"
 #include "AbilitySystem/knightAbilitySystemComponent.h"
 #include "Abilities/GameplayAbilityTypes.h"
@@ -12,6 +14,7 @@
 #include "Components/AudioComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "EngineUtils.h"
 #include "GameplayEffect.h"
 #include "Kismet/GameplayStatics.h"
 #include "Monster/knightGameplayEffect_ParriedPoiseDamage.h"
@@ -385,6 +388,12 @@ void AknightMonsterCharacterBase::HandleOutOfHealth(AActor* DamageInstigator, AA
 
 	const FGameplayTagContainer KeepAbilities(knightGameplayTags::Ability_Death);
 	AbilitySystemComponent->CancelAbilities(nullptr, &KeepAbilities);
+	RemoveLingeringEffectsOnOthers();
+	// 날던 몬스터는 나는 자세에서 바닥 사망 자세로 섞이며 순식간에 내려온다. 중력으로 떨어지듯 받친다(바닥이면 그대로).
+	if (Hover)
+	{
+		Hover->FallToGround(-GetCharacterMovement()->GetGravityZ());
+	}
 
 	if (AAIController* const AIController = Cast<AAIController>(GetController()))
 	{
@@ -400,8 +409,19 @@ void AknightMonsterCharacterBase::HandleOutOfHealth(AActor* DamageInstigator, AA
 		}
 	}
 	TargetingComponent->StopTargeting();
-	GetCharacterMovement()->StopMovementImmediately();
-	GetCharacterMovement()->DisableMovement();
+	// 공중에서 죽으면(도약 중 등) 그 자리에서 이동을 끄면 시체가 떠 있다. 떨어뜨리고 땅에 닿으면(Landed) 끈다.
+	UCharacterMovementComponent* const Movement = GetCharacterMovement();
+	if (Movement->IsMovingOnGround() || Movement->MovementMode == MOVE_None)
+	{
+		Movement->StopMovementImmediately();
+		Movement->DisableMovement();
+	}
+	else
+	{
+		bFallingToDeath = true;
+		Movement->Velocity = FVector(0.f, 0.f, FMath::Min(Movement->Velocity.Z, 0.f));
+		Movement->SetMovementMode(MOVE_Falling);
+	}
 
 	// 플레이어가 갈무리 지점에 닿도록 시체를 밟거나 통과할 수 있게 한다. 부위 바디는 연출용으로 남긴다.
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
@@ -416,6 +436,38 @@ void AknightMonsterCharacterBase::HandleOutOfHealth(AActor* DamageInstigator, AA
 
 	UE_LOG(LogknightAI, Log, TEXT("%s defeated by %s."), *GetNameSafe(this), *GetNameSafe(DamageInstigator));
 	OnMonsterDefeated.Broadcast(this, DamageInstigator);
+}
+
+void AknightMonsterCharacterBase::Landed(const FHitResult& Hit)
+{
+	Super::Landed(Hit);
+	if (bFallingToDeath)
+	{
+		bFallingToDeath = false;
+		GetCharacterMovement()->StopMovementImmediately();
+		GetCharacterMovement()->DisableMovement();
+	}
+}
+
+void AknightMonsterCharacterBase::RemoveLingeringEffectsOnOthers()
+{
+	// 이 몬스터가 건 화상(지속 피해)은 처치 뒤에도 남아 틱마다 피해를 준다. 처치 연출 중에 플레이어가 다치지 않게 지운다.
+	FGameplayEffectQuery Query;
+	const UAbilitySystemComponent* const Source = AbilitySystemComponent;
+	Query.CustomMatchDelegate.BindLambda([Source](const FActiveGameplayEffect& Effect)
+	{
+		return Effect.Spec.Def && Effect.Spec.Def->IsA<UknightGameplayEffect_Burn>()
+			&& Effect.Spec.GetEffectContext().GetInstigatorAbilitySystemComponent() == Source;
+	});
+	for (TActorIterator<APawn> It(GetWorld()); It; ++It)
+	{
+		UAbilitySystemComponent* const ASC = *It != this ? UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(*It) : nullptr;
+		if (ASC && ASC->GetActiveEffects(Query).Num() > 0)
+		{
+			ASC->RemoveActiveEffects(Query);
+			UE_LOG(LogknightAI, Log, TEXT("%s: removed its burn from %s."), *GetName(), *It->GetName());
+		}
+	}
 }
 
 void AknightMonsterCharacterBase::HandleRageMaxed(AActor* EffectInstigator, AActor* EffectCauser, const FGameplayEffectSpec* EffectSpec,
