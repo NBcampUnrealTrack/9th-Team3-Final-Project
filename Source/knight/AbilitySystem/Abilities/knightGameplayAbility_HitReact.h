@@ -58,6 +58,15 @@ struct FknightHitImpactFeel
 	UPROPERTY(EditDefaultsOnly, Category="Impact", meta=(ClampMin=0.02, Units="s"))
 	float KnockbackTime = 0.2f;
 
+	/**
+	 * (2026-11-04 튜터 자료 '넉백 Ease-Out') 넉백 감속 세기. 위치가 1 - (1 - t)^이 값 으로 움직인다.
+	 * 1 = 예전처럼 등속. 3 = Ease-Out Cubic(약경직), 4 = Quart(강경직), 5 = Quint(다운).
+	 * 클수록 처음에 빠르게 튕겨 나가고(최고 속도 = 평균 속도 × 이 값) 끝에서 급하게 멈춘다. 총 거리는 KnockbackDistance 그대로.
+	 * 넉백은 맞은 쪽 시간 배율을 따르므로 히트스톱 동안은 멈춰 있다가, 풀리는 첫 프레임에 최고 속도로 출발한다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Impact", meta=(ClampMin=1, ClampMax=8))
+	float KnockbackEasePower = 3.f;
+
 	UPROPERTY(EditDefaultsOnly, Category="Impact")
 	TSubclassOf<UCameraShakeBase> CameraShake;
 
@@ -115,6 +124,23 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category="Hit React")
 	FknightDirectionalMontages KnockdownMontages;
+
+	/**
+	 * (2026-11-04) 한손 스탠스(검을 뽑은 기본 상태)의 피격 동작. 위 세 개는 양손 스탠스용이다.
+	 * 한손으로 맞았는데 양손 피격 동작(대검을 두 손으로 쥔 자세)이 나오던 것. Front가 비어 있으면 양손 쪽을 그대로 쓴다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Hit React|One Handed")
+	FknightDirectionalMontages OneHandedFlinchMontages;
+
+	UPROPERTY(EditDefaultsOnly, Category="Hit React|One Handed")
+	FknightDirectionalMontages OneHandedStaggerMontages;
+
+	UPROPERTY(EditDefaultsOnly, Category="Hit React|One Handed")
+	FknightDirectionalMontages OneHandedKnockdownMontages;
+
+	/** 한손 가드 브레이크. 비어 있으면 한손 강경직(OneHandedStaggerMontages). */
+	UPROPERTY(EditDefaultsOnly, Category="Hit React|One Handed")
+	FknightDirectionalMontages OneHandedGuardBreakMontages;
 
 	/** Health lost below this does not flinch. */
 	UPROPERTY(EditDefaultsOnly, Category="Hit React", meta=(ClampMin=0))
@@ -201,6 +227,12 @@ private:
 	void StartGuardBreak(AActor& Avatar);
 
 	void ApplyImpactFeel(AActor& Avatar, const AActor* EventInstigator);
+
+	/** (2026-11-04) 넉백 세기 커브 n(1 - t)^(n - 1). 평균이 1이라 거리는 그대로이고, 처음 n배에서 0으로 줄어든다. 세기마다 한 번 만든다. */
+	class UCurveFloat* GetKnockbackStrengthCurve(float Power);
+
+	UPROPERTY(Transient)
+	TMap<int32, TObjectPtr<class UCurveFloat>> KnockbackCurves;
 	const FknightHitImpactFeel& GetImpactFeel(EknightHitReactType Type) const;
 
 	UFUNCTION()

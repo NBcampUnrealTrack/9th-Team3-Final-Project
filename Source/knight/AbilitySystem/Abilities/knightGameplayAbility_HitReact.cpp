@@ -8,6 +8,7 @@
 #include "Character/knightMovementComponent.h"
 #include "GameFramework/Character.h"
 #include "Camera/CameraShakeBase.h"
+#include "Curves/CurveFloat.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
@@ -19,6 +20,7 @@
 #include "GameplayEffect.h"
 #include "System/knightGameplayTags.h"
 #include "Monster/knightMonsterGuardPushComponent.h"
+#include "Combat/knightCombatTypes.h"
 #include "knight.h"
 
 UAnimMontage* FknightDirectionalMontages::Pick(const FVector& AvatarForward, const FVector& AvatarRight, const FVector& ToInstigator) const
@@ -58,7 +60,7 @@ UknightGameplayAbility_HitReact::UknightGameplayAbility_HitReact(const FObjectIn
 
 	// (2026-11-02) Event.GuardBroken: 몬스터의 가드 브레이크 공격을 막았다(UknightMonsterGuardPushComponent).
 	for (const FGameplayTag& EventTag : { knightGameplayTags::Event_Damaged.GetTag(), knightGameplayTags::Event_PoiseBroken.GetTag(), knightGameplayTags::Event_Parried.GetTag(),
-		knightMonsterGuardPush::Event_GuardBroken.GetTag() })
+		knightMonsterGuardPush::Event_GuardBroken.GetTag(), knightCombat::Event_KnockedDown.GetTag() })
 	{
 		FAbilityTriggerData Trigger;
 		Trigger.TriggerTag = EventTag;
@@ -73,11 +75,19 @@ bool UknightGameplayAbility_HitReact::ShouldAbilityRespondToEvent(const FGamepla
 	{
 		return false;
 	}
-	// 그로기(기절) 중에는 맞아도 피해만 받고 다른 반응 없이 기절이 이어진다.
+	// 그로기(기절) 중에는 맞아도 피해만 받고 다른 반응 없이 기절이 이어진다(2026-10-16 사용자 결정).
+	// (2026-11-04) 단, 넘어뜨리는 공격(Event.KnockedDown)은 기절 중에도 다운시킨다(같은 타격으로 그로기가 0이 된 경우 포함).
 	if (const UAbilitySystemComponent* const OwnerASC = ActorInfo->AbilitySystemComponent.Get();
-		OwnerASC && OwnerASC->HasMatchingGameplayTag(knightGameplayTags::State_HitReact_Groggy))
+		OwnerASC && OwnerASC->HasMatchingGameplayTag(knightGameplayTags::State_HitReact_Groggy)
+		&& Payload->EventTag != knightCombat::Event_KnockedDown)
 	{
 		return false;
+	}
+	// (2026-11-04) 이미 다운 중이면 넘어뜨리는 공격을 또 맞아도 다운을 처음부터 다시 하지 않는다(눕힌 채 계속 눕히는 무한 다운 방지).
+	if (Payload->EventTag == knightCombat::Event_KnockedDown)
+	{
+		const UAbilitySystemComponent* const OwnerASC = ActorInfo->AbilitySystemComponent.Get();
+		return !(OwnerASC && OwnerASC->HasMatchingGameplayTag(knightGameplayTags::State_HitReact_Knockdown));
 	}
 	if (Payload->EventTag != knightGameplayTags::Event_Damaged)
 	{
@@ -113,11 +123,40 @@ EknightHitReactType UknightGameplayAbility_HitReact::ResolveType(const FGameplay
 	{
 		return EknightHitReactType::GuardBreak;
 	}
+	// (2026-11-04) 넘어뜨리는 공격(FknightMeleeHitParams::bKnockdown).
+	if (Payload.EventTag == knightCombat::Event_KnockedDown)
+	{
+		return EknightHitReactType::Knockdown;
+	}
 	return EknightHitReactType::Flinch;
 }
 
 const FknightDirectionalMontages& UknightGameplayAbility_HitReact::GetMontages(EknightHitReactType Type) const
 {
+	// (2026-11-04) 한손 스탠스면 한손 피격 동작. 한손 쪽 Front가 비어 있으면 아래 양손 쪽으로 넘어간다.
+	if (!UknightGameplayAbility_StanceSwitch::IsTwoHanded(GetAbilitySystemComponentFromActorInfo()))
+	{
+		const FknightDirectionalMontages* OneHanded = nullptr;
+		switch (Type)
+		{
+		case EknightHitReactType::Stagger:
+			OneHanded = &OneHandedStaggerMontages;
+			break;
+		case EknightHitReactType::Knockdown:
+			OneHanded = &OneHandedKnockdownMontages;
+			break;
+		case EknightHitReactType::GuardBreak:
+			OneHanded = OneHandedGuardBreakMontages.Front ? &OneHandedGuardBreakMontages : &OneHandedStaggerMontages;
+			break;
+		default:
+			OneHanded = &OneHandedFlinchMontages;
+			break;
+		}
+		if (OneHanded && OneHanded->Front)
+		{
+			return *OneHanded;
+		}
+	}
 	switch (Type)
 	{
 	case EknightHitReactType::Stagger:
@@ -225,6 +264,32 @@ void UknightGameplayAbility_HitReact::StartGuardBreak(AActor& Avatar)
 	UE_LOG(LogknightCombat, Log, TEXT("%s: guard broken."), *Avatar.GetName());
 }
 
+UCurveFloat* UknightGameplayAbility_HitReact::GetKnockbackStrengthCurve(const float Power)
+{
+	const float N = FMath::Clamp(Power, 1.f, 8.f);
+	if (N <= 1.01f)
+	{
+		return nullptr;
+	}
+	const int32 Key = FMath::RoundToInt(N * 100.f);
+	if (const TObjectPtr<UCurveFloat>* const Found = KnockbackCurves.Find(Key))
+	{
+		return Found->Get();
+	}
+	// 위치 1 - (1 - t)^N 의 기울기 = 속도 N(1 - t)^(N - 1). 0..1 평균이 1이라 거리 = 세기(평균 속도) × 시간 그대로.
+	// 직선 보간이라 촘촘히 찍는다. 끝(t = 1)은 0이고, 마지막은 FinishVelocity(0)로 딱 멈춘다.
+	UCurveFloat* const Curve = NewObject<UCurveFloat>(this, NAME_None, RF_Transient);
+	constexpr int32 Samples = 24;
+	for (int32 Index = 0; Index <= Samples; ++Index)
+	{
+		const float T = static_cast<float>(Index) / Samples;
+		const FKeyHandle Handle = Curve->FloatCurve.AddKey(T, N * FMath::Pow(1.f - T, N - 1.f));
+		Curve->FloatCurve.SetKeyInterpMode(Handle, RCIM_Linear);
+	}
+	KnockbackCurves.Add(Key, Curve);
+	return Curve;
+}
+
 void UknightGameplayAbility_HitReact::ApplyImpactFeel(AActor& Avatar, const AActor* EventInstigator)
 {
 	const FknightHitImpactFeel& Feel = GetImpactFeel(ActiveType);
@@ -236,10 +301,14 @@ void UknightGameplayAbility_HitReact::ApplyImpactFeel(AActor& Avatar, const AAct
 		if (!Away.IsNearlyZero())
 		{
 			const float Time = FMath::Max(Feel.KnockbackTime, 0.02f);
+			// (2026-11-04) 등속 대신 Ease-Out: 처음에 최고 속도로 튕겨 나가 끝에서 급제동한다. 1이면 예전처럼 등속(커브 없음).
+			UCurveFloat* const Curve = GetKnockbackStrengthCurve(Feel.KnockbackEasePower);
 			UAbilityTask_ApplyRootMotionConstantForce* const Task = UAbilityTask_ApplyRootMotionConstantForce::ApplyRootMotionConstantForce(
-				this, TEXT("HitKnockback"), Away, Feel.KnockbackDistance / Time, Time, true, nullptr,
+				this, TEXT("HitKnockback"), Away, Feel.KnockbackDistance / Time, Time, true, Curve,
 				ERootMotionFinishVelocityMode::SetVelocity, FVector::ZeroVector, 0.f, true);
 			Task->ReadyForActivation();
+			UE_LOG(LogknightAbility, Verbose, TEXT("%s: knockback %.0fcm in %.2fs, ease power %.1f (start speed %.0f cm/s)"), *GetName(),
+				Feel.KnockbackDistance, Time, Feel.KnockbackEasePower, Feel.KnockbackDistance / Time * (Curve ? FMath::Max(Feel.KnockbackEasePower, 1.f) : 1.f));
 		}
 	}
 
