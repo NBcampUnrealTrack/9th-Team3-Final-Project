@@ -147,9 +147,11 @@ void UknightMeleeTraceComponent::StartSwingTrail(FActiveTrace& Trace) const
 	FX->SetWorldLocationAndRotation(Center, TrailRot);
 	FX->SetVariableFloat(TEXT("User.Width"), Length * SwingTrailWidthScale * WidthMultiplier);
 	FX->SetVariableBool(TEXT("User.LightOn"), bLightOn);
-	if (SwingTrailLife > 0.f)
+	// 판정 구간(노티파이)에 꼬리 시간이 있으면 그것이 먼저다.
+	const float TrailLife = Trace.Params.SwingTrailLife > 0.f ? Trace.Params.SwingTrailLife : SwingTrailLife;
+	if (TrailLife > 0.f)
 	{
-		FX->SetVariableFloat(TEXT("User.Life"), SwingTrailLife);
+		FX->SetVariableFloat(TEXT("User.Life"), TrailLife);
 	}
 	if (bOverrideSwingTrailColor || bUseStanceTrailVariation)
 	{

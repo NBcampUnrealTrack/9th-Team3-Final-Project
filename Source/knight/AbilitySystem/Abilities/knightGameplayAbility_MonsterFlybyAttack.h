@@ -265,6 +265,9 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> PillarMaterialInstance;
 
+	/** 처치로 끊긴 기둥이 옅어지며 사라지는 시간(게임 시간). */
+	static constexpr float DefeatedFadeTime = 0.4f;
+
 	UPROPERTY(Transient)
 	TObjectPtr<UNiagaraComponent> StreakComponent;
 

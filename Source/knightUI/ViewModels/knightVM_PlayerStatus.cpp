@@ -112,7 +112,7 @@ void UknightVM_PlayerStatus::RefreshAll()
 	bool bFound = false;
 	UE_MVVM_SET_PROPERTY_VALUE(Health, ASC ? ASC->GetGameplayAttributeValue(UknightCoreAttributeSet::GetHealthAttribute(), bFound) : 0.f);
 	UE_MVVM_SET_PROPERTY_VALUE(MaxHealth, ASC ? ASC->GetGameplayAttributeValue(UknightCoreAttributeSet::GetMaxHealthAttribute(), bFound) : 0.f);
-	// (2026-10-26) 스테미너 가불로 음수가 될 수 있다. 화면에는 0으로 보인다.
+	// 스테미너 가불로 음수가 될 수 있다. 화면에는 0으로 보인다.
 	UE_MVVM_SET_PROPERTY_VALUE(BoostGauge, ASC ? FMath::Max(0.f, ASC->GetGameplayAttributeValue(UknightAttributeSet::GetBoostGaugeAttribute(), bFound)) : 0.f);
 	UE_MVVM_SET_PROPERTY_VALUE(MaxBoostGauge, ASC ? ASC->GetGameplayAttributeValue(UknightAttributeSet::GetMaxBoostGaugeAttribute(), bFound) : 0.f);
 	UE_MVVM_SET_PROPERTY_VALUE(bOverheated, ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_Overheated));

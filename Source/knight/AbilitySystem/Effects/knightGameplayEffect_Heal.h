@@ -5,7 +5,7 @@
 #include "knightGameplayEffect_Heal.generated.h"
 
 /**
- * 체력 회복 (2026-10-09, 수리 키트). 즉시 적용, Healing(메타 속성) += SetByCaller.Healing.
+ * 체력 회복(수리 키트). 즉시 적용, Healing(메타 속성) += SetByCaller.Healing.
  * Core 속성 세트가 Healing을 Health 증가로 바꾼다(최대 체력까지, 사망 상태면 무시).
  * 부위 체력은 이 이펙트가 아니라 UknightPartHealthComponent::ApplyRepair가 따로 채운다.
  */

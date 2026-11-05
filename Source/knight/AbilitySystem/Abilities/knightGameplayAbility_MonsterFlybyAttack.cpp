@@ -29,6 +29,7 @@
 #include "Monster/knightMonsterMovementComponent.h"
 #include "Monster/knightMonsterTargetingComponent.h"
 #include "System/knightGameplayTags.h"
+#include "TimerManager.h"
 #include "knight.h"
 
 namespace knightMonsterFlyby
@@ -81,6 +82,43 @@ namespace knightMonsterFlyby
 		}
 		Component = nullptr;
 	}
+
+	/** 기둥 메시를 Time 동안 Fade 값으로 지우고 없앤다. 어빌리티가 끝난 뒤에도 돌도록 월드 타이머를 쓴다. */
+	void FadeOutPillar(UStaticMeshComponent* Pillar, UMaterialInstanceDynamic* Material, float Time)
+	{
+		UWorld* const World = Pillar ? Pillar->GetWorld() : nullptr;
+		if (!World || !Material || Time <= 0.f)
+		{
+			if (Pillar)
+			{
+				Pillar->DestroyComponent();
+			}
+			return;
+		}
+		constexpr float Interval = 1.f / 60.f;
+		const float StartFade = Material->K2_GetScalarParameterValue(TEXT("Fade"));
+		const TSharedRef<FTimerHandle> Handle = MakeShared<FTimerHandle>();
+		const TSharedRef<float> Elapsed = MakeShared<float>(0.f);
+		const TWeakObjectPtr<UStaticMeshComponent> WeakPillar(Pillar);
+		const TWeakObjectPtr<UMaterialInstanceDynamic> WeakMaterial(Material);
+		World->GetTimerManager().SetTimer(*Handle, FTimerDelegate::CreateWeakLambda(World, [World, Handle, Elapsed, WeakPillar, WeakMaterial, StartFade, Time]()
+		{
+			*Elapsed += Interval;
+			const float Alpha = FMath::Clamp(*Elapsed / Time, 0.f, 1.f);
+			if (UMaterialInstanceDynamic* const Mat = WeakMaterial.Get())
+			{
+				Mat->SetScalarParameterValue(TEXT("Fade"), StartFade * (1.f - Alpha));
+			}
+			if (Alpha >= 1.f || !WeakPillar.IsValid())
+			{
+				if (UStaticMeshComponent* const Done = WeakPillar.Get())
+				{
+					Done->DestroyComponent();
+				}
+				World->GetTimerManager().ClearTimer(*Handle);
+			}
+		}), Interval, true);
+	}
 }
 
 UknightGameplayAbility_MonsterFlybyAttack::UknightGameplayAbility_MonsterFlybyAttack(const FObjectInitializer& ObjectInitializer)
@@ -120,6 +158,7 @@ void UknightGameplayAbility_MonsterFlybyAttack::ActivateAbility(const FGameplayA
 		}
 	}
 	WarningRippleTime = Effects.WarningRippleInterval;
+	StartAttackWarning(WarningTime);
 	if (WarningMontage)
 	{
 		UAbilityTask_PlayMontageAndWait* const MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, WarningMontage);
@@ -312,7 +351,8 @@ void UknightGameplayAbility_MonsterFlybyAttack::UpdateWarningEffects()
 
 void UknightGameplayAbility_MonsterFlybyAttack::StopWarningEffects()
 {
-	knightMonsterFlyby::Release(WarningComponent, true);
+	// 처치로 끊기면(처치 연출) 경고 입자도 바로 지우지 않고 남은 입자가 사라지게 둔다.
+	knightMonsterFlyby::Release(WarningComponent, !AknightMonsterCharacterBase::IsDefeatedMonster(GetAvatarActorFromActorInfo()));
 	knightMonsterFlyby::Release(InflowComponent, false);
 	if (WarningAudio)
 	{
@@ -511,7 +551,15 @@ void UknightGameplayAbility_MonsterFlybyAttack::StopEffects()
 	BeamAudio = nullptr;
 	if (PillarComponent)
 	{
-		PillarComponent->DestroyComponent();
+		if (AknightMonsterCharacterBase::IsDefeatedMonster(GetAvatarActorFromActorInfo()))
+		{
+			// 처치로 끊긴 기둥은 갑자기 없어지지 않고 잠깐 옅어지며 사라진다.
+			knightMonsterFlyby::FadeOutPillar(PillarComponent, PillarMaterialInstance, DefeatedFadeTime);
+		}
+		else
+		{
+			PillarComponent->DestroyComponent();
+		}
 	}
 	PillarComponent = nullptr;
 	PillarMaterialInstance = nullptr;

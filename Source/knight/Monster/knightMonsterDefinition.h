@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
 #include "GameplayTagContainer.h"
+#include "Monster/knightMonsterReadout.h"
 #include "knightMonsterDefinition.generated.h"
 
 class UAnimMontage;
@@ -208,6 +209,12 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="States", meta=(ClampMin=0, ClampMax=1))
 	float Phase2HealthRatio = 0.f;
 
+	/**
+	 * HUD 센서 판독 문구를 이 몬스터에 맞게 바꾼다(잔열 분노 = HEAT CRITICAL 등). 없는 종류나 비운 줄은 HUD 기본 문구를 쓴다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI")
+	TMap<EknightMonsterReadout, FknightMonsterReadoutText> ReadoutTexts;
+
 	/** Rough radius for lock-on camera framing. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Targeting", meta=(ClampMin=0, Units="cm"))
 	float TargetRadius = 600.f;
@@ -223,13 +230,23 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI")
 	bool bAvoidRepeatingLastAttack = false;
 
-	/** 몬스터 공격이 끝난 뒤 다음 행동을 고르기 전까지 서 있는 시간. Knight Activate Ability 태스크가 본다. 0이면 바로 다음 행동으로 넘어간다. */
+	/**
+	 * 몬스터 공격이 끝난 뒤 다음 공격을 고르기 전까지의 틈(StateTree Recover 상태의 Knight Rest가 본다). 이 동안 타깃 쪽으로 천천히 몸을 돌린다.
+	 * 0이면 바로 다음 행동으로 넘어간다.
+	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="s"))
 	float AttackRestTime = 0.f;
 
 	/** 2페이즈(State.Monster.Phase2) 동안 AttackRestTime 대신 쓴다. 2페이즈 공격은 몽타주가 빨라 공격 사이 틈이 없어지기 쉽다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="s"))
 	float Phase2AttackRestTime = 0.f;
+
+	/**
+	 * 공격이 끝난 뒤(Recover 상태) 쉬는 대신 물러날 확률. 물러나기 행동(Ability.Move.Retreat 태그 어빌리티)을 지금 쓸 수 있을 때만 본다.
+	 * 물러나기의 조건(예: 공격하는 동안 맞지 않음 MinTimeSinceHit)은 그 어빌리티의 Selection이 정한다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, ClampMax=1))
+	float RecoverRetreatChance = 0.4f;
 
 	/** 공용 StateTree(ST_Monster_Default)의 추격이 멈추는 거리. 몸 크기에 맞춘다. Knight Monster Target 평가기가 내보낸다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="cm"))
@@ -238,6 +255,29 @@ public:
 	/** 0보다 크면 공중 턴(State.Monster.Airborne) 동안 ChaseStopDistance 대신 쓴다. 공중 공격(다이브)이 쓸 거리를 남긴다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="cm"))
 	float AirChaseStopDistance = 0.f;
+
+	/**
+	 * 공용 StateTree의 간 보기(Spacing) 상태가 들어가는 최대 거리 = 추격 멈춤 거리 + 이 값.
+	 * 이보다 멀면 쓸 공격이 없어도 둘레를 돌지 않고 추격한다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="cm"))
+	float SpacingDistanceSlack = 400.f;
+
+	/**
+	 * 공용 StateTree의 플레이어 상태 반응(Punish). 조건이 맞고 해당 태그(Ability.Punish.*)의 공격을 지금 쓸 수 있으면
+	 * 쉬기·간 보기·추격을 끊고 그 공격을 쓴다. 공격 쿨다운은 그대로 지킨다.
+	 * 긴 가드: 타깃이 가드를 이 시간(초) 이상 계속 올리고 있다. 0이면 반응하지 않는다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI|Punish", meta=(ClampMin=0, Units="s"))
+	float PunishGuardTime = 2.f;
+
+	/** 도망 추격: 타깃이 이 시간(초) 이상 계속 멀어지고 있다. 0이면 반응하지 않는다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI|Punish", meta=(ClampMin=0, Units="s"))
+	float PunishFleeTime = 1.5f;
+
+	/** 도망 추격: 타깃이 이 거리 이상 떨어져 있다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI|Punish", meta=(ClampMin=0, Units="cm"))
+	float PunishFleeDistance = 1500.f;
 
 	/** 공용 StateTree가 원거리 공격(Ability.Attack.Ranged)으로 넘어가는 거리 구간. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI", meta=(ClampMin=0, Units="cm"))

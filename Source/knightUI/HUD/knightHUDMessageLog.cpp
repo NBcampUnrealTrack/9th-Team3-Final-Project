@@ -8,6 +8,7 @@
 #include "Engine/LocalPlayer.h"
 #include "Foundation/knightUISubsystem.h"
 #include "knightAudioSubsystem.h"
+#include "Monster/knightMonsterDefinition.h"
 #include "Settings/knightSettingsSubsystem.h"
 #include "Sound/SoundBase.h"
 #include "ViewModels/knightVM_PlayerStatus.h"
@@ -77,6 +78,28 @@ void UknightHUDMessageLog::HandlePartBroken(EknightBodyPart Part)
 	{
 		AddLine(Messages->PartBrokenLines[Index], true);
 	}
+}
+
+void UknightHUDMessageLog::AddMonsterReadoutLine(EknightMonsterReadout Type, const UknightMonsterDefinition* Definition)
+{
+	const FknightMonsterReadoutLine* const Entry = Messages ? Messages->MonsterReadoutLines.Find(Type) : nullptr;
+	if (!Entry)
+	{
+		return;
+	}
+	const double Now = FPlatformTime::Seconds();
+	if (const double* const Last = ReadoutLineTimes.Find(Type); Last && Now - *Last < Entry->Cooldown)
+	{
+		return;
+	}
+	const FknightMonsterReadoutText* const Override = Definition ? Definition->ReadoutTexts.Find(Type) : nullptr;
+	const FText& Line = Override && !Override->AssistantLine.IsEmpty() ? Override->AssistantLine : Entry->Line;
+	if (Line.IsEmpty())
+	{
+		return;
+	}
+	ReadoutLineTimes.Add(Type, Now);
+	AddLine(Line, false);
 }
 
 void UknightHUDMessageLog::AddLine(const FText& Text, bool bSystem)

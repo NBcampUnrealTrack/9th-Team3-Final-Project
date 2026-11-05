@@ -7,6 +7,10 @@
 #include "Foundation/knightUISubsystem.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
+#include "HUD/knightHUDFinishBanner.h"
+#include "Monster/knightMonsterDefinition.h"
+#include "Raid/knightRaidDefinition.h"
+#include "Raid/knightRaidGameState.h"
 #include "Engine/GameInstance.h"
 #include "Raid/knightRaidSubsystem.h"
 #include "Screens/knightPauseMenu.h"
@@ -47,7 +51,12 @@ void AknightHUD::BeginPlay()
 			INotifyFieldValueChanged::FFieldValueChangedDelegate::CreateUObject(this, &ThisClass::HandleRaidViewModelChanged));
 	}
 
-	// (2026-10-19) 처음 죽거나 Esc를 누를 때 그 자리에서 읽느라 멈추지 않게, 로딩 화면이 떠 있는 지금 미리 읽어 둔다.
+	if (AknightRaidGameState* const RaidState = GetWorld() ? GetWorld()->GetGameState<AknightRaidGameState>() : nullptr)
+	{
+		FinishStageHandle = RaidState->OnFinishStageChanged.AddUObject(this, &ThisClass::HandleFinishStageChanged);
+	}
+
+	// 처음 죽거나 Esc를 누를 때 그 자리에서 읽느라 멈추지 않게, 로딩 화면이 떠 있는 지금 미리 읽어 둔다.
 	const UknightUISettings* const Settings = GetDefault<UknightUISettings>();
 	for (UClass* const ScreenClass : { static_cast<UClass*>(Settings->RaidResultScreenClass.LoadSynchronous()),
 		static_cast<UClass*>(Settings->PauseMenuClass.LoadSynchronous()) })
@@ -64,6 +73,12 @@ void AknightHUD::HandleRaidViewModelChanged(UObject* InViewModel, UE::FieldNotif
 	const UknightVM_Raid* const VM = RaidViewModel.Get();
 	const EknightRaidPhase Phase = VM ? VM->GetPhase() : EknightRaidPhase::None;
 	if (Phase != EknightRaidPhase::Success && Phase != EknightRaidPhase::Failed)
+	{
+		return;
+	}
+	// 처치 연출 중이면 결과 화면은 연출이 끝날 때(Done) 연다.
+	const AknightRaidGameState* const RaidState = GetWorld() ? GetWorld()->GetGameState<AknightRaidGameState>() : nullptr;
+	if (RaidState && RaidState->IsFinishPresentationPlaying())
 	{
 		return;
 	}
@@ -97,7 +112,7 @@ void AknightHUD::OpenRaidResult()
 	}
 	if (UClass* const ScreenClass = GetDefault<UknightUISettings>()->RaidResultScreenClass.LoadSynchronous())
 	{
-		// (2026-10-19) 첫 사망 때 멈춤을 확인하려고 여는 데 걸린 시간을 남긴다.
+		// 첫 사망 때 멈춤을 확인하려고 여는 데 걸린 시간을 남긴다.
 		const double StartSeconds = FPlatformTime::Seconds();
 		RaidResult = UI->PushWidgetToLayer(knightUIGameplayTags::UI_Layer_Menu, ScreenClass);
 		UE_LOG(LogknightUI, Log, TEXT("Raid result screen opened in %.0f ms."), (FPlatformTime::Seconds() - StartSeconds) * 1000.0);
@@ -105,6 +120,72 @@ void AknightHUD::OpenRaidResult()
 	else
 	{
 		UE_LOG(LogknightUI, Error, TEXT("Knight UI settings have no RaidResultScreenClass."));
+	}
+}
+
+void AknightHUD::HandleFinishStageChanged(EknightRaidFinishStage Stage)
+{
+	UCommonActivatableWidget* const Layout = HUDLayout.Get();
+	switch (Stage)
+	{
+	case EknightRaidFinishStage::Slow:
+		// 슬로모션 컷과 쓰러지는 장면은 화면만 보이게 한다.
+		if (Layout && !HUDLayoutVisibilityBeforeFinish.IsSet())
+		{
+			HUDLayoutVisibilityBeforeFinish = Layout->GetVisibility();
+			Layout->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		break;
+	case EknightRaidFinishStage::Banner:
+		ShowFinishBanner();
+		break;
+	case EknightRaidFinishStage::Done:
+		RemoveFinishBanner();
+		if (Layout && HUDLayoutVisibilityBeforeFinish.IsSet())
+		{
+			Layout->SetVisibility(HUDLayoutVisibilityBeforeFinish.GetValue());
+		}
+		HUDLayoutVisibilityBeforeFinish.Reset();
+		OpenRaidResult();
+		break;
+	default:
+		break;
+	}
+}
+
+void AknightHUD::ShowFinishBanner()
+{
+	APlayerController* const PC = GetOwningPlayerController();
+	const AknightRaidGameState* const RaidState = GetWorld() ? GetWorld()->GetGameState<AknightRaidGameState>() : nullptr;
+	if (!PC || FinishBanner)
+	{
+		return;
+	}
+	const UknightRaidDefinition* const Raid = RaidState ? RaidState->GetRaidDefinition() : nullptr;
+	const UknightMonsterDefinition* const Target = Raid ? Raid->TargetMonster.Get() : nullptr;
+	int32 BrokenParts = 0;
+	const UGameInstance* const GameInstance = GetGameInstance();
+	FknightRaidResult Result;
+	if (const UknightRaidSubsystem* const RaidSubsystem = GameInstance ? GameInstance->GetSubsystem<UknightRaidSubsystem>() : nullptr;
+		RaidSubsystem && RaidSubsystem->GetLastResult(Result))
+	{
+		BrokenParts = Result.BrokenParts.Num();
+	}
+	FinishBanner = CreateWidget<UknightHUDFinishBanner>(PC, UknightHUDFinishBanner::StaticClass());
+	if (FinishBanner)
+	{
+		FinishBanner->Setup(Target ? Target->DisplayName : FText::GetEmpty(), RaidState ? RaidState->GetElapsedRaidTime() : 0.f, BrokenParts,
+			Raid ? Raid->FinishPresentation.BannerTime : 3.5f);
+		FinishBanner->AddToViewport(50);
+	}
+}
+
+void AknightHUD::RemoveFinishBanner()
+{
+	if (FinishBanner)
+	{
+		FinishBanner->RemoveFromParent();
+		FinishBanner = nullptr;
 	}
 }
 
@@ -169,6 +250,12 @@ void AknightHUD::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		VM->RemoveAllFieldValueChangedDelegates(this);
 	}
 	RaidViewModel.Reset();
+	if (AknightRaidGameState* const RaidState = GetWorld() ? GetWorld()->GetGameState<AknightRaidGameState>() : nullptr)
+	{
+		RaidState->OnFinishStageChanged.Remove(FinishStageHandle);
+	}
+	FinishStageHandle.Reset();
+	RemoveFinishBanner();
 	if (UCommonActivatableWidget* const Screen = RaidResult.Get())
 	{
 		Screen->DeactivateWidget();

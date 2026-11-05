@@ -9,7 +9,7 @@
 class UAbilitySystemComponent;
 struct FGameplayEffectSpec;
 
-/** (2026-10-14) 어느 액터든 그로기가 터졌다(Victim, 일으킨 Instigator, 그 피해의 효과 문맥). */
+/** 어느 액터든 그로기가 터졌다(Victim, 일으킨 Instigator, 그 피해의 효과 문맥). */
 DECLARE_MULTICAST_DELEGATE_ThreeParams(FknightAnyPoiseBroken, AActor* /*Victim*/, AActor* /*Instigator*/, const FGameplayEffectContextHandle& /*Context*/);
 
 /**
@@ -33,7 +33,7 @@ public:
 	UknightHitReactionComponent();
 
 	/**
-	 * (2026-10-14) 어느 액터든 그로기가 터져 Event.PoiseBroken을 보낸 직후 알린다(일반 공격·스킬·패링 그로기 모두 여기를 지난다).
+	 * 어느 액터든 그로기가 터져 Event.PoiseBroken을 보낸 직후 알린다(일반 공격·스킬·패링 그로기 모두 여기를 지난다).
 	 * 플레이어의 그로기 연출(UknightGroggyFeedbackComponent)이 듣고, 자기가 일으킨 그로기만 처리한다. 반응 자체는 바꾸지 않는다.
 	 */
 	static FknightAnyPoiseBroken OnAnyPoiseBroken;

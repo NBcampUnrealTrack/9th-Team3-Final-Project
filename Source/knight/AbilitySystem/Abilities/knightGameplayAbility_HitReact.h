@@ -15,7 +15,7 @@ enum class EknightHitReactType : uint8
 	Flinch,
 	Stagger,
 	Knockdown,
-	/** (2026-10-16) 플레이어 그로기(기절): 시작 → 반복(GroggyDuration) → 끝. */
+	/** 플레이어 그로기(기절): 시작 → 반복(GroggyDuration) → 끝. */
 	Groggy,
 	/** (2026-11-02) 가드 브레이크: 몬스터의 가드 브레이크 공격(Event.GuardBroken)을 막았을 때. 가드가 풀리고 비틀거린다. */
 	GuardBreak
@@ -90,7 +90,7 @@ struct FknightHitImpactFeel
  * Independent group with retrigger, so a stagger can interrupt a flinch. Attacks, guard and boost are
  * cancelled on activation and blocked while it runs.
  *
- * (2026-10-16 사용자 결정) 그로기(기절): GroggyLoopMontage가 있으면 Event.PoiseBroken은 휘청·다운 대신 기절이 된다.
+ * 그로기(기절): GroggyLoopMontage가 있으면 Event.PoiseBroken은 휘청·다운 대신 기절이 된다.
  *   흐름: GroggyStartMontage → GroggyLoopMontage 반복 GroggyDuration초(기본 2.5) → GroggyEndMontage(한손 스탠스면 GroggyEndMontageOneHanded).
  *   그 동안 이동 입력이 잠기고(무브먼트 SetMoveInputLocked) 공격·가드·퀵스텝이 막힌다(State.HitReact).
  *   맞아도 피해만 받고 다른 피격 반응 없이 기절이 이어진다(State.HitReact.Groggy 동안 반응 이벤트 무시). 끝나면 PoiseRecoveryEffect로 그로기를 채운다.
@@ -180,7 +180,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Hit React|Groggy")
 	TObjectPtr<UAnimMontage> GroggyEndMontageOneHanded;
 
-	/** 그로기 반복 시간(초, 시작·끝 동작 제외). 바뀔 수 있는 값. (2026-10-16 사용자 결정 2.5초) */
+	/** 그로기 반복 시간(초, 시작·끝 동작 제외). 바뀔 수 있는 값. */
 	UPROPERTY(EditDefaultsOnly, Category="Hit React|Groggy", meta=(ClampMin=0, Units="s"))
 	float GroggyDuration = 2.5f;
 

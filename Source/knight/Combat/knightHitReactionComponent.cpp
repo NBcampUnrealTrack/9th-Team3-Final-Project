@@ -120,7 +120,7 @@ void UknightHitReactionComponent::FlushPendingReaction()
 	Payload.ContextHandle = Context;
 	ASC->HandleGameplayEvent(Payload.EventTag, &Payload);
 
-	// (2026-10-14) 그로기 연출(큰 히트스탑·이펙트)을 맡는 쪽에 알린다. 반응은 위 이벤트가 그대로 정한다.
+	// 그로기 연출(큰 히트스탑·이펙트)을 맡는 쪽에 알린다. 반응은 위 이벤트가 그대로 정한다.
 	if (bPoiseBroken)
 	{
 		OnAnyPoiseBroken.Broadcast(GetOwner(), DamageInstigator, Context);

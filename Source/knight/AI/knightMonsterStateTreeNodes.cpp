@@ -20,6 +20,19 @@
 #include "knight.h"
 #include "knightPerfCounters.h"
 
+namespace knightMonsterStateTree
+{
+	/**
+	 * 이동 행동(Ability.Move 태그: 뒷걸음, 물러나기)은 공격 후보에서 뺀다. 공격을 고르는 상태(Ability.Attack)가 옆걸음·뒷걸음을
+	 * 확률로 섞지 않고, 공격 사이 상태가 이동 행동을 Ability.Move 태그로 따로 고르게 하기 위함이다.
+	 * 이동 행동도 Ability.Attack을 함께 가진다(반응 어빌리티가 공격과 똑같이 끊고 막도록).
+	 */
+	static bool IsExcludedMove(const UGameplayAbility& Ability, const FGameplayTagContainer& RequestedTags)
+	{
+		return Ability.GetAssetTags().HasTag(knightGameplayTags::Ability_Move) && !RequestedTags.HasTag(knightGameplayTags::Ability_Move);
+	}
+}
+
 // Knight Monster Target
 
 void FknightStateTreeMonsterTargetEvaluator::TreeStart(FStateTreeExecutionContext& Context) const
@@ -49,6 +62,7 @@ void FknightStateTreeMonsterTargetEvaluator::Update(FInstanceDataType& InstanceD
 		InstanceData.HeightDifference = ToTarget.Z;
 		const float TargetYaw = ToTarget.GetSafeNormal2D().Rotation().Yaw;
 		InstanceData.AngleToTarget = FRotator::NormalizeAxis(TargetYaw - Monster->GetActorRotation().Yaw);
+		InstanceData.AbsAngleToTarget = FMath::Abs(InstanceData.AngleToTarget);
 		const UAbilitySystemComponent* const TargetASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Target);
 		InstanceData.bTargetAirborne = TargetASC && TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_Airborne);
 	}
@@ -57,6 +71,7 @@ void FknightStateTreeMonsterTargetEvaluator::Update(FInstanceDataType& InstanceD
 		InstanceData.Distance = 0.f;
 		InstanceData.HeightDifference = 0.f;
 		InstanceData.AngleToTarget = 0.f;
+		InstanceData.AbsAngleToTarget = 0.f;
 		InstanceData.bTargetAirborne = false;
 	}
 
@@ -78,7 +93,18 @@ void FknightStateTreeMonsterTargetEvaluator::Update(FInstanceDataType& InstanceD
 			? Definition->AirChaseStopDistance : Definition->ChaseStopDistance;
 		InstanceData.RangedMinDistance = Definition->RangedMinDistance;
 		InstanceData.RangedMaxDistance = Definition->RangedMaxDistance;
+		InstanceData.RecoverRetreatChance = Definition->RecoverRetreatChance;
+		InstanceData.SpacingMaxDistance = InstanceData.ChaseStopDistance + Definition->SpacingDistanceSlack;
 	}
+
+	const UknightMonsterDefinition* const Definition = Monster ? Monster->GetMonsterDefinition() : nullptr;
+	const UAbilitySystemComponent* const TargetASC = Target ? UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Target) : nullptr;
+	InstanceData.bPunishRepair = TargetASC && TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_Repairing);
+	InstanceData.bPunishFlee = Definition && Targeting && Definition->PunishFleeTime > 0.f
+		&& Targeting->GetTargetAwayTime() >= Definition->PunishFleeTime && InstanceData.Distance >= Definition->PunishFleeDistance;
+	InstanceData.bPunishGuard = Definition && Targeting && Definition->PunishGuardTime > 0.f
+		&& Targeting->GetTargetGuardTime() >= Definition->PunishGuardTime;
+	InstanceData.bPunishAny = InstanceData.bPunishRepair || InstanceData.bPunishFlee || InstanceData.bPunishGuard;
 }
 
 // Knight Activate Ability
@@ -128,6 +154,10 @@ EStateTreeRunStatus FknightStateTreeActivateAbilityTask::EnterState(FStateTreeEx
 		}
 		float Weight = 1.f;
 		const UGameplayAbility* const Instance = Spec->GetPrimaryInstance() ? Spec->GetPrimaryInstance() : Spec->Ability.Get();
+		if (!Instance || knightMonsterStateTree::IsExcludedMove(*Instance, InstanceData.AbilityTags))
+		{
+			continue;
+		}
 		if (const UknightGameplayAbility_MonsterAttack* const Attack = Cast<UknightGameplayAbility_MonsterAttack>(Instance))
 		{
 			Weight = Attack->GetSelectionWeight(AttackContext);
@@ -187,6 +217,8 @@ EStateTreeRunStatus FknightStateTreeActivateAbilityTask::EnterState(FStateTreeEx
 		}
 		KNIGHT_PERF_COUNT("Monster.AbilitiesActivated", 1);
 		const FGameplayAbilitySpec* const Spec = ASC->FindAbilitySpecFromHandle(Handle);
+		UE_LOG(LogknightAI, Verbose, TEXT("%s: [%s] activates %s."), *GetNameSafe(InstanceData.Actor), *InstanceData.AbilityTags.ToStringSimple(),
+			Spec ? *GetNameSafe(Spec->Ability) : TEXT("none"));
 		if (!Spec || !Spec->IsActive())
 		{
 			// 발동 도중에 이미 끝났다(즉발 기술).
@@ -194,7 +226,7 @@ EStateTreeRunStatus FknightStateTreeActivateAbilityTask::EnterState(FStateTreeEx
 		}
 		if (const UknightGameplayAbility_MonsterAttack* const Attack = Cast<UknightGameplayAbility_MonsterAttack>(Spec->GetPrimaryInstance()))
 		{
-			if (Definition)
+			if (Definition && InstanceData.bRestAfterAttack)
 			{
 				InstanceData.RestTime = ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Phase2) ? Definition->Phase2AttackRestTime : Definition->AttackRestTime;
 			}
@@ -382,7 +414,7 @@ namespace knightMonsterStateTree
 		{
 			const UGameplayAbility* const Instance = Spec.GetPrimaryInstance() ? Spec.GetPrimaryInstance() : Spec.Ability.Get();
 			const UknightGameplayAbility_MonsterAttack* const Attack = Cast<UknightGameplayAbility_MonsterAttack>(Instance);
-			const bool bCoversSides = Attack
+			const bool bCoversSides = Attack && !IsExcludedMove(*Attack, Tags)
 				&& (Attack->GetSelection().MinAngle > 0.f || (Attack->GetSelection().MaxAngle >= 180.f && bNeedsTurnMontage));
 			if (bCoversSides && (Tags.IsEmpty() || Attack->GetAssetTags().HasAll(Tags)) && Attack->GetSelectionWeight(AttackContext) > 0.f)
 			{
@@ -545,6 +577,47 @@ void FknightStateTreeFaceTargetTask::UpdateTurnWarpTarget(FInstanceDataType& Ins
 	}
 }
 
+// Knight Rest
+
+EStateTreeRunStatus FknightStateTreeRestTask::EnterState(FStateTreeExecutionContext& Context, const FStateTreeTransitionResult& Transition) const
+{
+	FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
+	InstanceData.RemainingTime = InstanceData.Duration;
+	if (InstanceData.RemainingTime <= 0.f && InstanceData.Monster)
+	{
+		const UknightMonsterDefinition* const Definition = InstanceData.Monster->GetMonsterDefinition();
+		const UAbilitySystemComponent* const ASC = InstanceData.Monster->GetAbilitySystemComponent();
+		if (Definition)
+		{
+			InstanceData.RemainingTime = ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Phase2)
+				? Definition->Phase2AttackRestTime : Definition->AttackRestTime;
+		}
+	}
+	UE_LOG(LogknightAI, Verbose, TEXT("%s: rests %.2fs."), *GetNameSafe(InstanceData.Monster), InstanceData.RemainingTime);
+	return InstanceData.RemainingTime > 0.f ? EStateTreeRunStatus::Running : EStateTreeRunStatus::Succeeded;
+}
+
+EStateTreeRunStatus FknightStateTreeRestTask::Tick(FStateTreeExecutionContext& Context, const float DeltaTime) const
+{
+	FInstanceDataType& InstanceData = Context.GetInstanceData(*this);
+	InstanceData.RemainingTime -= DeltaTime;
+	if (InstanceData.RemainingTime <= 0.f)
+	{
+		return EStateTreeRunStatus::Succeeded;
+	}
+	UknightMonsterMovementComponent* const Movement = InstanceData.Monster ? InstanceData.Monster->GetMonsterMovementComponent() : nullptr;
+	if (Movement && InstanceData.Target && InstanceData.TurnRate > 0.f)
+	{
+		const FVector ToTarget = InstanceData.Target->GetActorLocation() - InstanceData.Monster->GetActorLocation();
+		const float Angle = FMath::Abs(FRotator::NormalizeAxis(ToTarget.GetSafeNormal2D().Rotation().Yaw - InstanceData.Monster->GetActorRotation().Yaw));
+		if (Angle <= InstanceData.MaxTurnAngle)
+		{
+			Movement->TurnTowards(InstanceData.Target->GetActorLocation(), DeltaTime, InstanceData.TurnRate, InstanceData.Tolerance);
+		}
+	}
+	return EStateTreeRunStatus::Running;
+}
+
 // Knight Has Gameplay Tag
 
 bool FknightStateTreeHasGameplayTagCondition::TestCondition(FStateTreeExecutionContext& Context) const
@@ -580,6 +653,10 @@ bool FknightStateTreeCanUseAbilityCondition::TestCondition(FStateTreeExecutionCo
 			}
 			// Activate Ability 태스크와 같은 판정: 몬스터 공격은 Selection 가중치, 나머지는 쓸 수 있으면 통과.
 			const UGameplayAbility* const Instance = Spec->GetPrimaryInstance() ? Spec->GetPrimaryInstance() : Spec->Ability.Get();
+			if (!Instance || knightMonsterStateTree::IsExcludedMove(*Instance, InstanceData.AbilityTags))
+			{
+				continue;
+			}
 			const UknightGameplayAbility_MonsterAttack* const Attack = Cast<UknightGameplayAbility_MonsterAttack>(Instance);
 			if (!Attack || Attack->GetSelectionWeight(AttackContext) > 0.f)
 			{

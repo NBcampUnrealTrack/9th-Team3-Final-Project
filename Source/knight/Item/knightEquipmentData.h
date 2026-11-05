@@ -75,7 +75,7 @@ public:
 	TSoftClassPtr<class ACharacter> PlayerCharacterClass;
 
 	/**
-	 * (2026-10-20) 기본 장착 에셋. 나이트 Parts 컴포넌트의 Default Loadout Asset과 같은 에셋을 넣는다.
+	 * 기본 장착 에셋. 나이트 Parts 컴포넌트의 Default Loadout Asset과 같은 에셋을 넣는다.
 	 * 넣으면 ReadLoadout이 PlayerCharacterClass를 읽지 않는다. PlayerCharacterClass를 읽으면 BP_Knight와 딸린 에셋
 	 * 1,000여 개를 그 자리에서 로드해서 정비소 첫 진입이 4~5초 멈췄다. 비어 있으면 예전처럼 PlayerCharacterClass를 쓴다.
 	 */

@@ -11,6 +11,8 @@
 class AknightMonsterCharacterBase;
 class AknightRaidGameState;
 class UknightRaidDefinition;
+class UknightAudioSubsystem;
+class UknightRaidFinishPresentation;
 class USoundBase;
 struct FStreamableHandle;
 
@@ -78,7 +80,7 @@ protected:
 	TObjectPtr<const UknightRaidDefinition> DefaultRaidDefinition;
 
 	/**
-	 * (2026-10-19) 레이드에 들어갈 때 월드가 안정될 때까지 로딩 화면(레이드 단계 None)을 유지하고 게임을 일시정지해 둔다.
+	 * 레이드에 들어갈 때 월드가 안정될 때까지 로딩 화면(레이드 단계 None)을 유지하고 게임을 일시정지해 둔다.
 	 * 전에는 맵이 올라온 프레임에 바로 출격해서, 텍스처·셰이더가 덜 준비된 채 로딩 화면이 걷히고 몬스터가 먼저 움직였다
 	 * ('로딩이 끝나기 전에 시작'). 끝 = MinLoadingHoldTime이 지나고, 스트리밍을 기다리는 텍스처가 MaxStreamingResources 이하이고,
 	 * (에디터만) 셰이더 컴파일과 추적 가능한 PSO 준비가 끝나고, 진행 중인 비동기 로드(미리 불러오는 큐·화면 효과·전투 음악)가 없을 때. 시간 초과 시 미완성 레이드를 시작하지 않고 로비로 돌아간다.
@@ -137,7 +139,21 @@ private:
 	/** Picks the music state from the raid phase and the target monsters' rage, and the combat track (see CombatMusic). */
 	void UpdateMusic();
 	void UpdateCombatMusic(EknightRaidPhase Phase);
+	/** 보스 BGM(bCombatMusicDynamic): 대상 몬스터가 2페이즈나 분노면 Enrage 곡으로, 아니면 Normal로 크로스페이드한다. */
+	void UpdateCombatMusicIntensity(UknightAudioSubsystem& Audio);
 	void HandleMonsterHealthChanged(const FOnAttributeChangeData& Data);
+
+	/** 마지막 대상이 쓰러지면 처치 연출(RaidDefinition->FinishPresentation)을 시작한다. 연출 중에는 결과 화면·귀환 타이머·BGM 엔딩을 미룬다. */
+	void StartFinishPresentation(AknightMonsterCharacterBase& Monster);
+	void HandleFinishImpact();
+	void HandleFinishDone();
+	bool IsFinishPresentationPlaying() const;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UknightRaidFinishPresentation> FinishPresentation;
+
+	/** 처치 연출이 끝나면 걸 귀환 타이머(초). */
+	float PendingReturnDelay = 0.f;
 
 	virtual void ReturnToMainMenu() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -155,6 +171,8 @@ private:
 	TObjectPtr<USoundBase> PlayingCombatTrack;
 	bool bCombatMusicLowHealth = false;
 	bool bCombatMusicEnded = false;
+	/** 보스 BGM MetaSound에 마지막으로 보낸 Intensity. -1이면 아직 안 보냄. */
+	float CombatMusicIntensity = -1.f;
 	FGameplayTagContainer BrokenParts;
 	FTimerHandle PhaseTimer;
 	FTimerHandle TimeLimitTimer;

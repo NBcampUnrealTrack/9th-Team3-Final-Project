@@ -193,7 +193,7 @@ void UknightGroggyFeedbackComponent::WatchAttack(UGameplayAbility* Attack, UAnim
 	WatchedMontage = Montage;
 	WatchedHitParams = HitParams;
 	PredictedTargetsThisAttack.Reset();
-	// (2026-10-20) 이미 맞힌 대상은 이번 몽타주에서 맞지 않으니 예측한 것으로 쳐서 건너뛴다.
+	// 이미 맞힌 대상은 이번 몽타주에서 맞지 않으니 예측한 것으로 쳐서 건너뛴다.
 	if (AlreadyHitTargets)
 	{
 		PredictedTargetsThisAttack.Append(*AlreadyHitTargets);

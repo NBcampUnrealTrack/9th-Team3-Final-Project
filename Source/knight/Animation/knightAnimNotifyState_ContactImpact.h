@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Animation/AnimNotifies/AnimNotifyState.h"
+#include "GameplayTagContainer.h"
 #include "knightAnimNotifyState_ContactImpact.generated.h"
 
 class UknightAnimNotify_GroundImpact;
@@ -50,6 +51,10 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category="Contact Impact")
 	TArray<FknightContactImpactStep> Steps;
+
+	/** 몬스터에 이 태그 중 하나라도 있으면 이번 구간은 터뜨리지 않는다(패링으로 튕겨 나는 다이브: State.Monster.DiveParried). */
+	UPROPERTY(EditAnywhere, Category="Contact Impact", meta=(Categories="State"))
+	FGameplayTagContainer BlockedTags;
 
 private:
 	bool IsTouching(const USkeletalMeshComponent* MeshComp) const;

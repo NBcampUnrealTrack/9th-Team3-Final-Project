@@ -70,6 +70,18 @@ public:
 	virtual float GetPartDamageMultiplier(const FGameplayTag& PartTag) const override;
 	virtual bool IsDead() const override;
 
+	/** Actor가 죽은 몬스터면 true. 몬스터가 남긴 투사체·장판이 처치 뒤에 더 맞히지 않게 확인한다. */
+	/** 공중에서 죽어 캡슐이 떨어지는 중(땅에 닿으면 false). */
+	bool IsFallingToDeath() const { return bFallingToDeath; }
+
+	UknightMonsterHoverComponent* GetHoverComponent() const { return Hover; }
+
+	static bool IsDefeatedMonster(const AActor* Actor)
+	{
+		const AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(Actor);
+		return Monster && Monster->IsDead();
+	}
+
 	//~ ITargetableInterface
 	virtual bool IsTargetable() const override;
 	virtual void GetTargetPoints(TArray<FknightTargetPoint>& OutPoints) const override;
@@ -202,6 +214,14 @@ private:
 	/** MonsterDefinition의 LoopSounds 중 bWaitForEngage가 bEngaged와 같은 것을 튼다. */
 	void StartLoopSounds(bool bEngaged);
 	void StopLoopSounds();
+
+	/** 죽을 때: 이 몬스터가 다른 대상(플레이어)에 걸어 둔 화상 같은 지속 효과를 지운다. */
+	void RemoveLingeringEffectsOnOthers();
+
+	virtual void Landed(const FHitResult& Hit) override;
+
+	/** 공중에서 죽어 떨어지는 중. 땅에 닿으면 이동을 끈다. */
+	bool bFallingToDeath = false;
 	void HandleLoopSoundMuteChanged(const FGameplayTag Tag, int32 NewCount);
 	/** 태그로 줄여 두거나 BurstTime 사이에 쉬는 중이면 줄인 볼륨, 아니면 원래 볼륨. */
 	float GetLoopVolume(int32 Index) const;

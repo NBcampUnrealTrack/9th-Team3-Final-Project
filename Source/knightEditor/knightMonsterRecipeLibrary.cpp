@@ -8,6 +8,9 @@
 #include "AbilitySystem/Attributes/knightMonsterAttributeSet.h"
 #include "AbilitySystem/knightAbilitySet.h"
 #include "AI/knightBossAIController.h"
+#include "AI/knightMonsterStateTreeNodes.h"
+#include "Conditions/StateTreeCommonConditions.h"
+#include "System/knightGameplayTags.h"
 #include "AnimGraphNode_BlendSpacePlayer.h"
 #include "Animation/AnimBlueprint.h"
 #include "Animation/AnimMontage.h"
@@ -15,6 +18,7 @@
 #include "Animation/AnimSequence.h"
 #include "Animation/BlendSpace.h"
 #include "Animation/knightAnimNode_LegPlacement.h"
+#include "Animation/knightAnimNode_LookAt.h"
 #include "Animation/knightAnimNode_WingClearance.h"
 #include "Animation/knightAnimNotifyState_MeleeTrace.h"
 #include "Animation/knightAnimNotifyState_PlayRate.h"
@@ -1525,6 +1529,18 @@ namespace knightRecipe
 		{
 			Log.Error(TEXT("공용 StateTree의 Aim 상태에서 Knight Face Target을 찾지 못했습니다."));
 		}
+		if (!UknightMonsterRecipeLibrary::SetupRecoverState(StateTree))
+		{
+			Log.Error(TEXT("공용 StateTree에 공격 사이 상태(Recover)를 만들지 못했습니다."));
+		}
+		if (!UknightMonsterRecipeLibrary::SetupSpacingState(StateTree))
+		{
+			Log.Error(TEXT("공용 StateTree에 간 보기 상태(Spacing)를 만들지 못했습니다."));
+		}
+		if (!UknightMonsterRecipeLibrary::SetupPunishState(StateTree))
+		{
+			Log.Error(TEXT("공용 StateTree에 플레이어 상태 반응(Punish)을 만들지 못했습니다."));
+		}
 
 		FStateTreeCompilerLog CompilerLog;
 		if (!UStateTreeEditingSubsystem::CompileStateTree(StateTree, CompilerLog))
@@ -1570,6 +1586,502 @@ bool UknightMonsterRecipeLibrary::SetFaceTargetSideAttacks(UStateTree* StateTree
 		}
 	}
 	return false;
+}
+
+namespace knightRecipePunish
+{
+	UStateTreeState* FindState(UStateTreeEditorData* EditorData, FName Name)
+	{
+		TArray<UStateTreeState*> Pending(EditorData->SubTrees);
+		while (!Pending.IsEmpty())
+		{
+			UStateTreeState* const State = Pending.Pop();
+			if (State->Name == Name)
+			{
+				return State;
+			}
+			Pending.Append(State->Children);
+		}
+		return nullptr;
+	}
+
+	// Punish와 다른 상태 사이의 전이를 지금 트리에 맞게 다시 잇는다. Punish가 없으면 아무것도 안 한다.
+	// Recover·Spacing을 따로 다시 만들면 그 상태가 새 ID로 바뀌어, 거기 달린 끼어들기 전이와 Strike → Recover 전이가 끊긴다.
+	// 그래서 세 Setup 함수가 모두 끝에서 부른다.
+	void Relink(UStateTreeEditorData* EditorData)
+	{
+		UStateTreeState* const Punish = FindState(EditorData, TEXT("Punish"));
+		if (!Punish)
+		{
+			return;
+		}
+		const FGuid EvaluatorID = EditorData->Evaluators[0].ID;
+
+		if (UStateTreeState* const Recover = FindState(EditorData, TEXT("Recover")))
+		{
+			for (UStateTreeState* const Group : Punish->Children)
+			{
+				if (!Group)
+				{
+					continue;
+				}
+				for (UStateTreeState* const Strike : Group->Children)
+				{
+					if (!Strike || !Strike->Name.ToString().EndsWith(TEXT("Strike")))
+					{
+						continue;
+					}
+					for (FStateTreeTransition& Transition : Strike->Transitions)
+					{
+						if (Transition.Trigger == EStateTreeTransitionTrigger::OnStateSucceeded)
+						{
+							Strike->Modify();
+							Transition.State = Recover->GetLinkToState();
+						}
+					}
+				}
+			}
+		}
+
+		// 노려보기·돌아보기·간 보기·추격 중에도 바로 끼어든다. 고를 응징 공격이 없으면(쿨다운) Punish 선택이 실패해 원래 상태를 이어 간다.
+		// 물러나기(Retreat)에는 달지 않는다. 뒷걸음이 시작되자마자 끊겨 몽타주가 튄다. 물러난 뒤 Combat에서 다시 본다.
+		for (const TCHAR* Name : { TEXT("Recover"), TEXT("Retreat"), TEXT("Turn"), TEXT("Hold"), TEXT("Spacing"), TEXT("Chase") })
+		{
+			UStateTreeState* const State = FindState(EditorData, Name);
+			if (!State)
+			{
+				continue;
+			}
+			State->Modify();
+			State->Transitions.RemoveAll([](const FStateTreeTransition& Transition) { return Transition.State.Name == TEXT("Punish"); });
+			if (State->Name == TEXT("Recover") || State->Name == TEXT("Retreat"))
+			{
+				continue;
+			}
+			FStateTreeTransition& Transition = State->AddTransition(EStateTreeTransitionTrigger::OnTick, EStateTreeTransitionType::GotoState, Punish);
+			TStateTreeEditorNode<FStateTreeCompareBoolCondition>& Condition = Transition.AddConditionWithOuter<FStateTreeCompareBoolCondition>(State);
+			Condition.GetInstanceData().bRight = true;
+			const FPropertyBindingPath Target(Condition.ID, TEXT("bLeft"));
+			EditorData->EditorBindings.RemoveBindings(Target);
+			EditorData->EditorBindings.AddBinding(FPropertyBindingPath(EvaluatorID, TEXT("bPunishAny")), Target);
+		}
+	}
+}
+
+bool UknightMonsterRecipeLibrary::SetupRecoverState(UStateTree* StateTree, float TurnAngle)
+{
+	UStateTreeEditorData* const EditorData = StateTree ? Cast<UStateTreeEditorData>(StateTree->EditorData) : nullptr;
+	if (!EditorData || EditorData->Evaluators.IsEmpty())
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetupRecoverState: %s has no editor data or Knight Monster Target evaluator."), *GetNameSafe(StateTree));
+		return false;
+	}
+	const FGuid EvaluatorID = EditorData->Evaluators[0].ID;
+
+	auto FindState = [EditorData](FName Name) -> UStateTreeState*
+	{
+		TArray<UStateTreeState*> Pending(EditorData->SubTrees);
+		while (!Pending.IsEmpty())
+		{
+			UStateTreeState* const State = Pending.Pop();
+			if (State->Name == Name)
+			{
+				return State;
+			}
+			Pending.Append(State->Children);
+		}
+		return nullptr;
+	};
+	auto Bind = [&](const FGuid& TargetID, FName TargetProperty, FName SourceProperty)
+	{
+		const FPropertyBindingPath Target(TargetID, TargetProperty);
+		EditorData->EditorBindings.RemoveBindings(Target);
+		EditorData->EditorBindings.AddBinding(FPropertyBindingPath(EvaluatorID, SourceProperty), Target);
+	};
+
+	UStateTreeState* const Combat = FindState(TEXT("Combat"));
+	UStateTreeState* const Strike = FindState(TEXT("Strike"));
+	UStateTreeState* const React = FindState(TEXT("React"));
+	UStateTreeState* const Breath = FindState(TEXT("Breath"));
+	if (!Combat || !Strike || !React)
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetupRecoverState: %s is missing Combat, Strike or React."), *GetNameSafe(StateTree));
+		return false;
+	}
+	EditorData->Modify();
+	Combat->Modify();
+
+	// 다시 만들 때 예전 Rest·Recover는 지운다(남은 바인딩은 아래 RemoveInvalidBindings가 정리한다).
+	Combat->Children.RemoveAll([](const UStateTreeState* Child) { return Child && (Child->Name == TEXT("Rest") || Child->Name == TEXT("Recover")); });
+
+	UStateTreeState& Recover = Combat->AddChildState(TEXT("Recover"));
+	Recover.SelectionBehavior = EStateTreeStateSelectionBehavior::TrySelectChildrenInOrder;
+	{
+		// 쉬는 동안 반응이 시작되면(다운, 경직) 바로 React로.
+		FStateTreeTransition& ToReact = Recover.AddTransition(EStateTreeTransitionTrigger::OnTick, EStateTreeTransitionType::GotoState, React);
+		TStateTreeEditorNode<FStateTreeCompareBoolCondition>& Reacting = ToReact.AddConditionWithOuter<FStateTreeCompareBoolCondition>(&Recover);
+		Reacting.GetInstanceData().bRight = true;
+		Bind(Reacting.ID, TEXT("bLeft"), TEXT("bIsReacting"));
+	}
+
+	const FGameplayTagContainer RetreatTags(knightGameplayTags::Ability_Move_Retreat);
+	{
+		UStateTreeState& Retreat = Recover.AddChildState(TEXT("Retreat"));
+		TStateTreeEditorNode<FStateTreeRandomCondition>& Chance = Retreat.AddEnterCondition<FStateTreeRandomCondition>();
+		Bind(Chance.ID, TEXT("Threshold"), TEXT("RecoverRetreatChance"));
+		TStateTreeEditorNode<FknightStateTreeCanUseAbilityCondition>& CanRetreat = Retreat.AddEnterCondition<FknightStateTreeCanUseAbilityCondition>();
+		CanRetreat.GetInstanceData().AbilityTags = RetreatTags;
+		CanRetreat.GetInstanceData().bIgnoreAngle = false;
+		Bind(CanRetreat.ID, TEXT("Target"), TEXT("Target"));
+
+		TStateTreeEditorNode<FknightStateTreeActivateAbilityTask>& Move = Retreat.AddTask<FknightStateTreeActivateAbilityTask>();
+		Move.GetInstanceData().AbilityTags = RetreatTags;
+		Move.GetInstanceData().RetryDelay = 0.f;
+		Move.GetInstanceData().MaxStopWaitTime = 0.f;
+		Move.GetInstanceData().bRestAfterAttack = false;
+		Bind(Move.ID, TEXT("Target"), TEXT("Target"));
+		Retreat.AddTransition(EStateTreeTransitionTrigger::OnStateCompleted, EStateTreeTransitionType::GotoState, Combat);
+	}
+	{
+		UStateTreeState& Turn = Recover.AddChildState(TEXT("Turn"));
+		TStateTreeEditorNode<FStateTreeCompareFloatCondition>& Behind = Turn.AddEnterCondition<FStateTreeCompareFloatCondition>(UE::StateTree::EComparisonOperator::GreaterOrEqual);
+		Behind.GetInstanceData().Right = TurnAngle;
+		Bind(Behind.ID, TEXT("Left"), TEXT("AbsAngleToTarget"));
+
+		TStateTreeEditorNode<FknightStateTreeFaceTargetTask>& Face = Turn.AddTask<FknightStateTreeFaceTargetTask>();
+		Face.GetInstanceData().TurnRate = 120.f;
+		Face.GetInstanceData().MaxTime = 1.5f;
+		Face.GetInstanceData().bSkipForSideAttacks = true;
+		Bind(Face.ID, TEXT("Target"), TEXT("Target"));
+		Turn.AddTransition(EStateTreeTransitionTrigger::OnStateCompleted, EStateTreeTransitionType::GotoState, Combat);
+	}
+	{
+		UStateTreeState& Hold = Recover.AddChildState(TEXT("Hold"));
+		TStateTreeEditorNode<FknightStateTreeRestTask>& Rest = Hold.AddTask<FknightStateTreeRestTask>();
+		Bind(Rest.ID, TEXT("Target"), TEXT("Target"));
+		Hold.AddTransition(EStateTreeTransitionTrigger::OnStateCompleted, EStateTreeTransitionType::GotoState, Combat);
+	}
+
+	// 공격 Task 안에서 쉬지 않고, 끝나면 Recover로. 고를 공격이 없어 실패하면 원래 전이(Combat, Chase)를 그대로 쓴다.
+	auto RouteToRecover = [&](UStateTreeState& State)
+	{
+		State.Modify();
+		for (FStateTreeEditorNode& Task : State.Tasks)
+		{
+			if (FknightActivateAbilityTaskInstanceData* const Data = Task.Instance.GetMutablePtr<FknightActivateAbilityTaskInstanceData>())
+			{
+				Data->bRestAfterAttack = false;
+			}
+		}
+		const bool bHadFailedTransition = State.Transitions.ContainsByPredicate([](const FStateTreeTransition& Transition)
+		{
+			return Transition.Trigger == EStateTreeTransitionTrigger::OnStateFailed;
+		});
+		State.Transitions.RemoveAll([](const FStateTreeTransition& Transition)
+		{
+			return Transition.Trigger == EStateTreeTransitionTrigger::OnStateCompleted || Transition.Trigger == EStateTreeTransitionTrigger::OnStateSucceeded;
+		});
+		State.AddTransition(EStateTreeTransitionTrigger::OnStateSucceeded, EStateTreeTransitionType::GotoState, &Recover);
+		if (!bHadFailedTransition)
+		{
+			State.AddTransition(EStateTreeTransitionTrigger::OnStateFailed, EStateTreeTransitionType::GotoState, Combat);
+		}
+	};
+	RouteToRecover(*Strike);
+	if (Breath)
+	{
+		RouteToRecover(*Breath);
+	}
+	knightRecipePunish::Relink(EditorData);
+
+	EditorData->ReparentStates();
+	EditorData->RemoveInvalidBindings();
+	FStateTreeCompilerLog CompilerLog;
+	const bool bCompiled = UStateTreeEditingSubsystem::CompileStateTree(StateTree, CompilerLog);
+	StateTree->MarkPackageDirty();
+	UE_LOG(LogTemp, Display, TEXT("SetupRecoverState: %s %s."), *GetNameSafe(StateTree), bCompiled ? TEXT("compiled") : TEXT("FAILED to compile"));
+	return bCompiled;
+}
+
+bool UknightMonsterRecipeLibrary::SetupSpacingState(UStateTree* StateTree)
+{
+	UStateTreeEditorData* const EditorData = StateTree ? Cast<UStateTreeEditorData>(StateTree->EditorData) : nullptr;
+	if (!EditorData || EditorData->Evaluators.IsEmpty())
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetupSpacingState: %s has no editor data or Knight Monster Target evaluator."), *GetNameSafe(StateTree));
+		return false;
+	}
+	const FGuid EvaluatorID = EditorData->Evaluators[0].ID;
+	auto Bind = [&](const FGuid& TargetID, FName TargetProperty, FName SourceProperty)
+	{
+		const FPropertyBindingPath Target(TargetID, TargetProperty);
+		EditorData->EditorBindings.RemoveBindings(Target);
+		EditorData->EditorBindings.AddBinding(FPropertyBindingPath(EvaluatorID, SourceProperty), Target);
+	};
+
+	UStateTreeState* Combat = nullptr;
+	UStateTreeState* React = nullptr;
+	TArray<UStateTreeState*> Pending(EditorData->SubTrees);
+	while (!Pending.IsEmpty())
+	{
+		UStateTreeState* const State = Pending.Pop();
+		Combat = State->Name == TEXT("Combat") ? State : Combat;
+		React = State->Name == TEXT("React") ? State : React;
+		Pending.Append(State->Children);
+	}
+	if (!Combat || !React)
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetupSpacingState: %s is missing Combat or React."), *GetNameSafe(StateTree));
+		return false;
+	}
+	EditorData->Modify();
+	Combat->Modify();
+	Combat->Children.RemoveAll([](const UStateTreeState* Child) { return Child && Child->Name == TEXT("Spacing"); });
+
+	UStateTreeState& Spacing = Combat->AddChildState(TEXT("Spacing"));
+	{
+		FStateTreeTransition& ToReact = Spacing.AddTransition(EStateTreeTransitionTrigger::OnTick, EStateTreeTransitionType::GotoState, React);
+		TStateTreeEditorNode<FStateTreeCompareBoolCondition>& Reacting = ToReact.AddConditionWithOuter<FStateTreeCompareBoolCondition>(&Spacing);
+		Reacting.GetInstanceData().bRight = true;
+		Bind(Reacting.ID, TEXT("bLeft"), TEXT("bIsReacting"));
+	}
+
+	// 멀면 둘레를 돌지 말고 Chase로 다가간다.
+	TStateTreeEditorNode<FStateTreeCompareFloatCondition>& Near = Spacing.AddEnterCondition<FStateTreeCompareFloatCondition>(UE::StateTree::EComparisonOperator::LessOrEqual);
+	Bind(Near.ID, TEXT("Left"), TEXT("Distance"));
+	Bind(Near.ID, TEXT("Right"), TEXT("SpacingMaxDistance"));
+
+	// 쓸 수 있는 공격이 하나라도 있으면 간 보지 않고 공격한다. 몸을 돌리면 되는 공격도 있는 것으로 친다(Attack의 Face가 돌린다).
+	TStateTreeEditorNode<FknightStateTreeCanUseAbilityCondition>& NoAttack = Spacing.AddEnterCondition<FknightStateTreeCanUseAbilityCondition>();
+	NoAttack.GetInstanceData().AbilityTags = FGameplayTagContainer(knightGameplayTags::Ability_Attack);
+	NoAttack.GetInstanceData().bIgnoreAngle = true;
+	NoAttack.GetInstanceData().bInvert = true;
+	Bind(NoAttack.ID, TEXT("Target"), TEXT("Target"));
+
+	const FGameplayTagContainer StrafeTags(knightGameplayTags::Ability_Move_Strafe);
+	TStateTreeEditorNode<FknightStateTreeCanUseAbilityCondition>& CanStrafe = Spacing.AddEnterCondition<FknightStateTreeCanUseAbilityCondition>();
+	CanStrafe.GetInstanceData().AbilityTags = StrafeTags;
+	CanStrafe.GetInstanceData().bIgnoreAngle = false;
+	Bind(CanStrafe.ID, TEXT("Target"), TEXT("Target"));
+
+	TStateTreeEditorNode<FknightStateTreeActivateAbilityTask>& Move = Spacing.AddTask<FknightStateTreeActivateAbilityTask>();
+	Move.GetInstanceData().AbilityTags = StrafeTags;
+	Move.GetInstanceData().RetryDelay = 0.f;
+	Move.GetInstanceData().bRestAfterAttack = false;
+	Bind(Move.ID, TEXT("Target"), TEXT("Target"));
+	Spacing.AddTransition(EStateTreeTransitionTrigger::OnStateCompleted, EStateTreeTransitionType::GotoState, Combat);
+
+	// Combat은 자식을 위에서부터 고른다. Chase는 조건 없이 항상 들어가므로 그 앞에 둔다.
+	UStateTreeState* const Added = Combat->Children.Pop();
+	const int32 ChaseIndex = Combat->Children.IndexOfByPredicate([](const UStateTreeState* Child) { return Child && Child->Name == TEXT("Chase"); });
+	Combat->Children.Insert(Added, ChaseIndex == INDEX_NONE ? 0 : ChaseIndex);
+	knightRecipePunish::Relink(EditorData);
+
+	EditorData->ReparentStates();
+	EditorData->RemoveInvalidBindings();
+	FStateTreeCompilerLog CompilerLog;
+	const bool bCompiled = UStateTreeEditingSubsystem::CompileStateTree(StateTree, CompilerLog);
+	StateTree->MarkPackageDirty();
+	UE_LOG(LogTemp, Display, TEXT("SetupSpacingState: %s %s (Spacing at %d)."), *GetNameSafe(StateTree), bCompiled ? TEXT("compiled") : TEXT("FAILED to compile"),
+		Combat->Children.IndexOfByKey(Added));
+	return bCompiled;
+}
+
+bool UknightMonsterRecipeLibrary::SetupPunishState(UStateTree* StateTree)
+{
+	UStateTreeEditorData* const EditorData = StateTree ? Cast<UStateTreeEditorData>(StateTree->EditorData) : nullptr;
+	if (!EditorData || EditorData->Evaluators.IsEmpty())
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetupPunishState: %s has no editor data or Knight Monster Target evaluator."), *GetNameSafe(StateTree));
+		return false;
+	}
+	const FGuid EvaluatorID = EditorData->Evaluators[0].ID;
+	auto Bind = [&](const FGuid& TargetID, FName TargetProperty, FName SourceProperty)
+	{
+		const FPropertyBindingPath Target(TargetID, TargetProperty);
+		EditorData->EditorBindings.RemoveBindings(Target);
+		EditorData->EditorBindings.AddBinding(FPropertyBindingPath(EvaluatorID, SourceProperty), Target);
+	};
+	auto FindState = [EditorData](FName Name) -> UStateTreeState*
+	{
+		TArray<UStateTreeState*> Pending(EditorData->SubTrees);
+		while (!Pending.IsEmpty())
+		{
+			UStateTreeState* const State = Pending.Pop();
+			if (State->Name == Name)
+			{
+				return State;
+			}
+			Pending.Append(State->Children);
+		}
+		return nullptr;
+	};
+	auto AddBoolTransition = [&](UStateTreeState& From, UStateTreeState* To, FName Source)
+	{
+		FStateTreeTransition& Transition = From.AddTransition(EStateTreeTransitionTrigger::OnTick, EStateTreeTransitionType::GotoState, To);
+		TStateTreeEditorNode<FStateTreeCompareBoolCondition>& Condition = Transition.AddConditionWithOuter<FStateTreeCompareBoolCondition>(&From);
+		Condition.GetInstanceData().bRight = true;
+		Bind(Condition.ID, TEXT("bLeft"), Source);
+		return &Transition;
+	};
+
+	UStateTreeState* const Combat = FindState(TEXT("Combat"));
+	UStateTreeState* const React = FindState(TEXT("React"));
+	UStateTreeState* const Recover = FindState(TEXT("Recover"));
+	if (!Combat || !React || !Recover)
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetupPunishState: %s is missing Combat, React or Recover (run SetupRecoverState first)."), *GetNameSafe(StateTree));
+		return false;
+	}
+	EditorData->Modify();
+	Combat->Modify();
+	Combat->Children.RemoveAll([](const UStateTreeState* Child) { return Child && Child->Name == TEXT("Punish"); });
+
+	UStateTreeState& Punish = Combat->AddChildState(TEXT("Punish"));
+	Punish.SelectionBehavior = EStateTreeStateSelectionBehavior::TrySelectChildrenInOrder;
+	AddBoolTransition(Punish, React, TEXT("bIsReacting"));
+
+	struct FPunishCase
+	{
+		const TCHAR* Name;
+		FName Condition;
+		FGameplayTag Tag;
+	};
+	const FPunishCase Cases[] = {
+		{ TEXT("PunishRepair"), TEXT("bPunishRepair"), knightGameplayTags::Ability_Punish_Repair },
+		{ TEXT("PunishFlee"), TEXT("bPunishFlee"), knightGameplayTags::Ability_Punish_Flee },
+		{ TEXT("PunishGuard"), TEXT("bPunishGuard"), knightGameplayTags::Ability_Punish_Guard },
+	};
+	for (const FPunishCase& Case : Cases)
+	{
+		const FGameplayTagContainer Tags(Case.Tag);
+		UStateTreeState& Group = Punish.AddChildState(Case.Name);
+		Group.SelectionBehavior = EStateTreeStateSelectionBehavior::TrySelectChildrenInOrder;
+		TStateTreeEditorNode<FStateTreeCompareBoolCondition>& When = Group.AddEnterCondition<FStateTreeCompareBoolCondition>();
+		When.GetInstanceData().bRight = true;
+		Bind(When.ID, TEXT("bLeft"), Case.Condition);
+		// 몸을 돌리면 쓸 수 있는 공격도 있는 것으로 친다(아래 Face가 돌린다).
+		TStateTreeEditorNode<FknightStateTreeCanUseAbilityCondition>& CanUse = Group.AddEnterCondition<FknightStateTreeCanUseAbilityCondition>();
+		CanUse.GetInstanceData().AbilityTags = Tags;
+		CanUse.GetInstanceData().bIgnoreAngle = true;
+		Bind(CanUse.ID, TEXT("Target"), TEXT("Target"));
+
+		UStateTreeState& Face = Group.AddChildState(*FString::Printf(TEXT("%sFace"), Case.Name));
+		UStateTreeState& Strike = Group.AddChildState(*FString::Printf(TEXT("%sStrike"), Case.Name));
+		{
+			TStateTreeEditorNode<FknightStateTreeFaceTargetTask>& Turn = Face.AddTask<FknightStateTreeFaceTargetTask>();
+			Turn.GetInstanceData().TurnRate = 120.f;
+			Turn.GetInstanceData().MaxTime = 1.f;
+			Turn.GetInstanceData().bSkipForSideAttacks = true;
+			Turn.GetInstanceData().SideAttackTags = Tags;
+			Bind(Turn.ID, TEXT("Target"), TEXT("Target"));
+			Face.AddTransition(EStateTreeTransitionTrigger::OnStateCompleted, EStateTreeTransitionType::GotoState, &Strike);
+		}
+		{
+			TStateTreeEditorNode<FknightStateTreeActivateAbilityTask>& Attack = Strike.AddTask<FknightStateTreeActivateAbilityTask>();
+			Attack.GetInstanceData().AbilityTags = Tags;
+			Attack.GetInstanceData().RetryDelay = 0.f;
+			Attack.GetInstanceData().MaxStopWaitTime = 0.f;
+			Attack.GetInstanceData().bRestAfterAttack = false;
+			Bind(Attack.ID, TEXT("Target"), TEXT("Target"));
+			Strike.AddTransition(EStateTreeTransitionTrigger::OnStateSucceeded, EStateTreeTransitionType::GotoState, Recover);
+			Strike.AddTransition(EStateTreeTransitionTrigger::OnStateFailed, EStateTreeTransitionType::GotoState, Combat);
+		}
+	}
+
+	// Combat은 자식을 위에서부터 고른다. 맨 앞에 둬서 다른 판단보다 먼저 본다.
+	UStateTreeState* const Added = Combat->Children.Pop();
+	Combat->Children.Insert(Added, 0);
+	knightRecipePunish::Relink(EditorData);
+
+	EditorData->ReparentStates();
+	EditorData->RemoveInvalidBindings();
+	FStateTreeCompilerLog CompilerLog;
+	const bool bCompiled = UStateTreeEditingSubsystem::CompileStateTree(StateTree, CompilerLog);
+	StateTree->MarkPackageDirty();
+	UE_LOG(LogTemp, Display, TEXT("SetupPunishState: %s %s."), *GetNameSafe(StateTree), bCompiled ? TEXT("compiled") : TEXT("FAILED to compile"));
+	return bCompiled;
+}
+
+bool UknightMonsterRecipeLibrary::SetupLookAt(UAnimBlueprint* AnimBlueprint, const TArray<FName>& Bones, const TArray<float>& Weights,
+	float MaxYaw, float MaxPitch, bool bDisableWhenAirborne)
+{
+	UClass* const LookAtClass = FindObject<UClass>(nullptr, TEXT("/Script/knightAnimGraph.AnimGraphNode_knightLookAt"));
+	if (!AnimBlueprint || !LookAtClass || Bones.IsEmpty() || Bones.Num() != Weights.Num())
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetupLookAt: %s needs an anim blueprint and matching Bones/Weights."), *GetNameSafe(AnimBlueprint));
+		return false;
+	}
+	UEdGraphNode* LookAtNode = nullptr;
+	UEdGraphNode* ToLocalNode = nullptr;
+	TArray<UEdGraph*> Graphs;
+	AnimBlueprint->GetAllGraphs(Graphs);
+	for (UEdGraph* const Graph : Graphs)
+	{
+		for (UEdGraphNode* const Node : Graph->Nodes)
+		{
+			if (Node && Node->GetClass() == LookAtClass)
+			{
+				LookAtNode = Node;
+			}
+			else if (Node && Node->GetClass()->GetFName() == TEXT("AnimGraphNode_ComponentToLocalSpace"))
+			{
+				ToLocalNode = Node;
+			}
+		}
+	}
+	if (!LookAtNode)
+	{
+		// 컴포넌트 공간 노드들(발 배치, 날개) 뒤, 로컬 공간으로 돌아가기 바로 앞에 끼운다.
+		UEdGraphPin* const ToLocalIn = ToLocalNode ? ToLocalNode->FindPin(TEXT("ComponentPose"), EGPD_Input) : nullptr;
+		if (!ToLocalIn || ToLocalIn->LinkedTo.Num() != 1)
+		{
+			UE_LOG(LogTemp, Error, TEXT("SetupLookAt: %s has no Component To Local node with one input link."), *GetNameSafe(AnimBlueprint));
+			return false;
+		}
+		UEdGraphPin* const Source = ToLocalIn->LinkedTo[0];
+		UEdGraph* const Graph = ToLocalNode->GetGraph();
+		Graph->Modify();
+		LookAtNode = NewObject<UEdGraphNode>(Graph, LookAtClass, NAME_None, RF_Transactional);
+		Graph->AddNode(LookAtNode, false, false);
+		LookAtNode->CreateNewGuid();
+		LookAtNode->PostPlacedNewNode();
+		LookAtNode->AllocateDefaultPins();
+		LookAtNode->NodePosX = ToLocalNode->NodePosX - 40;
+		LookAtNode->NodePosY = ToLocalNode->NodePosY + 220;
+		UEdGraphPin* const LookIn = LookAtNode->FindPin(TEXT("ComponentPose"), EGPD_Input);
+		UEdGraphPin* const LookOut = LookAtNode->FindPin(TEXT("Pose"), EGPD_Output);
+		if (!LookIn || !LookOut)
+		{
+			Graph->RemoveNode(LookAtNode);
+			return false;
+		}
+		ToLocalIn->BreakAllPinLinks();
+		Source->MakeLinkTo(LookIn);
+		LookOut->MakeLinkTo(ToLocalIn);
+	}
+	FAnimNode_knightLookAt* const Node = knightRecipe::ValuePtr<FAnimNode_knightLookAt>(LookAtNode->GetClass(), LookAtNode, TEXT("Node"), nullptr);
+	if (!Node)
+	{
+		return false;
+	}
+	LookAtNode->Modify();
+	Node->Bones.Reset();
+	for (int32 Index = 0; Index < Bones.Num(); ++Index)
+	{
+		FknightLookAtBone& Entry = Node->Bones.AddDefaulted_GetRef();
+		Entry.Bone.BoneName = Bones[Index];
+		Entry.Weight = Weights[Index];
+	}
+	Node->MaxYaw = MaxYaw;
+	Node->MaxPitch = MaxPitch;
+	Node->bDisableWhenAirborne = bDisableWhenAirborne;
+
+	FKismetEditorUtilities::CompileBlueprint(AnimBlueprint, EBlueprintCompileOptions::SkipGarbageCollection);
+	AnimBlueprint->MarkPackageDirty();
+	const bool bCompiled = AnimBlueprint->Status != BS_Error;
+	UE_LOG(LogTemp, Display, TEXT("SetupLookAt: %s %s."), *GetNameSafe(AnimBlueprint), bCompiled ? TEXT("compiled") : TEXT("FAILED to compile"));
+	return bCompiled;
 }
 
 bool UknightMonsterRecipeLibrary::CreateSharedMonsterAssets()

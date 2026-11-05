@@ -24,14 +24,14 @@ struct FGameplayAttribute;
  *   달리기 공격(GA_Knight_RunAttack)이 이 태그를 요구하고, 일반 1타(GA_Knight_Attack_1)는 이 태그가 있으면 막힌다.
  *   예전에는 Sprint 어빌리티가 붙였는데, Shift 달리기를 InputTag.Run 네이티브 입력으로 옮기면서 여기로 옮겼다.
  *
- * 속도 스탯 연결 (2026-10-04):
+ * 속도 스탯 연결:
  *   걷기 속도 = BaseWalkSpeed x WalkSpeed 배율 x 중량 계수
  *   달리기 속도 = BaseRunSpeed x RunSpeed 배율 x 중량 계수
  *   점프 힘 = BaseJumpZVelocity x JumpSpeed 배율 (중량은 점프에 영향 없음)
  * 배율·중량·적재 한도는 메카 속성 세트(UknightAttributeSet)에서 매번 읽으므로,
  * 파츠 교체나 부위 파괴로 스탯이 바뀌면 바로 반영된다.
  *
- * 출발·정지 Easing (2026-10-09):
+ * 출발·정지 Easing:
  *   출발: 땅 위의 가속 = MaxAcceleration x 출발 곡선(지금 속도 / 최고 속도) x 중량 계수.
  *         기본 곡선은 느리게 떼고(0.35배) 중간에 붙었다가(1.0배) 최고 속도 근처에서 부드럽게 닿는(0.6배) S자.
  *   정지: 방향키를 떼면 StopBrakingFriction·StopBrakingDeceleration으로 미끄러지며 멈춘다(속도가 줄수록 감속도 약해짐).
@@ -63,7 +63,7 @@ public:
 
 	/**
 	 * 달리기 상태를 켜고 끈다. 지상 이동 속도가 걷기 대신 달리기 기준으로 바뀐다.
-	 * 조작은 '누르고 있는 동안 달리기'(LeftShift, 캐릭터의 SetRunning이 부른다). 토글 설정은 2026-10-08에 뺐다.
+	 * 조작은 '누르고 있는 동안 달리기'(LeftShift, 캐릭터의 SetRunning이 부른다). 토글 설정은 뺐다.
 	 */
 	UFUNCTION(BlueprintCallable, Category="Knight|Movement")
 	void SetWantsToRun(bool bNewWantsToRun) { bWantsToRun = bNewWantsToRun; }
@@ -72,7 +72,7 @@ public:
 	bool GetWantsToRun() const { return bWantsToRun; }
 
 	/**
-	 * (2026-10-13) 지금 실제로 달리는 중인지: 달리기 키를 누르고, 달리기·이동이 막히지 않았고, 땅 위에서 이동 입력이 있을 때.
+	 * 지금 실제로 달리는 중인지: 달리기 키를 누르고, 달리기·이동이 막히지 않았고, 땅 위에서 이동 입력이 있을 때.
 	 * 달리기 키만 누르고 서 있거나 공중이면 아니다. 달리는 동안 행동 에너지 회복을 멈추는 데 쓴다(UknightAbilitySystemComponent).
 	 */
 	UFUNCTION(BlueprintPure, Category="Knight|Movement")
@@ -86,7 +86,7 @@ public:
 	float GetWeightSpeedFactor() const;
 
 	/**
-	 * 퀵스텝 거리용 중량 계수 (2026-10-21). 적재율이 DodgeWeightStartRatio 이하면 1.0이고,
+	 * 퀵스텝 거리용 중량 계수. 적재율이 DodgeWeightStartRatio 이하면 1.0이고,
 	 * 그 뒤 적재율 1에서 MinDodgeWeightFactor가 되도록 직선으로 줄어든다. 이동용 GetWeightSpeedFactor보다 늦게·약하게 걸린다.
 	 */
 	UFUNCTION(BlueprintPure, Category="Knight|Movement")
@@ -95,7 +95,7 @@ public:
 	/**
 	 * 이동 입력으로 가속하지 못하게 막는다. 입력 값은 그대로 들어오므로 방향은 읽을 수 있고,
 	 * 가속이 0이라 지금 속도에서 제동으로 미끄러지며 멈춘다(이동 방향으로 몸도 돌지 않는다). 퀵스텝 경직·가드에서 쓴다.
-	 * (2026-10-08) 잠금 요청 수를 센다: true로 켠 쪽이 반드시 false로 한 번 끈다. 퀵스텝 경직 중 가드를 올리는 것처럼
+	 * 잠금 요청 수를 센다: true로 켠 쪽이 반드시 false로 한 번 끈다. 퀵스텝 경직 중 가드를 올리는 것처럼
 	 * 겹쳐도 먼저 끝난 쪽이 다른 쪽의 잠금을 풀지 않게 하려는 것.
 	 */
 	void SetMoveInputLocked(bool bLocked) { MoveInputLockCount = FMath::Max(0, MoveInputLockCount + (bLocked ? 1 : -1)); }
@@ -104,7 +104,7 @@ public:
 	bool IsMoveInputLocked() const { return MoveInputLockCount > 0; }
 
 	/**
-	 * 달리기를 막는다 (2026-10-09, 수리 키트 사용 중). 달리기 키를 누르고 있어도 걷기 속도(줄지 않음)로 움직이고,
+	 * 달리기를 막는다(수리 키트 사용 중). 달리기 키를 누르고 있어도 걷기 속도(줄지 않음)로 움직이고,
 	 * 풀리면 키 상태대로 돌아간다. 이동 잠금처럼 요청 수를 센다: true로 켠 쪽이 반드시 false로 한 번 끈다.
 	 */
 	void SetRunLocked(bool bLocked) { RunLockCount = FMath::Max(0, RunLockCount + (bLocked ? 1 : -1)); }
@@ -198,7 +198,7 @@ protected:
 
 	/**
 	 * 배율 1.0일 때의 걷기 속도. 바뀔 수 있는 값.
-	 * (2026-10-14) 600 → 540 (-10%): '게임이 너무 스피디하다'는 의견으로 시험. MaxAcceleration도 같이 낮춤(생성자, 1200 → 1100).
+	 * 600 → 540 (-10%): '게임이 너무 스피디하다'는 의견으로 시험. MaxAcceleration도 같이 낮춤(생성자, 1200 → 1100).
 	 * (2026-10-28) 540 → 450: 이동 중 미끄러지는 느낌 수정. 조깅 애니(원래 384cm/s)를 1.17배로 재생해 이 속도에 맞췄다.
 	 *   블렌드스페이스(UE4_*_Jog_*_BlendSpace, BS_Knight_Locomotion) 샘플 위치·재생 배율과 같이 바꿔야 한다.
 	 */
@@ -207,14 +207,14 @@ protected:
 
 	/**
 	 * 배율 1.0일 때의 달리기 속도. 무거운 메카 느낌을 위해 걷기의 1.5배로 시작한다. 바뀔 수 있는 값.
-	 * (2026-10-14) 900 → 810 (-10%), 걷기와 같은 이유.
+	 * 900 → 810 (-10%), 걷기와 같은 이유.
 	 * (2026-10-28) 810 → 650: 달리기 애니(원래 480cm/s)를 1.35배로 재생해 맞췄다. 걷기와 같은 이유.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Speed", meta=(ClampMin=0, Units="CentimetersPerSecond"))
 	float BaseRunSpeed = 650.f;
 
 	/**
-	 * (2026-10-23 사용자 결정) 락온 중에는 이동 방향이 앞(캐릭터가 보는 쪽)과 이 값 이상으로 겹칠 때만 달린다(내적, 1 = 정면).
+	 * 락온 중에는 이동 방향이 앞(캐릭터가 보는 쪽)과 이 값 이상으로 겹칠 때만 달린다(내적, 1 = 정면).
 	 * 0.5면 W+A·W+D(약 0.71)는 달리고, A·D만(0)이나 뒤로는 걷는다. 전에는 뒤로 갈 때만 막아서 옆으로도 달렸다. 바뀔 수 있는 값.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Speed", meta=(ClampMin=-1, ClampMax=1))
@@ -233,7 +233,7 @@ protected:
 	TObjectPtr<UCurveFloat> WeightSpeedCurve;
 
 	/**
-	 * (2026-10-21 사용자 결정) 퀵스텝 거리는 이동보다 늦게·약하게 무게를 탄다. 적재율이 이 값 이하면 퀵스텝 거리가 줄지 않는다.
+	 * 퀵스텝 거리는 이동보다 늦게·약하게 무게를 탄다. 적재율이 이 값 이하면 퀵스텝 거리가 줄지 않는다.
 	 * 이동과 같은 계수(0%부터 최대 30%)를 쓸 때 잔열 보통 풀세트(적재율 43%)로 2페이즈에 맞은 횟수가 기본 메카의 두 배였다.
 	 * 50%면 보통 풀세트는 영향이 없고, 소켓까지 끼운 무거운 조합(67%)부터 조금 짧아진다. 바뀔 수 있는 값.
 	 */
@@ -246,10 +246,10 @@ protected:
 
 	/**
 	 * 출발 곡선. X = 지금 속도 / 최고 속도(0~1), Y = 가속 배율(MaxAcceleration에 곱함). 땅 위에서만 쓴다.
-	 * 기본값(2026-10-09 사용자 결정 'S자, 조금 더 묵직하게', 바뀔 수 있는 값): 0 → 0.35, 0.5 → 1.0, 1.0 → 0.6 (직선 보간).
+	 * 기본값(S자로 조금 더 묵직하게, 바뀔 수 있는 값): 0 → 0.35, 0.5 → 1.0, 1.0 → 0.6 (직선 보간).
 	 * 이때 최고 속도까지 걷기 약 0.73초, 달리기 약 1.09초.
-	 * (2026-10-13 사용자 요청 '초반 움직임 더 느리게, 로봇 느낌') 0 → 0.15, 0.2 → 0.45 로 출발을 더 늦췄다. 나머지는 같다. 키를 모두 지우면 일정한 가속(배율 1)으로 돌아간다.
-	 * (2026-10-14) 걷기·달리기 속도 -10%, MaxAcceleration 1200 → 1100(생성자). 위 곡선과 합쳐 최고 속도까지 원래보다 약 20% 더 걸린다:
+	 * 초반 움직임을 더 느리게(로봇 느낌) 0 → 0.15, 0.2 → 0.45 로 출발을 더 늦췄다. 나머지는 같다. 키를 모두 지우면 일정한 가속(배율 1)으로 돌아간다.
+	 * 걷기·달리기 속도 -10%, MaxAcceleration 1200 → 1100(생성자). 위 곡선과 합쳐 최고 속도까지 원래보다 약 20% 더 걸린다:
 	 * 걷기 약 0.89초, 달리기 약 1.33초. (MaxAcceleration 900으로 곡선 변경과 겹쳤을 때는 +50%라 1100으로 맞춤)
 	 * 배율이 0이면 출발할 수 없으므로 0.05 아래로는 내려가지 않는다.
 	 */
@@ -260,7 +260,7 @@ protected:
 	 * 방향키를 뗐을 때(달리기 → 걷기로 속도가 줄 때 포함)의 마찰. 속도에 비례하는 감속이라 멈추는 끝이 부드럽다. 클수록 빨리 멈춘다.
 	 * 엔진이 BrakingFrictionFactor(기본 2)를 곱해서 쓴다.
 	 * 기본값 2(바뀔 수 있는 값): StopBrakingDeceleration 600과 함께 걷기 약 0.40초·86cm, 달리기 약 0.48초·145cm에 멈춘다
-	 * (걷기 600·달리기 900 기준. 10-14에 속도를 10% 낮춰서 지금은 조금 더 짧게 멈춘다).
+	 * (걷기 600·달리기 900 기준. 속도를 10% 낮춰서 지금은 조금 더 짧게 멈춘다).
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Movement|Easing", meta=(ClampMin=0))
 	float StopBrakingFriction = 2.f;

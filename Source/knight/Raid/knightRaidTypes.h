@@ -24,6 +24,24 @@ enum class EknightRaidPhase : uint8
 	Returning
 };
 
+/** 마지막 대상 몬스터를 처치한 뒤 처치 연출의 단계(UknightRaidFinishPresentation). HUD와 음성이 따라 움직인다. */
+UENUM(BlueprintType)
+enum class EknightRaidFinishStage : uint8
+{
+	/** 연출이 없다(처치 전, 또는 연출을 끈 레이드). */
+	None,
+	/** 막타 히트스톱과 여러 각도의 슬로모션. HUD를 숨긴다. */
+	Slow,
+	/** 원래 속도로 돌아오며 플레이어 시점으로 돌아온다. */
+	Return,
+	/** 몬스터가 쓰러져 땅에 닿았다. 먼지가 가라앉기를 기다린다. */
+	Impact,
+	/** 토벌 확인 배너와 음성. */
+	Banner,
+	/** 연출이 끝났다. 결과 화면을 연다. */
+	Done
+};
+
 UENUM(BlueprintType)
 enum class EknightRaidFailReason : uint8
 {

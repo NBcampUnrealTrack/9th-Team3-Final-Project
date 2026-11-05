@@ -1,10 +1,12 @@
 #include "Monster/knightMonsterTargetingComponent.h"
 
 #include "AbilitySystemComponent.h"
+#include "AbilitySystemGlobals.h"
 #include "AbilitySystem/Attributes/knightCoreAttributeSet.h"
 #include "Engine/World.h"
 #include "GenericTeamAgentInterface.h"
 #include "Interfaces/CombatInterface.h"
+#include "System/knightGameplayTags.h"
 #include "TimerManager.h"
 #include "knight.h"
 #include "knightPerfCounters.h"
@@ -172,12 +174,68 @@ void UknightMonsterTargetingComponent::EvaluateTarget()
 		SetCurrentTarget(Best);
 	}
 	UpdateTargetBehind(Now);
+	UpdateTargetGuardAndAway(Now);
 }
 
 float UknightMonsterTargetingComponent::GetTargetBehindTime() const
 {
 	const UWorld* const World = GetWorld();
 	return TargetBehindSince >= 0.0 && World ? static_cast<float>(World->GetTimeSeconds() - TargetBehindSince) : 0.f;
+}
+
+float UknightMonsterTargetingComponent::GetTargetGuardTime() const
+{
+	const UWorld* const World = GetWorld();
+	return TargetGuardSince >= 0.0 && World ? static_cast<float>(World->GetTimeSeconds() - TargetGuardSince) : 0.f;
+}
+
+float UknightMonsterTargetingComponent::GetTargetAwayTime() const
+{
+	const UWorld* const World = GetWorld();
+	return TargetAwaySince >= 0.0 && World ? static_cast<float>(World->GetTimeSeconds() - TargetAwaySince) : 0.f;
+}
+
+void UknightMonsterTargetingComponent::UpdateTargetGuardAndAway(double Now)
+{
+	const AActor* const Owner = GetOwner();
+	const AActor* const Target = CurrentTarget.Get();
+	const UAbilitySystemComponent* const TargetASC = Target ? UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Target) : nullptr;
+	const bool bGuarding = TargetASC && TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_Guarding);
+	if (!bGuarding)
+	{
+		TargetGuardSince = -1.0;
+	}
+	else if (TargetGuardSince < 0.0)
+	{
+		TargetGuardSince = Now;
+	}
+
+	if (!Owner || !Target)
+	{
+		TargetAwaySince = -1.0;
+		bHasLastTargetLocation = false;
+		return;
+	}
+	const FVector TargetLocation = Target->GetActorLocation();
+	const double Elapsed = Now - LastTargetLocationTime;
+	if (bHasLastTargetLocation && Elapsed > UE_KINDA_SMALL_NUMBER)
+	{
+		const FVector AwayDirection = (TargetLocation - Owner->GetActorLocation()).GetSafeNormal2D();
+		const float AwayMove = FVector::DotProduct(TargetLocation - LastTargetLocation, AwayDirection);
+		const bool bAway = !AwayDirection.IsNearlyZero() && AwayMove / Elapsed >= AwaySpeed;
+		if (!bAway)
+		{
+			TargetAwaySince = -1.0;
+		}
+		else if (TargetAwaySince < 0.0)
+		{
+			// 멀어지기 시작한 것은 지난 평가 직후로 본다. 평가 간격만큼 늦게 세지 않게 한다.
+			TargetAwaySince = LastTargetLocationTime;
+		}
+	}
+	LastTargetLocation = TargetLocation;
+	LastTargetLocationTime = Now;
+	bHasLastTargetLocation = true;
 }
 
 void UknightMonsterTargetingComponent::UpdateTargetBehind(double Now)
@@ -252,6 +310,9 @@ void UknightMonsterTargetingComponent::SetCurrentTarget(AActor* NewTarget)
 	}
 	CurrentTarget = NewTarget;
 	TargetBehindSince = -1.0;
+	TargetGuardSince = -1.0;
+	TargetAwaySince = -1.0;
+	bHasLastTargetLocation = false;
 	KNIGHT_PERF_COUNT("Monster.TargetChanges", 1);
 	UE_LOG(LogknightAI, Log, TEXT("%s target: %s -> %s"), *GetNameSafe(GetOwner()), *GetNameSafe(OldTarget), *GetNameSafe(NewTarget));
 	OnTargetChanged.Broadcast(OldTarget, NewTarget);

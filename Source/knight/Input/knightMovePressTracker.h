@@ -5,7 +5,7 @@
 class ACharacter;
 
 /**
- * '새로 누른' 이동 입력 판정. (2026-10-08, 공격 후딜 이동 캔슬(knightGameplayAbility_MeleeAttack)에서 꺼내 가드와 같이 쓴다)
+ * '새로 누른' 이동 입력 판정. (공격 후딜 이동 캔슬(knightGameplayAbility_MeleeAttack)에서 꺼내 가드와 같이 쓴다)
  *
  * 사용법:
  *   1. 행동을 시작할 때 Reset(캐릭터) — 그때 누르고 있던 방향은 '새 누름'이 아니다.

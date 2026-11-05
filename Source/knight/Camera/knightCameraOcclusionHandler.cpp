@@ -21,7 +21,7 @@ FVector UknightCameraOcclusionHandler::ResolveCameraLocation(const AActor* ViewO
 	ViewOwner->GetAttachedActors(Attached);
 	Params.AddIgnoredActors(Attached);
 
-	// 카메라를 막지 않는 것: 몬스터(페이드 핸들러가 처리), 물(아래 수면 높이 제한), (2026-10-23) 보이지 않는 벽.
+	// 카메라를 막지 않는 것: 몬스터(페이드 핸들러가 처리), 물(아래 수면 높이 제한), 보이지 않는 벽.
 	const auto IsIgnoredHit = [this](const FHitResult& Hit)
 	{
 		const AActor* const Actor = Hit.GetActor();
@@ -77,8 +77,8 @@ FVector UknightCameraOcclusionHandler::ResolveCameraLocation(const AActor* ViewO
 		: FMath::FInterpTo(CurrentFraction, BlockedFraction, DeltaTime, RecoverySpeed);
 	FVector ResolvedLocation = FMath::Lerp(Pivot, DesiredLocation, CurrentFraction);
 
-	// (2026-10-23) 당겨진 만큼 카메라를 올린다(시야각은 카메라 컴포넌트가 GetCloseUpExtraFOV로 넓힘). 위가 막히면 막힌 데까지만.
-	// (2026-10-26) 벽에 비비면 흔들리던 문제: 당긴 정도는 프레임마다 바뀌고(당길 때 즉시), 벽에 닿은 자리에서 위로 검사하면
+	// 당겨진 만큼 카메라를 올린다(시야각은 카메라 컴포넌트가 GetCloseUpExtraFOV로 넓힘). 위가 막히면 막힌 데까지만.
+	// 벽에 비비면 흔들리던 문제: 당긴 정도는 프레임마다 바뀌고(당길 때 즉시), 벽에 닿은 자리에서 위로 검사하면
 	// 닿은 프레임·안 닿은 프레임이 번갈아 40cm를 올렸다 내렸다 했다. → 올리기·시야각은 부드럽게 따라가고,
 	// 위로 검사할 때 처음부터 닿아 있는 것(벽 옆면)은 막힌 것으로 치지 않는다.
 	SmoothedCloseUp = FMath::FInterpTo(SmoothedCloseUp, 1.f - CurrentFraction, DeltaTime, CloseUpBlendSpeed);

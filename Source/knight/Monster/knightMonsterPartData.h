@@ -107,6 +107,10 @@ struct KNIGHT_API FknightMonsterPartDefinition
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Break", meta=(EditCondition="bBreakable"))
 	TObjectPtr<USoundBase> BreakSound;
 
+	/** 부서지는 순간 부위 자리에서 화면에 퍼지는 충격파 세기(1 = 기본, 0 = 없음). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Break", meta=(EditCondition="bBreakable", ClampMin=0, ClampMax=3))
+	float BreakScreenShockwave = 1.f;
+
 	/** 떨어진 조각(BreakPieceMesh)이 처음 땅에 닿을 때 한 번 재생한다. 비우면 소리 없음. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Break", meta=(EditCondition="bBreakable"))
 	TObjectPtr<USoundBase> BreakPieceLandSound;

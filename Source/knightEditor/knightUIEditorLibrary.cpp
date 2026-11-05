@@ -750,6 +750,28 @@ bool UknightUIEditorLibrary::ReplaceUserWidget(UWidgetBlueprint* WidgetBlueprint
 	return true;
 }
 
+bool UknightUIEditorLibrary::InsertFullScreenWidget(UWidgetBlueprint* WidgetBlueprint, TSubclassOf<UUserWidget> WidgetClass, FName WidgetName, FName AfterWidgetName)
+{
+	UCanvasPanel* const Root = WidgetBlueprint && WidgetBlueprint->WidgetTree ? Cast<UCanvasPanel>(WidgetBlueprint->WidgetTree->RootWidget) : nullptr;
+	UWidget* const After = Root ? WidgetBlueprint->WidgetTree->FindWidget(AfterWidgetName) : nullptr;
+	const int32 AfterIndex = After ? Root->GetChildIndex(After) : INDEX_NONE;
+	if (!WidgetClass || AfterIndex == INDEX_NONE || WidgetBlueprint->WidgetTree->FindWidget(WidgetName))
+	{
+		return false;
+	}
+	WidgetBlueprint->Modify();
+	WidgetBlueprint->WidgetTree->Modify();
+	UUserWidget* const Widget = NewWidget<UUserWidget>(WidgetBlueprint, WidgetClass, WidgetName, true);
+	UCanvasPanelSlot* const CanvasSlot = Cast<UCanvasPanelSlot>(Root->InsertChildAt(AfterIndex + 1, Widget));
+	if (CanvasSlot)
+	{
+		CanvasSlot->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f));
+		CanvasSlot->SetOffsets(FMargin(0.f));
+	}
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBlueprint);
+	return true;
+}
+
 bool UknightUIEditorLibrary::SetCanvasSlotLayout(UWidgetBlueprint* WidgetBlueprint, FName WidgetName, FVector2D Position, FVector2D Size)
 {
 	UWidget* const Widget = WidgetBlueprint && WidgetBlueprint->WidgetTree ? WidgetBlueprint->WidgetTree->FindWidget(WidgetName) : nullptr;

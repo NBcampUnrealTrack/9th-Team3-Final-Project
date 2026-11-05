@@ -27,7 +27,7 @@ namespace
 		TEXT("1: mechanical attack timing (lock -> burst -> stop) on player attacks. 0: original animation timing."),
 		ECVF_Cheat);
 
-	/** (2026-10-23) 이 공격을 하는 폰이 로컬 플레이어면 그 카메라(공격 휘두르기 카메라 연출용). */
+	/** 이 공격을 하는 폰이 로컬 플레이어면 그 카메라(공격 휘두르기 카메라 연출용). */
 	UknightCameraComponent* FindLocalPlayerCamera(const USkeletalMeshComponent* MeshComp)
 	{
 		const APawn* const Pawn = MeshComp ? Cast<APawn>(MeshComp->GetOwner()) : nullptr;
@@ -202,7 +202,7 @@ void FknightMechAttackTiming::EnterPhase(EPhase NewPhase)
 	case EPhase::Lock:
 		SetRate(Settings.LockRate);
 		PlaySound(Settings.LockSound);
-		// (2026-10-23) 카메라 연출: 칼을 젖힌 순간 시야각을 살짝 조인다(양손은 락처럼 TwoHandedLockScale만큼 더 크게).
+		// 카메라 연출: 칼을 젖힌 순간 시야각을 살짝 조인다(양손은 락처럼 TwoHandedLockScale만큼 더 크게).
 		if (UknightCameraComponent* const Camera = FindLocalPlayerCamera(Mesh.Get()))
 		{
 			// (2026-11-03) 공격 무게별 세기(CameraKickScale)를 곱한다. 0이면 이 공격은 카메라가 움직이지 않는다.
@@ -230,7 +230,7 @@ void FknightMechAttackTiming::EnterPhase(EPhase NewPhase)
 		{
 			PC->ClientStartCameraShake(Settings.BurstShake, Settings.BurstShakeScale);
 		}
-		// (2026-10-23) 카메라 연출: 휘두르는 순간 조임을 풀며 시야각이 튀고 앞으로 밀렸다가 돌아온다.
+		// 카메라 연출: 휘두르는 순간 조임을 풀며 시야각이 튀고 앞으로 밀렸다가 돌아온다.
 		if (UknightCameraComponent* const Camera = FindLocalPlayerCamera(MeshComp))
 		{
 			Camera->StartAttackSwing((bTwoHandedStance ? Settings.TwoHandedLockScale : 1.f) * CameraKickScale);

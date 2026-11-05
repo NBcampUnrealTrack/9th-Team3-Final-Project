@@ -275,7 +275,7 @@ void UknightGameplayAbility_CombatStance::AttachWeaponToBack() const
 	{
 		if (Mesh != CharacterMesh && Mesh->ComponentHasTag(WeaponComponentTag))
 		{
-			// (2026-10-26) 노티파이와 같은 함수로 옮긴다(손 소켓이면 워크벤치 위치를 쓰고, 등은 지금처럼 딱 붙인다).
+			// 노티파이와 같은 함수로 옮긴다(손 소켓이면 워크벤치 위치를 쓰고, 등은 지금처럼 딱 붙인다).
 			UknightPartsComponent::AttachWeaponToSocket(Mesh, CharacterMesh, BackSocket);
 			return;
 		}

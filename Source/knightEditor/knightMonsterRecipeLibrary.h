@@ -6,6 +6,7 @@
 #include "knightMonsterRecipeLibrary.generated.h"
 
 class AknightMonsterCharacterBase;
+class UAnimBlueprint;
 class UAnimMontage;
 class UAnimSequence;
 class UBlendSpace;
@@ -57,6 +58,41 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
 	static bool SetFaceTargetSideAttacks(UStateTree* StateTree, FName StateName, bool bSkip, const FGameplayTagContainer& SideAttackTags);
+
+	/**
+	 * 몬스터 StateTree의 공격 사이 상태(Recover)를 Combat 아래에 다시 만들고 컴파일한다(저장은 호출한 쪽). 예전 Rest 상태는 지운다.
+	 *   Recover ─ Retreat: 확률(몬스터 정의 RecoverRetreatChance)과 Ability.Move.Retreat 어빌리티를 쓸 수 있으면 물러난다
+	 *           ├ Turn:    타깃이 TurnAngle 이상 옆·뒤에 있으면 돌아본다(옆·뒤 공격을 쓸 수 있으면 돌지 않고 바로 공격으로)
+	 *           └ Hold:    몬스터 정의의 AttackRestTime 동안 서서 천천히 노려본다
+	 * Strike·Breath는 공격 Task 안에서 쉬지 않고(bRestAfterAttack 끔) 성공하면 Recover로 간다.
+	 * Combat·Strike·React 상태나 Knight Monster Target 평가기가 없으면 false.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
+	static bool SetupRecoverState(UStateTree* StateTree, float TurnAngle = 100.f);
+
+	/**
+	 * 공용 StateTree의 Combat 아래, Chase 앞에 간 보기 상태(Spacing)를 만들거나 다시 만든다.
+	 * 쓸 수 있는 공격(Ability.Attack)이 하나도 없고, 타깃이 SpacingMaxDistance 안이고, Ability.Move.Strafe 어빌리티를 쓸 수 있으면
+	 * 그 어빌리티(옆걸음, 탐색 비행)로 둘레를 돈 뒤 Combat으로 돌아간다. 공격 쿨다운 동안 서 있지 않게 한다.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
+	static bool SetupSpacingState(UStateTree* StateTree);
+
+	/**
+	 * 공용 StateTree의 Combat 맨 앞에 플레이어 상태 반응(Punish)을 만들거나 다시 만든다. 자식은 위에서부터 Repair, Flee, Guard.
+	 * 각각 평가기의 bPunishRepair·bPunishFlee·bPunishGuard가 참이고 Ability.Punish.* 공격을 쓸 수 있으면 몸을 돌린 뒤 그 공격을 쓰고 Recover로 간다.
+	 * Recover의 Turn·Hold, Spacing, Chase에는 bPunishAny로 Punish에 끼어드는 전이를 단다. 공격 중과 물러나기 중에는 끊지 않는다.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
+	static bool SetupPunishState(UStateTree* StateTree);
+
+	/**
+	 * 애님 Blueprint에 Knight Look At 노드를 넣거나(없으면 컴포넌트 공간 → 로컬 공간 변환 바로 앞) 값을 고친 뒤 컴파일한다.
+	 * Bones는 목뿌리 → 머리 순서, Weights는 같은 길이(합 1 권장). 저장은 부른 쪽이 한다.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Knight|Monster Recipe")
+	static bool SetupLookAt(UAnimBlueprint* AnimBlueprint, const TArray<FName>& Bones, const TArray<float>& Weights,
+		float MaxYaw = 60.f, float MaxPitch = 25.f, bool bDisableWhenAirborne = true);
 
 	/**
 	 * 시퀀스마다 섹션 하나인 몽타주를 만들거나 고친다(돌진의 Start, Loop, Stop처럼). 섹션은 순서대로 이어지고,

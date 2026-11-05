@@ -35,6 +35,17 @@ public:
 	/** 지상(0)과 공중(1) 사이 높이 Target으로 지금 높이에서 BlendTime 동안 옮긴다(지쳐 조금씩 내려앉기). */
 	void SetAirAlpha(float Target, float BlendTime);
 
+	/**
+	 * 죽을 때: 몸의 가장 낮은 뼈(BodyBones, 없으면 FootBones, 둘 다 없으면 모든 뼈)를 지금 높이에서 중력(GravityAccel, cm/s², 양수)으로
+	 * 떨어뜨린다. 나는 자세에서 바닥 사망 애니메이션으로 섞이면 몸이 몇 분의 1초 만에 바닥으로 내려오는데, 그동안 메시를 받쳐
+	 * 떨어지는 속도를 중력에 맞춘다. 애니메이션의 자세가 이 높이보다 높아지면 끝난다. 이미 바닥이면 아무것도 하지 않는다.
+	 */
+	void FallToGround(float GravityAccel);
+
+	/** FallToGround로 떨어지는 중인지, 그리고 시작할 때 계산한 바닥까지의 시간(게임 초). */
+	bool IsFallingToGround() const { return bFalling; }
+	float GetFallDuration() const { return FallDuration; }
+
 	/** 0 = 지상 높이, 1 = 공중 높이. */
 	float GetAirAlpha() const { return AirAlpha; }
 
@@ -89,5 +100,15 @@ private:
 	float AirAlpha = 0.f;
 	float AirAlphaTarget = 0.f;
 	float AirAlphaSpeed = 0.f;
+
+	/** 메시 원점 기준 가장 낮은 뼈의 높이(cm). FallToGround가 쓴다. */
+	float GetLowestFallBone(const USkeletalMeshComponent& MeshComponent, float MeshOriginZ) const;
+
+	/** FallToGround 중: 시작할 때 가장 낮은 뼈의 높이(캡슐 기준), 지난 시간, 중력. */
+	bool bFalling = false;
+	float FallStartLowest = 0.f;
+	float FallElapsed = 0.f;
+	float FallGravity = 0.f;
+	float FallDuration = 0.f;
 	float LastHeightDelta = 0.f;
 };

@@ -43,6 +43,42 @@ void UknightMonsterHoverComponent::SetAirAlpha(float Target, float BlendTime)
 	}
 }
 
+void UknightMonsterHoverComponent::FallToGround(float GravityAccel)
+{
+	const USkeletalMeshComponent* const MeshComponent = Mesh.Get();
+	if (!MeshComponent || GravityAccel <= 0.f)
+	{
+		return;
+	}
+	FallStartLowest = MeshComponent->GetRelativeLocation().Z + GetLowestFallBone(*MeshComponent, MeshComponent->GetComponentLocation().Z);
+	FallElapsed = 0.f;
+	FallGravity = GravityAccel;
+	bFalling = true;
+	const ACharacter* const Owner = Cast<ACharacter>(GetOwner());
+	const float Floor = Owner && Owner->GetCapsuleComponent() ? -Owner->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() : 0.f;
+	FallDuration = FMath::Sqrt(2.f * FMath::Max(FallStartLowest - Floor, 0.f) / GravityAccel);
+	SetComponentTickEnabled(true);
+}
+
+float UknightMonsterHoverComponent::GetLowestFallBone(const USkeletalMeshComponent& MeshComponent, float MeshOriginZ) const
+{
+	const TArray<FName>& Bones = !BodyBones.IsEmpty() ? BodyBones : FootBones;
+	float Lowest = TNumericLimits<float>::Max();
+	if (!Bones.IsEmpty())
+	{
+		for (const FName Bone : Bones)
+		{
+			Lowest = FMath::Min(Lowest, MeshComponent.GetSocketLocation(Bone).Z - MeshOriginZ);
+		}
+		return Lowest;
+	}
+	for (int32 Index = 0; Index < MeshComponent.GetNumBones(); ++Index)
+	{
+		Lowest = FMath::Min(Lowest, MeshComponent.GetSocketLocation(MeshComponent.GetBoneName(Index)).Z - MeshOriginZ);
+	}
+	return Lowest == TNumericLimits<float>::Max() ? 0.f : Lowest;
+}
+
 void UknightMonsterHoverComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
@@ -88,6 +124,25 @@ void UknightMonsterHoverComponent::TickComponent(float DeltaTime, ELevelTick Tic
 			LowestBody = FMath::Min(LowestBody, MeshComponent->GetSocketLocation(Bone).Z - MeshOriginZ);
 		}
 		Height = FMath::Max(Height, BodyClearance - Character->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() - LowestBody);
+	}
+
+	if (bFalling)
+	{
+		// 이번 프레임 자세로 내려앉을 높이(Natural)보다 중력으로 떨어진 높이(Desired)가 높으면 그만큼 받친다.
+		FallElapsed += DeltaTime;
+		const float Desired = FallStartLowest - 0.5f * FallGravity * FMath::Square(FallElapsed);
+		const float Natural = Height + GetLowestFallBone(*MeshComponent, MeshOriginZ);
+		if (Desired > Natural)
+		{
+			Height += Desired - Natural;
+		}
+		// 사망 애니메이션이 잠깐 몸을 들어 올려도 계속 떨어진다. 바닥(캡슐 밑면)까지 떨어지면 끝난다.
+		const ACharacter* const Owner = Cast<ACharacter>(GetOwner());
+		const float Floor = Owner && Owner->GetCapsuleComponent() ? -Owner->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() : 0.f;
+		if (Desired <= Floor)
+		{
+			bFalling = false;
+		}
 	}
 
 	FVector Location = MeshComponent->GetRelativeLocation();

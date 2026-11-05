@@ -8,6 +8,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
+#include "Monster/knightMonsterCharacterBase.h"
 #include "Monster/knightMonsterDebug.h"
 #include "knight.h"
 
@@ -135,7 +136,8 @@ void AknightMonsterSpikeProjectile::Land()
 	}
 	UWorld* const World = GetWorld();
 	AActor* const AttackerActor = Attacker.Get();
-	if (!World || !AttackerActor)
+	// 쏜 몬스터가 이미 죽었으면(처치 연출) 가시는 그대로 꽂히되 맞히지 않는다.
+	if (!World || !AttackerActor || AknightMonsterCharacterBase::IsDefeatedMonster(AttackerActor))
 	{
 		return;
 	}

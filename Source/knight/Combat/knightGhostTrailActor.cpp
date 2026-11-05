@@ -155,7 +155,7 @@ void AknightGhostTrailActor::CaptureCharacterMeshes(
 			PoseComp->SetSkinnedAssetAndUpdate(SkelAsset);
 			PoseComp->RegisterComponent();
 			PoseComp->SetWorldTransform(SkelComp->GetComponentTransform());
-			// (2026-10-26) 본체 포즈를 따라가는 메시(LeaderPose, 예: 흑관 몸통)는 자기 포즈를 계산하지 않아 기본 자세만 남아 있다.
+			// 본체 포즈를 따라가는 메시(LeaderPose, 예: 흑관 몸통)는 자기 포즈를 계산하지 않아 기본 자세만 남아 있다.
 			// 그 메시는 본체(리더)의 포즈를 뼈 이름으로 맞춰 복사한다. 흑관을 입으면 캐릭터 대신 망토 모양 잔상만 남던 문제.
 			USkeletalMeshComponent* PoseSource = SkelComp;
 			if (USkeletalMeshComponent* const Leader = Cast<USkeletalMeshComponent>(SkelComp->LeaderPoseComponent.Get()))

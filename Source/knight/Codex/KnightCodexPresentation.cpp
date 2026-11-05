@@ -94,49 +94,38 @@ namespace
 	public:
 		void Construct(const SButton::FArguments& Args, UKnightCodexArchiveButton* InOwner)
 		{
-			Owner = InOwner; SButton::Construct(Args); SetCanTick(true);
-		}
-		virtual void Tick(const FGeometry& G, double Time, float Delta) override
-		{
-			SButton::Tick(G, Time, Delta);
-			const float TargetSelected = Owner.IsValid() && Owner->IsRecordSelected() ? 1.f : 0.f;
-			const float TargetHover = IsHovered() ? 1.f : 0.f;
-			const float NewSelected = FMath::FInterpConstantTo(Selected, TargetSelected, Delta, 1.f/.14f);
-			const float NewHover = FMath::FInterpConstantTo(Hover, TargetHover, Delta, 1.f/.12f);
-			if (NewSelected != Selected || NewHover != Hover)
-			{
-				Selected = NewSelected; Hover = NewHover; Invalidate(EInvalidateWidgetReason::Paint);
-			}
+			Owner = InOwner; SButton::Construct(Args); SetCanTick(false);
 		}
 		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& G, const FSlateRect& Clip,
 			FSlateWindowElementList& Out, int32 Layer, const FWidgetStyle& PaintStyle, bool ParentEnabled) const override
 		{
 			const bool Enabled = ParentEnabled && IsEnabled();
 			const bool Locked = Owner.IsValid() && Owner->IsRecordLocked();
+			const float Selected = Owner.IsValid() && Owner->IsRecordSelected() ? 1.f : 0.f;
+			const float Hover = Enabled && !Locked && (IsHovered() || HasKeyboardFocus()) ? 1.f : 0.f;
 			const FVector2D S = G.GetLocalSize();
 			const float X = S.X - 1.f, Y = S.Y - 1.f, C = 9.f;
 			FLinearColor Base = Color(TEXT("071018"), Locked ? .60f : .72f);
 			FLinearColor Active = Color(TEXT("075DB7"), .88f);
 			FLinearColor Background = FMath::Lerp(Base, Active, Selected);
-			Background = FMath::Lerp(Background, Color(TEXT("163246"), .87f), Hover*(1.f-Selected)*.8f);
+			Background = FMath::Lerp(Background, Color(TEXT("163246"), .87f), Hover * (1.f - Selected) * .8f);
 			if (!Enabled) Background.A *= .55f;
 			Fill(Out, Layer, G, Background * PaintStyle.GetColorAndOpacityTint());
 			FLinearColor Edge = FMath::Lerp(Color(TEXT("416176"), .55f + .35f*Hover), Color(TEXT("50BDE9"), .95f), Selected);
 			if (HasKeyboardFocus()) Edge = Color(TEXT("C0EBFF"));
 			Edge *= PaintStyle.GetColorAndOpacityTint();
-			Line(Out, Layer+1, G, {{0,0},{X-C,0},{X,C},{X,Y-C},{X-C,Y},{0,Y},{0,0}}, Edge);
+			Line(Out, Layer+3, G, {{0,0},{X-C,0},{X,C},{X,Y-C},{X-C,Y},{0,Y},{0,0}}, Edge);
 			if (Selected > .01f)
 			{
 				FLinearColor Marker = Color(TEXT("7ADFFF"), Selected);
-				Line(Out, Layer+1, G, {{3,5},{3,Y-5}}, Marker, 3.f);
+				Line(Out, Layer+3, G, {{3,5},{3,Y-5}}, Marker, 3.f);
 			}
 			if (HasKeyboardFocus())
-				Line(Out, Layer+1, G, {{5,15},{5,5},{25,5}}, Edge, 2.f);
-			return SButton::OnPaint(Args, G, Clip, Out, Layer+2, PaintStyle, ParentEnabled);
+				Line(Out, Layer+3, G, {{5,15},{5,5},{25,5}}, Edge, 2.f);
+			return SButton::OnPaint(Args, G, Clip, Out, Layer+4, PaintStyle, ParentEnabled);
 		}
 	private:
 		TWeakObjectPtr<UKnightCodexArchiveButton> Owner;
-		float Selected = 0.f, Hover = 0.f;
 	};
 }
 

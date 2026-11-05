@@ -18,7 +18,7 @@ class USoundBase;
  * The montage should have auto blend out disabled so the final pose holds. The ability stays active until the
  * avatar is destroyed (map travel, respawn) and never stops the montage itself.
  *
- * (2026-10-19 사용자 결정 '로봇이 쓰러지는 것보다 터지는 게 좋다') 폭발: bExplodeOnDeath면 사망 몽타주를 시작한 뒤
+ * 폭발(로봇이라 쓰러지는 것보다 터지는 쪽이 어울린다): bExplodeOnDeath면 사망 몽타주를 시작한 뒤
  * ExplodeDelay초에 몸 중심(ExplosionSocket)에서 폭발 이펙트·소리·카메라 흔들림을 내고 메카(본체·부위·파츠·무기 메시)를 모두 숨긴다.
  * 이펙트는 지금 있는 것을 섞은 임시값(GA_Knight_Death에서 교체). 캡슐은 남겨 둔다(지우면 카메라가 바닥 아래로 떨어진다).
  */
@@ -42,7 +42,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Death")
 	TObjectPtr<UAnimMontage> KnockdownDeathMontage;
 
-	/** (2026-10-19) 죽으면 폭발하며 사라진다. 끄면 예전처럼 쓰러진 채 남는다. */
+	/** 죽으면 폭발하며 사라진다. 끄면 예전처럼 쓰러진 채 남는다. */
 	UPROPERTY(EditDefaultsOnly, Category="Death|Explode")
 	bool bExplodeOnDeath = true;
 

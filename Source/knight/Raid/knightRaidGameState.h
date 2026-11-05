@@ -9,6 +9,7 @@
 class UknightRaidDefinition;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FknightRaidPhaseChanged, EknightRaidPhase, OldPhase, EknightRaidPhase, NewPhase);
+DECLARE_MULTICAST_DELEGATE_OneParam(FknightRaidFinishStageChanged, EknightRaidFinishStage);
 
 /**
  * Current raid state for UI and gameplay to read. Written only by AknightRaidGameMode.
@@ -41,8 +42,23 @@ public:
 	UPROPERTY(BlueprintAssignable, Category="Knight|Raid")
 	FknightRaidPhaseChanged OnRaidPhaseChanged;
 
+	/** 처치 연출 단계. None이 아니고 Done 전이면 연출 중이다(HUD는 숨기고, 결과 화면은 Done에서 연다). */
+	EknightRaidFinishStage GetFinishStage() const { return FinishStage; }
+	bool IsFinishPresentationPlaying() const { return FinishStage != EknightRaidFinishStage::None && FinishStage != EknightRaidFinishStage::Done; }
+	FknightRaidFinishStageChanged OnFinishStageChanged;
+
 private:
 	friend class AknightRaidGameMode;
+	friend class UknightRaidFinishPresentation;
+
+	void SetFinishStage(EknightRaidFinishStage NewStage)
+	{
+		if (FinishStage != NewStage)
+		{
+			FinishStage = NewStage;
+			OnFinishStageChanged.Broadcast(NewStage);
+		}
+	}
 
 	void SetRaidDefinition(const UknightRaidDefinition* InDefinition) { RaidDefinition = InDefinition; }
 	void SetLoadingStatus(const FText& InStatus) { LoadingStatus = InStatus; }
@@ -55,6 +71,7 @@ private:
 	FText LoadingStatus;
 
 	EknightRaidPhase RaidPhase = EknightRaidPhase::None;
+	EknightRaidFinishStage FinishStage = EknightRaidFinishStage::None;
 	double RaidClockStartTime = -1.0;
 	double RaidClockStopTime = -1.0;
 };

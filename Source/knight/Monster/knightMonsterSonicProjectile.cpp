@@ -12,6 +12,7 @@
 #include "Environment/knightWaterRippleSubsystem.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
+#include "Monster/knightMonsterCharacterBase.h"
 #include "Monster/knightMonsterDebug.h"
 #include "UObject/ConstructorHelpers.h"
 #include "knight.h"
@@ -66,10 +67,34 @@ void AknightMonsterSonicProjectile::Tick(float DeltaSeconds)
 		Destroy();
 		return;
 	}
+	// 쏜 몬스터가 죽으면(처치 연출) 더는 맞히지 않는다. 날던 음파는 이펙트를 꺼 가며 조금 더 날다가 사라진다.
+	if (!bDisarmed && AknightMonsterCharacterBase::IsDefeatedMonster(Source))
+	{
+		bDisarmed = true;
+		EffectComponent->Deactivate();
+		Mesh->SetVisibility(false);
+		SetLifeSpan(DisarmedLifeTime);
+	}
 	const FVector Start = GetActorLocation();
 	const float Step = FMath::Min(static_cast<float>(Velocity.Size()) * DeltaSeconds, RemainingDistance);
 	const FVector End = Start + Velocity.GetSafeNormal() * Step;
 	RemainingDistance -= Step;
+	if (bDisarmed)
+	{
+		// 벽이나 사거리 끝에서는 그 자리에 멈춰 남은 입자가 꺼지기를 기다린다.
+		FHitResult WorldHit;
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(knightSonicProjectile), false, Source);
+		Params.AddIgnoredActor(this);
+		if (Step > 0.f && !World->LineTraceSingleByChannel(WorldHit, Start, End, ECC_WorldStatic, Params))
+		{
+			SetActorLocation(End);
+		}
+		else
+		{
+			RemainingDistance = 0.f;
+		}
+		return;
+	}
 
 	// 이번 틱에 지나간 구간의 중간과 끝을 구체로 본다. 빠른 투사체가 얇은 대상을 건너뛰지 않게 한다.
 	// 회피(무적)로 피하면 그 대상은 다시 맞지 않고 투사체는 그대로 지나간다.

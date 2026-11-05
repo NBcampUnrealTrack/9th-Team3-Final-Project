@@ -104,7 +104,7 @@ void UknightGameplayAbility_BoostLunge::ActivateAbility(const FGameplayAbilitySp
 	HitTask->EventReceived.AddDynamic(this, &ThisClass::OnMeleeHitEvent);
 	HitTask->ReadyForActivation();
 
-	// (2026-10-29 사용자 요청) 선딜레이: 대상 쪽으로 돌아 돌진 자세로 멈춘 채 등 부스터를 먼저 켜고(예열), StartupDelay초 뒤에 돌진한다.
+	// 선딜레이: 대상 쪽으로 돌아 돌진 자세로 멈춘 채 등 부스터를 먼저 켜고(예열), StartupDelay초 뒤에 돌진한다.
 	// 달리던 속도는 버리고 이동 입력도 막는다. 돌진 방향·거리는 예열이 끝날 때 다시 잰다(StartLunge).
 	UWorld* const World = GetWorld();
 	if (StartupDelay > 0.f && !bAirLunge && World)
@@ -190,7 +190,7 @@ void UknightGameplayAbility_BoostLunge::StartLunge()
 	{
 		if (UAnimInstance* const Anim = Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr)
 		{
-			// (2026-10-29) 예열 중 멈춰 둔 돌진 자세면 이어서 재생한다.
+			// 예열 중 멈춰 둔 돌진 자세면 이어서 재생한다.
 			if (Anim->GetActiveInstanceForMontage(Dash))
 			{
 				Anim->Montage_Resume(Dash);
@@ -224,7 +224,7 @@ void UknightGameplayAbility_BoostLunge::StartLunge()
 			GetStanceScaledHitParams(HitParams), Destination, Duration);
 	}
 
-	// (2026-10-29) 예열에서 이미 켰으면 그대로 이어서 뿜는다.
+	// 예열에서 이미 켰으면 그대로 이어서 뿜는다.
 	if (BackThrusters.IsEmpty())
 	{
 		StartBackThrusters(*Character);
@@ -233,7 +233,7 @@ void UknightGameplayAbility_BoostLunge::StartLunge()
 	{
 		StartFootThrusters(*Character);
 	}
-	// (2026-10-26) 이미 기본 공격이 닿는 거리(멈출 지점까지 GhostInRangeDistance 이하)면 잔상을 남기지 않는다.
+	// 이미 기본 공격이 닿는 거리(멈출 지점까지 GhostInRangeDistance 이하)면 잔상을 남기지 않는다.
 	GhostStopLocation = Character->GetActorLocation() + ToDestination;
 	if (bSpawnGhostTrail && Distance > GhostInRangeDistance)
 	{
@@ -480,7 +480,7 @@ void UknightGameplayAbility_BoostLunge::SpawnGhostStep()
 	{
 		return;
 	}
-	// (2026-10-26) 돌진하다 기본 공격이 닿는 거리로 들어오면 더 남기지 않는다(몬스터에 붙은 잔상).
+	// 돌진하다 기본 공격이 닿는 거리로 들어오면 더 남기지 않는다(몬스터에 붙은 잔상).
 	if (FVector::Dist2D(Character->GetActorLocation(), GhostStopLocation) <= GhostInRangeDistance)
 	{
 		StopGhostTrail();
@@ -509,7 +509,7 @@ void UknightGameplayAbility_BoostLunge::EndAbility(const FGameplayAbilitySpecHan
 			Feedback->EndPredictionForAttack(this);
 		}
 	}
-	// (2026-10-29) 예열 도중 끊기면(피격 등) 돌진을 시작하지 않고 이동 잠금을 푼다.
+	// 예열 도중 끊기면(피격 등) 돌진을 시작하지 않고 이동 잠금을 푼다.
 	if (UWorld* const World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(StartupDelayTimer);

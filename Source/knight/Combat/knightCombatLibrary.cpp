@@ -51,7 +51,7 @@ namespace
 {
 	// 공격의 피해 이펙트가 쓰는 피해 실행(UknightDamageExecution)의 가드 범위로 판정한다. 퍼펙트 가드가 일반 가드와 같은 각도를 쓰게 하려는 것.
 	// 피해 이펙트가 없거나 다른 실행을 쓰면 기본 피해 실행의 각도를 쓴다.
-	// (2026-10-12) 방향은 타격 결과의 공격이 들어온 지점(TraceStart)에서 잰다. 피해 실행과 같은 기준이다.
+	// 방향은 타격 결과의 공격이 들어온 지점(TraceStart)에서 잰다. 피해 실행과 같은 기준이다.
 	bool IsAttackerInGuardArc(const TSubclassOf<UGameplayEffect>& DamageEffect, const AActor* Target, const AActor* Attacker, const FHitResult& Hit)
 	{
 		if (const UGameplayEffect* const Effect = DamageEffect ? DamageEffect->GetDefaultObject<UGameplayEffect>() : nullptr)
@@ -69,7 +69,7 @@ namespace
 	}
 
 	/**
-	 * (2026-10-19 사용자 결정) 락온 부위 보정. 공격자가 이 대상의 부위에 락온 중이고, 맞은 지점이 그 락온 지점에서
+	 * 락온 부위 보정. 공격자가 이 대상의 부위에 락온 중이고, 맞은 지점이 그 락온 지점에서
 	 * 락온 컴포넌트의 LockOnPartAssistRadius 안이면 그 부위에 맞은 것으로 친다(히트의 뼈·컴포넌트를 락온 지점 것으로 바꿈).
 	 * 큰 몬스터를 휘두르면 칼이 노린 부위보다 앞발·몸통에 먼저 닿아 원하지 않는 부위가 맞던 문제. 락온 컴포넌트가 없는 공격자(몬스터)는 그대로.
 	 * 바꾼 뼈로 부위를 다시 판정해 락온 부위가 나오지 않으면(락온 지점이 부위 뼈가 아님) 원래 히트를 쓴다.
@@ -132,8 +132,8 @@ namespace
 		OutTravel = FMath::Clamp(Distance - Radius - StopDistance, 0.f, MaxDistance);
 		OutLocation = AttackerLocation + Direction * OutTravel;
 		OutRotation = Direction.Rotation();
-		// (2026-10-19) Verbose: 락온 중 매 프레임 불려서(락온 컴포넌트의 '멀다' 판정) 로그가 한 판에 10만 줄 넘게 쌓이고 랙을 만들었다.
-		// (2026-10-20) VeryVerbose: 밸런스 측정 때 LogknightCombat을 Verbose로 켜도 이 줄은 나오지 않게(타격 로그만 남게).
+		// Verbose: 락온 중 매 프레임 불려서(락온 컴포넌트의 '멀다' 판정) 로그가 한 판에 10만 줄 넘게 쌓이고 랙을 만들었다.
+		// VeryVerbose: 밸런스 측정 때 LogknightCombat을 Verbose로 켜도 이 줄은 나오지 않게(타격 로그만 남게).
 		UE_LOG(LogknightCombat, VeryVerbose, TEXT("Attack warp -> %s: distance %.0f, radius %.0f, travel %.0f"),
 			*GetNameSafe(TargetActor), Distance, Radius, OutTravel);
 		return true;
@@ -148,7 +148,7 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FHitResult& InHit, const FknightMeleeHitParams& Params,
 	const UGameplayAbility* SourceAbility)
 {
-	// (2026-10-19) 플레이어가 부위에 락온 중이면 그 부위 근처 타격을 락온 부위로 보정한다. 아래는 모두 보정된 히트를 쓴다.
+	// 플레이어가 부위에 락온 중이면 그 부위 근처 타격을 락온 부위로 보정한다. 아래는 모두 보정된 히트를 쓴다.
 	const FHitResult Hit = ApplyLockOnPartAssist(Attacker, InHit);
 	AActor* const Target = Hit.GetActor();
 	AknightCharacter* const LocalPlayer = Cast<AknightCharacter>(Attacker);
@@ -177,7 +177,7 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 	}
 
 	// 패링할 수 없는 공격은 패링 판정을 건너뛴다. 패링 구간에도 State.Guarding이 붙어 있어 아래 가드로 처리된다.
-	// 패링(퍼펙트 가드)도 일반 가드처럼 가드 범위(정면) 안에서 들어온 공격만 막는다. 범위 밖이면 아래에서 그냥 맞는다. (2026-10-08)
+	// 패링(퍼펙트 가드)도 일반 가드처럼 가드 범위(정면) 안에서 들어온 공격만 막는다. 범위 밖이면 아래에서 그냥 맞는다.
 	const bool bInParryWindow = TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_Parrying);
 	const bool bInGuardArc = bInParryWindow && IsAttackerInGuardArc(Params.DamageEffect, Target, Attacker, Hit);
 	if (bInParryWindow && !(Params.bCanBeParried && bInGuardArc))
@@ -224,7 +224,7 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 
 	FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
 	Context.AddHitResult(Hit, true);
-	// (2026-10-21) 어떤 공격의 피해인지 남긴다(피해 실행 로그의 [어빌리티], 밸런스 측정용).
+	// 어떤 공격의 피해인지 남긴다(피해 실행 로그의 [어빌리티], 밸런스 측정용).
 	if (SourceAbility)
 	{
 		Context.SetAbility(SourceAbility);
@@ -240,7 +240,7 @@ EknightHitOutcome UknightCombatLibrary::ApplyMeleeHit(AActor* Attacker, const FH
 	SpecHandle.Data->SetSetByCallerMagnitude(knightGameplayTags::SetByCaller_PoiseDamage, Params.PoiseDamage);
 
 	// 적용 전에 읽어 둔다. 타격으로 타깃이 죽으면서 태그가 바뀔 수 있다.
-	// (2026-10-12) 가드 중이어도 가드 범위 밖(등 뒤 등)에서 들어온 공격은 아래 일반 피격으로 처리한다.
+	// 가드 중이어도 가드 범위 밖(등 뒤 등)에서 들어온 공격은 아래 일반 피격으로 처리한다.
 	// 피해 실행도 같은 범위로 가드 감소를 정하므로, 가드 이펙트·히트 스톱과 실제 피해가 어긋나지 않는다.
 	const bool bGuarding = TargetASC->HasMatchingGameplayTag(knightGameplayTags::State_Guarding)
 		&& IsAttackerInGuardArc(Params.DamageEffect, Target, Attacker, Hit);
@@ -356,14 +356,26 @@ int32 UknightCombatLibrary::ApplyAreaMeleeHits(AActor* Attacker, const FVector& 
 		// 피해 컨텍스트, 큐, 부위 조회는 히트 결과를 필요로 하므로 가장 가까운 표면 지점으로 하나 만든다.
 		FVector ImpactPoint = Component->GetComponentLocation();
 		FVector ClosestPoint;
-		if (Component->GetClosestPointOnCollision(Center, ClosestPoint) >= 0.f)
+		const float ClosestDistance = Component->GetClosestPointOnCollision(Center, ClosestPoint);
+		if (ClosestDistance >= 0.f)
 		{
 			ImpactPoint = ClosestPoint;
+		}
+		// 메시 충돌 바디가 몸 일부에만 있으면 위에서 내리꽂는 공격도 허리 아래에 닿은 것으로 나온다(패링 불꽃, 맞은 부위가 엉뚱해진다).
+		// 루트 캡슐 표면이 판정 중심에 더 가까우면 그 점을 쓴다.
+		const UPrimitiveComponent* const Root = Cast<UPrimitiveComponent>(Target->GetRootComponent());
+		FVector RootPoint = FVector::ZeroVector;
+		const float RootDistance = Root && Root != Component ? Root->GetClosestPointOnCollision(Center, RootPoint) : -1.f;
+		if (RootDistance >= 0.f && (ClosestDistance < 0.f || RootDistance < ClosestDistance))
+		{
+			ImpactPoint = RootPoint;
 		}
 		FHitResult Hit(Target, Component, ImpactPoint, FixedNormal.IsZero() ? (Center - ImpactPoint).GetSafeNormal() : FixedNormal);
 		Hit.bBlockingHit = true;
 		Hit.TraceStart = Center;
 		Hit.TraceEnd = ImpactPoint;
+		UE_LOG(LogknightCombat, Verbose, TEXT("%s area hit on %s via %s at %s (center %s, target %s)."), *GetNameSafe(Attacker), *GetNameSafe(Target),
+			*GetNameSafe(Component), *ImpactPoint.ToCompactString(), *Center.ToCompactString(), *Target->GetActorLocation().ToCompactString());
 		const EknightHitOutcome Outcome = ApplyMeleeHit(Attacker, Hit, Params);
 		UE_LOG(LogknightAI, Verbose, TEXT("%s: area hit %s (outcome %d)."), *GetNameSafe(Attacker), *GetNameSafe(Target), static_cast<int32>(Outcome));
 		OnHit(*Target, Outcome);
@@ -522,7 +534,7 @@ void UknightCombatLibrary::StartAttackLunge(UGameplayAbility* Ability, const UAn
 		float LungeDuration = 0.f;
 		double StartTime = -1.0;
 		FTimerHandle Timer;
-		// (2026-10-27) 대상 따라가기(TrackTarget이 있을 때만): 처음 돌진 방향과 지난 프레임까지 간 비율.
+		// 대상 따라가기(TrackTarget이 있을 때만): 처음 돌진 방향과 지난 프레임까지 간 비율.
 		TFunction<bool(FVector&)> TrackTarget;
 		FVector Direction = FVector::ZeroVector;
 		float PrevEased = 0.f;
@@ -567,7 +579,7 @@ void UknightCombatLibrary::StartAttackLunge(UGameplayAbility* Ability, const UAn
 		FVector Delta;
 		if (Lunge->TrackTarget)
 		{
-			// (2026-10-27) 대상 따라가기: 목표를 대상의 지금 위치로 바꾸고, 남은 거리 중 이번 프레임 몫만큼 간다.
+			// 대상 따라가기: 목표를 대상의 지금 위치로 바꾸고, 남은 거리 중 이번 프레임 몫만큼 간다.
 			// 시작점 보간을 그대로 쓰면 대상이 다가올 때 목표가 당겨져 뒤로 끌리므로, 처음 돌진 방향의 반대로는 가지 않는다.
 			FVector Tracked;
 			if (Lunge->TrackTarget(Tracked))

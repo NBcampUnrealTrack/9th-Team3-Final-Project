@@ -27,9 +27,9 @@ namespace knightDamageMath
 		float GuardEfficiency = 1.f;      // 맞는 쪽 가드 효율 (배율)
 		float GuardDamageMultiplier = 0.2f;      // 가드 효율 1.0일 때 남는 피해 비율
 		float GuardPoiseDamageMultiplier = 0.5f; // 가드 효율 1.0일 때 남는 그로기 비율
-		float GuardBlockedDamageToPoise = 0.f;   // (2026-10-20) 가드로 막아 줄어든 피해의 이 비율만큼 그로기를 더한다
-		float DamageTakenMultiplier = 1.f;       // 맞는 쪽 받는 피해 배율 (2026-10-10, 마지막에 곱함)
-		float PoiseDamageTakenMultiplier = 1.f;  // 맞는 쪽 받는 그로기 배율 = 그로기 저항 (2026-10-10, 마지막에 곱함)
+		float GuardBlockedDamageToPoise = 0.f;   // 가드로 막아 줄어든 피해의 이 비율만큼 그로기를 더한다
+		float DamageTakenMultiplier = 1.f;       // 맞는 쪽 받는 피해 배율(마지막에 곱함)
+		float PoiseDamageTakenMultiplier = 1.f;  // 맞는 쪽 받는 그로기 배율 = 그로기 저항(마지막에 곱함)
 	};
 
 	struct FResult
@@ -57,7 +57,7 @@ namespace knightDamageMath
 	KNIGHT_API float GetDefenseMultiplier(float Defense);
 
 	/**
-	 * (2026-10-12) 공격이 들어온 지점(AttackOrigin)이 맞는 쪽 정면(TargetForward) 기준 가드 범위 안인지.
+	 * 공격이 들어온 지점(AttackOrigin)이 맞는 쪽 정면(TargetForward) 기준 가드 범위 안인지.
 	 * ArcDegrees는 전체 각도(150이면 좌우 75°씩). 높이는 무시하고 수평으로만 본다. 두 점이 같은 자리면 범위 안.
 	 */
 	KNIGHT_API bool IsInGuardArc(const FVector& TargetLocation, const FVector& TargetForward, const FVector& AttackOrigin, float ArcDegrees);
@@ -72,7 +72,7 @@ namespace knightDamageMath
  *   Raw    = SetByCaller.Damage + AttackPower * SetByCaller.MotionValue / 100
  *   Damage = Raw * PartMultiplier * Critical * 100 / (100 + Defense) * Guard * DamageTakenMultiplier
  *   Poise  = SetByCaller.PoiseDamage * StaggerPower * GuardPoise * PoiseDamageTakenMultiplier
- *   (2026-10-10) DamageTakenMultiplier·PoiseDamageTakenMultiplier = 맞는 쪽의 받는 피해·그로기 배율(기본 1.0, 파츠 효과용).
+ *   DamageTakenMultiplier·PoiseDamageTakenMultiplier = 맞는 쪽의 받는 피해·그로기 배율(기본 1.0, 파츠 효과용).
  *   마지막에 곱해서 방어력·가드와 상관없이 정확한 비율로 줄인다(예: 0.85 = 받는 피해 -15%).
  *   Guard / GuardPoise = 1 - (1 - 기준 배율) * GuardEfficiency   (가드 범위 안에서 막았을 때만)
  *
@@ -81,7 +81,7 @@ namespace knightDamageMath
  * 맞는 쪽에 State.Invulnerable이 있으면 피격이 0이 된다.
  * State.Guarding은 공격자가 가드 범위 안에 있을 때 피해를 줄인다.
  * 퍼펙트 가드(State.Parrying)는 UknightCombatLibrary::ApplyMeleeHit이 이펙트를 적용하기 전에 판정한다(가드 범위 안 + 패리 가능한 공격이면
- * 이펙트 자체를 적용하지 않음). 그래서 여기까지 온 피격은 패리 구간이어도 일반 가드·피격으로 계산한다. (2026-10-08, 전에는 여기서 0으로 만들어
+ * 이펙트 자체를 적용하지 않음). 그래서 여기까지 온 피격은 패리 구간이어도 일반 가드·피격으로 계산한다. (전에는 여기서 0으로 만들어
  * 등 뒤 공격·패리 불가 공격도 패리 구간이면 피해가 0이었다)
  *
  * 모든 캡처는 UknightCoreAttributeSet에서 읽는다. 공격하는 쪽과 맞는 쪽 ASC 모두 이 세트가 있어야 한다:
@@ -102,7 +102,7 @@ public:
 
 	/**
 	 * 공격자가 맞는 쪽의 가드 범위(GuardArcDegrees) 안에 있는지. 퍼펙트 가드도 같은 범위를 쓰도록 공개한다(UknightCombatLibrary).
-	 * (2026-10-12) Hit이 있고 TraceStart가 있으면 공격이 들어온 지점에서 방향을 잰다:
+	 * Hit이 있고 TraceStart가 있으면 공격이 들어온 지점에서 방향을 잰다:
 	 *   근접 공격 = 무기·발톱 스윕의 직전 위치, 몬스터 범위 공격 = 범위 중심, 쓸어서 맞는 투사체 = 맞기 직전 위치.
 	 *   없으면 공격자 액터 위치. 잔열처럼 큰 몬스터는 몸 중심이 공격 부위(머리·꼬리)에서 8~10m 떨어져 있어서
 	 *   몸 중심으로 재면 정면으로 막아도 범위 밖으로 나오던 문제를 고친다.
@@ -119,7 +119,7 @@ protected:
 	float GuardPoiseDamageMultiplier = 0.5f;
 
 	/**
-	 * (2026-10-20 사용자 결정) 가드로 막아 줄어든 피해(막지 않았을 때 피해 - 막은 뒤 피해)의 이 비율만큼 그로기를 더한다.
+	 * 가드로 막아 줄어든 피해(막지 않았을 때 피해 - 막은 뒤 피해)의 이 비율만큼 그로기를 더한다.
 	 * 1.0 = 막은 피해를 그대로 그로기로. 막으면 피해는 덜 받는 대신 그냥 맞을 때보다 그로기가 더 쌓이게 하려는 것.
 	 * 예) 잔열 한 방(방어 21 기준 16.5)을 가드 효율 0.8로 막으면 피해 5.9, 그로기 10 x 0.6 + 막은 피해 10.6 = 16.6. 바뀔 수 있는 값.
 	 */

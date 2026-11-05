@@ -108,7 +108,7 @@ EknightHitReactType UknightGameplayAbility_HitReact::ResolveType(const FGameplay
 {
 	if (Payload.EventTag == knightGameplayTags::Event_PoiseBroken)
 	{
-		// (2026-10-16) 그로기 반복 몽타주가 있으면 그로기가 0이 될 때 기절한다.
+		// 그로기 반복 몽타주가 있으면 그로기가 0이 될 때 기절한다.
 		if (GroggyLoopMontage)
 		{
 			return EknightHitReactType::Groggy;

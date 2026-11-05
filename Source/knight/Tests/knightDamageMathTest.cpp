@@ -89,7 +89,7 @@ bool FknightDamageMathTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("피해 = 60 x 0.6 = 36"), R.Damage, 36.f, Tolerance);
 	}
 
-	// ---- (2026-10-20) 막은 피해를 그로기로 더하기 ----
+	// ---- 막은 피해를 그로기로 더하기 ----
 	{
 		FInputs In = Base;
 		In.bGuarded = true;
@@ -130,7 +130,7 @@ bool FknightDamageMathTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("경직치가 음수면 그로기 0"), R.PoiseDamage, 0.f, Tolerance);
 	}
 
-	// ---- 받는 피해·그로기 배율 (2026-10-10, 파츠 효과용): 마지막에 곱해서 정확한 비율로 줄인다 ----
+	// ---- 받는 피해·그로기 배율 (파츠 효과용): 마지막에 곱해서 정확한 비율로 줄인다 ----
 	{
 		FInputs In = Base;
 		In.DamageTakenMultiplier = 0.85f;
@@ -158,7 +158,7 @@ bool FknightDamageMathTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("받는 그로기 배율이 음수면 그로기 0"), R.PoiseDamage, 0.f, Tolerance);
 	}
 
-	// ---- 가드 범위 (2026-10-12): 전체 150° = 정면 좌우 75°씩, 수평으로만 본다 ----
+	// ---- 가드 범위: 전체 150° = 정면 좌우 75°씩, 수평으로만 본다 ----
 	{
 		const FVector Origin = FVector::ZeroVector;
 		const FVector Forward = FVector::ForwardVector;

@@ -49,7 +49,7 @@ void UknightGameplayAbility_Death::ActivateAbility(const FGameplayAbilitySpecHan
 		UE_LOG(LogknightAbility, Warning, TEXT("%s: no death montage; the Knight stays in its current pose."), *GetName());
 	}
 
-	// (2026-10-19) 쓰러지기 시작한 뒤 잠깐 있다가 폭발하며 사라진다.
+	// 쓰러지기 시작한 뒤 잠깐 있다가 폭발하며 사라진다.
 	if (bExplodeOnDeath)
 	{
 		if (ExplodeDelay > 0.f)

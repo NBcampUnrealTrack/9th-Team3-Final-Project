@@ -39,7 +39,8 @@ namespace
 	{
 		const TSubclassOf<UCommonButtonBase> ButtonClass = LoadClass<UCommonButtonBase>(nullptr,
 			TEXT("/Game/Knight/UI/Common/WBP_KnightButton.WBP_KnightButton_C"));
-		return Owner && ButtonClass ? CreateWidget<UCommonButtonBase>(Owner, ButtonClass) : nullptr;
+		UCommonButtonBase* const Button = Owner && ButtonClass ? CreateWidget<UCommonButtonBase>(Owner, ButtonClass) : nullptr;
+		return Button;
 	}
 
 	FText RewardCount(const FknightRaidReward& Reward)

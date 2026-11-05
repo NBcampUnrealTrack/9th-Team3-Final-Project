@@ -46,6 +46,8 @@ void UknightGameplayAbility_MonsterTornadoAttack::ActivateAbility(const FGamepla
 	Phase = EPhase::Summon;
 	PhaseTime = 0.f;
 	bLanded = false;
+	// 첫 회오리가 솟을 때까지.
+	StartAttackWarning(SpawnTime);
 	if (SummonMontage)
 	{
 		UAbilityTask_PlayMontageAndWait* const MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, SummonMontage);
