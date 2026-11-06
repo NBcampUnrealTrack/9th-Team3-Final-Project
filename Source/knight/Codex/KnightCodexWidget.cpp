@@ -30,12 +30,13 @@ namespace
 	const FLinearColor NormalColor(FColor(0x1B, 0x2B, 0x3A));
 	const FLinearColor LockedColor(FColor(0x15, 0x22, 0x2C));
 	FText OrPending(const FText& Value) { return Value.IsEmpty() ? LOCTEXT("Pending", "설명 준비 중") : Value; }
-	void SetImage(UImage* Image, UTexture2D* Texture, UWidget* Container = nullptr)
+	void SetImage(UImage* Image, UTexture2D* Texture, UWidget* Container = nullptr, bool bReserveSpace = false)
 	{
 		if (!Image) return;
 		Image->SetVisibility(Texture ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 		if (Texture) Image->SetBrushFromTexture(Texture, true);
-		if (Container) Container->SetVisibility(Texture ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
+		else Image->SetBrush(FSlateBrush());
+		if (Container) Container->SetVisibility(Texture || bReserveSpace ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
 	}
 	struct FQuestDropGroup
 	{
@@ -74,16 +75,29 @@ void UKnightCodexBossEntryWidget::NativeOnInitialized()
 	if (Button_Select) Button_Select->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleClicked);
 }
 
-void UKnightCodexBossEntryWidget::Configure(FName InId, const FText& Name, UTexture2D* Icon, bool bUnlocked)
+void UKnightCodexBossEntryWidget::Configure(FName InId, const FText& Name, UTexture2D* Icon, bool bUnlocked, FVector4 IconUV, int32 Ordinal)
 {
 	BossId = InId;
 	bEntryUnlocked = bUnlocked;
 	if (Text_Name) Text_Name->SetText(Name);
 	if (Text_Name) Text_Name->SetColorAndOpacity(FSlateColor(bUnlocked
 		? FLinearColor(0.94f, 0.97f, 1.f, 1.f) : FLinearColor(0.54f, 0.65f, 0.74f, 1.f)));
-	SetImage(Image_Icon, bUnlocked ? Icon : nullptr, GetWidgetFromName(TEXT("Size_Icon")));
+	SetImage(Image_Icon, bUnlocked ? Icon : nullptr, GetWidgetFromName(TEXT("Size_Icon")), true);
+	if (Image_Icon && Icon && bUnlocked)
+	{
+		const FVector2D Min(FMath::Clamp(IconUV.X,0.,1.),FMath::Clamp(IconUV.Y,0.,1.));
+		const FVector2D Max(FMath::Clamp(IconUV.Z,0.,1.),FMath::Clamp(IconUV.W,0.,1.));
+		if (Max.X > Min.X && Max.Y > Min.Y)
+		{
+			FSlateBrush Brush=Image_Icon->GetBrush(); Brush.SetUVRegion(FBox2D(Min,Max));
+			Brush.ImageSize=FVector2D(Icon->GetSizeX()*(Max.X-Min.X),Icon->GetSizeY()*(Max.Y-Min.Y));
+			Image_Icon->SetBrush(Brush);
+		}
+	}
+	if (auto* Number=Cast<UTextBlock>(GetWidgetFromName(TEXT("Text_Ordinal"))))
+		Number->SetText(Ordinal>0 ? FText::FromString(FString::Printf(TEXT("%02d"),Ordinal)) : FText::GetEmpty());
 	if (Text_LockState) Text_LockState->SetText(bUnlocked ? LOCTEXT("Unlocked", "해금") : LOCTEXT("Locked", "미해금"));
-	if (Row_LockState) Row_LockState->SetVisibility(ESlateVisibility::HitTestInvisible);
+	if (Row_LockState) Row_LockState->SetVisibility(bUnlocked ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
 	else if (Text_LockState) Text_LockState->SetVisibility(ESlateVisibility::HitTestInvisible);
 	SetSelected(bEntrySelected);
 }
@@ -104,7 +118,7 @@ void UKnightCodexDropEntryWidget::Configure(const FknightRaidReward& Reward)
 {
 	const UknightItemDefinition* Item = Reward.Item;
 	if (Text_Name) Text_Name->SetText(Item && !Item->DisplayName.IsEmpty() ? Item->DisplayName : LOCTEXT("UnknownItem", "아이템 정보 없음"));
-	SetImage(Image_Icon, Item ? Item->Icon.LoadSynchronous() : nullptr, GetWidgetFromName(TEXT("Size_ItemIcon")));
+	SetImage(Image_Icon, Item ? Item->Icon.LoadSynchronous() : nullptr, GetWidgetFromName(TEXT("Size_ItemIcon")), true);
 	TArray<FText> Details;
 	if (Reward.MinCount == Reward.MaxCount)
 	{
@@ -125,7 +139,7 @@ void UKnightCodexDropEntryWidget::Configure(const FknightRaidReward& Reward)
 void UKnightCodexDropEntryWidget::ConfigureQuestDrop(const UknightItemDefinition* Item, const TArray<FText>& Sources)
 {
 	if (Text_Name) Text_Name->SetText(Item && !Item->DisplayName.IsEmpty() ? Item->DisplayName : LOCTEXT("UnknownItem", "아이템 정보 없음"));
-	SetImage(Image_Icon, Item ? Item->Icon.LoadSynchronous() : nullptr, GetWidgetFromName(TEXT("Size_ItemIcon")));
+	SetImage(Image_Icon, Item ? Item->Icon.LoadSynchronous() : nullptr, GetWidgetFromName(TEXT("Size_ItemIcon")), true);
 	if (Text_Details) Text_Details->SetText(FText::Join(FText::FromString(TEXT("\n")), Sources));
 }
 
@@ -193,6 +207,15 @@ void UKnightCodexWidget::NativeDestruct()
 
 void UKnightCodexWidget::Open()
 {
+	// Reopening the same reader retains category, record and valid scroll positions.
+	// Data loads are synchronous; progression events only refresh content, never motion.
+	if (LoadedData && (!ReadingButtons[0].IsEmpty() || !ReadingButtons[1].IsEmpty() || !GeneratedEntries.IsEmpty()))
+	{
+		RefreshUnlockStates();
+		if (!SelectedBossId.IsNone() && !FindBoss(SelectedBossId)) SelectedBossId = NAME_None;
+		SelectCategory(ActiveCategory);
+		return;
+	}
 	LoadedData = CodexData.LoadSynchronous();
 	if (!LoadedData)
 	{
@@ -246,7 +269,8 @@ void UKnightCodexWidget::RefreshUnlockStates()
 		const bool bUnlocked = IsBossUnlocked(*Boss);
 		const FText Name = !Boss->DisplayNameOverride.IsEmpty() ? Boss->DisplayNameOverride
 			: Boss->MonsterDefinition && !Boss->MonsterDefinition->DisplayName.IsEmpty() ? Boss->MonsterDefinition->DisplayName : FText::FromName(Boss->BossId);
-		Entry->Configure(Boss->BossId, Name, bUnlocked ? Boss->ListIcon.LoadSynchronous() : nullptr, bUnlocked);
+		Entry->Configure(Boss->BossId, Name, bUnlocked ? Boss->ListIcon.LoadSynchronous() : nullptr, bUnlocked,
+			Boss->ListIconUV, LoadedData->Bosses.IndexOfByPredicate([Boss](const auto& B){return B.BossId==Boss->BossId;})+1);
 	}
 	RefreshBoss();
 }
@@ -260,6 +284,7 @@ void UKnightCodexWidget::RebuildTextPage(FName ListName, UTextBlock* LegacyBody,
 		if (Button.IsValid()) Button->OnSectionSelected.RemoveDynamic(this, &ThisClass::HandleSectionSelected);
 	ReadingButtons[Category].Reset();
 	ReadingSectionIndices[Category].Reset();
+	ReadingSelectedIndices[Category] = INDEX_NONE;
 	ReadingPageTitles[Category] = Title;
 	List->ClearChildren();
 	// An existing source record may be internal-only. It stays in DA_Codex; the reader never renders it.
@@ -287,13 +312,12 @@ void UKnightCodexWidget::RebuildTextPage(FName ListName, UTextBlock* LegacyBody,
 		UTextBlock* Label = WidgetTree->ConstructWidget<UTextBlock>();
 		KnightCodexPresentation::TextStyle(Label, 17, false);
 		Label->SetText(EntryName);
-		Label->SetAutoWrapText(false);
-		Label->SetTextOverflowPolicy(ETextOverflowPolicy::Ellipsis);
+		Label->SetAutoWrapText(true);
 		UHorizontalBoxSlot* LabelSlot = Row->AddChildToHorizontalBox(Label);
 		LabelSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 		LabelSlot->SetVerticalAlignment(VAlign_Center);
 		USizeBox* Height = WidgetTree->ConstructWidget<USizeBox>();
-		Height->SetHeightOverride(62.f);
+		Height->SetMinDesiredHeight(76.f);
 		Height->AddChild(Entry);
 		List->AddChildToVerticalBox(Height)->SetPadding(FMargin(0.f, 0.f, 0.f, 8.f));
 		ReadingButtons[Category].Add(Entry);
@@ -317,6 +341,8 @@ void UKnightCodexWidget::HandleSectionSelected(int32 Category, int32 SectionInde
 void UKnightCodexWidget::SelectReadingSection(int32 Category, int32 SectionIndex)
 {
 	if (Category < 0 || Category > 1 || !ReadingButtons[Category].IsValidIndex(SectionIndex)) return;
+	if (ReadingSelectedIndices[Category] == SectionIndex) return;
+	ReadingSelectedIndices[Category] = SectionIndex;
 	for (int32 Index = 0; Index < ReadingButtons[Category].Num(); ++Index)
 		if (UKnightCodexSectionButton* Button = ReadingButtons[Category][Index].Get()) Button->SetRecordState(Index == SectionIndex);
 	UTextBlock* Title = Category == 0 ? Text_WorldTitle : Text_MechTitle;
@@ -351,10 +377,10 @@ void UKnightCodexWidget::SelectCategory(int32 Category)
 	if (Switcher_Content) Switcher_Content->SetActiveWidgetIndex(Category);
 	if (UWidgetSwitcher* EntrySwitcher = Cast<UWidgetSwitcher>(GetWidgetFromName(TEXT("Switcher_Entries"))))
 		EntrySwitcher->SetActiveWidgetIndex(Category);
-	if (Category < 2) SelectReadingSection(Category, 0);
-	if (Category == 0) { ResetReadingScroll(TEXT("Scroll_World")); ResetReadingScroll(TEXT("Scroll_WorldEntries")); }
-	else if (Category == 1) { ResetReadingScroll(TEXT("Scroll_Mech")); ResetReadingScroll(TEXT("Scroll_MechEntries")); }
-	else ResetReadingScroll(TEXT("Scroll_BossDetail"));
+	// The switchers retain each page's selection and independent scroll offsets.
+	// Only a genuinely missing selection chooses an initial record.
+	if (Category < 2 && !ReadingButtons[Category].IsValidIndex(ReadingSelectedIndices[Category]))
+		SelectReadingSection(Category, 0);
 	UButton* Categories[] = {Button_World, Button_Mech, Button_Monster};
 	for (int32 Index = 0; Index < 3; ++Index)
 	{
@@ -362,7 +388,7 @@ void UKnightCodexWidget::SelectCategory(int32 Category)
 		else if (Categories[Index]) Categories[Index]->SetBackgroundColor(Index == Category ? SelectedColor : NormalColor);
 	}
 	if (UTextBlock* Heading = Cast<UTextBlock>(GetWidgetFromName(TEXT("Label_CodexEntries"))))
-		Heading->SetText(Category == 0 ? LOCTEXT("WorldRecords", "세계관 기록") : Category == 1 ? LOCTEXT("MechRecords", "기체 기록") : LOCTEXT("MonsterRecords", "몬스터 기록"));
+		Heading->SetText(Category == 0 ? LOCTEXT("WorldRecords", "세계관 기록") : Category == 1 ? LOCTEXT("MechRecords", "기체 기록") : LOCTEXT("MonsterList", "개체 목록"));
 	if (Category == 2 && SelectedBossId.IsNone() && !GeneratedEntries.IsEmpty())
 	{
 		SelectBoss(GeneratedEntries[0]->GetBossId());
@@ -413,7 +439,8 @@ void UKnightCodexWidget::RebuildBosses()
 			const FText Name = !Boss.DisplayNameOverride.IsEmpty() ? Boss.DisplayNameOverride
 				: Boss.MonsterDefinition && !Boss.MonsterDefinition->DisplayName.IsEmpty() ? Boss.MonsterDefinition->DisplayName : FText::FromName(Boss.BossId);
 			const bool bUnlocked = IsBossUnlocked(Boss);
-			Entry->Configure(Boss.BossId, Name, bUnlocked ? Boss.ListIcon.LoadSynchronous() : nullptr, bUnlocked);
+			Entry->Configure(Boss.BossId, Name, bUnlocked ? Boss.ListIcon.LoadSynchronous() : nullptr, bUnlocked,
+				Boss.ListIconUV, SeenIds.Num());
 			Entry->OnSelected.AddUniqueDynamic(this, &ThisClass::HandleBossSelected);
 			Box_Bosses->AddChildToVerticalBox(Entry)->SetPadding(FMargin(0.f, 0.f, 0.f, 10.f));
 			GeneratedEntries.Add(Entry);
@@ -426,9 +453,14 @@ void UKnightCodexWidget::RebuildBosses()
 bool UKnightCodexWidget::SelectBoss(FName BossId)
 {
 	if (!FindBoss(BossId)) return false;
+	const bool bChanged = SelectedBossId != BossId;
 	SelectedBossId = BossId;
 	RefreshBoss();
-	ResetReadingScroll(TEXT("Scroll_BossDetail"));
+	if (bChanged)
+	{
+		ResetReadingScroll(TEXT("Scroll_BossDetail"));
+		ResetReadingScroll(TEXT("Scroll_BossObservation"));
+	}
 	return true;
 }
 
@@ -446,7 +478,9 @@ void UKnightCodexWidget::ClearBossDetail()
 
 void UKnightCodexWidget::SetBossDetailLocked(bool bLocked)
 {
-	if (UWidget* Label = GetWidgetFromName(TEXT("Label_Drops")))
+	UWidget* Label=GetWidgetFromName(TEXT("Row_Label_Drops"));
+	if (!Label) Label=GetWidgetFromName(TEXT("Label_Drops"));
+	if (Label)
 		Label->SetVisibility(bLocked ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
 }
 
@@ -468,7 +502,11 @@ void UKnightCodexWidget::RefreshBoss()
 		if (Text_BossDescription) Text_BossDescription->SetText(LOCTEXT("QuestLocked", "관련 퀘스트 완료 시 공개됩니다."));
 		if (Text_BossExtra) Text_BossExtra->SetVisibility(ESlateVisibility::Collapsed);
 		SetImage(Image_Portrait, nullptr, GetWidgetFromName(TEXT("Size_Portrait")));
-		if (Text_NoPortrait) Text_NoPortrait->SetVisibility(ESlateVisibility::Collapsed);
+		if (Text_NoPortrait)
+		{
+			Text_NoPortrait->SetText(LOCTEXT("IllustrationLocked", "미해금 기록"));
+			Text_NoPortrait->SetVisibility(ESlateVisibility::HitTestInvisible);
+		}
 		if (Box_Drops) Box_Drops->ClearChildren();
 		if (Text_NoDrops) Text_NoDrops->SetVisibility(ESlateVisibility::Collapsed);
 		return;
@@ -482,7 +520,11 @@ void UKnightCodexWidget::RefreshBoss()
 	}
 	UTexture2D* Portrait = Boss->Portrait.LoadSynchronous();
 	SetImage(Image_Portrait, Portrait, GetWidgetFromName(TEXT("Size_Portrait")));
-	if (Text_NoPortrait) Text_NoPortrait->SetVisibility(ESlateVisibility::Collapsed);
+	if (Text_NoPortrait)
+	{
+		Text_NoPortrait->SetText(LOCTEXT("IllustrationUnavailable", "등록된 이미지가 없습니다."));
+		Text_NoPortrait->SetVisibility(Portrait ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+	}
 	if (Box_Drops) Box_Drops->ClearChildren();
 	bool bDataUnavailable = false;
 	bool bFoundQuest = false;

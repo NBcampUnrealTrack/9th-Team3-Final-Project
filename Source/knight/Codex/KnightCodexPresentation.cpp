@@ -55,10 +55,14 @@ namespace
 		virtual int32 OnPaint(const FPaintArgs&, const FGeometry& G, const FSlateRect&, FSlateWindowElementList& Out,
 			int32 Layer, const FWidgetStyle& Style, bool) const override
 		{
-			// Keep legacy enum values loadable, but only panel framing is drawn now.
-			if (!Owner.IsValid() || Owner->Symbol != EKnightCodexSymbol::Frame) return Layer;
+			if (!Owner.IsValid()) return Layer;
 			const FLinearColor Ink = Owner->Ink * Style.GetColorAndOpacityTint();
 			const FVector2D Size = G.GetLocalSize();
+			if (Owner->Symbol == EKnightCodexSymbol::Accent)
+			{
+				Line(Out,Layer,G,{{2,Size.Y*.83f},{Size.X-2,Size.Y*.17f}},Ink,2.f);
+				return Layer;
+			}
 			if (Owner->Symbol == EKnightCodexSymbol::Frame)
 			{
 				const float X = Size.X - 1.f, Y = Size.Y - 1.f, C = 15.f;
@@ -96,33 +100,50 @@ namespace
 		{
 			Owner = InOwner; SButton::Construct(Args); SetCanTick(false);
 		}
+		// This control paints focus on its existing outer edge; suppress only its
+		// default Slate focus brush, keeping keyboard/controller focus functional.
+		virtual const FSlateBrush* GetFocusBrush() const override { return nullptr; }
 		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& G, const FSlateRect& Clip,
 			FSlateWindowElementList& Out, int32 Layer, const FWidgetStyle& PaintStyle, bool ParentEnabled) const override
 		{
 			const bool Enabled = ParentEnabled && IsEnabled();
-			const bool Locked = Owner.IsValid() && Owner->IsRecordLocked();
 			const float Selected = Owner.IsValid() && Owner->IsRecordSelected() ? 1.f : 0.f;
-			const float Hover = Enabled && !Locked && (IsHovered() || HasKeyboardFocus()) ? 1.f : 0.f;
+			const float Hover = Enabled && IsHovered() ? 1.f : 0.f;
 			const FVector2D S = G.GetLocalSize();
 			const float X = S.X - 1.f, Y = S.Y - 1.f, C = 9.f;
-			FLinearColor Base = Color(TEXT("071018"), Locked ? .60f : .72f);
-			FLinearColor Active = Color(TEXT("075DB7"), .88f);
+			const bool Tab=Owner.IsValid() && Owner->bCategoryTile;
+			const bool TextOnly=Owner.IsValid() && Owner->bTextOnly;
+			const FLinearColor Tint=PaintStyle.GetColorAndOpacityTint();
+			FWidgetStyle ContentStyle=PaintStyle;
+			ContentStyle.BlendColorAndOpacityTint(Selected || Hover || HasKeyboardFocus() ? FLinearColor::White : FLinearColor(.60f,.69f,.76f,1.f));
+			if(Tab || TextOnly)
+			{
+				if(Selected && Tab)
+					Line(Out,Layer,G,{{24,Y-2},{X-24,Y-2}},Color(TEXT("57D7F7"))*Tint,3.f);
+				if(HasKeyboardFocus())
+					Line(Out,Layer+1,G,{{8,Y*.65f},{8,Y*.35f}},Color(TEXT("C0EBFF"))*Tint,2.f);
+				else if(Hover)
+					Line(Out,Layer+1,G,{{16,Y-7},{X-16,Y-7}},Color(TEXT("709DB6"),.65f)*Tint,1.f);
+				return SButton::OnPaint(Args,G,Clip,Out,Layer+2,ContentStyle,ParentEnabled);
+			}
+			FLinearColor Base = Color(TEXT("071018"), 0.f);
+			FLinearColor Active = Color(TEXT("163B50"), .64f);
 			FLinearColor Background = FMath::Lerp(Base, Active, Selected);
-			Background = FMath::Lerp(Background, Color(TEXT("163246"), .87f), Hover * (1.f - Selected) * .8f);
+			Background = FMath::Lerp(Background, Color(TEXT("163246"), .32f), Hover * (1.f - Selected));
 			if (!Enabled) Background.A *= .55f;
 			Fill(Out, Layer, G, Background * PaintStyle.GetColorAndOpacityTint());
 			FLinearColor Edge = FMath::Lerp(Color(TEXT("416176"), .55f + .35f*Hover), Color(TEXT("50BDE9"), .95f), Selected);
 			if (HasKeyboardFocus()) Edge = Color(TEXT("C0EBFF"));
 			Edge *= PaintStyle.GetColorAndOpacityTint();
-			Line(Out, Layer+3, G, {{0,0},{X-C,0},{X,C},{X,Y-C},{X-C,Y},{0,Y},{0,0}}, Edge);
+			if (Selected || HasKeyboardFocus())
+				Line(Out, Layer+3, G, {{0,0},{X,0},{X,Y-C},{X-C,Y},{0,Y},{0,0}}, Edge);
+			else Line(Out,Layer+3,G,{{0,Y},{X,Y}},Color(TEXT("476D82"),Hover?.65f:.30f)*Tint);
 			if (Selected > .01f)
 			{
 				FLinearColor Marker = Color(TEXT("7ADFFF"), Selected);
 				Line(Out, Layer+3, G, {{3,5},{3,Y-5}}, Marker, 3.f);
 			}
-			if (HasKeyboardFocus())
-				Line(Out, Layer+3, G, {{5,15},{5,5},{25,5}}, Edge, 2.f);
-			return SButton::OnPaint(Args, G, Clip, Out, Layer+4, PaintStyle, ParentEnabled);
+			return SButton::OnPaint(Args, G, Clip, Out, Layer+4, ContentStyle, ParentEnabled);
 		}
 	private:
 		TWeakObjectPtr<UKnightCodexArchiveButton> Owner;

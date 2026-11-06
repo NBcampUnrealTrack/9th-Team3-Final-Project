@@ -18,6 +18,7 @@
 #include "Widgets/Layout/SBorder.h"
 #include "Styling/CoreStyle.h"
 #include "Components/VerticalBox.h"
+#include "Components/CanvasPanel.h"
 #include "Components/Border.h"
 #include "Components/Image.h"
 #include "Components/ScrollBox.h"
@@ -35,6 +36,7 @@
 #include "TextureCompiler.h"
 #include "UObject/UObjectIterator.h"
 #include "Slate/WidgetRenderer.h"
+#include "Slate/SRetainerWidget.h"
 #include "Input/HittestGrid.h"
 #include "ImageUtils.h"
 #include "Misc/FileHelper.h"
@@ -99,9 +101,10 @@ int32 UknightOperationMapCheckCommandlet::Main(const FString& Params)
 	UKnightMainMenuWidget* Menu = Class ? CreateWidget<UKnightMainMenuWidget>(Player, Class) : nullptr;
 	if (!Menu) return 1;
 	Menu->AddToRoot();
-    // Render linear HDR values and encode sRGB only during readback. The default
-    // 8-bit WidgetRenderer target applies display gamma twice in this offscreen setup.
-    FWidgetRenderer* Renderer = new FWidgetRenderer(false);
+    // Match the viewport's gamma-space Slate pass. Retainers explicitly write
+    // gamma-space pixels with NoGamma; a linear-only capture would brighten those
+    // groups and invent a flash when switching back to direct painting.
+    FWidgetRenderer* Renderer = new FWidgetRenderer(true);
     auto MakeCaptureTarget = [](FIntPoint Extent)
     {
         auto* Result = NewObject<UTextureRenderTarget2D>(); Result->ClearColor=FLinearColor::Transparent;
@@ -113,10 +116,21 @@ int32 UknightOperationMapCheckCommandlet::Main(const FString& Params)
         .BorderBackgroundColor(FLinearColor(FColor(9,20,31))),FVector2D(16,16),0.f); FlushRenderingCommands();
     TArray<FLinearColor> ProbePixels;
     Probe->GameThread_GetRenderTargetResource()->ReadLinearColorPixels(ProbePixels,FReadSurfaceDataFlags(RCM_MinMax));
-    const FColor ProbeColor=ProbePixels[128].ToFColor(true);
-    UE_LOG(LogTemp,Display,TEXT("OperationMap CAPTURE linear float + sRGB readback: sample=%d,%d,%d expected=9,20,31"),ProbeColor.R,ProbeColor.G,ProbeColor.B);
+    const FColor ProbeColor=ProbePixels[128].ToFColor(false);
+    UE_LOG(LogTemp,Display,TEXT("OperationMap CAPTURE gamma-space float + raw readback: sample=%d,%d,%d expected=9,20,31"),ProbeColor.R,ProbeColor.G,ProbeColor.B);
     Check(FMath::Abs(int32(ProbeColor.R)-9)+FMath::Abs(int32(ProbeColor.G)-20)+FMath::Abs(int32(ProbeColor.B)-31)<=6,
         TEXT("offscreen Slate colour calibration agrees with authored sRGB colour"));
+	if (Failures) return 2;
+	auto RetainedProbe = SNew(SRetainerWidget)[SNew(SBorder).BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+		.BorderBackgroundColor(FLinearColor(FColor(9,20,31)))];
+	for(int32 I=0; I<3; ++I) { ++GFrameCounter; Renderer->DrawWidget(Probe,RetainedProbe,FVector2D(16,16),0.f); FlushRenderingCommands(); }
+	ProbePixels.Reset(); Probe->GameThread_GetRenderTargetResource()->ReadLinearColorPixels(ProbePixels,FReadSurfaceDataFlags(RCM_MinMax));
+	const FColor RetainedColor=ProbePixels[128].ToFColor(false);
+	UE_LOG(LogTemp,Display,TEXT("OperationMap CAPTURE retained colour=%d,%d,%d direct=%d,%d,%d"),
+		RetainedColor.R,RetainedColor.G,RetainedColor.B,ProbeColor.R,ProbeColor.G,ProbeColor.B);
+	Check(FMath::Abs(int32(RetainedColor.R)-ProbeColor.R)+FMath::Abs(int32(RetainedColor.G)-ProbeColor.G)+FMath::Abs(int32(RetainedColor.B)-ProbeColor.B)<=6,
+		TEXT("retained and direct painting agree before reviewing transition colour continuity"));
+	if (Failures) return 2;
 	TSharedRef<SVirtualWindow> Window = SNew(SVirtualWindow);
 	Window->SetContent(Menu->TakeWidget()); FSlateApplication::Get().RegisterVirtualWindow(Window);
 	FHittestGrid Grid; UTextureRenderTarget2D* Target = nullptr; FIntPoint Size; float Scale = 1.f;
@@ -144,11 +158,11 @@ int32 UknightOperationMapCheckCommandlet::Main(const FString& Params)
         // highlight in the frame. Raw linear readback avoids that colour shift.
         TArray<FLinearColor> LinearPixels; TArray<FColor> Pixels;
         Check(Target->GameThread_GetRenderTargetResource()->ReadLinearColorPixels(LinearPixels,FReadSurfaceDataFlags(RCM_MinMax)), TEXT("real Slate/RHI pixels read"));
-        Pixels.Reserve(LinearPixels.Num()); for (const auto& Pixel : LinearPixels) Pixels.Add(Pixel.ToFColor(true));
+        Pixels.Reserve(LinearPixels.Num()); for (const auto& Pixel : LinearPixels) Pixels.Add(Pixel.ToFColor(false));
 		TArray64<uint8> Png; FImageUtils::PNGCompressImageArray(Size.X, Size.Y, Pixels, Png);
 		Check(FFileHelper::SaveArrayToFile(Png, *(Out / (Name + TEXT(".png")))), TEXT("render saved"));
 	};
-	SetSize(FIntPoint(1920,1080)); Menu->ShowPage(EKnightMainMenuPage::Stage); Draw(); Draw();
+	SetSize(FIntPoint(1920,1080)); Menu->ShowPage(EKnightMainMenuPage::Stage); Draw(); Draw(.45f); Draw();
 	UKnightStageMapWidget* Map = Menu->Map_Stages; UKnightQuestMenuWidget* Panel = Menu->QuestWidget;
 	if (!Map || !Panel || !Map->MapMID) return 1;
 	GShaderCompilingManager->FinishAllCompilation(); FTextureCompilingManager::Get().FinishAllCompilation();
@@ -222,7 +236,7 @@ int32 UknightOperationMapCheckCommandlet::Main(const FString& Params)
 	FPointerEvent Wheel(0, P, P, TSet<FKey>(), EKeys::Invalid, 1, FModifierKeysState()); Map->NativeOnMouseWheel(Geometry, Wheel); Draw();
 	Check(!Map->Center.Equals(CenterBefore) && Map->VisibleLatitude < LatitudeBefore && Map->SelectTime == DragSelectionTime, TEXT("drag and zoom work without restarting selection"));
 	const FVector2D SavedCenter = Map->Center; const float SavedLatitude = Map->VisibleLatitude;
-	Menu->ShowPage(EKnightMainMenuPage::Home); Menu->ShowPage(EKnightMainMenuPage::Stage); Draw();
+	Menu->ShowPage(EKnightMainMenuPage::Home); Draw(.35f); Menu->ShowPage(EKnightMainMenuPage::Stage); Draw(); Draw(.45f); Draw();
 	Check(Menu->SelectedStageId == R3 && Panel->GetSelectedQuestId() == Q3 && Map->Center.Equals(SavedCenter,.01) && Map->VisibleLatitude == SavedLatitude,
 		TEXT("same profile reopening restores region difficulty and map view without sweep"));
 	Check(Map->SelectedStageId == R3 && Map->SelectionWeights.FindRef(R3) == 1.f, TEXT("restoration retains single steady selection and resumes its loop"));
@@ -288,9 +302,9 @@ int32 UknightOperationMapCheckCommandlet::Main(const FString& Params)
         Capture(FString::Printf(TEXT("Loop_%03d"),Frame));
     }
     Check(Map->SelectTime==LoopOrigin && Map->Time-Map->SelectTime > 2.f*Map->LoopDuration, TEXT("continuous perimeter exceeds two laps with refresh and hover, no restart"));
-    Menu->ShowPage(EKnightMainMenuPage::Home); const float ClosedTime=Map->Time; Draw(.5f);
+    Menu->ShowPage(EKnightMainMenuPage::Home); Draw(.35f); const float ClosedTime=Map->Time; Draw(.5f);
     Check(Map->Time==ClosedTime, TEXT("closed operation map stops animation clock"));
-    Menu->ShowPage(EKnightMainMenuPage::Stage); Draw(.2f); Draw();
+    Menu->ShowPage(EKnightMainMenuPage::Stage); Draw(); Draw(.45f); Draw();
     Check(Map->SelectedStageId==R1 && Panel->DisplayedQuestId==Q1, TEXT("reopening has no stale loop or mission"));
     const FName BeforeCycle=Map->SelectedQuestId; Map->CycleQuestMarker(1); Draw(.2f);
     Check(Map->SelectedQuestId!=BeforeCycle && Panel->DisplayedQuestId==Map->SelectedQuestId, TEXT("map keyboard/controller mode cycling keeps panel in sync"));
@@ -302,10 +316,76 @@ int32 UknightOperationMapCheckCommandlet::Main(const FString& Params)
 	Check(Progress->GetMoney() == InitialMoney, TEXT("browsing and UI transitions grant/spend no money"));
 	for (const auto& Item : InitialItems) Check(Progress->GetItemCount(Item.Item) == Item.Count, TEXT("browsing leaves inventory quantities unchanged"));
 	Check(!Flow->IsTravelPending() && Flow->GetActiveStageId().IsNone(), TEXT("browsing does not start gameplay or change active stage"));
+
+	// Actual bound menu actions, real widget tracks and RHI frames. No desktop input driver.
+	for (const FIntPoint Resolution : { FIntPoint(1920,1080), FIntPoint(1280,720) })
+	{
+		SetSize(Resolution); Menu->SelectQuest(Q1); Draw(.3f); Draw();
+		const FWidgetTransform IdleMap = Map->GetRenderTransform();
+		const FWidgetTransform IdlePanel = Menu->Panel_QuestHost->GetRenderTransform();
+		const FVector2D IdleSize = Map->GetCachedGeometry().GetLocalSize();
+		Menu->ShowPage(EKnightMainMenuPage::Home); Draw(.35f); Draw();
+		const int32 HomeCount = Menu->Panel_Home->GetChildrenCount();
+		int32 Frame = 0;
+		auto MotionCapture = [&]() { Capture(FString::Printf(TEXT("Motion_%d_%03d"), Resolution.X, Frame++)); };
+		MotionCapture(); Menu->Button_Stage->OnClicked().Broadcast();
+		Check(Menu->IsOperationMapTransitionActive() && Map->GetRenderOpacity() == 0.f && Map->TransitionReveal == 0.f,
+			TEXT("real Hangar deployment button initializes hidden map before first frame"));
+		Check(Menu->Panel_Stage->GetVisibility() == ESlateVisibility::HitTestInvisible,
+			TEXT("overlap blocks navigation and clicks on map and reward descendants"));
+		Menu->HandleQuestLaunchRequested(Q1);
+		Check(!Flow->IsTravelPending(), TEXT("stale launch request blocked during entry"));
+		MotionCapture();
+		for (int32 I=0; I<13; ++I)
+		{
+			Draw(1.f/30.f); MotionCapture();
+			if (I==0) Check(Menu->OperationMapTransition->GetRewardOpacity()==0.f, TEXT("reward group observes 60ms delay"));
+			if (I==3) { Menu->Button_Stage->OnClicked().Broadcast(); Check(Menu->OperationMapTransition->GetReveal() > .5f, TEXT("repeated entry action does not restart transition")); }
+		}
+		Check(!Menu->IsOperationMapTransitionActive() && Map->GetRenderTransform()==IdleMap
+			&& Menu->Panel_QuestHost->GetRenderTransform()==IdlePanel && Map->GetCachedGeometry().GetLocalSize().Equals(IdleSize,.1f),
+			TEXT("entry lands on exact authored transforms and layout at supported DPI"));
+		Check(!Map->bTransitionReveal && Map->TransitionScan==0.f && Map->TransitionReveal==1.f,
+			TEXT("scan removed after entrance and full map restored"));
+		const float LoopStart=Map->Time;
+		for (int32 I=0; I<21; ++I) { Draw(1.f/30.f); MotionCapture(); }
+		Check(Map->Time>LoopStart && Map->SelectedQuestId==Q1 && Panel->DisplayedQuestId==Q1,
+			TEXT("settled map continues perimeter and retains matching mission"));
+		Menu->Button_Back->OnClicked().Broadcast(); MotionCapture();
+		Check(Menu->GetCurrentPage()==EKnightMainMenuPage::Stage && Menu->OperationMapTransition->IsExiting(), TEXT("bound Back retains outgoing page until exit ends"));
+		for (int32 I=0; I<12; ++I) { Draw(1.f/30.f); MotionCapture(); }
+		Check(Menu->GetCurrentPage()==EKnightMainMenuPage::Home && !Menu->IsOperationMapTransitionActive()
+			&& Menu->GetPreferredFocusTarget()==Menu->Button_Stage && Menu->Panel_Home->GetChildrenCount()==HomeCount,
+			TEXT("exit restores exact Home children and deployment focus target"));
+		Check(Map->GetRenderTransform()==IdleMap && Map->TransitionScan==0.f, TEXT("hidden outgoing tracks reset without residual scan"));
+		// Reverse from the current entrance, then suppress held input through completion.
+		Menu->Button_Stage->OnClicked().Broadcast(); Draw(); Draw(.10f); Draw();
+		const float BeforeAlpha=Map->GetRenderOpacity(), BeforeReveal=Map->TransitionReveal;
+		const FWidgetTransform BeforeTransform=Map->GetRenderTransform();
+		Menu->NativeOnPreviewKeyDown(Menu->GetCachedGeometry(),FKeyEvent(EKeys::Escape,FModifierKeysState(),0,false,0,0));
+		Check(Menu->OperationMapTransition->IsExiting() && Map->GetRenderOpacity()==BeforeAlpha
+			&& Map->TransitionReveal==BeforeReveal && Map->GetRenderTransform()==BeforeTransform,
+			TEXT("Escape during entry reverses from current opacity reveal and position without snap"));
+		for (int32 I=0; I<12; ++I)
+		{
+			Menu->NativeOnPreviewKeyDown(Menu->GetCachedGeometry(),FKeyEvent(EKeys::Escape,FModifierKeysState(),0,true,0,0));
+			Draw(1.f/30.f); Capture(FString::Printf(TEXT("Interrupted_%d_%02d"),Resolution.X,I));
+		}
+		Check(Menu->GetCurrentPage()==EKnightMainMenuPage::Home && !Menu->IsOperationMapTransitionActive(), TEXT("held Escape completes once and cannot open settings on Home"));
+		Menu->NativeOnKeyUp(Menu->GetCachedGeometry(),FKeyEvent(EKeys::Escape,FModifierKeysState(),0,false,0,0));
+		Menu->Button_Stage->OnClicked().Broadcast(); Draw(); Draw(.45f); Draw();
+		Check(Menu->SelectedStageId==R1 && Panel->DisplayedQuestId==Q1 && Map->GetRenderOpacity()==1.f,
+			TEXT("reopening after interruption restores selection and full visibility"));
+		Menu->NativeOnPreviewKeyDown(Menu->GetCachedGeometry(),FKeyEvent(EKeys::Escape,FModifierKeysState(),0,false,0,0));
+		Check(Menu->OperationMapTransition->IsExiting(), TEXT("settled Escape uses the same exit as Back without clearing quest"));
+		Draw(.35f); Menu->NativeOnKeyUp(Menu->GetCachedGeometry(),FKeyEvent(EKeys::Escape,FModifierKeysState(),0,false,0,0));
+		Menu->Button_Stage->OnClicked().Broadcast(); Draw(); Draw(.45f); Draw();
+	}
+	Check(Progress->GetMoney()==InitialMoney && !Flow->IsTravelPending(), TEXT("entry exit and interruption do not transact or deploy"));
 	// A fresh widget in the same GameInstance models menu reconstruction after travel.
 	Menu->SaveOperationMapContext(); const auto Context = GI->GetSubsystem<UKnightOperationMapStateSubsystem>()->Profiles.FindRef(ProfileA);
 	auto* Returned = CreateWidget<UKnightMainMenuWidget>(Player, Class); Returned->AddToRoot();
-	Window->SetContent(Returned->TakeWidget()); Returned->ShowPage(EKnightMainMenuPage::Stage); Draw(); Draw();
+	Window->SetContent(Returned->TakeWidget()); Returned->ShowPage(EKnightMainMenuPage::Stage); Draw(); Draw(.45f); Draw();
 	Check(Returned->SelectedStageId == Context.RegionId && Returned->QuestWidget->GetSelectedQuestId() == Context.QuestId,
 		TEXT("reconstructed menu restores same-profile context after travel lifecycle"));
 	Capture(TEXT("ReconstructedMenu"));

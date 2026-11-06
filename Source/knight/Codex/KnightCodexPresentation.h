@@ -10,10 +10,10 @@ class UTextBlock;
 UENUM(BlueprintType)
 enum class EKnightCodexSymbol : uint8
 {
-	World, Mech, Monster, Document, Material, Back, Close, Lock, Frame
+	World, Mech, Monster, Document, Material, Back, Close, Lock, Frame, Accent
 };
 
-/** Panel frame only. Legacy symbol enum values remain loadable but do not draw icons. */
+/** Static panel frame and diagonal accent. Legacy icon enum values remain loadable. */
 UCLASS()
 class KNIGHT_API UKnightCodexSymbolWidget : public UWidget
 {
@@ -30,7 +30,7 @@ private:
 	TSharedPtr<SWidget> SymbolSlate;
 };
 
-/** Codex-only button chrome: thin accent border and 140 ms state transitions. */
+/** Codex-only static button chrome. Selection and input focus have distinct edges. */
 UCLASS()
 class KNIGHT_API UKnightCodexArchiveButton : public UButton
 {
@@ -38,6 +38,7 @@ class KNIGHT_API UKnightCodexArchiveButton : public UButton
 public:
 	UKnightCodexArchiveButton(const FObjectInitializer& ObjectInitializer);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Codex") bool bCategoryTile = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Codex") bool bTextOnly = false;
 	void SetRecordState(bool bSelected, bool bLocked = false);
 	bool IsRecordSelected() const { return bRecordSelected; }
 	bool IsRecordLocked() const { return bRecordLocked; }

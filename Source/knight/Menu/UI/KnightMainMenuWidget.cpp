@@ -134,6 +134,8 @@ void UKnightMainMenuWidget::NativeConstruct()
 
 void UKnightMainMenuWidget::NativeDestruct()
 {
+	if (OperationMapTransition) OperationMapTransition->Cancel();
+	if (CodexTransition) CodexTransition->Cancel();
 	SaveOperationMapContext();
 	ReturnSuppressedKeys.Reset();
 	if (UGameInstance* GI = GetGameInstance())
@@ -189,6 +191,32 @@ void UKnightMainMenuWidget::HandleQuestProfileChanged(const FString& SlotId)
 
 bool UKnightMainMenuWidget::ShowPage(EKnightMainMenuPage NewPage)
 {
+	if (IsTravelPending()) return false;
+	if (NewPage == EKnightMainMenuPage::Home && CurrentPage == EKnightMainMenuPage::Codex)
+	{
+		if (!CodexTransition) CodexTransition = NewObject<UKnightCodexTransition>(this);
+		CodexTransition->Exit(this); return true;
+	}
+	if (IsCodexTransitionActive()) return NewPage == CurrentPage;
+	if (NewPage == EKnightMainMenuPage::Codex && CurrentPage == EKnightMainMenuPage::Codex) return true;
+	if (NewPage == EKnightMainMenuPage::Codex && CurrentPage == EKnightMainMenuPage::Home && !IsOperationMapTransitionActive())
+	{
+		if (!ApplyPage(NewPage, false)) return false;
+		if (!CodexTransition) CodexTransition = NewObject<UKnightCodexTransition>(this);
+		CodexTransition->Enter(this); return true;
+	}
+	if (NewPage == EKnightMainMenuPage::Home && CurrentPage == EKnightMainMenuPage::Stage)
+	{
+		if (!OperationMapTransition) OperationMapTransition = NewObject<UKnightOperationMapTransition>(this);
+		SaveOperationMapContext(); OperationMapTransition->Exit(this); return true;
+	}
+	if (IsOperationMapTransitionActive()) return NewPage == CurrentPage;
+	if (NewPage == EKnightMainMenuPage::Stage && CurrentPage == EKnightMainMenuPage::Home)
+	{
+		if (!ApplyPage(NewPage, false)) return false;
+		if (!OperationMapTransition) OperationMapTransition = NewObject<UKnightOperationMapTransition>(this);
+		OperationMapTransition->Enter(this); return true;
+	}
 	if (NewPage == EKnightMainMenuPage::Inventory) return OpenMaterialsShortcut();
 	if (NewPage == EKnightMainMenuPage::Maintenance)
 	{
@@ -197,6 +225,42 @@ bool UKnightMainMenuWidget::ShowPage(EKnightMainMenuPage NewPage)
 		return CurrentPage == EKnightMainMenuPage::Home && MaintenanceSubmenu && (MaintenanceSubmenu->GetVisibility() == ESlateVisibility::Visible);
 	}
 	return ApplyPage(NewPage, false);
+}
+
+bool UKnightMainMenuWidget::IsOperationMapTransitionActive() const
+{
+	return OperationMapTransition && OperationMapTransition->IsActive();
+}
+
+bool UKnightMainMenuWidget::IsCodexTransitionActive() const
+{
+	return CodexTransition && CodexTransition->IsActive();
+}
+
+void UKnightMainMenuWidget::CompleteCodexTransition(bool bExited)
+{
+	if (bExited)
+	{
+		bRestoreCodexFocus = true;
+		ApplyPage(EKnightMainMenuPage::Home, false);
+		if (Panel_Codex) Panel_Codex->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+		if (Button_Codex) Button_Codex->SetUserFocus(GetOwningPlayer());
+	}
+	else if (CurrentPage == EKnightMainMenuPage::Codex && CodexWidget && CodexWidget->GetFocusButton())
+		CodexWidget->GetFocusButton()->SetUserFocus(GetOwningPlayer());
+}
+
+void UKnightMainMenuWidget::CompleteOperationMapTransition(bool bExited)
+{
+	if (bExited)
+	{
+		bRestoreMaintenanceFocus = bRestoreCodexFocus = bRestoreMaterialsShortcutFocus = false;
+		ApplyPage(EKnightMainMenuPage::Home, false);
+		// The switcher now hides Stage; restore its authored visibility for reopening.
+		if (Panel_Stage) Panel_Stage->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+		if (Button_Stage) Button_Stage->SetUserFocus(GetOwningPlayer());
+	}
+	else FocusCurrentPage();
 }
 
 bool UKnightMainMenuWidget::OpenMaterialsShortcut()
@@ -237,6 +301,8 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 	{
 		return false;
 	}
+	if (NewPage != EKnightMainMenuPage::Stage && OperationMapTransition) OperationMapTransition->Cancel();
+	if (NewPage != EKnightMainMenuPage::Codex && CodexTransition) CodexTransition->Cancel();
 	if (CurrentPage == EKnightMainMenuPage::Stage && NewPage != EKnightMainMenuPage::Stage)
 	{
 		SaveOperationMapContext();
@@ -299,7 +365,7 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 		EnsureSettingsWidget();
 		// The settings screen is laid out for the whole screen, so it goes over the menu rather than into Panel_Settings.
 		if (SettingsWidget && !SettingsWidget->IsInViewport()) SettingsWidget->AddToViewport(50);
-		if (SettingsWidget) SettingsWidget->Open();
+		if (SettingsWidget) { SettingsWidget->SetReturnMenu(Panel_Home); SettingsWidget->Open(); }
 	}
 	else if (SettingsWidget && SettingsWidget->IsInViewport())
 	{
@@ -348,6 +414,7 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 
 bool UKnightMainMenuWidget::HandleBackRequested()
 {
+	if (CurrentPage == EKnightMainMenuPage::Stage) return ShowPage(EKnightMainMenuPage::Home);
 	if (CurrentPage == EKnightMainMenuPage::Settings && SettingsWidget) { SettingsWidget->RequestClose(); return true; }
 	if (CurrentPage == EKnightMainMenuPage::Codex) { HandleCodexClosed(); return true; }
 	if (CurrentPage == EKnightMainMenuPage::Maintenance)
@@ -376,13 +443,6 @@ bool UKnightMainMenuWidget::HandleBackRequested()
 		if (Button_Maintenance) Button_Maintenance->SetFocus();
 		return true;
 	}
-	if (CurrentPage == EKnightMainMenuPage::Stage && QuestWidget
-		&& !QuestWidget->GetSelectedQuestId().IsNone()) return QuestWidget->SelectQuest(NAME_None);
-	// First Esc clears the selected region, the next one leaves the map.
-	if (CurrentPage == EKnightMainMenuPage::Stage && !SelectedStageId.IsNone())
-	{
-		return SelectStage(NAME_None);
-	}
 	return CurrentPage == EKnightMainMenuPage::Home ? ShowPage(EKnightMainMenuPage::Settings) : ShowPage(EKnightMainMenuPage::Home);
 }
 
@@ -393,6 +453,17 @@ FReply UKnightMainMenuWidget::NativeOnPreviewKeyDown(const FGeometry& InGeometry
 		if (InKeyEvent.IsRepeat()) return FReply::Handled();
 		// A fresh press also recovers if application focus loss swallowed key-up.
 		ReturnSuppressedKeys.Remove(InKeyEvent.GetKey());
+	}
+	if (IsOperationMapTransitionActive() || IsCodexTransitionActive())
+	{
+		const FKey Key = InKeyEvent.GetKey();
+		if (Key == EKeys::Escape || Key == EKeys::Gamepad_FaceButton_Right) RequestBack();
+		ReturnSuppressedKeys.Add(Key); return FReply::Handled();
+	}
+	if ((CurrentPage == EKnightMainMenuPage::Stage || CurrentPage == EKnightMainMenuPage::Codex)
+		&& (InKeyEvent.GetKey() == EKeys::Escape || InKeyEvent.GetKey() == EKeys::Gamepad_FaceButton_Right))
+	{
+		RequestBack(); ReturnSuppressedKeys.Add(InKeyEvent.GetKey()); return FReply::Handled();
 	}
 	if (IsMaintenanceDestinationOpen() && MaintenanceWidget && MaintenanceWidget->IsTransitionActive())
 	{
@@ -452,6 +523,7 @@ bool UKnightMainMenuWidget::NativeSupportsCustomNavigation() const
 
 FNavigationReply UKnightMainMenuWidget::NativeOnNavigation(const FGeometry& Geometry, const FNavigationEvent& Event, const FNavigationReply& DefaultReply)
 {
+	if (IsOperationMapTransitionActive()) return FNavigationReply::Stop();
     if (CurrentPage == EKnightMainMenuPage::Stage && !IsTravelPending() && Map_Stages)
     {
         const auto Direction = Event.GetNavigationType();
@@ -484,7 +556,11 @@ void UKnightMainMenuWidget::EnsureSettingsWidget()
 	SettingsWidget->OnClosed.AddUniqueDynamic(this, &ThisClass::HandleSettingsClosed);
 }
 
-void UKnightMainMenuWidget::HandleSettingsClosed() { ShowPage(EKnightMainMenuPage::Home); }
+void UKnightMainMenuWidget::HandleSettingsClosed()
+{
+	if (ShowPage(EKnightMainMenuPage::Home) && Button_Settings)
+		Button_Settings->SetUserFocus(GetOwningPlayer());
+}
 
 void UKnightMainMenuWidget::EnsureCodexWidget()
 {
@@ -686,6 +762,8 @@ void UKnightMainMenuWidget::SetMaintenanceSubmenuOpen(bool bOpen)
 void UKnightMainMenuWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
+	if (OperationMapTransition) OperationMapTransition->Tick(InDeltaTime);
+	if (CodexTransition) CodexTransition->Tick(InDeltaTime);
 	if (MaintenanceWidget) MaintenanceWidget->TickExit(InDeltaTime);
 	if (CurrentPage == EKnightMainMenuPage::Home && MaintenanceSubmenu && (MaintenanceSubmenu->GetVisibility() == ESlateVisibility::Visible))
 		PlaceMaintenanceSubmenu();
@@ -780,6 +858,7 @@ void UKnightMainMenuWidget::HandleCodexClosed()
 
 UWidget* UKnightMainMenuWidget::GetPreferredFocusTarget() const
 {
+	if (IsOperationMapTransitionActive() || IsCodexTransitionActive()) return const_cast<UKnightMainMenuWidget*>(this);
 	if (CurrentPage == EKnightMainMenuPage::Home && MaintenanceSubmenu && (MaintenanceSubmenu->GetVisibility() == ESlateVisibility::Visible))
 		return MaintenanceCraftingButton;
 	if (CurrentPage == EKnightMainMenuPage::Home && bRestoreMaterialsShortcutFocus && FocusBeforeMaterialsShortcut.IsValid())
@@ -837,12 +916,14 @@ void UKnightMainMenuWidget::HandleStageClicked()
 
 void UKnightMainMenuWidget::HandleReturnToTitleClicked()
 {
+	if (IsOperationMapTransitionActive()) return;
 	SetMaintenanceSubmenuOpen(false);
 	if (UKnightGameFlowSubsystem* const Flow = GetFlow()) Flow->RequestOpenTitle();
 }
 
 void UKnightMainMenuWidget::HandleMaintenanceClicked()
 {
+	if (IsOperationMapTransitionActive()) return;
 	if (IsTravelPending()) return;
 	if (CurrentPage == EKnightMainMenuPage::Home && MaintenanceSubmenu && (MaintenanceSubmenu->GetVisibility() == ESlateVisibility::Visible))
 	{
@@ -1175,11 +1256,13 @@ void UKnightMainMenuWidget::RefreshRaidDetails()
 
 void UKnightMainMenuWidget::HandleMapStageClicked(FName StageId)
 {
+	if (IsOperationMapTransitionActive()) return;
 	SelectStage(StageId);
 }
 
 void UKnightMainMenuWidget::HandleMapQuestClicked(FName QuestId)
 {
+	if (IsOperationMapTransitionActive()) return;
 	SelectQuest(QuestId);
 }
 
@@ -1191,6 +1274,7 @@ void UKnightMainMenuWidget::HandleQuestSelectionChanged(FName QuestId)
 
 void UKnightMainMenuWidget::HandleLaunchStageClicked()
 {
+	if (IsOperationMapTransitionActive()) return;
 	if (bQuestMode) return;
 	UKnightGameFlowSubsystem* const Flow = GetFlow();
 	if (!Flow || IsTravelPending() || !bStageLaunchAvailable || SelectedStageId.IsNone())
@@ -1208,7 +1292,7 @@ void UKnightMainMenuWidget::HandleLaunchStageClicked()
 void UKnightMainMenuWidget::HandleQuestLaunchRequested(FName QuestId)
 {
 	// Reject stale programmatic/deferred actions as well as blocked UI clicks.
-	if (CurrentPage != EKnightMainMenuPage::Stage || !QuestWidget || QuestWidget->IsPanelChanging()
+	if (IsOperationMapTransitionActive() || CurrentPage != EKnightMainMenuPage::Stage || !QuestWidget || QuestWidget->IsPanelChanging()
 		|| QuestId != QuestWidget->GetSelectedQuestId() || QuestRegionById.FindRef(QuestId) != SelectedStageId) return;
 	SaveOperationMapContext();
 	UKnightGameFlowSubsystem* const Flow = GetFlow();

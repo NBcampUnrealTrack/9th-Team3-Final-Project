@@ -24,6 +24,7 @@ UknightSettingsTab::UknightSettingsTab(const FObjectInitializer& ObjectInitializ
 
 void UknightSettingsTab::SetTab(const FText& Caption, const FText& Label)
 {
+	ConfigureSettingsButton(1);
 	SetButtonText(Label);
 	if (Txt_Caption)
 	{
@@ -37,7 +38,7 @@ void UknightSettingsTab::SetTabSelected(bool bInSelected)
 	{
 		Img_Selected->SetVisibility(bInSelected ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Hidden);
 	}
-	SetIsSelected(bInSelected, false);
+	SetSettingsSelected(bInSelected);
 }
 
 void UknightSettingsTab::NativeOnAddedToFocusPath(const FFocusEvent& InFocusEvent)
@@ -48,14 +49,9 @@ void UknightSettingsTab::NativeOnAddedToFocusPath(const FFocusEvent& InFocusEven
 
 FReply UknightSettingsTab::NativeOnPreviewKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
 {
-	// Right goes into the rows; left has nowhere to go. Both caught before Slate turns them into navigation.
-	if (InKeyEvent.GetKey() == EKeys::Right)
+	if (InKeyEvent.GetKey() == EKeys::Down || InKeyEvent.GetKey() == EKeys::Gamepad_DPad_Down)
 	{
 		OnTabEntered.ExecuteIfBound();
-		return FReply::Handled();
-	}
-	if (InKeyEvent.GetKey() == EKeys::Left)
-	{
 		return FReply::Handled();
 	}
 	return Super::NativeOnPreviewKeyDown(InGeometry, InKeyEvent);
@@ -88,6 +84,13 @@ void UknightSettingsScreen::NativeOnInitialized()
 	}
 	Btn_Apply->OnClicked().AddUObject(this, &ThisClass::Apply);
 	Btn_Revert->OnClicked().AddUObject(this, &ThisClass::Revert);
+	for (auto* Action : {Btn_Apply.Get(),Btn_Revert.Get(),Btn_Defaults.Get(),Btn_PromptApply.Get(),Btn_PromptDiscard.Get(),Btn_PromptContinue.Get()})
+		if (Action) Action->ConfigureSettingsButton(2);
+	if (Btn_Back)
+	{
+		Btn_Back->ConfigureSettingsButton(3);
+		Btn_Back->OnClicked().AddUObject(this,&ThisClass::RequestClose);
+	}
 	if (Btn_Defaults) Btn_Defaults->OnClicked().AddUObject(this, &ThisClass::RestoreDefaults);
 	if (Btn_PromptApply)
 	{
@@ -132,6 +135,9 @@ void UknightSettingsScreen::HandleTabChanged()
 	const bool bHadFocus = HasFocusedDescendants();
 	Box_Rows->ClearChildren();
 	Rows.Reset();
+	DetailRow.Reset();
+	if (Txt_DetailTitle) Txt_DetailTitle->SetText(FText::GetEmpty());
+	if (Txt_DetailBody) Txt_DetailBody->SetText(FText::GetEmpty());
 
 	TArray<FKnightSettingSection> Sections;
 	GetTabSections(GetCurrentTab(), Sections);
@@ -144,7 +150,7 @@ void UknightSettingsScreen::HandleTabChanged()
 			Header->SetCaption(Section.Caption);
 			if (UVerticalBoxSlot* const HeaderSlot = Cast<UVerticalBoxSlot>(Box_Rows->AddChild(Header)); HeaderSlot && !bFirstSection)
 			{
-				HeaderSlot->SetPadding(FMargin(0.f, 24.f, 0.f, 0.f));
+				HeaderSlot->SetPadding(FMargin(0.f, 20.f, 0.f, 0.f));
 			}
 		}
 		bFirstSection = false;
@@ -173,6 +179,9 @@ void UknightSettingsScreen::HandleTabChanged()
 			UCommonTextBlock* const Note = WidgetTree->ConstructWidget<UCommonTextBlock>();
 			if (NoteTextStyle) Note->SetStyle(NoteTextStyle);
 			Note->SetAutoWrapText(true);
+			Note->SetStyle(nullptr);
+			FSlateFontInfo Font=Note->GetFont(); Font.Size=18; Note->SetFont(Font);
+			Note->SetColorAndOpacity(FLinearColor(FColor(155,193,214)));
 			Note->SetText(Section.Note);
 			if (UVerticalBoxSlot* const NoteSlot = Cast<UVerticalBoxSlot>(Box_Rows->AddChild(Note)))
 			{
@@ -195,14 +204,15 @@ void UknightSettingsScreen::HandleTabChanged()
 	const TArray<TObjectPtr<UknightSettingRow>> Enabled = Rows.FilterByPredicate([](const UknightSettingRow* Row) { return Row && Row->GetIsEnabled(); });
 	if (Enabled.Num() > 0)
 	{
-		Enabled[0]->SetNavigationRuleBase(EUINavigation::Up, EUINavigationRule::Stop);
-		Enabled.Last()->SetNavigationRuleBase(EUINavigation::Down, EUINavigationRule::Stop);
+		Enabled[0]->SetNavigationRuleExplicit(EUINavigation::Up,GetTabButton(GetCurrentTab()));
+		Enabled.Last()->SetNavigationRuleExplicit(EUINavigation::Down,Btn_Defaults);
 		HandleRowFocused(Enabled[0], false);
 	}
 	if (bHadFocus && bRowsLevel)
 	{
 		FocusLevel(true);
 	}
+	if (DetailRow.IsValid()) HandleRowFocused(DetailRow.Get(),false);
 	RefreshFooter();
 }
 
@@ -220,6 +230,7 @@ void UknightSettingsScreen::HandleValuesChanged()
 			}
 		}
 	}
+	if (DetailRow.IsValid()) HandleRowFocused(DetailRow.Get(),false);
 	RefreshFooter();
 }
 
@@ -273,6 +284,8 @@ void UknightSettingsScreen::HandleDisplayConfirm(bool bShow)
 
 void UknightSettingsScreen::ShowPrompt(bool bShow, UknightButtonBase* FocusTarget)
 {
+	bPromptVisible=bShow;
+	if (Panel_Editor) Panel_Editor->SetIsEnabled(!bShow);
 	if (Panel_Prompt)
 	{
 		Panel_Prompt->SetVisibility(bShow ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
@@ -287,8 +300,16 @@ void UknightSettingsScreen::ShowPrompt(bool bShow, UknightButtonBase* FocusTarge
 	}
 }
 
+void UknightSettingsScreen::HandleExitChromeOpacity(float Alpha)
+{
+	for (UknightButtonBase* Button : { Btn_Defaults.Get(), Btn_Revert.Get(), Btn_Apply.Get(), Btn_Back.Get(),
+		Btn_PromptApply.Get(), Btn_PromptDiscard.Get(), Btn_PromptContinue.Get() })
+		if (Button) Button->SetSettingsOutlineOpacity(Alpha);
+}
+
 void UknightSettingsScreen::HandleOpened()
 {
+	HandleExitChromeOpacity(1.f);
 	SetRowsLevel(false);
 }
 
@@ -309,7 +330,7 @@ bool UknightSettingsScreen::HandleBackRequested()
 
 bool UknightSettingsScreen::IsFooterFocused() const
 {
-	for (const UknightButtonBase* const Button : { Btn_Defaults.Get(), Btn_Revert.Get(), Btn_Apply.Get() })
+	for (const UknightButtonBase* const Button : { Btn_Defaults.Get(), Btn_Revert.Get(), Btn_Apply.Get(), Btn_Back.Get() })
 	{
 		if (Button && Button->HasFocusedDescendants())
 		{
@@ -386,12 +407,14 @@ void UknightSettingsScreen::HandleRowFocused(UknightSettingRow* Row, bool bKeybo
 	}
 	if (Txt_DetailTitle) Txt_DetailTitle->SetText(Row->GetItem().Label);
 	if (Txt_DetailBody) Txt_DetailBody->SetText(Row->GetItem().Description);
+	DetailRow=Row;
+	for (UknightSettingRow* Candidate : Rows) Candidate->SetSettingsSelected(Candidate==Row);
 	if (bKeyboardFocus)
 	{
 		SetRowsLevel(true);
 		if (Scroll_Rows)
 		{
-			Scroll_Rows->ScrollWidgetIntoView(Row, true, EDescendantScrollDestination::IntoView);
+			Scroll_Rows->ScrollWidgetIntoView(Row, false, EDescendantScrollDestination::IntoView);
 		}
 	}
 }
@@ -413,16 +436,31 @@ void UknightSettingsScreen::SwitchTab(int32 Direction)
 
 FReply UknightSettingsScreen::NativeOnPreviewKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
 {
+	if (IsClosing()) return FReply::Handled();
 	const FKey Key = InKeyEvent.GetKey();
-	if (!bRowsLevel && !IsCapturingKey())
+	if (Key==EKeys::Gamepad_FaceButton_Right && !IsCapturingKey())
 	{
-		// Down past the last category goes to the footer buttons; up from the footer comes back.
+		if (IsDisplayConfirmShown()) RevertDisplay();
+		else if (bPromptVisible) ConfirmContinue();
+		else if (!HandleBackRequested()) RequestClose();
+		return FReply::Handled();
+	}
+	if (!bPromptVisible && !IsCapturingKey())
+	{
+		const bool Left=Key==EKeys::Left || Key==EKeys::Gamepad_DPad_Left;
+		const bool Right=Key==EKeys::Right || Key==EKeys::Gamepad_DPad_Right;
+		if ((Left || Right) && GetTabButton(GetCurrentTab())->HasFocusedDescendants())
+		{ SetRowsLevel(false); SwitchTab(Right?1:-1); return FReply::Handled(); }
+	}
+	if (!bPromptVisible && !bRowsLevel && !IsCapturingKey())
+	{
+		// Tab reaches the fixed footer; Up returns to the current category.
 		UknightSettingsTab* const LastTab = GetTabButton(TabCount - 1);
-		if (Key == EKeys::Down && LastTab && LastTab->HasFocusedDescendants() && FocusFooter())
+		if (Key == EKeys::Tab && LastTab && GetTabButton(GetCurrentTab())->HasFocusedDescendants() && FocusFooter())
 		{
 			return FReply::Handled();
 		}
-		if (Key == EKeys::Up && IsFooterFocused())
+		if ((Key == EKeys::Up || Key == EKeys::Gamepad_DPad_Up) && IsFooterFocused())
 		{
 			FocusLevel(false);
 			return FReply::Handled();
@@ -433,14 +471,15 @@ FReply UknightSettingsScreen::NativeOnPreviewKeyDown(const FGeometry& InGeometry
 
 FReply UknightSettingsScreen::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
 {
+	if (IsClosing()) return FReply::Handled();
 	const FKey Key = InKeyEvent.GetKey();
-	if (IsDisplayConfirmShown())
+	if (IsDisplayConfirmShown() || bPromptVisible || IsCapturingKey())
 	{
 		return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
 	}
-	if (Key == EKeys::Q || Key == EKeys::E)
+	if (Key == EKeys::Q || Key == EKeys::E || Key==EKeys::Gamepad_LeftShoulder || Key==EKeys::Gamepad_RightShoulder)
 	{
-		SwitchTab(Key == EKeys::E ? 1 : -1);
+		SwitchTab(Key == EKeys::E || Key==EKeys::Gamepad_RightShoulder ? 1 : -1);
 		return FReply::Handled();
 	}
 	if (Key == EKeys::R)

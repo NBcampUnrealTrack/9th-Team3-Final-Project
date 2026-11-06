@@ -19,6 +19,7 @@ UknightSettingRow::UknightSettingRow(const FObjectInitializer& ObjectInitializer
 void UknightSettingRow::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
+	ConfigureSettingsButton(0);
 	OnClicked().AddUObject(this, &ThisClass::HandleRowClicked);
 	if (Btn_Prev)
 	{
@@ -38,6 +39,8 @@ void UknightSettingRow::NativeOnInitialized()
 void UknightSettingRow::Setup(const FKnightSettingItem& InItem)
 {
 	SetButtonText(InItem.Label);
+	SetToolTipText(InItem.Description);
+	if (Txt_Label) Txt_Label->SetToolTipText(InItem.Label);
 	if (Slider_Value)
 	{
 		bUpdating = true;
@@ -67,6 +70,7 @@ void UknightSettingRow::Refresh(const FKnightSettingItem& InItem)
 	{
 		RefreshValueText();
 	}
+	if (Txt_Value) Txt_Value->SetToolTipText(Txt_Value->GetText());
 }
 
 void UknightSettingRow::RefreshValueText()
@@ -113,6 +117,7 @@ void UknightSettingRow::NativeOnRemovedFromFocusPath(const FFocusEvent& InFocusE
 
 FReply UknightSettingRow::NativeOnPreviewKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
 {
+	OnFocused.ExecuteIfBound(this,true);
 	if (bCapturingKey)
 	{
 		FinishKeyCapture(InKeyEvent.GetKey());
@@ -121,11 +126,11 @@ FReply UknightSettingRow::NativeOnPreviewKeyDown(const FGeometry& InGeometry, co
 	// Left / right change the value. Caught in preview: otherwise Slate turns them into focus navigation first,
 	// which would jump out of the list.
 	const FKey Key = InKeyEvent.GetKey();
-	if (Key == EKeys::Left || Key == EKeys::Right)
+	if (Key == EKeys::Left || Key == EKeys::Right || Key==EKeys::Gamepad_DPad_Left || Key==EKeys::Gamepad_DPad_Right)
 	{
 		if (Item.Type != EKnightSettingControl::Key)
 		{
-			Step(Key == EKeys::Right ? 1 : -1);
+			Step(Key == EKeys::Right || Key==EKeys::Gamepad_DPad_Right ? 1 : -1);
 		}
 		return FReply::Handled();
 	}
