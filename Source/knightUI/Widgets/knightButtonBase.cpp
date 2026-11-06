@@ -8,6 +8,31 @@
 #include "Components/Image.h"
 #include "Framework/Application/SlateApplication.h"
 
+void UknightButtonBase::ConfigureOperationMapButton(bool bInSelectable)
+{
+	bOperationMapPresentation = true;
+	bTriggerClickedAfterSelection = true;
+	SetShouldSelectUponReceivingFocus(false);
+	SetIsSelectable(bInSelectable);
+	SetIsToggleable(false);
+	SetIsInteractableWhenSelected(true);
+	bFocusOnHover = false;
+	HoverScale = PressedScale = 1.f;
+	FocusedTextStyle = nullptr;
+	if (const auto StyleClass = LoadClass<UCommonButtonStyle>(nullptr,
+		TEXT("/Game/Knight/UI/Style/BS_Knight_OperationMap.BS_Knight_OperationMap_C"))) SetStyle(StyleClass);
+	const auto Tint = [](UWidget* Widget)
+	{
+		if (auto* Image = Cast<UImage>(Widget)) Image->SetColorAndOpacity(FLinearColor(FColor(119, 197, 255)));
+	};
+	for (UWidget* Bracket : { Bracket_L.Get(), Bracket_R.Get() })
+	{
+		Tint(Bracket);
+		if (auto* Nested = Cast<UUserWidget>(Bracket)) if (Nested->WidgetTree) Nested->WidgetTree->ForEachWidget(Tint);
+	}
+	RefreshTargets();
+}
+
 void UknightButtonBase::ConfigureMaintenanceButton(bool bInSelectable, bool bMainTab)
 {
 	bMaintenancePresentation = true;
@@ -184,6 +209,15 @@ void UknightButtonBase::HandleLockClicked()
 
 void UknightButtonBase::RefreshTargets()
 {
+	if (bOperationMapPresentation)
+	{
+		StopAnimating();
+		CurrentScale = TargetScale = 1.f;
+		ShakeTimeLeft = 0.f;
+		BracketAlpha = TargetBracketAlpha = GetIsEnabled() && !GetLocked() && (IsHovered() || bFocusedVisual) ? 1.f : 0.f;
+		ApplyMotion();
+		return;
+	}
 	if (bMaintenancePresentation)
 	{
 		StopAnimating();

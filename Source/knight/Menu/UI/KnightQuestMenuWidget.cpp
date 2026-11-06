@@ -15,6 +15,8 @@
 #include "Progression/knightProgressionSubsystem.h"
 #include "knightItemDefinition.h"
 #include "knight.h"
+#include "Menu/UI/KnightOperationMapPresentation.h"
+#include "Menu/UI/KnightButtonFillExtension.h"
 
 #define LOCTEXT_NAMESPACE "KnightQuestMenu"
 
@@ -35,11 +37,20 @@ namespace
 		return Text;
 	}
 
-	UCommonButtonBase* NewQuestButton(APlayerController* Owner)
+	UCommonButtonBase* NewQuestButton(APlayerController* Owner, bool bSelectable = false)
 	{
 		const TSubclassOf<UCommonButtonBase> ButtonClass = LoadClass<UCommonButtonBase>(nullptr,
 			TEXT("/Game/Knight/UI/Common/WBP_KnightButton.WBP_KnightButton_C"));
 		UCommonButtonBase* const Button = Owner && ButtonClass ? CreateWidget<UCommonButtonBase>(Owner, ButtonClass) : nullptr;
+		if (Button)
+		{
+			UKnightButtonFillExtension::SetEnabled(Button, false);
+			if (UFunction* Function = Button->FindFunction(TEXT("ConfigureOperationMapButton")))
+			{
+				struct { bool bInSelectable; } Params { bSelectable };
+				Button->ProcessEvent(Function, &Params);
+			}
+		}
 		return Button;
 	}
 
@@ -64,6 +75,7 @@ void UKnightQuestMenuWidget::BuildLayout()
 	Root->SetPadding(FMargin(18, 16));
 	WidgetTree->RootWidget = Root;
 	UVerticalBox* const Column = WidgetTree->ConstructWidget<UVerticalBox>();
+	ContentColumn = Column;
 	Root->SetContent(Column);
 	RegionHeading = NewQuestText(WidgetTree, TEXT("TS_Knight_Subhead"));
 	RegionHeading->SetText(LOCTEXT("ChooseRegion", "지도에서 구역을 선택하세요"));
@@ -114,35 +126,90 @@ void UKnightQuestMenuWidget::SetButtonLabel(UCommonButtonBase* Button, const FTe
 
 FText UKnightQuestMenuWidget::GetAvailability(const UKnightQuestDefinition* Quest, bool& bCanLaunch) const
 {
-	bCanLaunch = false;
-	if (!Quest || !Catalog) return LOCTEXT("QuestNotReady", "준비 중");
-	if (!Quest->bContentEnabled) return LOCTEXT("QuestNotReady", "준비 중");
-	FText Reason;
-	bCanLaunch = Catalog->CanSelectQuest(Quest->QuestId, GetGameInstance(), Reason);
-	return bCanLaunch ? (Quest->bMapExplorationOnly ? LOCTEXT("MapExplorationReady", "맵 탐색 가능") : LOCTEXT("QuestReady", "출격 가능")) :
-		(Reason.IsEmpty() ? LOCTEXT("QuestNotReady", "준비 중") : Reason);
+	const auto State = KnightOperationMapPresentation::Query(Catalog, Quest, GetGameInstance());
+	bCanLaunch = State.bCanLaunch;
+	TArray<FText> Lines { State.Availability };
+	if (!State.ClearLabel.IsEmpty()) Lines.Add(FText::Format(LOCTEXT("ClearMark", "✓ {0}"), State.ClearLabel));
+	if (!bCanLaunch && !State.Reason.IsEmpty()) Lines.Add(State.Reason);
+	return FText::Join(FText::FromString(TEXT(" · ")), Lines);
 }
 
 void UKnightQuestMenuWidget::RefreshQuests()
 {
 	Catalog = UKnightQuestSettings::LoadCatalog();
-	SetRegionQuests(ActiveRegionId, ActiveRegionName, RegionQuestIds);
+	if (!bPanelChanging) RebuildRegionContent();
 }
 
-void UKnightQuestMenuWidget::SetRegionQuests(FName RegionId, const FText& RegionName, const TArray<FName>& QuestIds)
+void UKnightQuestMenuWidget::SetRegionQuests(FName RegionId, const FText& RegionName, const TArray<FName>& QuestIds, bool bAnimate)
 {
+	const bool bChanged = ActiveRegionId != RegionId;
 	ActiveRegionId = RegionId;
 	ActiveRegionName = RegionName;
 	RegionQuestIds = QuestIds;
+	if (!RegionQuestIds.Contains(SelectedQuestId)) SelectedQuestId = NAME_None;
+	if (bChanged && bAnimate && ContentColumn)
+	{
+		bPanelChanging = bFadingOut = true; FadeElapsed = 0.f;
+		FadeStartOpacity = ContentColumn->GetRenderOpacity();
+		ContentColumn->SetVisibility(ESlateVisibility::HitTestInvisible);
+		if (LaunchButton) LaunchButton->SetIsEnabled(false);
+		return;
+	}
+	if (!bPanelChanging || !bAnimate) FinishPanelChange();
+}
+
+void UKnightQuestMenuWidget::FinishPanelChange()
+{
+	bPanelChanging = bFadingOut = false; FadeElapsed = 0.f;
+	if (ContentColumn) { ContentColumn->SetRenderOpacity(1.f); ContentColumn->SetVisibility(ESlateVisibility::SelfHitTestInvisible); }
+	RebuildRegionContent();
+}
+
+void UKnightQuestMenuWidget::NativeTick(const FGeometry& Geometry, float DeltaTime)
+{
+	Super::NativeTick(Geometry, DeltaTime);
+	if (!bPanelChanging || !ContentColumn) return;
+	FadeElapsed += FMath::Max(0.f, DeltaTime);
+	const float OutDuration = PanelFadeDuration / 3.f;
+	if (bFadingOut && FadeElapsed >= OutDuration)
+	{
+		ContentColumn->SetRenderOpacity(0.f);
+		bFadingOut = false;
+		RebuildRegionContent();
+		ContentColumn->ForceLayoutPrepass();
+	}
+	if (bFadingOut)
+		ContentColumn->SetRenderOpacity(FadeStartOpacity * (1.f - FMath::SmoothStep(0.f, OutDuration, FadeElapsed)));
+	else
+		ContentColumn->SetRenderOpacity(FMath::SmoothStep(OutDuration, PanelFadeDuration, FadeElapsed));
+	if (FadeElapsed >= PanelFadeDuration)
+	{
+		bPanelChanging = false;
+		ContentColumn->SetRenderOpacity(1.f); ContentColumn->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+		RefreshDetails();
+	}
+}
+
+void UKnightQuestMenuWidget::NativeDestruct()
+{
+	bPanelChanging = bFadingOut = false;
+	if (ContentColumn) { ContentColumn->SetRenderOpacity(1.f); ContentColumn->SetVisibility(ESlateVisibility::SelfHitTestInvisible); }
+	Super::NativeDestruct();
+}
+
+void UKnightQuestMenuWidget::RebuildRegionContent()
+{
+	const bool bHadFocus = HasFocusedDescendants();
+	const float Scroll = QuestList ? QuestList->GetScrollOffset() : 0.f;
 	QuestOrder.Reset();
 	QuestButtons.Reset();
 	if (QuestList) QuestList->ClearChildren();
 	if (RegionHeading)
 	{
-		RegionHeading->SetText(RegionId.IsNone() ? LOCTEXT("ChooseRegion", "지도에서 구역을 선택하세요")
-			: RegionName.IsEmpty() ? FText::FromName(RegionId) : RegionName);
+		RegionHeading->SetText(ActiveRegionId.IsNone() ? LOCTEXT("ChooseRegion", "지도에서 구역을 선택하세요")
+			: ActiveRegionName.IsEmpty() ? FText::FromName(ActiveRegionId) : ActiveRegionName);
 	}
-	if (!Catalog || !QuestList || RegionId.IsNone())
+	if (!Catalog || !QuestList || ActiveRegionId.IsNone())
 	{
 		SelectedQuestId = NAME_None;
 		RefreshDetails();
@@ -153,7 +220,7 @@ void UKnightQuestMenuWidget::SetRegionQuests(FName RegionId, const FText& Region
 	{
 		UKnightQuestDefinition* const Quest = Catalog->FindQuest(QuestId);
 		if (!Quest) continue;
-		UCommonButtonBase* const Button = NewQuestButton(GetOwningPlayer());
+		UCommonButtonBase* const Button = NewQuestButton(GetOwningPlayer(), true);
 		if (!Button) continue;
 		SetButtonLabel(Button, Quest->DisplayName);
 		Button->OnClicked().AddWeakLambda(this, [this, QuestId]() { SelectQuest(QuestId); });
@@ -177,32 +244,35 @@ void UKnightQuestMenuWidget::SetRegionQuests(FName RegionId, const FText& Region
 		}
 	}
 	if (!QuestOrder.Contains(SelectedQuestId)) SelectedQuestId = NAME_None;
+	if (QuestList) QuestList->SetScrollOffset(Scroll);
 	RefreshDetails();
+	if (bHadFocus && !bPanelChanging) if (UWidget* Focus = GetFocusButton()) Focus->SetUserFocus(GetOwningPlayer());
 }
 
 bool UKnightQuestMenuWidget::SelectQuest(FName QuestId)
 {
-	if (!QuestId.IsNone() && (!Catalog || !QuestOrder.Contains(QuestId))) return false;
+	if (!QuestId.IsNone() && (!Catalog || !RegionQuestIds.Contains(QuestId) || !Catalog->FindQuest(QuestId))) return false;
 	const bool bChanged = SelectedQuestId != QuestId;
 	SelectedQuestId = QuestId;
-	RefreshDetails();
+	if (!bPanelChanging || !bFadingOut) RefreshDetails();
 	if (bChanged) OnSelectionChanged.Broadcast(QuestId);
 	return true;
 }
 
 bool UKnightQuestMenuWidget::CycleQuest(int32 Direction)
 {
-	if (QuestOrder.IsEmpty()) return false;
-	const int32 Current = QuestOrder.IndexOfByKey(SelectedQuestId);
-	const int32 Next = Current == INDEX_NONE ? (Direction >= 0 ? 0 : QuestOrder.Num() - 1)
-		: (Current + (Direction >= 0 ? 1 : -1) + QuestOrder.Num()) % QuestOrder.Num();
-	SelectQuest(QuestOrder[Next]);
+	if (RegionQuestIds.IsEmpty()) return false;
+	const int32 Current = RegionQuestIds.IndexOfByKey(SelectedQuestId);
+	const int32 Next = Current == INDEX_NONE ? (Direction >= 0 ? 0 : RegionQuestIds.Num() - 1)
+		: (Current + (Direction >= 0 ? 1 : -1) + RegionQuestIds.Num()) % RegionQuestIds.Num();
+	SelectQuest(RegionQuestIds[Next]);
 	if (UWidget* const Button = GetFocusButton()) Button->SetUserFocus(GetOwningPlayer());
 	return true;
 }
 
 UWidget* UKnightQuestMenuWidget::GetFocusButton() const
 {
+	if (bPanelChanging) return nullptr;
 	const int32 Index = QuestOrder.IndexOfByKey(SelectedQuestId);
 	return QuestButtons.IsValidIndex(Index) ? QuestButtons[Index].Get()
 		: (QuestButtons.IsEmpty() ? nullptr : QuestButtons[0].Get());
@@ -219,6 +289,8 @@ FText UKnightQuestMenuWidget::FormatReward(const FknightRaidReward& Reward)
 
 void UKnightQuestMenuWidget::RefreshDetails()
 {
+	const bool bSelectionChanged = DisplayedQuestId != SelectedQuestId;
+	DisplayedQuestId = SelectedQuestId;
 	const UKnightQuestDefinition* const Quest = Catalog ? Catalog->FindQuest(SelectedQuestId) : nullptr;
 	for (int32 Index = 0; Index < QuestButtons.Num(); ++Index)
 	{
@@ -227,6 +299,7 @@ void UKnightQuestMenuWidget::RefreshDetails()
 		const bool bSelected = QuestOrder.IsValidIndex(Index) && QuestOrder[Index] == SelectedQuestId;
 		if (bSelected && !Button->GetSelected()) Button->SetIsSelected(true, false);
 		else if (!bSelected && Button->GetSelected()) Button->ClearSelection();
+		if (bSelected && bSelectionChanged && QuestList) QuestList->ScrollWidgetIntoView(Button->GetParent(), false);
 	}
 	if (!Quest)
 	{
@@ -252,7 +325,7 @@ void UKnightQuestMenuWidget::RefreshDetails()
 		const FText Availability = GetAvailability(Quest, bCanLaunch);
 		if (DetailAvailability) DetailAvailability->SetText(Availability);
 		const UKnightGameFlowSubsystem* const Flow = GetGameInstance() ? GetGameInstance()->GetSubsystem<UKnightGameFlowSubsystem>() : nullptr;
-		if (LaunchButton) LaunchButton->SetIsEnabled(bCanLaunch && Flow && !Flow->IsTravelPending());
+		if (LaunchButton) LaunchButton->SetIsEnabled(!bPanelChanging && bCanLaunch && Flow && !Flow->IsTravelPending());
 		return;
 	}
 	if (DetailTarget) DetailTarget->SetVisibility(ESlateVisibility::HitTestInvisible);
@@ -294,12 +367,15 @@ void UKnightQuestMenuWidget::RefreshDetails()
 	const FText Availability = GetAvailability(Quest, bCanLaunch);
 	if (DetailAvailability) DetailAvailability->SetText(Availability);
 	const UKnightGameFlowSubsystem* const Flow = GetGameInstance() ? GetGameInstance()->GetSubsystem<UKnightGameFlowSubsystem>() : nullptr;
-	if (LaunchButton) LaunchButton->SetIsEnabled(bCanLaunch && Flow && !Flow->IsTravelPending());
+	if (LaunchButton) LaunchButton->SetIsEnabled(!bPanelChanging && bCanLaunch && Flow && !Flow->IsTravelPending());
 }
 
 void UKnightQuestMenuWidget::HandleLaunchClicked()
 {
-	if (!SelectedQuestId.IsNone() && LaunchButton && LaunchButton->GetIsEnabled())
+	const auto State = KnightOperationMapPresentation::Query(Catalog, Catalog ? Catalog->FindQuest(SelectedQuestId) : nullptr, GetGameInstance());
+	const auto* Flow = GetGameInstance() ? GetGameInstance()->GetSubsystem<UKnightGameFlowSubsystem>() : nullptr;
+	if (!bPanelChanging && DisplayedQuestId == SelectedQuestId && RegionQuestIds.Contains(SelectedQuestId)
+		&& State.bCanLaunch && Flow && !Flow->IsTravelPending() && LaunchButton && LaunchButton->GetIsEnabled())
 	{
 		OnLaunchRequested.Broadcast(SelectedQuestId);
 	}

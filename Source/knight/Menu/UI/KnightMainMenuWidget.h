@@ -43,6 +43,7 @@ class KNIGHT_API UKnightMainMenuWidget : public UKnightMenuWidgetBase
 	GENERATED_BODY()
 	friend class UknightEquipmentActionCheckCommandlet;
 	friend class UknightMaintenanceEntranceCheckCommandlet;
+	friend class UknightOperationMapCheckCommandlet;
 
 public:
 	UFUNCTION(BlueprintPure, Category="Knight|Menu")
@@ -188,7 +189,10 @@ private:
 	bool ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDuringTravel);
 	bool OpenMaterialsShortcut();
 	bool RebuildMapMarkers();
-	void ShowSelectedRegionQuests();
+	void ShowSelectedRegionQuests(bool bAnimate = true);
+	void SaveOperationMapContext();
+	void RestoreOperationMapContext();
+	FString OperationMapProfile;
 	void PlaceQuestPanel();
 	void RefreshStageDetails();
 	void RefreshRaidDetails();

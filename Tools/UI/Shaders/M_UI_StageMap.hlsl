@@ -1,4 +1,5 @@
-// M_UI_StageMap Custom 노드 코드. 입력: UV, ViewRect, MapPixels, Tex(LandTex), Blink, R0..R7(Region0..7). 출력 float4.
+// UI custom node: UV, ViewRect, MapPixels, Tex, R0..R7, FX0..FX7, SelectionTuning. Output float4.
+// Blink is retained as an unused serialized input for compatibility.
 // 고친 뒤 Tools/UI/make_stage_map_material.py로 에셋에 넣는다.
 
 // Map texture coordinates of this pixel, and the same in map pixels (Slate units at the current zoom).
@@ -7,7 +8,7 @@ float2 px = uv * MapPixels.xy;
 
 float3 bg = float3(0.0033, 0.0056, 0.0091);
 float3 frost = float3(0.39, 0.58, 0.87);
-float3 ember = float3(1.0, 0.195, 0.010);
+float3 blue = float3(0.19, 0.56, 1.0);
 float3 grey = float3(0.19, 0.23, 0.28);
 
 // Dot grid: one dot per cell, sized and lit by the land under the cell centre so each dot is uniform.
@@ -31,6 +32,9 @@ float grid = 1.0 - min(smoothstep(0.0, gw.x * 1.5, gd.x), smoothstep(0.0, gw.y *
 // Stage regions: soft shapes around each stage, edge wobbled the same way as UKnightStageMapWidget::FindMarkerAt.
 // R = (u, v, radius in map pixels, state). State 0 unused, 1 normal, 2 hovered, 3 selected, +3 locked.
 float4 regions[8] = { R0, R1, R2, R3, R4, R5, R6, R7 };
+float4 effects[8] = { FX0, FX1, FX2, FX3, FX4, FX5, FX6, FX7 };
+float4 bestFX = 0;
+float bestRadius = 1.0;
 float bestT = 1e4;
 float bestState = 0.0;
 float bestAngle = 0.0;
@@ -50,6 +54,8 @@ for (int i = 0; i < 8; ++i)
         bestT = t;
         bestState = g.w;
         bestAngle = a;
+        bestFX = effects[i];
+        bestRadius = g.z * wob;
     }
 }
 
@@ -63,26 +69,34 @@ if (bestState > 0.5)
 {
     bool locked = bestState > 3.5;
     float st = locked ? bestState - 3.0 : bestState;
-    bool selected = st > 2.5;
-    float3 regionCol = locked ? grey : (selected ? ember : frost);
-    float fill = locked ? 0.14 : (selected ? 0.15 : (st > 1.5 ? 0.16 : 0.09));
-    if (selected && !locked)
-    {
-        // Blink: +1 bright, -1 dim, 0 steady.
-        fill = Blink > 0.5 ? 0.4 : (Blink < -0.5 ? 0.03 : fill);
-    }
-    float edge = locked ? 0.55 : (selected ? 0.95 : (st > 1.5 ? 0.8 : 0.45));
-    if (locked)
-    {
-        // Dashed outline: 24 dashes around the region.
-        edge *= step(0.5, frac(bestAngle * 24.0 / 6.2831853));
-    }
+    float selected = saturate(bestFX.x);
+    float hovered = saturate(bestFX.w) * (1.0 - selected);
+    float3 regionCol = locked ? grey : frost;
+    float fill = locked ? 0.14 : 0.09;
+    float edge = locked ? 0.55 : 0.45;
+    if (locked) edge *= step(0.5, frac(bestAngle * 24.0 / 6.2831853));
     col = lerp(col, regionCol, fill * inRegion);
     col = lerp(col, regionCol, edge * edgeBand);
-    dotCol = lerp(dotCol, locked ? grey * 2.0 : regionCol, inRegion * (selected ? 0.6 : 0.4));
+    // Selection and hover have different strengths; availability does not mask selection.
+    col = lerp(col, blue, inRegion * selected * SelectionTuning.z);
+    col += frost * hovered * (inRegion * 0.025 + edgeBand * 0.13);
+    dotCol = lerp(dotCol, locked ? grey * 2.0 : regionCol, inRegion * 0.4);
 }
 col += frost * grid * 0.06;
 col = lerp(col, dotCol, dotMask * dotAlpha);
+// The moving segment uses the exact same irregular perimeter as the artwork and hit test.
+// No extra rectangle, texture crop, particle layer, or independent screen coordinates.
+float edgeDistance = abs(bestT - 1.0) * bestRadius;
+float core = 1.0 - smoothstep(0.6, 2.1, edgeDistance);
+float halo = exp(-pow(edgeDistance / max(SelectionTuning.y, 1.0), 2.0));
+float angle01 = bestAngle / 6.2831853 + 0.5;
+float arcDistance = abs(frac(angle01 - bestFX.y + 0.5) - 0.5);
+float segment = 1.0 - smoothstep(0.015, 0.075, arcDistance);
+float selected = saturate(bestFX.x);
+float peak = bestFX.z;
+col += blue * selected * (core * SelectionTuning.x + halo * 0.055);
+col += float3(0.40, 0.76, 1.0) * peak * (core * (0.24 + segment * 1.1) + halo * segment * 0.27);
+
 
 // Soft fade at the widget edges so the map reads as a panel.
 float2 e = min(UV, 1.0 - UV);

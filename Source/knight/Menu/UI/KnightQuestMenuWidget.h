@@ -10,6 +10,7 @@ class UScrollBox;
 class UBorder;
 class UKnightQuestCatalog;
 class UKnightQuestDefinition;
+class UVerticalBox;
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FKnightQuestLaunchRequested, FName);
 DECLARE_MULTICAST_DELEGATE_OneParam(FKnightQuestSelectionChanged, FName);
@@ -23,7 +24,9 @@ class KNIGHT_API UKnightQuestMenuWidget : public UUserWidget
 public:
 	void RefreshQuests();
 	/** Show only the quests on the selected map region. Does not change raid state. */
-	void SetRegionQuests(FName RegionId, const FText& RegionName, const TArray<FName>& QuestIds);
+	void SetRegionQuests(FName RegionId, const FText& RegionName, const TArray<FName>& QuestIds, bool bAnimate = true);
+	bool IsPanelChanging() const { return bPanelChanging; }
+	void FinishPanelChange();
 	bool SelectQuest(FName QuestId);
 	bool CycleQuest(int32 Direction);
 	FName GetSelectedQuestId() const { return SelectedQuestId; }
@@ -32,10 +35,16 @@ public:
 	FKnightQuestSelectionChanged OnSelectionChanged;
 
 protected:
+	friend class UknightOperationMapCheckCommandlet;
 	virtual void NativeOnInitialized() override;
+	virtual void NativeTick(const FGeometry& Geometry, float DeltaTime) override;
+	virtual void NativeDestruct() override;
+	UPROPERTY(EditAnywhere, Category="Knight|Quest|Presentation", meta=(ClampMin="0.15", ClampMax="0.20"))
+	float PanelFadeDuration = .18f;
 
 private:
 	void BuildLayout();
+	void RebuildRegionContent();
 	void RefreshDetails();
 	void HandleLaunchClicked();
 	FText GetAvailability(const UKnightQuestDefinition* Quest, bool& bCanLaunch) const;
@@ -63,10 +72,17 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UCommonButtonBase> LaunchButton;
 	UPROPERTY(Transient)
+	TObjectPtr<UVerticalBox> ContentColumn;
+	UPROPERTY(Transient)
 	TArray<TObjectPtr<UCommonButtonBase>> QuestButtons;
 	TArray<FName> QuestOrder;
 	TArray<FName> RegionQuestIds;
 	FName ActiveRegionId;
 	FText ActiveRegionName;
 	FName SelectedQuestId;
+	FName DisplayedQuestId;
+	bool bPanelChanging = false;
+	bool bFadingOut = false;
+	float FadeElapsed = 0.f;
+	float FadeStartOpacity = 1.f;
 };

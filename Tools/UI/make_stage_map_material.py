@@ -1,7 +1,7 @@
 """Builds /Game/Knight/UI/Menu/M_UI_StageMap around the Custom node in Tools/UI/Shaders/M_UI_StageMap.hlsl.
 
 Run in the editor (Tools > Execute Python Script) or with the pythonscript commandlet. When the material already exists
-only the HLSL is replaced, so it is safe to run again after editing the shader.
+the HLSL and selection inputs are updated without replacing its artwork graph.
 """
 import os
 
@@ -79,6 +79,25 @@ else:
     mel.connect_material_expressions(custom, "", alpha, "")
     mel.connect_material_property(rgb, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     mel.connect_material_property(alpha, "", unreal.MaterialProperty.MP_OPACITY)
+
+# Add the selection inputs to existing assets without rebuilding their artwork graph.
+inputs = list(custom.get_editor_property("inputs"))
+existing_names = {str(entry.get_editor_property("input_name")) for entry in inputs}
+for name in ["SelectionTuning"] + ["FX%d" % i for i in range(REGIONS)]:
+    if name not in existing_names:
+        entry = unreal.CustomInput()
+        entry.set_editor_property("input_name", name)
+        inputs.append(entry)
+custom.set_editor_property("inputs", inputs)
+for index, (pin, param_name) in enumerate([("SelectionTuning", "SelectionTuning")] + [("FX%d" % i, "RegionEffect%d" % i) for i in range(REGIONS)]):
+    param = next((o for o in unreal.ObjectIterator(unreal.MaterialExpressionVectorParameter)
+                  if o.get_outermost() == material.get_outermost() and str(o.get_editor_property("parameter_name")) == param_name), None)
+    if param is None:
+        param = mel.create_material_expression(material, unreal.MaterialExpressionVectorParameter, -1050, index * 70)
+        param.set_editor_property("parameter_name", param_name)
+        param.set_editor_property("default_value", unreal.LinearColor(.58, 7, .13, 0) if index == 0 else unreal.LinearColor(0, 1, 0, 0))
+        param.set_editor_property("group", "Selection")
+    mel.connect_material_expressions(param, "RGBA", custom, pin)
 
 mel.recompile_material(material)
 eal.save_loaded_asset(material, False)
