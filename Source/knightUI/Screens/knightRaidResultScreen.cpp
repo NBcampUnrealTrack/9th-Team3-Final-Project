@@ -4,16 +4,19 @@
 #include "CommonTextBlock.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
+#include "Components/Border.h"
 #include "Components/Image.h"
 #include "Components/PanelWidget.h"
 #include "Components/ScrollBox.h"
 #include "Components/ScrollBoxSlot.h"
 #include "Components/SizeBox.h"
+#include "Components/TextBlock.h"
 #include "Engine/GameInstance.h"
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "GameFlow/KnightGameFlowSubsystem.h"
 #include "GameFlow/KnightStageCatalog.h"
+#include "HUD/knightHUDScreenDraw.h"
 #include "InputCoreTypes.h"
 #include "Kismet/GameplayStatics.h"
 #include "Monster/knightMonsterDefinition.h"
@@ -74,30 +77,16 @@ void UknightRaidResultScreen::ShowResult(const FknightRaidResult& Result)
 {
 	bSuccess = Result.bSuccess;
 	bReportShown = false;
+	bReturnFocused = false;
 	bReturnRequested = false;
 	ElapsedTime = 0.f;
 	ShownCountdown = -1;
 
-	// Banner.
+	// 홀로그램 선 색. 시간 숫자도 같은 색으로 강조한다.
 	const FLinearColor AccentColor = bSuccess ? SuccessColor : FailureColor;
-	if (Img_Accent)
+	if (Img_ReportAccent)
 	{
-		Img_Accent->SetColorAndOpacity(AccentColor);
-	}
-	if (Txt_BannerCaption)
-	{
-		Txt_BannerCaption->SetText(bSuccess ? INVTEXT("MISSION COMPLETE") : INVTEXT("MISSION FAILED"));
-	}
-	if (Txt_BannerTitle)
-	{
-		Txt_BannerTitle->SetText(bSuccess ? LOCTEXT("ResultSuccess", "토벌 완료") : LOCTEXT("ResultFailed", "임무 실패"));
-		Txt_BannerTitle->SetColorAndOpacity(AccentColor);
-	}
-	if (Txt_BannerReason)
-	{
-		const FText Reason = bSuccess ? FText::GetEmpty() : GetFailReasonText(Result.FailReason);
-		Txt_BannerReason->SetText(Reason);
-		Txt_BannerReason->SetVisibility(Reason.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+		Img_ReportAccent->SetColorAndOpacity(knightHUDDraw::WithOpacity(AccentColor, 0.45f));
 	}
 
 	// Report.
@@ -108,6 +97,27 @@ void UknightRaidResultScreen::ShowResult(const FknightRaidResult& Result)
 	if (Txt_ClearTime)
 	{
 		Txt_ClearTime->SetText(FormatRaidTime(Result.ElapsedTime));
+		ClearTimeSeconds = Result.ElapsedTime;
+		Txt_ClearTime->SetColorAndOpacity(AccentColor);
+	}
+	if (Txt_ClearTimeLabel)
+	{
+		Txt_ClearTimeLabel->SetText(bSuccess ? INVTEXT("CLEAR TIME") : INVTEXT("ELAPSED"));
+	}
+	// 실패면 부위 파괴 대신 실패 사유.
+	const FText Reason = bSuccess ? FText::GetEmpty() : GetFailReasonText(Result.FailReason);
+	if (Row_FailReason)
+	{
+		Row_FailReason->SetVisibility(Reason.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
+	}
+	if (Txt_FailReason)
+	{
+		Txt_FailReason->SetText(Reason);
+		Txt_FailReason->SetColorAndOpacity(FailureColor);
+	}
+	if (Row_BrokenParts)
+	{
+		Row_BrokenParts->SetVisibility(bSuccess ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
 	}
 
 	// Progression has already applied this result (it listens to the raid subsystem), so a best time equal to
@@ -144,20 +154,17 @@ void UknightRaidResultScreen::ShowResult(const FknightRaidResult& Result)
 	StartWorldTime = World ? World->GetTimeSeconds() : 0.0;
 	RefreshCountdown();
 
-	// Motion: banner first, report later.
+	// Motion: 판독 창이 올라가는 동안 기다렸다가 보고 패널을 켠다. 자리는 미리 잡아 둔다(Hidden).
 	if (Img_Dim)
 	{
 		Img_Dim->SetRenderOpacity(0.f);
 	}
-	if (Banner)
-	{
-		Banner->SetVisibility(ESlateVisibility::HitTestInvisible);
-		Banner->SetRenderOpacity(0.f);
-	}
 	if (Report)
 	{
-		Report->SetVisibility(ESlateVisibility::Collapsed);
+		Report->SetVisibility(ESlateVisibility::Hidden);
 	}
+	GatherRevealTargets();
+	TickReveal(-1.f);
 	Btn_Return->SetIsEnabled(false);
 
 	if (USoundBase* const Sound = bSuccess ? SuccessSound.Get() : FailureSound.Get())
@@ -167,6 +174,13 @@ void UknightRaidResultScreen::ShowResult(const FknightRaidResult& Result)
 
 	StopTicker();
 	Ticker = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateUObject(this, &ThisClass::TickMotion));
+}
+
+void UknightRaidResultScreen::SetReturnStartTime(double WorldSeconds)
+{
+	StartWorldTime = WorldSeconds;
+	ShownCountdown = -1;
+	RefreshCountdown();
 }
 
 void UknightRaidResultScreen::NativeOnDeactivated()
@@ -183,7 +197,8 @@ void UknightRaidResultScreen::NativeDestruct()
 
 UWidget* UknightRaidResultScreen::NativeGetDesiredFocusTarget() const
 {
-	return Btn_Return;
+	// 패널이 다 켜지기 전에는 화면 자체에 포커스를 둔다. 버튼에 먼저 주면 포커스 테두리가 투명한 줄 위에 혼자 떠 보인다.
+	return bReturnFocused ? Btn_Return.Get() : nullptr;
 }
 
 FReply UknightRaidResultScreen::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
@@ -302,32 +317,24 @@ bool UknightRaidResultScreen::TickMotion(float DeltaTime)
 {
 	ElapsedTime += DeltaTime;
 
-	const auto EaseOut = [](float Alpha) { return 1.f - FMath::Square(1.f - FMath::Clamp(Alpha, 0.f, 1.f)); };
-	const float BannerAlpha = BannerInDuration > 0.f ? EaseOut(ElapsedTime / BannerInDuration) : 1.f;
 	if (Img_Dim)
 	{
-		Img_Dim->SetRenderOpacity(BannerAlpha);
+		Img_Dim->SetRenderOpacity(DimInDuration > 0.f ? knightHUDDraw::EaseOut(ElapsedTime / DimInDuration) : 1.f);
 	}
 
-	if (!bReportShown)
+	const float ReportTime = GetReportTime();
+	if (ReportTime >= 0.f && !bReportShown)
 	{
-		if (Banner)
-		{
-			// Opens vertically like a shutter.
-			Banner->SetRenderOpacity(BannerAlpha);
-			Banner->SetRenderScale(FVector2D(1.f, FMath::Lerp(0.4f, 1.f, BannerAlpha)));
-		}
-		if (ElapsedTime >= BannerInDuration + BannerHoldDuration)
-		{
-			ShowReport();
-		}
+		ShowReport();
 	}
-	else if (Report)
+	TickReveal(ReportTime);
+	// 버튼은 마지막 줄까지 다 올라온 뒤에 누를 수 있게 한다. 포커스 테두리는 줄 투명도와 상관없이 그려져 먼저 떠 보인다.
+	if (bReportShown && !bReturnFocused && !bReturnRequested
+		&& ReportTime >= RowStartTime + FMath::Max(0, RevealRows.Num() - 1) * RowInterval + RowInDuration)
 	{
-		const float ReportTime = ElapsedTime - (BannerInDuration + BannerHoldDuration);
-		const float ReportAlpha = ReportInDuration > 0.f ? EaseOut(ReportTime / ReportInDuration) : 1.f;
-		Report->SetRenderOpacity(ReportAlpha);
-		Report->SetRenderTranslation(FVector2D(0.f, (1.f - ReportAlpha) * 16.f));
+		bReturnFocused = true;
+		Btn_Return->SetIsEnabled(true);
+		Btn_Return->SetFocus();
 	}
 
 	RefreshCountdown();
@@ -337,20 +344,172 @@ bool UknightRaidResultScreen::TickMotion(float DeltaTime)
 void UknightRaidResultScreen::ShowReport()
 {
 	bReportShown = true;
-	if (Banner)
-	{
-		Banner->SetVisibility(ESlateVisibility::Collapsed);
-	}
 	if (Report)
 	{
 		Report->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
-		Report->SetRenderOpacity(0.f);
 	}
-	if (!bReturnRequested)
+}
+
+void UknightRaidResultScreen::GatherRevealTargets()
+{
+	RevealRows.Reset();
+	DecodeLabels.Reset();
+	ClearTimeStart = RowStartTime;
+	UPanelWidget* const Column = Cast<UPanelWidget>(GetWidgetFromName(TEXT("VerticalBox_Report")));
+	if (!Column)
 	{
-		Btn_Return->SetIsEnabled(true);
-		Btn_Return->SetFocus();
+		return;
 	}
+	// 접힌 줄(성공의 실패 사유 등)은 건너뛰어 보이는 줄끼리 간격을 맞춘다.
+	TMap<const UWidget*, float> RowStart;
+	for (UWidget* const Row : Column->GetAllChildren())
+	{
+		if (Row && Row->GetVisibility() != ESlateVisibility::Collapsed)
+		{
+			RowStart.Add(Row, RowStartTime + RevealRows.Num() * RowInterval);
+			RevealRows.Add(Row);
+		}
+	}
+	const auto FindRowStart = [&](const UWidget* Widget)
+	{
+		for (const UWidget* Each = Widget; Each; Each = Each->GetParent())
+		{
+			if (const float* const Start = RowStart.Find(Each))
+			{
+				return *Start;
+			}
+		}
+		return RowStartTime;
+	};
+	for (const TCHAR* const Name : { TEXT("Txt_ReportCaption"), TEXT("Txt_ClearTimeLabel"), TEXT("Txt_BestTimeLabel"), TEXT("Txt_BrokenPartsLabel"),
+		TEXT("Txt_FailReasonLabel"), TEXT("Txt_RewardsLabel") })
+	{
+		if (UTextBlock* const Label = Cast<UTextBlock>(GetWidgetFromName(Name)))
+		{
+			DecodeLabels.Add({ Label, Label->GetText().ToString(), FindRowStart(Label) });
+		}
+	}
+	if (Txt_ClearTime)
+	{
+		ClearTimeStart = FindRowStart(Txt_ClearTime);
+	}
+}
+
+void UknightRaidResultScreen::TickReveal(float ReportTime)
+{
+	// 바탕판: 외곽선이 반쯤 그려졌을 때부터 차오른다.
+	if (UBorder* const Frame = Cast<UBorder>(GetWidgetFromName(TEXT("Border_Frame"))))
+	{
+		const float Plate = knightHUDDraw::EaseOut((ReportTime - TraceDuration * 0.5f) / PlateInDuration);
+		Frame->SetBrushColor(FLinearColor(1.f, 1.f, 1.f, ReportTime < 0.f ? 0.f : Plate));
+	}
+	// 줄: 위에서부터 차례로 살짝 올라오며 나타난다.
+	for (int32 Index = 0; Index < RevealRows.Num(); ++Index)
+	{
+		if (UWidget* const Row = RevealRows[Index].Get())
+		{
+			const float Alpha = ReportTime < 0.f ? 0.f : knightHUDDraw::EaseOut((ReportTime - RowStartTime - Index * RowInterval) / RowInDuration);
+			Row->SetRenderOpacity(Alpha);
+			Row->SetRenderTranslation(FVector2D(0.f, (1.f - Alpha) * 8.f));
+			// 버튼 틀은 위젯 투명도를 받지 않고 그려져서, 줄이 반쯤 나타날 때까지 숨겨 둔다.
+			if (Btn_Return && Btn_Return->IsChildOf(Row))
+			{
+				const ESlateVisibility ButtonVisibility = Alpha < 0.4f ? ESlateVisibility::Hidden : ESlateVisibility::Visible;
+				if (Btn_Return->GetVisibility() != ButtonVisibility)
+				{
+					Btn_Return->SetVisibility(ButtonVisibility);
+				}
+			}
+		}
+	}
+	// 라벨: 아직 맞춰지지 않은 글자는 무작위 글자로 바뀌며 돈다. 다 맞춰진 라벨은 다시 건드리지 않는다.
+	static const TCHAR Glyphs[] = TEXT("ABCDEFGHJKLMNPQRSTUVWXYZ0123456789");
+	for (FDecodeLabel& Entry : DecodeLabels)
+	{
+		UTextBlock* const Label = Entry.Label.Get();
+		if (!Label || Entry.Text.IsEmpty())
+		{
+			continue;
+		}
+		const int32 Done = ReportTime < Entry.StartTime ? 0 : FMath::FloorToInt32((ReportTime - Entry.StartTime) / DecodeCharInterval);
+		if (Done >= Entry.Text.Len())
+		{
+			Label->SetText(FText::FromString(Entry.Text));
+			Entry.Text.Reset();
+			continue;
+		}
+		FString Shown = Entry.Text;
+		for (int32 Char = Done; Char < Shown.Len(); ++Char)
+		{
+			if (FChar::IsAlnum(Shown[Char]))
+			{
+				Shown[Char] = Glyphs[FMath::RandRange(0, UE_ARRAY_COUNT(Glyphs) - 2)];
+			}
+		}
+		Label->SetText(FText::FromString(Shown));
+	}
+	// 소요 시간: 0부터 올라가 멈춘다.
+	if (Txt_ClearTime && ReportTime >= 0.f && ReportTime <= ClearTimeStart + CountUpDuration + 0.1f)
+	{
+		const float Count = knightHUDDraw::EaseOut((ReportTime - ClearTimeStart) / CountUpDuration);
+		Txt_ClearTime->SetText(FormatRaidTime(ClearTimeSeconds * Count));
+	}
+}
+
+int32 UknightRaidResultScreen::NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect,
+	FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const
+{
+	const int32 Layer = Super::NativePaint(Args, AllottedGeometry, MyCullingRect, OutDrawElements, LayerId, InWidgetStyle, bParentEnabled);
+	const float ReportTime = GetReportTime();
+	if (!Report || ReportTime < 0.f)
+	{
+		return Layer;
+	}
+
+	// 보고 패널의 배치 자리. 바탕판 위에 외곽선과 모서리 브래킷을 그린다.
+	// 틱 공간(GetCachedGeometry)은 창 모드에서 데스크톱 좌표라 창 위치만큼 어긋난다. 그리는 공간 기준으로 잡는다.
+	const FGeometry& ReportGeometry = Report->GetPaintSpaceGeometry();
+	const FVector2D TL = AllottedGeometry.AbsoluteToLocal(ReportGeometry.GetAbsolutePosition());
+	const FVector2D FullSize = AllottedGeometry.AbsoluteToLocal(ReportGeometry.GetAbsolutePosition() + ReportGeometry.GetAbsoluteSize()) - TL;
+	if (FullSize.X <= 1.f || FullSize.Y <= 1.f)
+	{
+		return Layer;
+	}
+	// 외곽선: 왼쪽 위 모서리에서 시계 방향으로 한 바퀴 그려진 뒤 옅게 남는다. 모서리 브래킷은 다 그려지면 나타난다.
+	const FLinearColor AccentColor = bSuccess ? SuccessColor : FailureColor;
+	const float Trace = knightHUDDraw::EaseOut(ReportTime / TraceDuration);
+	const float LineOpacity = ReportTime < TraceDuration ? 0.9f : FMath::Lerp(0.9f, 0.3f, FMath::Clamp((ReportTime - TraceDuration) / 0.4f, 0.f, 1.f));
+	const FVector2D BR = TL + FullSize;
+	const FVector2D Corners[] = { TL, FVector2D(BR.X, TL.Y), BR, FVector2D(TL.X, BR.Y), TL };
+	const float Perimeter = 2.f * (FullSize.X + FullSize.Y);
+	float Remaining = Perimeter * Trace;
+	TArray<FVector2f> Outline = { FVector2f(TL) };
+	for (int32 Edge = 0; Edge < 4 && Remaining > 0.f; ++Edge)
+	{
+		const FVector2D From = Corners[Edge];
+		const FVector2D To = Corners[Edge + 1];
+		const float Length = (To - From).Size();
+		const float Step = FMath::Min(Remaining, Length);
+		Outline.Add(FVector2f(From + (To - From) * (Step / Length)));
+		Remaining -= Step;
+	}
+	knightHUDDraw::Lines(OutDrawElements, Layer + 1, AllottedGeometry, Outline, knightHUDDraw::WithOpacity(AccentColor, LineOpacity), 1.f);
+
+	const float BracketOpacity = knightHUDDraw::EaseOut((ReportTime - TraceDuration * 0.8f) / 0.2f);
+	if (BracketOpacity > 0.f)
+	{
+		const FLinearColor Accent = knightHUDDraw::WithOpacity(AccentColor, BracketOpacity);
+		const float Arm = 24.f;
+		const FVector2D Mid = TL + FullSize * 0.5;
+		for (const FVector2D& Corner : { TL, FVector2D(BR.X, TL.Y), BR, FVector2D(TL.X, BR.Y) })
+		{
+			const float SX = Corner.X < Mid.X ? 1.f : -1.f;
+			const float SY = Corner.Y < Mid.Y ? 1.f : -1.f;
+			knightHUDDraw::Lines(OutDrawElements, Layer + 2, AllottedGeometry,
+				{ FVector2f(Corner.X + SX * Arm, Corner.Y), FVector2f(Corner.X, Corner.Y), FVector2f(Corner.X, Corner.Y + SY * Arm) }, Accent, 2.f);
+		}
+	}
+	return Layer + 3;
 }
 
 void UknightRaidResultScreen::RefreshCountdown()
@@ -374,8 +533,8 @@ void UknightRaidResultScreen::RefreshCountdown()
 	ShownCountdown = Remaining;
 	Txt_Countdown->SetVisibility(ESlateVisibility::HitTestInvisible);
 	Txt_Countdown->SetText(Remaining > 0
-		? FText::Format(LOCTEXT("ReturnCountdown", "{0}초 후 기지로 귀환"), FText::AsNumber(Remaining))
-		: LOCTEXT("Returning", "기지로 귀환 중"));
+		? FText::Format(LOCTEXT("ReturnCountdown", "RETURN IN {0}s"), FText::AsNumber(Remaining))
+		: LOCTEXT("Returning", "RETURNING"));
 }
 
 void UknightRaidResultScreen::StopTicker()
