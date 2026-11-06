@@ -1,4 +1,5 @@
 #include "Settings/KnightSettingsWidget.h"
+#include "Settings/KnightSettingsExitTransition.h"
 
 #include "Engine/GameInstance.h"
 #include "Engine/LocalPlayer.h"
@@ -188,6 +189,10 @@ FText UKnightSettingsWidget::GetTabCaption(int32 Index)
 
 void UKnightSettingsWidget::Open()
 {
+	if (ExitTransition) ExitTransition->Cancel();
+	ExitTransition = MakeShared<FKnightSettingsExitTransition>(this);
+	bClosing = false; bCloseBroadcast = false;
+	SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 	UknightGameUserSettings* const Graphics = UknightGameUserSettings::Get();
 	ULocalPlayer* const Player = GetOwningLocalPlayer();
 	UknightSettingsSubsystem* const Settings = Player ? Player->GetSubsystem<UknightSettingsSubsystem>() : nullptr;
@@ -478,6 +483,7 @@ void UKnightSettingsWidget::FocusSettings() { HandleFocusRequested(); }
 
 void UKnightSettingsWidget::SetTab(int32 Index)
 {
+	if (bClosing) return;
 	const int32 NewTab = (Index % TabCount + TabCount) % TabCount;
 	if (NewTab == CurrentTab) return;
 	CurrentTab = NewTab;
@@ -526,6 +532,7 @@ void UKnightSettingsWidget::EndDisplayPreview() const
 
 void UKnightSettingsWidget::OptionEdited(FName Id, const FString& Value)
 {
+	if (bClosing) return;
 	if (!DraftPersonal) return;
 	if (bDisplayConfirmShown) { HandleValuesChanged(); return; }
 	const bool bOn = Value == OnText;
@@ -622,6 +629,7 @@ void UKnightSettingsWidget::OptionEdited(FName Id, const FString& Value)
 
 void UKnightSettingsWidget::Apply()
 {
+	if (bClosing) return;
 	if (bDisplayConfirmShown || !IsDirty()) return;
 	// A saved mode can become unavailable after a GPU, driver, or resolution change.
 	// The disabled row displays Off; keep the value we apply and save in sync with it.
@@ -796,6 +804,12 @@ void UKnightSettingsWidget::RestoreDisplay(bool bRefreshScreen)
 
 void UKnightSettingsWidget::Revert()
 {
+	if (bClosing) return;
+	DiscardDraft(true);
+}
+
+void UKnightSettingsWidget::DiscardDraft(bool bRefresh)
+{
 	if (bDisplayConfirmShown) return;
 	DraftGraphics = SavedGraphics;
 	CopyPersonal(DraftPersonal, SavedPersonal);
@@ -803,13 +817,14 @@ void UKnightSettingsWidget::Revert()
 	DraftCulture = SavedCulture;
 	PreviewAudio(SavedPersonal);
 	EndDisplayPreview();
-	HandleTabChanged();
+	if (bRefresh) HandleTabChanged();
 	ShowUnsavedPrompt(false);
 	SetStatus(LOCTEXT("Discarded", "편집한 내용을 버렸습니다."));
 }
 
 void UKnightSettingsWidget::RestoreDefaults()
 {
+	if (bClosing) return;
 	if (bDisplayConfirmShown) return;
 	DraftGraphics = FKnightGraphicsChoice();
 	FKnightDisplayInfo Primary;
@@ -830,7 +845,7 @@ void UKnightSettingsWidget::RestoreDefaults()
 
 void UKnightSettingsWidget::RequestClose()
 {
-	if (bDisplayConfirmShown) return;
+	if (bClosing || bDisplayConfirmShown || IsCapturingKey()) return;
 	if (IsDirty())
 	{
 		ShowUnsavedPrompt(true);
@@ -847,24 +862,48 @@ void UKnightSettingsWidget::ShowUnsavedPrompt(bool bShow)
 
 void UKnightSettingsWidget::CloseNow()
 {
+	if (bClosing) return;
 	ShowUnsavedPrompt(false);
 	EndDisplayPreview();
+	bClosing = true;
+	if (!ExitTransition) ExitTransition = MakeShared<FKnightSettingsExitTransition>(this);
+	ExitTransition->Start();
+}
+
+void UKnightSettingsWidget::CompleteExit()
+{
+	if (!bClosing || bCloseBroadcast) return;
+	bCloseBroadcast = true;
 	OnClosed.Broadcast();
+}
+
+float UKnightSettingsWidget::GetExitElapsed() const
+{
+	return ExitTransition ? ExitTransition->GetElapsed() : 0.f;
+}
+
+int32 UKnightSettingsWidget::NativePaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& Cull,
+	FSlateWindowElementList& Out, int32 Layer, const FWidgetStyle& Style, bool Enabled) const
+{
+	const int32 Painted = Super::NativePaint(Args, Geometry, Cull, Out, Layer, Style, Enabled);
+	return ExitTransition ? ExitTransition->Paint(Geometry, Out, Painted) : Painted;
 }
 
 void UKnightSettingsWidget::ConfirmApply()
 {
+	if (bClosing) return;
 	ShowUnsavedPrompt(false);
 	Apply();
 	if (bDisplayConfirmShown) bCloseAfterDisplayConfirm = true;
 	else if (!IsDirty()) CloseNow();
 	else ShowUnsavedPrompt(true);
 }
-void UKnightSettingsWidget::ConfirmDiscard() { Revert(); CloseNow(); }
-void UKnightSettingsWidget::ConfirmContinue() { ShowUnsavedPrompt(false); SetStatus(FText::GetEmpty()); HandleFocusRequested(); }
+void UKnightSettingsWidget::ConfirmDiscard() { if (bClosing) return; DiscardDraft(false); CloseNow(); }
+void UKnightSettingsWidget::ConfirmContinue() { if (bClosing) return; ShowUnsavedPrompt(false); SetStatus(FText::GetEmpty()); HandleFocusRequested(); }
 
 FReply UKnightSettingsWidget::NativeOnPreviewKeyDown(const FGeometry& Geometry, const FKeyEvent& Event)
 {
+	if (bClosing) return FReply::Handled();
 	if (Event.GetKey() == EKeys::Escape)
 	{
 		if (bDisplayConfirmShown) { RevertDisplay(); return FReply::Handled(); }
@@ -879,6 +918,8 @@ FReply UKnightSettingsWidget::NativeOnPreviewKeyDown(const FGeometry& Geometry, 
 
 void UKnightSettingsWidget::NativeDestruct()
 {
+	if (ExitTransition) ExitTransition->Cancel();
+	ExitTransition.Reset();
 	// Leaving the map mid-countdown counts as not keeping the display.
 	if (bDisplayConfirmShown) RestoreDisplay(false);
 	EndDisplayPreview();

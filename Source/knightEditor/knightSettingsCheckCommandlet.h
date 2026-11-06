@@ -9,4 +9,6 @@ class UknightSettingsCheckCommandlet : public UCommandlet
     GENERATED_BODY()
 public:
     virtual int32 Main(const FString& Params) override;
+    UFUNCTION() void CountSettingsClose() { ++CloseCount; }
+    int32 CloseCount = 0;
 };

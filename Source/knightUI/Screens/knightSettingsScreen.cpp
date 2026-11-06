@@ -300,8 +300,16 @@ void UknightSettingsScreen::ShowPrompt(bool bShow, UknightButtonBase* FocusTarge
 	}
 }
 
+void UknightSettingsScreen::HandleExitChromeOpacity(float Alpha)
+{
+	for (UknightButtonBase* Button : { Btn_Defaults.Get(), Btn_Revert.Get(), Btn_Apply.Get(), Btn_Back.Get(),
+		Btn_PromptApply.Get(), Btn_PromptDiscard.Get(), Btn_PromptContinue.Get() })
+		if (Button) Button->SetSettingsOutlineOpacity(Alpha);
+}
+
 void UknightSettingsScreen::HandleOpened()
 {
+	HandleExitChromeOpacity(1.f);
 	SetRowsLevel(false);
 }
 
@@ -428,6 +436,7 @@ void UknightSettingsScreen::SwitchTab(int32 Direction)
 
 FReply UknightSettingsScreen::NativeOnPreviewKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
 {
+	if (IsClosing()) return FReply::Handled();
 	const FKey Key = InKeyEvent.GetKey();
 	if (Key==EKeys::Gamepad_FaceButton_Right && !IsCapturingKey())
 	{
@@ -462,6 +471,7 @@ FReply UknightSettingsScreen::NativeOnPreviewKeyDown(const FGeometry& InGeometry
 
 FReply UknightSettingsScreen::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
 {
+	if (IsClosing()) return FReply::Handled();
 	const FKey Key = InKeyEvent.GetKey();
 	if (IsDisplayConfirmShown() || bPromptVisible || IsCapturingKey())
 	{

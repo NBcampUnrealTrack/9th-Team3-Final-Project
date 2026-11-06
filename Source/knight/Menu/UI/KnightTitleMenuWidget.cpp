@@ -277,7 +277,7 @@ bool UKnightTitleMenuWidget::ApplyPage(EKnightTitlePage NewPage, bool bAllowDuri
 		EnsureSettingsWidget();
 		// The settings screen is laid out for the whole screen, so it goes over the menu rather than into Panel_Settings.
 		if (SettingsWidget && !SettingsWidget->IsInViewport()) SettingsWidget->AddToViewport(50);
-		if (SettingsWidget) SettingsWidget->Open();
+		if (SettingsWidget) { SettingsWidget->SetReturnMenu(Panel_Home); SettingsWidget->Open(); }
 	}
 	else if (SettingsWidget && SettingsWidget->IsInViewport())
 	{
@@ -352,7 +352,11 @@ void UKnightTitleMenuWidget::EnsureSettingsWidget()
 	SettingsWidget->OnClosed.AddUniqueDynamic(this, &ThisClass::HandleSettingsClosed);
 }
 
-void UKnightTitleMenuWidget::HandleSettingsClosed() { ShowPage(EKnightTitlePage::Home); }
+void UKnightTitleMenuWidget::HandleSettingsClosed()
+{
+	if (ShowPage(EKnightTitlePage::Home) && Button_Settings)
+		Button_Settings->SetUserFocus(GetOwningPlayer());
+}
 
 UWidget* UKnightTitleMenuWidget::GetPreferredFocusTarget() const
 {

@@ -86,6 +86,7 @@ protected:
 	virtual void HandleDisplayConfirm(bool bShow) override;
 	virtual void HandleFocusRequested() override;
 	virtual void HandleOpened() override;
+	virtual void HandleExitChromeOpacity(float Alpha) override;
 	virtual bool HandleBackRequested() override;
 
 	UPROPERTY(EditAnywhere, Category="Knight|Settings|Classes")

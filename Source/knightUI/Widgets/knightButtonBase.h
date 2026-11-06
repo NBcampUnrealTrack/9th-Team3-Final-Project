@@ -27,6 +27,8 @@ class KNIGHTUI_API UknightButtonBase : public UCommonButtonBase
 public:
 	/** Opt-in Settings-only static presentation: 0 row, 1 tab, 2 outlined action, 3 text Back. */
 	void ConfigureSettingsButton(uint8 Kind);
+	/** Rounded-box outlines ignore inherited tint in Slate; Settings exit supplies its group fade. */
+	void SetSettingsOutlineOpacity(float Alpha);
 	void SetSettingsSelected(bool bInSelected);
 	/** Owner-controlled tab/list selection; actions never latch. Opt-in so other screens retain their presentation. */
 	UFUNCTION(BlueprintCallable, Category="Knight|Button")
@@ -121,6 +123,7 @@ private:
 	bool bSettingsPresentation = false;
 	bool bSettingsSelected = false;
 	uint8 SettingsKind = 0;
+	float SettingsOutlineOpacity = 1.f;
 	void HandleLockClicked();
 	void RefreshTargets();
 	void RefreshLockVisual();

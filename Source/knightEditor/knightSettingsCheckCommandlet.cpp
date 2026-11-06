@@ -1,4 +1,9 @@
 #include "knightSettingsCheckCommandlet.h"
+#include "Settings/KnightSettingsExitTransition.h"
+#include "Components/WidgetSwitcher.h"
+#include "Components/CanvasPanel.h"
+#include "GameFramework/PlayerState.h"
+#include "GameFramework/WorldSettings.h"
 #include "Screens/knightSettingsScreen.h"
 #include "Widgets/knightSettingRow.h"
 #include "Settings/knightSettingsSubsystem.h"
@@ -69,6 +74,8 @@ int32 UknightSettingsCheckCommandlet::Main(const FString& Params)
         Draw(); Draw(); TArray<FLinearColor> Linear; TArray<FColor> Pixels;
         Check(Target->GameThread_GetRenderTargetResource()->ReadLinearColorPixels(Linear,FReadSurfaceDataFlags(RCM_MinMax)),TEXT("real Slate RHI readback"));
         for(const auto& P:Linear)Pixels.Add(P.ToFColor(false)); TArray64<uint8> PNG;
+        if(Name.EndsWith(TEXT("_299")))
+            Check(!Pixels.ContainsByPredicate([](const FColor& P){return P.R||P.G||P.B;}),TEXT("final real rendered frame contains no residual cores, outlines or text"));
         FImageUtils::PNGCompressImageArray(Extent.X,Extent.Y,Pixels,PNG);
         Check(FFileHelper::SaveArrayToFile(PNG,*(Out/(Name+TEXT(".png")))),TEXT("render saved"));
     };
@@ -181,7 +188,72 @@ int32 UknightSettingsCheckCommandlet::Main(const FString& Params)
         Monitor->Setup(Item); Screen->HandleRowFocused(Monitor,false); Capture(TEXT("LongText_720_Fixture"));
         Check(Monitor->Txt_Value->GetToolTipText().EqualTo(Item.OptionLabels[0]),TEXT("ellipsis retains full live value in tooltip"));
     }
-    Screen->Revert(); Screen->RequestClose(); Check(!Screen->bPromptVisible,TEXT("clean Back does not fabricate pending edits"));
+    Screen->Revert();
+    Screen->OnClosed.AddDynamic(this,&ThisClass::CountSettingsClose);
+    for(const auto Size:{FIntPoint(1920,1080),FIntPoint(1280,720),FIntPoint(2560,1080)})
+    {
+        Resize(Size);
+        for(int32 Tab=0;Tab<4;++Tab)
+        {
+            Screen->Open(); Screen->SetTab(Tab); Screen->FocusLevel(false); Draw();
+            Screen->Scroll_Rows->SetScrollOffset(40.f); Draw();
+            const float Scroll=Screen->Scroll_Rows->GetScrollOffset();
+            const FWidgetTransform Before=Screen->Scroll_Rows->GetRenderTransform();
+            const int32 CountBefore=CloseCount;
+            if(Tab==0) Screen->Btn_Back->OnClicked().Broadcast();
+            else Press(Tab==1?EKeys::Gamepad_FaceButton_Right:EKeys::Escape);
+            Check(Screen->IsClosing()&&CloseCount==CountBefore,TEXT("Back/Esc/controller accepted close defers OnClosed"));
+            const auto Motion=Screen->ExitTransition;
+            Screen->RequestClose(); Screen->Apply(); Screen->RestoreDefaults(); Screen->SetTab((Tab+1)%4);
+            Screen->OptionEdited(TEXT("Master"),TEXT("11"));
+            Check(Screen->GetCurrentTab()==Tab&&!Screen->IsDirty()&&Screen->ExitTransition==Motion,TEXT("repeated close, category and value edits blocked during exit"));
+            Check(FMath::IsNearlyEqual(Screen->Scroll_Rows->GetScrollOffset(),Scroll),TEXT("exit preserves current scroll without rebuilding rows"));
+            float Prev=0.f;
+            for(float Time:{0.f,.075f,.15f,.21f,.27f,.299f})
+            {
+                Motion->Advance(Time-Prev); Prev=Time;
+                Capture(FString::Printf(TEXT("Exit_Tab%d_%dx%d_%03d"),Tab,Size.X,Size.Y,FMath::RoundToInt(Time*1000)));
+                Check(Screen->GetVisibility()!=ESlateVisibility::Collapsed&&CloseCount==CountBefore,TEXT("outgoing screen lives until its final transparent frame"));
+            }
+            Check(Screen->Scroll_Rows->GetRenderOpacity()==0.f&&Screen->GetWidgetFromName(TEXT("Row_Header"))->GetRenderOpacity()==0.f,TEXT("content and chrome fully transparent before removal"));
+            auto* FooterBorder=Cast<UBorder>(Screen->Btn_Defaults->GetWidgetFromName(TEXT("Border_State")));
+            Check(FooterBorder&&FooterBorder->Background.OutlineSettings.Color.GetSpecifiedColor().A==0.f,TEXT("Slate independent outline reaches zero before cleanup"));
+            Motion->Advance(.002f); Screen->RequestClose(); Motion->Advance(1.f);
+            Check(CloseCount==CountBefore+1&&Screen->GetVisibility()==ESlateVisibility::Collapsed,TEXT("completion navigates once and hides outgoing input targets"));
+            Check(Screen->Scroll_Rows->GetRenderTransform()==Before,TEXT("authored transform restored while hidden"));
+            Screen->Open(); Draw();
+            Check(!Screen->IsClosing()&&Screen->IsVisible()&&Screen->Scroll_Rows->GetRenderOpacity()==1.f,TEXT("reopen restores opacity and availability"));
+        }
+    }
+    // Real-time CoreTicker must finish even when World time is paused.
+    auto* PauseState=World->SpawnActor<APlayerState>(); World->GetWorldSettings()->SetPauserPlayerState(PauseState);
+    Screen->RequestClose(); const int32 PausedBefore=CloseCount;
+    Check(World->IsPaused(),TEXT("paused-world fixture active"));
+    FTSTicker::GetCoreTicker().Tick(.31f);
+    Check(CloseCount==PausedBefore+1&&World->IsPaused(),TEXT("core ticker completes exit while preserving game pause"));
+    World->GetWorldSettings()->SetPauserPlayerState(nullptr);
+    Screen->Open(); Screen->SetTab(2); Screen->OptionEdited(TEXT("Master"),TEXT("19")); Screen->RequestClose();
+    Check(Screen->bPromptVisible&&!Screen->IsClosing(),TEXT("dirty close waits for original prompt"));
+    Screen->ConfirmContinue(); Check(!Screen->IsClosing()&&Screen->IsDirty(),TEXT("prompt cancel leaves screen usable and draft intact"));
+    Screen->RequestClose(); auto* RowBeforeDiscard=Screen->Rows[0].Get(); Screen->ConfirmDiscard();
+    Check(Screen->IsClosing()&&!Screen->IsDirty()&&Screen->Rows[0]==RowBeforeDiscard,TEXT("discard accepted without rebuilding the departing list"));
+    const auto Obsolete=Screen->ExitTransition; Obsolete->Advance(.09f); const int32 InterruptedBefore=CloseCount;
+    Screen->Open(); Obsolete->Advance(1.f);
+    Check(!Screen->IsClosing()&&CloseCount==InterruptedBefore,TEXT("reopen cancels old callback and restores presentation"));
+    Screen->RequestClose(); const auto Removed=Screen->ExitTransition; Screen->NativeDestruct(); Removed->Advance(1.f);
+    Check(CloseCount==InterruptedBefore,TEXT("removal cancels outstanding transition callback")); Screen->Open();
+    FKnightGraphicsChoice Display=Screen->SavedGraphics; Display.Resolution=FIntPoint(1920,1080); Screen->StartDisplayConfirm(Display);
+    Screen->RequestClose(); Check(Screen->IsDisplayConfirmShown()&&!Screen->IsClosing(),TEXT("display confirmation owns close"));
+    Press(EKeys::Escape); Check(!Screen->IsDisplayConfirmShown()&&!Screen->IsClosing(),TEXT("Esc rolls display back instead of exiting"));
+    // Caller page presentation is temporary; original navigation owns final destination.
+    auto* Pages=NewObject<UWidgetSwitcher>(Screen); auto* Home=NewObject<UCanvasPanel>(Screen); auto* Empty=NewObject<UCanvasPanel>(Screen);
+    Pages->AddChild(Home); Pages->AddChild(Empty); Pages->SetActiveWidget(Empty); Screen->SetReturnMenu(Home);
+    Screen->RequestClose(); Check(Pages->GetActiveWidget()==Home&&Home->GetRenderOpacity()==0.f,TEXT("actual caller prepared invisible before first transition frame"));
+    Screen->ExitTransition->Advance(.20f);
+    Check(Home->GetRenderOpacity()>0.f&&Home->GetRenderOpacity()<1.f&&Home->GetVisibility()==ESlateVisibility::HitTestInvisible,TEXT("caller overlaps late fade but cannot accept clicks"));
+    Screen->ExitTransition->Advance(.11f);
+    Check(Pages->GetActiveWidget()==Empty&&Home->GetRenderOpacity()==1.f,TEXT("caller presentation reset for existing final navigation"));
+    Screen->SetReturnMenu(nullptr); Screen->OnClosed.RemoveDynamic(this,&ThisClass::CountSettingsClose); Screen->NativeDestruct();
     Screen->RemoveFromRoot(); Window->SetContent(SNullWidget::NullWidget); FSlateApplication::Get().UnregisterVirtualWindow(Window); Target->RemoveFromRoot(); BeginCleanup(Renderer); FlushRenderingCommands();
     GI->Shutdown(); GEngine->DestroyWorldContext(World); World->DestroyWorld(false); GI->RemoveFromRoot();
     UE_LOG(LogTemp,Display,TEXT("SettingsStatic COMPLETE checks=%d failures=%d; Slate/delegate checks, not physical mouse/controller or monitor-mode testing"),Checks,Failures);

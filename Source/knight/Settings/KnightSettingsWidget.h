@@ -6,6 +6,7 @@
 #include "Settings/knightGameUserSettings.h"
 #include "KnightSettingsWidget.generated.h"
 
+class FKnightSettingsExitTransition;
 class UknightSharedSettings;
 class UknightSettingsSubsystem;
 
@@ -77,6 +78,7 @@ class KNIGHT_API UKnightSettingsWidget : public UUserWidget
 public:
 	static constexpr int32 TabCount = 4;
 	friend class UknightSettingsCheckCommandlet;
+	friend class FKnightSettingsExitTransition;
 
 	UPROPERTY(BlueprintAssignable, Category="Knight|Settings")
 	FKnightSettingsClosed OnClosed;
@@ -86,6 +88,19 @@ public:
 	void FocusSettings();
 	/** Closes, or asks first when there are unapplied edits. */
 	void RequestClose();
+	bool IsClosing() const { return bClosing; }
+	/** The actual caller page; only its presentation changes during accepted closure. */
+	void SetReturnMenu(UWidget* Page) { ReturnMenu = Page; }
+	float GetExitElapsed() const;
+
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Settings|Exit", meta=(ClampMin="0.28", ClampMax="0.34"))
+	float ExitDuration = .30f;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Settings|Exit") float ExitSlideDistance = 44.f;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Settings|Exit") float ExitChromeFadeDuration = .23f;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Settings|Exit", meta=(ClampMin="0", ClampMax="0.9"))
+	float ReturnMenuFadeDelayFraction = .60f;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Settings|Exit", meta=(ClampMin="0", ClampMax="1"))
+	float ExitEdgeIntensity = .16f;
 	/** True while a key row waits for a key; Esc then cancels the capture instead of closing. */
 	virtual bool IsCapturingKey() const { return false; }
 	static TSubclassOf<UKnightSettingsWidget> GetSharedWidgetClass();
@@ -124,6 +139,8 @@ public:
 protected:
 	virtual FReply NativeOnPreviewKeyDown(const FGeometry& Geometry, const FKeyEvent& Event) override;
 	virtual void NativeDestruct() override;
+	virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& Cull,
+		FSlateWindowElementList& Out, int32 Layer, const FWidgetStyle& Style, bool Enabled) const override;
 
 	/** The tab changed or its rows changed shape (Open, Revert, defaults): rebuild the list. */
 	virtual void HandleTabChanged() {}
@@ -137,6 +154,8 @@ protected:
 	virtual void HandleFocusRequested() { SetKeyboardFocus(); }
 	/** Start of Open, before the first HandleTabChanged. */
 	virtual void HandleOpened() {}
+	/** Settings-only layers whose custom brushes do not inherit Slate parent opacity. */
+	virtual void HandleExitChromeOpacity(float Alpha) {}
 	/** Esc that is not a key capture or the unsaved prompt. Return true when the screen used it (leaving a sub-list). */
 	virtual bool HandleBackRequested() { return false; }
 
@@ -151,7 +170,13 @@ private:
 	void PreviewAudio(const UknightSharedSettings* Settings) const;
 	void PreviewDisplay(const UknightSharedSettings* Settings) const;
 	void EndDisplayPreview() const;
+	void DiscardDraft(bool bRefresh);
 	void CloseNow();
+	void CompleteExit();
+	bool bClosing = false;
+	bool bCloseBroadcast = false;
+	TWeakObjectPtr<UWidget> ReturnMenu;
+	TSharedPtr<FKnightSettingsExitTransition> ExitTransition;
 	void ApplyPreset(int32 Quality);
 
 	void ShowUnsavedPrompt(bool bShow);

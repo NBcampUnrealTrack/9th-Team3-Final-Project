@@ -23,6 +23,11 @@ void UknightButtonBase::SetSettingsSelected(bool bInSelected)
 	bSettingsSelected=bInSelected; RefreshSettingsVisual();
 }
 
+void UknightButtonBase::SetSettingsOutlineOpacity(float Alpha)
+{
+	SettingsOutlineOpacity=FMath::Clamp(Alpha,0.f,1.f); RefreshSettingsVisual();
+}
+
 void UknightButtonBase::RefreshSettingsVisual()
 {
 	if (!bSettingsPresentation || !WidgetTree) return;
@@ -39,7 +44,7 @@ void UknightButtonBase::RefreshSettingsVisual()
 		FSlateBrush Brush; Brush.DrawAs=ESlateBrushDrawType::RoundedBox;
 		Brush.TintColor=FLinearColor(FColor(29,61,81)).CopyWithNewOpacity(SettingsKind==0 ? (bSettingsSelected?.64f:Hot?.2f:0.f) : 0.f);
 		const FLinearColor Edge(FColor(Hot ? 104 : 73,Hot ? 202 : 125,Hot ? 234 : 153));
-		Brush.OutlineSettings=FSlateBrushOutlineSettings(FVector4(0),FSlateColor(Edge.CopyWithNewOpacity(GetIsEnabled()?1.f:.48f)),SettingsKind==2?1.f:0.f);
+		Brush.OutlineSettings=FSlateBrushOutlineSettings(FVector4(0),FSlateColor(Edge.CopyWithNewOpacity(SettingsKind==2 ? (GetIsEnabled()?1.f:.48f)*SettingsOutlineOpacity : 0.f)),SettingsKind==2?1.f:0.f);
 		Brush.OutlineSettings.RoundingType=ESlateBrushRoundingType::FixedRadius;
 		State->SetBrush(Brush);
 		State->SetBrushColor(FLinearColor::White);
