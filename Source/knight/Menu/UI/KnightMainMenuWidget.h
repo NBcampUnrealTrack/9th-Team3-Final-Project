@@ -70,6 +70,8 @@ protected:
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 	virtual FReply NativeOnPreviewKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
 	virtual FReply NativeOnKeyUp(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
+	virtual bool NativeSupportsCustomNavigation() const override;
+	virtual FNavigationReply NativeOnNavigation(const FGeometry& Geometry, const FNavigationEvent& Event, const FNavigationReply& DefaultReply) override;
 	virtual EKnightFlowState GetExpectedFlowState() const override { return EKnightFlowState::MainMenu; }
 	virtual bool HandleBackRequested() override;
 	virtual bool ShouldAllowEscapeToChild() const override;

@@ -90,13 +90,17 @@ float edgeDistance = abs(bestT - 1.0) * bestRadius;
 float core = 1.0 - smoothstep(0.6, 2.1, edgeDistance);
 float halo = exp(-pow(edgeDistance / max(SelectionTuning.y, 1.0), 2.0));
 float angle01 = bestAngle / 6.2831853 + 0.5;
-float arcDistance = abs(frac(angle01 - bestFX.y + 0.5) - 0.5);
-float segment = 1.0 - smoothstep(0.015, 0.075, arcDistance);
+// Wrapped distances give the head/tail continuous values through the loop seam.
+// CPU supplies an arc-length-driven angle, so the head travels steadily around the irregular edge.
+float behind = frac(bestFX.y - angle01 + 1.0);
+float headDistance = abs(frac(angle01 - bestFX.y + 0.5) - 0.5);
+float head = exp(-pow(headDistance / 0.018, 2.0));
+float tail = exp(-behind / 0.045) * (1.0 - smoothstep(0.09, 0.16, behind));
+float segment = max(head, tail * 0.65);
 float selected = saturate(bestFX.x);
 float peak = bestFX.z;
 col += blue * selected * (core * SelectionTuning.x + halo * 0.055);
-col += float3(0.40, 0.76, 1.0) * peak * (core * (0.24 + segment * 1.1) + halo * segment * 0.27);
-
+col += float3(0.40, 0.76, 1.0) * peak * segment * (core * 1.15 + halo * 0.25);
 
 // Soft fade at the widget edges so the map reads as a panel.
 float2 e = min(UV, 1.0 - UV);

@@ -15,8 +15,12 @@
 #include "CommonButtonBase.h"
 #include "CommonTextBlock.h"
 #include "CommonGameViewportClient.h"
+#include "Widgets/Layout/SBorder.h"
+#include "Styling/CoreStyle.h"
 #include "Components/VerticalBox.h"
 #include "Components/Border.h"
+#include "Components/Image.h"
+#include "Components/ScrollBox.h"
 #include "Engine/GameInstance.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
@@ -61,6 +65,10 @@ int32 UknightOperationMapCheckCommandlet::Main(const FString& Params)
 	UGameInstance* GI = NewObject<UGameInstance>(GEngine); GI->AddToRoot(); GI->InitializeStandalone();
 	UWorld* World = GI->GetWorld();
 	TGuardValue<TSubclassOf<UGameViewportClient>> ViewportClass(GEngine->GameViewportClientClass, UCommonGameViewportClient::StaticClass());
+    // Offscreen Slate has no OS cursor. Keep this fixture-only override in memory;
+    // normal viewport cursor settings and project configuration are unchanged.
+    auto* UISettings = GetMutableDefault<UUserInterfaceSettings>();
+    TGuardValue<decltype(UISettings->HardwareCursors)> CursorGuard(UISettings->HardwareCursors, {});
 	UGameViewportClient* Viewport = NewObject<UCommonGameViewportClient>(GEngine);
 	GI->GetWorldContext()->GameViewport = Viewport; Viewport->Init(*GI->GetWorldContext(), GI, false);
 	ULocalPlayer* LocalPlayer = NewObject<ULocalPlayer>(GEngine); GI->AddLocalPlayer(LocalPlayer, FPlatformUserId::CreateFromInternalId(0));
@@ -91,7 +99,24 @@ int32 UknightOperationMapCheckCommandlet::Main(const FString& Params)
 	UKnightMainMenuWidget* Menu = Class ? CreateWidget<UKnightMainMenuWidget>(Player, Class) : nullptr;
 	if (!Menu) return 1;
 	Menu->AddToRoot();
-	FWidgetRenderer* Renderer = new FWidgetRenderer(true);
+    // Render linear HDR values and encode sRGB only during readback. The default
+    // 8-bit WidgetRenderer target applies display gamma twice in this offscreen setup.
+    FWidgetRenderer* Renderer = new FWidgetRenderer(false);
+    auto MakeCaptureTarget = [](FIntPoint Extent)
+    {
+        auto* Result = NewObject<UTextureRenderTarget2D>(); Result->ClearColor=FLinearColor::Transparent;
+        Result->TargetGamma=1.f; Result->InitCustomFormat(Extent.X,Extent.Y,PF_FloatRGBA,true); Result->UpdateResourceImmediate(true);
+        return Result;
+    };
+    auto* Probe = MakeCaptureTarget(FIntPoint(16,16));
+    Renderer->DrawWidget(Probe, SNew(SBorder).BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+        .BorderBackgroundColor(FLinearColor(FColor(9,20,31))),FVector2D(16,16),0.f); FlushRenderingCommands();
+    TArray<FLinearColor> ProbePixels;
+    Probe->GameThread_GetRenderTargetResource()->ReadLinearColorPixels(ProbePixels,FReadSurfaceDataFlags(RCM_MinMax));
+    const FColor ProbeColor=ProbePixels[128].ToFColor(true);
+    UE_LOG(LogTemp,Display,TEXT("OperationMap CAPTURE linear float + sRGB readback: sample=%d,%d,%d expected=9,20,31"),ProbeColor.R,ProbeColor.G,ProbeColor.B);
+    Check(FMath::Abs(int32(ProbeColor.R)-9)+FMath::Abs(int32(ProbeColor.G)-20)+FMath::Abs(int32(ProbeColor.B)-31)<=6,
+        TEXT("offscreen Slate colour calibration agrees with authored sRGB colour"));
 	TSharedRef<SVirtualWindow> Window = SNew(SVirtualWindow);
 	Window->SetContent(Menu->TakeWidget()); FSlateApplication::Get().RegisterVirtualWindow(Window);
 	FHittestGrid Grid; UTextureRenderTarget2D* Target = nullptr; FIntPoint Size; float Scale = 1.f;
@@ -104,13 +129,22 @@ int32 UknightOperationMapCheckCommandlet::Main(const FString& Params)
 	{
 		if (Target) Target->RemoveFromRoot(); Size = NewSize;
 		Scale = GetDefault<UUserInterfaceSettings>()->GetDPIScaleBasedOnSize(Size) * ExtraScale;
-		Window->Resize(FVector2D(Size)); Target = FWidgetRenderer::CreateTargetFor(FVector2D(Size), TF_Bilinear, true); Target->AddToRoot();
+		Window->Resize(FVector2D(Size)); Target = MakeCaptureTarget(Size); Target->AddToRoot();
 		Draw(); Draw();
 	};
+    TSet<UTexture2D*> PreparedTextures;
 	auto Capture = [&](const FString& Name)
 	{
-		TArray<FColor> Pixels; FReadSurfaceDataFlags Flags(RCM_UNorm); Flags.SetLinearToGamma(false);
-		Check(Target->GameThread_GetRenderTargetResource()->ReadPixels(Pixels, Flags), TEXT("real Slate/RHI pixels read"));
+        FTextureCompilingManager::Get().FinishAllCompilation();
+        for (TObjectIterator<UTexture2D> It; It; ++It)
+            if (It->GetPathName().StartsWith(TEXT("/Game/Knight/Items/Materials/")) && !PreparedTextures.Contains(*It))
+            { It->SetForceMipLevelsToBeResident(300.f); It->WaitForStreaming(); PreparedTextures.Add(*It); }
+        Draw(); Draw();
+        // FColor HDR ReadPixels normalizes each channel against the brightest
+        // highlight in the frame. Raw linear readback avoids that colour shift.
+        TArray<FLinearColor> LinearPixels; TArray<FColor> Pixels;
+        Check(Target->GameThread_GetRenderTargetResource()->ReadLinearColorPixels(LinearPixels,FReadSurfaceDataFlags(RCM_MinMax)), TEXT("real Slate/RHI pixels read"));
+        Pixels.Reserve(LinearPixels.Num()); for (const auto& Pixel : LinearPixels) Pixels.Add(Pixel.ToFColor(true));
 		TArray64<uint8> Png; FImageUtils::PNGCompressImageArray(Size.X, Size.Y, Pixels, Png);
 		Check(FFileHelper::SaveArrayToFile(Png, *(Out / (Name + TEXT(".png")))), TEXT("render saved"));
 	};
@@ -161,20 +195,22 @@ int32 UknightOperationMapCheckCommandlet::Main(const FString& Params)
 	Menu->SelectQuest(Q1); Draw(.025f); Menu->SelectQuest(Q2); Draw(.025f); Menu->SelectQuest(Q3); Draw(.2f); Draw();
 	Check(Panel->ActiveRegionId == R3 && Panel->DisplayedQuestId == Q3 && !Panel->IsPanelChanging(), TEXT("rapid changes resolve to latest region and quest together"));
 	Capture(TEXT("Fresh_ExplorationLocked"));
-	Check(Panel->DetailRewards->GetVisibility() == ESlateVisibility::Collapsed && Panel->DetailTarget->GetVisibility() == ESlateVisibility::Collapsed, TEXT("map exploration does not present boss or rewards"));
-	for (UCommonButtonBase* Button : Panel->QuestButtons)
-	{
-		const auto* Fill = Button->GetExtension<UKnightButtonFillExtension>();
-		Check(!Fill || !Fill->IsEnabled(), TEXT("operation quest buttons have no animated fill"));
-		Check(Button->GetStyleCDO() && Button->GetStyleCDO()->GetClass()->GetName() == TEXT("BS_Knight_OperationMap_C"), TEXT("quest state style is scoped blue operation-map style"));
-	}
+	Check(!Panel->CurrencyText && Panel->RewardIcons.IsEmpty(), TEXT("map exploration does not invent currency or reward items"));
+    {
+        auto* Button = Panel->LaunchButton.Get();
+        const auto* Fill = Button->GetExtension<UKnightButtonFillExtension>();
+        Check(!Fill || !Fill->IsEnabled(), TEXT("launch uses static operation-map feedback"));
+        int32 ScrollCount=0, ButtonCount=0;
+        Panel->WidgetTree->ForEachWidget([&](UWidget* Widget) { ScrollCount += Widget->IsA<UScrollBox>(); ButtonCount += Widget->IsA<UCommonButtonBase>(); });
+        Check(ScrollCount==1 && ButtonCount==1, TEXT("one rewards scroller and launch only; no mission selector or stale focus targets"));
+    }
 	Progress->RecordQuestCompleted(Q1); Draw();
 	Check(State(Q1).bCompleted && State(Q1).bCanLaunch && State(Q2).bCanLaunch, TEXT("normal clear history remains separate from replay and next unlock"));
 	Menu->SelectQuest(Q2); Draw(.4f); Draw(); Capture(TEXT("NormalClear_NextReady"));
 	Progress->RecordQuestCompleted(Q2); Draw();
 	Check(State(Q2).bCompleted && State(Q2).bCanLaunch && State(Q3).bCanLaunch && !State(Q3).bCompleted, TEXT("Janhyang normal opens exploration without fabricating exploration clear"));
 	Menu->SelectQuest(Q3); Draw(.4f); Draw(); Capture(TEXT("ExplorationReady"));
-	Check(Panel->DetailAvailability->GetText().ToString().Contains(TEXT("맵 탐색 가능")), TEXT("exploration explicitly identified in information panel"));
+	Check(Panel->DifficultyBadge->GetText().ToString() == TEXT("맵 탐색") && Panel->DetailAvailability->GetVisibility() == ESlateVisibility::Collapsed, TEXT("exploration mode identified without redundant readiness label"));
 	Panel->HandleLaunchClicked(); Check(Launches == 2 && Launched == Q3, TEXT("exploration button routes the actual map-test quest, not an old combat selection"));
 	// Real pointer handlers exercise panning and wheel zoom without a desktop/controller driver.
 	const auto Geometry = Map->GetCachedGeometry(); const FVector2D P = Geometry.LocalToAbsolute(Geometry.GetLocalSize() * .5);
@@ -189,24 +225,80 @@ int32 UknightOperationMapCheckCommandlet::Main(const FString& Params)
 	Menu->ShowPage(EKnightMainMenuPage::Home); Menu->ShowPage(EKnightMainMenuPage::Stage); Draw();
 	Check(Menu->SelectedStageId == R3 && Panel->GetSelectedQuestId() == Q3 && Map->Center.Equals(SavedCenter,.01) && Map->VisibleLatitude == SavedLatitude,
 		TEXT("same profile reopening restores region difficulty and map view without sweep"));
-	Check(Map->Time - Map->SelectTime >= Map->SweepDuration, TEXT("restoration never replays selection or unlock celebration"));
+	Check(Map->SelectedStageId == R3 && Map->SelectionWeights.FindRef(R3) == 1.f, TEXT("restoration retains single steady selection and resumes its loop"));
 	DrainSave(); Check(Saves->SelectSlot(ProfileB), TEXT("switch to separate isolated profile")); Draw();
 	Check(Menu->SelectedStageId.IsNone() && Panel->GetSelectedQuestId().IsNone() && !State(Q1).bCompleted && State(Q3).bProgressionLocked,
 		TEXT("new profile gets no old selection or clear/unlock indicators"));
 	Menu->SelectQuest(Q1); Draw(.4f); DrainSave(); Check(Saves->SelectSlot(ProfileA), TEXT("return to first isolated profile")); Draw();
 	Check(Menu->SelectedStageId == R3 && Panel->GetSelectedQuestId() == Q3 && State(Q2).bCompleted && State(Q3).bCanLaunch,
 		TEXT("first profile restores own state and actual progression"));
-	for (const FIntPoint Resolution : { FIntPoint(1280,720), FIntPoint(2560,1440) })
+	for (const FIntPoint Resolution : { FIntPoint(1280,720), FIntPoint(2560,1440), FIntPoint(3440,1440) })
 	{
-		SetSize(Resolution, Resolution.X == 1280 ? 1.25f : 1.f);
+		SetSize(Resolution);
 		Map->RestoreView(FVector2D(0,0), 110.f); Menu->SelectQuest(Q2); Draw(.4f); Draw();
 		const auto View = Map->MakeView(Map->GetCachedGeometry().GetLocalSize());
 		const int32 Index = Map->Markers.IndexOfByPredicate([&](const FKnightMapMarker& M) { return M.StageId == R2; });
 		Check(Index != INDEX_NONE && Map->FindMarkerAt(Map->ToLocal(Map->Markers[Index].Location, View), View.LocalSize) == Index,
 			TEXT("painted region and hit detection agree at alternate DPI"));
 		Check(Map->LeaderTarget.Get() == Panel, TEXT("connector keeps the actual details target"));
+        const auto ScrollGeometry = Panel->RewardScroll->GetCachedGeometry();
+        const auto LaunchGeometry = Panel->LaunchButton->GetCachedGeometry();
+        const float ScrollBottom = ScrollGeometry.GetAbsolutePosition().Y + ScrollGeometry.GetAbsoluteSize().Y;
+        Check(ScrollBottom <= LaunchGeometry.GetAbsolutePosition().Y && LaunchGeometry.GetAbsoluteSize().Y > 20.f, TEXT("reward scroll stays above fixed accessible launch button at every resolution"));
+        const FName BeforeWheel = Panel->DisplayedQuestId;
+        const FVector2D Cursor = ScrollGeometry.GetAbsolutePosition()+FVector2D(20,20);
+        FPointerEvent RewardWheel(0,Cursor,Cursor,TSet<FKey>(),EKeys::Invalid,-1,FModifierKeysState());
+        Panel->RewardScroll->TakeWidget()->OnMouseWheel(ScrollGeometry,RewardWheel); Draw();
+        Check(Panel->DisplayedQuestId == BeforeWheel, TEXT("reward wheel scrolling never selects a difficulty"));
+        Panel->RewardScroll->SetScrollOffset(0); Draw();
 		Capture(FString::Printf(TEXT("Scale_%d"), Resolution.X));
 	}
+    // All map pins use the same source for heading, badge, reward definitions and launch target.
+    SetSize(FIntPoint(1920,1080)); Map->RestoreView(FVector2D(0,0),110.f);
+    for (const auto& Pin : Map->QuestMarkers)
+    {
+        Menu->SelectQuest(Pin.QuestId); Draw(.2f); Draw();
+        const auto* Quest = Catalog->FindQuest(Pin.QuestId);
+        Check(Quest && Panel->DisplayedQuestId == Pin.QuestId && Map->SelectedQuestId == Pin.QuestId, TEXT("every map mode synchronizes selected and displayed quest"));
+        if (!Quest) continue;
+        Check(Panel->LaunchButton->GetIsEnabled() == State(Pin.QuestId).bCanLaunch, TEXT("each selected mode retains authoritative launch restriction"));
+        if (Quest->bMapExplorationOnly) continue;
+        Check(Panel->CurrencyText && Panel->CurrencyText->GetText().ToString() == FString::Printf(TEXT("%dgold"),Quest->MoneyReward), TEXT("currency bound to selected quest without separators"));
+        TArray<FknightRaidReward> Rewards = Quest->ClearRewards;
+        for (const auto& Part : Quest->PartBreakRewards) Rewards.Add(Part.Reward);
+        Check(Panel->RewardIcons.Num() == Rewards.Num(), TEXT("one row per actual quest reward; no raid-reward concatenation"));
+        for (int32 I=0; I<Rewards.Num(); ++I)
+        {
+            auto* Texture = Rewards[I].Item ? Rewards[I].Item->Icon.LoadSynchronous() : nullptr;
+            Check(Texture && Panel->RewardIcons[I]->GetBrush().GetResourceObject() == Texture, TEXT("row resolves actual material icon from item definition"));
+            UE_LOG(LogTemp, Display, TEXT("OperationMap REWARD quest=%s item=%s icon=%s count=%d..%d chance=%g condition=%s shown=%s"),
+                *Pin.QuestId.ToString(), *GetPathNameSafe(Rewards[I].Item), *GetPathNameSafe(Texture), Rewards[I].MinCount, Rewards[I].MaxCount,
+                Rewards[I].Chance, *Rewards[I].RequiredBrokenPart.ToString(), *Panel->RewardValues[I]->GetText().ToString());
+        }
+    }
+    Menu->SelectQuest(Q1); Draw(.2f); Draw();
+    Check(Panel->DetailAvailability->GetVisibility()==ESlateVisibility::Collapsed, TEXT("available quest has no readiness/clear label"));
+    for (const auto& Region : Map->Markers) Check(Region.ClearHistory.IsEmpty() && !Region.Availability.ToString().Contains(TEXT("출격 가능")), TEXT("redundant region status text removed, progression retained"));
+    Capture(TEXT("Redesign_1080"));
+    const float LoopOrigin = Map->SelectTime;
+    for (int32 Frame=0; Frame<=195; ++Frame)
+    {
+        Draw(1.f/30.f);
+        if (Frame==45 || Frame==110) { Menu->HandleQuestProgressChanged(); Map->SetHovered(1); }
+        Capture(FString::Printf(TEXT("Loop_%03d"),Frame));
+    }
+    Check(Map->SelectTime==LoopOrigin && Map->Time-Map->SelectTime > 2.f*Map->LoopDuration, TEXT("continuous perimeter exceeds two laps with refresh and hover, no restart"));
+    Menu->ShowPage(EKnightMainMenuPage::Home); const float ClosedTime=Map->Time; Draw(.5f);
+    Check(Map->Time==ClosedTime, TEXT("closed operation map stops animation clock"));
+    Menu->ShowPage(EKnightMainMenuPage::Stage); Draw(.2f); Draw();
+    Check(Map->SelectedStageId==R1 && Panel->DisplayedQuestId==Q1, TEXT("reopening has no stale loop or mission"));
+    const FName BeforeCycle=Map->SelectedQuestId; Map->CycleQuestMarker(1); Draw(.2f);
+    Check(Map->SelectedQuestId!=BeforeCycle && Panel->DisplayedQuestId==Map->SelectedQuestId, TEXT("map keyboard/controller mode cycling keeps panel in sync"));
+    Menu->SelectQuest(Q1); Draw(.2f);
+    Menu->NativeOnPreviewKeyDown(Menu->GetCachedGeometry(), FKeyEvent(EKeys::Gamepad_DPad_Down,FModifierKeysState(),0,false,0,0)); Draw(.2f);
+    Check(Map->SelectedQuestId != Q1 && Panel->DisplayedQuestId == Map->SelectedQuestId, TEXT("controller D-pad uses map selection, no removed list targets"));
+    Menu->NativeOnNavigation(Menu->GetCachedGeometry(), FNavigationEvent(FModifierKeysState(),0,EUINavigation::Up,ENavigationGenesis::Controller),FNavigationReply::Escape()); Draw(.2f);
+    Check(Map->SelectedQuestId == Q1 && Panel->DisplayedQuestId == Q1, TEXT("controller navigation event returns to map normal mode"));
 	Check(Progress->GetMoney() == InitialMoney, TEXT("browsing and UI transitions grant/spend no money"));
 	for (const auto& Item : InitialItems) Check(Progress->GetItemCount(Item.Item) == Item.Count, TEXT("browsing leaves inventory quantities unchanged"));
 	Check(!Flow->IsTravelPending() && Flow->GetActiveStageId().IsNone(), TEXT("browsing does not start gameplay or change active stage"));

@@ -73,7 +73,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FKnightMapQuestClicked, FName, Quest
  * Stage-select map: a flat (equirectangular) dot map larger than the widget, panned by dragging and stopped at its edges.
  * Each stage is a soft-edged region around its location; clicking anywhere in a region selects the stage.
  *
- * The material paints the dots, grid, regions and a one-shot silhouette sweep. This class paints region names,
+ * The material paints the dots, grid, regions and a continuous silhouette sweep. This class paints region names,
  * progression marks and a leader line from the selected mark to LeaderTarget (the info panel).
  *
  * Regions reach the material as vector parameters Region0 .. Region7 = (u, v, radius in map pixels, state),
@@ -96,6 +96,7 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category="Knight|Map")
 	void SetSelectedQuest(FName QuestId);
+	bool CycleQuestMarker(int32 Direction);
 
 	/** NAME_None clears the selection. Does not broadcast OnStageClicked. */
 	UFUNCTION(BlueprintCallable, Category="Knight|Map")
@@ -147,7 +148,9 @@ protected:
 	float LatitudeLimit = 75.f;
 
 	UPROPERTY(EditAnywhere, Category="Knight|Map|Selection", meta=(ClampMin="0.25", ClampMax="0.4"))
-	float SweepDuration = .34f;
+	float SweepDuration = .34f; // Legacy serialized one-shot tuning, retained for compatibility.
+	UPROPERTY(EditAnywhere, Category="Knight|Map|Selection", meta=(ClampMin="2.5", ClampMax="3.5"))
+	float LoopDuration = 3.f;
 	UPROPERTY(EditAnywhere, Category="Knight|Map|Selection", meta=(ClampMin="0.05", ClampMax="0.3"))
 	float SelectionFadeDuration = .12f;
 	UPROPERTY(EditAnywhere, Category="Knight|Map|Selection", meta=(ClampMin="0.1", ClampMax="1"))
@@ -221,8 +224,10 @@ private:
 	FVector2D FocusCenter = FVector2D::ZeroVector;
 
 	float Time = 0.f;
-	/** Start time of the current region's one-shot sweep. */
+	/** Session clock and selection origin. Hidden widgets do not advance their loop. */
 	float SelectTime = 0.f;
 	TMap<FName, float> SelectionWeights;
+	TMap<FName, TArray<float>> ContourLengths;
+	float GetContourAngle(FName RegionId, float Phase) const;
 	float InitialVisibleLatitude = 110.f;
 };

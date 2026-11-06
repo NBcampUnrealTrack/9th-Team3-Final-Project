@@ -431,18 +431,36 @@ FReply UKnightMainMenuWidget::NativeOnPreviewKeyDown(const FGeometry& InGeometry
 	if (CurrentPage == EKnightMainMenuPage::Stage && !IsTravelPending())
 	{
 		const FKey Key = InKeyEvent.GetKey();
-		if (Key == EKeys::Left || Key == EKeys::A || Key == EKeys::Right || Key == EKeys::D)
+		if (Key == EKeys::Left || Key == EKeys::A || Key == EKeys::Right || Key == EKeys::D || Key == EKeys::Gamepad_DPad_Left || Key == EKeys::Gamepad_DPad_Right)
 		{
-			CycleStage(Key == EKeys::Left || Key == EKeys::A ? -1 : 1);
+			CycleStage(Key == EKeys::Left || Key == EKeys::A || Key == EKeys::Gamepad_DPad_Left ? -1 : 1);
 			return FReply::Handled();
 		}
-		if ((Key == EKeys::Up || Key == EKeys::Down) && QuestWidget && !SelectedStageId.IsNone())
+		if ((Key == EKeys::Up || Key == EKeys::Down || Key == EKeys::Gamepad_DPad_Up || Key == EKeys::Gamepad_DPad_Down) && Map_Stages && !SelectedStageId.IsNone())
 		{
-			QuestWidget->CycleQuest(Key == EKeys::Up ? -1 : 1);
+			Map_Stages->CycleQuestMarker(Key == EKeys::Up || Key == EKeys::Gamepad_DPad_Up ? -1 : 1);
 			return FReply::Handled();
 		}
 	}
 	return Super::NativeOnPreviewKeyDown(InGeometry, InKeyEvent);
+}
+
+bool UKnightMainMenuWidget::NativeSupportsCustomNavigation() const
+{
+    return CurrentPage == EKnightMainMenuPage::Stage || Super::NativeSupportsCustomNavigation();
+}
+
+FNavigationReply UKnightMainMenuWidget::NativeOnNavigation(const FGeometry& Geometry, const FNavigationEvent& Event, const FNavigationReply& DefaultReply)
+{
+    if (CurrentPage == EKnightMainMenuPage::Stage && !IsTravelPending() && Map_Stages)
+    {
+        const auto Direction = Event.GetNavigationType();
+        if (Direction == EUINavigation::Left || Direction == EUINavigation::Right)
+        { CycleStage(Direction == EUINavigation::Left ? -1 : 1); return FNavigationReply::Stop(); }
+        if (Direction == EUINavigation::Up || Direction == EUINavigation::Down)
+        { Map_Stages->CycleQuestMarker(Direction == EUINavigation::Up ? -1 : 1); return FNavigationReply::Stop(); }
+    }
+    return Super::NativeOnNavigation(Geometry,Event,DefaultReply);
 }
 
 FReply UKnightMainMenuWidget::NativeOnKeyUp(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
@@ -777,8 +795,8 @@ UWidget* UKnightMainMenuWidget::GetPreferredFocusTarget() const
 	{
 		return CodexWidget->GetFocusButton();
 	}
-	if (CurrentPage == EKnightMainMenuPage::Stage && QuestWidget && QuestWidget->GetFocusButton())
-		return QuestWidget->GetFocusButton();
+	if (CurrentPage == EKnightMainMenuPage::Stage && QuestWidget)
+		return QuestWidget->GetFocusButton() ? QuestWidget->GetFocusButton() : Map_Stages.Get();
 	if (CurrentPage == EKnightMainMenuPage::Stage && Map_Stages) return Map_Stages;
 	if (CurrentPage == EKnightMainMenuPage::Stage && !SelectedStageId.IsNone() && CanFocusButton(Button_LaunchStage))
 	{
@@ -927,7 +945,6 @@ bool UKnightMainMenuWidget::RebuildMapMarkers()
 	for (auto& Marker : Markers)
 	{
 		bool bCombatReady = false, bExploreReady = false, bLocked = false;
-		TArray<FText> Clears;
 		for (const auto& Pin : QuestMarkers)
 		{
 			if (Pin.RegionId != Marker.StageId) continue;
@@ -936,12 +953,10 @@ bool UKnightMainMenuWidget::RebuildMapMarkers()
 			bCombatReady |= State.bCanLaunch && !Quest->bMapExplorationOnly;
 			bExploreReady |= State.bCanLaunch && Quest->bMapExplorationOnly;
 			bLocked |= State.bProgressionLocked;
-			if (!State.ClearLabel.IsEmpty() && !Clears.ContainsByPredicate([&](const FText& Text) { return Text.EqualTo(State.ClearLabel); })) Clears.Add(State.ClearLabel);
 		}
-		Marker.Availability = bCombatReady ? LOCTEXT("RegionReady", "▷ 출격 가능")
-			: bExploreReady ? LOCTEXT("RegionExplore", "▷ 맵 탐색 가능")
-			: bLocked ? LOCTEXT("RegionLocked", "잠김") : LOCTEXT("RegionUnavailable", "출격 불가");
-		if (!Clears.IsEmpty()) Marker.ClearHistory = FText::Format(LOCTEXT("RegionClears", "✓ {0}"), FText::Join(FText::FromString(TEXT(" · ")), Clears));
+		Marker.Availability = bCombatReady || bExploreReady ? FText::GetEmpty()
+            : bLocked ? LOCTEXT("RegionLocked", "잠김") : LOCTEXT("RegionUnavailable", "출격 불가");
+        Marker.ClearHistory = FText::GetEmpty();
 	}
 	Map_Stages->SetMarkers(Markers);
 	Map_Stages->SetQuestMarkers(QuestMarkers);

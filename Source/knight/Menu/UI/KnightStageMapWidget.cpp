@@ -81,6 +81,21 @@ void UKnightStageMapWidget::NativeOnInitialized()
 void UKnightStageMapWidget::SetMarkers(const TArray<FKnightMapMarker>& InMarkers)
 {
 	Markers = InMarkers;
+    // Arc-length lookup is geometry-only. Refreshes rebuild it without restarting the clock.
+    ContourLengths.Reset();
+    for (const auto& Marker : Markers)
+    {
+        auto& Lengths = ContourLengths.Add(Marker.StageId); Lengths.Add(0.f);
+        const auto UV = ToUV(Marker.Location);
+        FVector2D Previous(-RegionWobble(-PI,UV),0);
+        for (int32 I=1; I<=256; ++I)
+        {
+            const float A = -PI + 2.f * PI * I / 256.f;
+            const FVector2D Point = FVector2D(FMath::Cos(A),FMath::Sin(A)) * RegionWobble(A,UV);
+            Lengths.Add(Lengths.Last() + FVector2D::Distance(Previous,Point)); Previous = Point;
+        }
+        const float Total = Lengths.Last(); for (float& Length : Lengths) Length /= Total;
+    }
 	for (auto It = SelectionWeights.CreateIterator(); It; ++It)
 		if (!Markers.ContainsByPredicate([&](const FKnightMapMarker& M) { return M.StageId == It.Key(); })) It.RemoveCurrent();
 	HoveredIndex = INDEX_NONE;
@@ -115,6 +130,27 @@ void UKnightStageMapWidget::SetSelectedQuest(FName QuestId)
 	SelectedQuestId = QuestId;
 }
 
+bool UKnightStageMapWidget::CycleQuestMarker(int32 Direction)
+{
+    TArray<FName> Ids;
+    for (const auto& Pin : QuestMarkers) if (Pin.RegionId == SelectedStageId) Ids.Add(Pin.QuestId);
+    if (Ids.IsEmpty()) return false;
+    const int32 Current = Ids.IndexOfByKey(SelectedQuestId);
+    const int32 Next = Current == INDEX_NONE ? (Direction >= 0 ? 0 : Ids.Num()-1)
+        : (Current + (Direction >= 0 ? 1 : -1) + Ids.Num()) % Ids.Num();
+    OnQuestClicked.Broadcast(Ids[Next]);
+    return true;
+}
+
+float UKnightStageMapWidget::GetContourAngle(FName RegionId, float Phase) const
+{
+    const TArray<float>* Lengths = ContourLengths.Find(RegionId);
+    if (!Lengths || Lengths->Num()<2) return Phase;
+    int32 Index=1; while (Index<Lengths->Num()-1 && (*Lengths)[Index]<Phase) ++Index;
+    const float T = (Phase-(*Lengths)[Index-1]) / FMath::Max(SMALL_NUMBER,(*Lengths)[Index]-(*Lengths)[Index-1]);
+    return (Index-1+T) / (Lengths->Num()-1);
+}
+
 void UKnightStageMapWidget::SetSelectedStage(FName StageId)
 {
 	if (StageId != SelectedStageId)
@@ -127,7 +163,7 @@ void UKnightStageMapWidget::SetSelectedStage(FName StageId)
 void UKnightStageMapWidget::RestoreSelection(FName StageId)
 {
 	SelectedStageId = StageId;
-	SelectTime = Time - SweepDuration;
+	SelectTime = Time;
 	SelectionWeights.Reset();
 	if (!StageId.IsNone()) SelectionWeights.Add(StageId, 1.f);
 }
@@ -200,9 +236,8 @@ void UKnightStageMapWidget::ApplyToMaterial(const FVector2D& LocalSize)
 	MapMID->SetVectorParameterValue(TEXT("ViewRect"), FLinearColor(TopLeftUV.X, TopLeftUV.Y, SizeUV.X, SizeUV.Y));
 	MapMID->SetVectorParameterValue(TEXT("MapPixels"), FLinearColor(360.f * View.PixelsPerDegree, 180.f * View.PixelsPerDegree, 0.f, 0.f));
 
-	const float T = FMath::Clamp((Time - SelectTime) / FMath::Max(.01f, SweepDuration), 0.f, 1.f);
-	const float Sweep = 1.f - FMath::Pow(1.f - T, 3.f);
-	const float Peak = FMath::SmoothStep(0.f, .12f, T) * (1.f - FMath::SmoothStep(.70f, 1.f, T));
+	const float Phase = FMath::Fmod(FMath::Max(0.f, Time - SelectTime) / FMath::Max(.1f, LoopDuration), 1.f);
+    const float Sweep = GetContourAngle(SelectedStageId, Phase);
 	MapMID->SetScalarParameterValue(TEXT("Blink"), 0.f);
 	MapMID->SetVectorParameterValue(TEXT("SelectionTuning"), FLinearColor(OutlineBrightness, SelectionGlowWidth, InteriorOpacity, 0.f));
 
@@ -221,14 +256,14 @@ void UKnightStageMapWidget::ApplyToMaterial(const FVector2D& LocalSize)
 		MapMID->SetVectorParameterValue(RegionNames[Index], Region);
 		const FName Id = Markers.IsValidIndex(Index) ? Markers[Index].StageId : NAME_None;
 		MapMID->SetVectorParameterValue(FName(*FString::Printf(TEXT("RegionEffect%d"), Index)),
-			FLinearColor(SelectionWeights.FindRef(Id), Sweep, Id == SelectedStageId ? Peak : 0.f, Index == HoveredIndex ? 1.f : 0.f));
+			FLinearColor(SelectionWeights.FindRef(Id), Sweep, !SelectedStageId.IsNone() && Id == SelectedStageId ? SelectionWeights.FindRef(Id) : 0.f, Index == HoveredIndex ? 1.f : 0.f));
 	}
 }
 
 void UKnightStageMapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
-	Time += InDeltaTime;
+	if (!SelectedStageId.IsNone()) Time += FMath::Max(0.f, InDeltaTime);
 	for (const auto& Marker : Markers)
 	{
 		float& Weight = SelectionWeights.FindOrAdd(Marker.StageId);
