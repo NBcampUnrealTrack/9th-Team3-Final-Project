@@ -172,6 +172,34 @@ struct KNIGHT_API FknightRaidFinishSettings
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Finish|Impact")
 	TSoftObjectPtr<USoundBase> ImpactSound;
+
+	/**
+	 * 물 위에서 쓰러질 때 몸 가운데 수면에 터뜨리는 물보라(솟구침)와, WaterSplashFallDelay(게임 초) 뒤 쏟아지는 물보라.
+	 * 공중에서 떨어졌다면 물에 닿는 순간 FallWaterSplashScale로, 쿵 순간 ImpactWaterSplashScale로 낸다(배율 0이면 그 순간은 끈다).
+	 * 비우면 물보라를 내지 않는다. ImpactEffect(충격파 등)는 물 위에서도 같이 낸다.
+	 * 잔향 다이브 착수(NS_Janhyang_DiveSplash 1배)와 탈진 착수(0.5배)와 같은 이펙트를 쓰면 크기를 맞추기 쉽다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Finish|Water")
+	TSoftObjectPtr<UNiagaraSystem> WaterSplash;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Finish|Water")
+	TSoftObjectPtr<UNiagaraSystem> WaterSplashFall;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Finish|Water", meta=(ClampMin=0, Units="s"))
+	float WaterSplashFallDelay = 0.55f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Finish|Water", meta=(ClampMin=0))
+	float FallWaterSplashScale = 0.75f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Finish|Water", meta=(ClampMin=0))
+	float ImpactWaterSplashScale = 0.5f;
+
+	/** 물보라 자리 수면을 누르는 물결 반지름(물보라 배율을 곱한다)과 깊이. 물결이 켜진 레벨에서만 보인다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Finish|Water", meta=(ClampMin=0, Units="cm"))
+	float WaterRippleRadius = 1200.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Finish|Water", meta=(ClampMin=0, Units="cm"))
+	float WaterRippleDepth = 40.f;
 };
 
 /** One possible reward line. Each line is rolled independently on a successful raid. */

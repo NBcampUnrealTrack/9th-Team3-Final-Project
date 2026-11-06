@@ -54,6 +54,8 @@ private:
 	/** 지금 몬스터 몸 경계 중심(바라보는 점). */
 	FVector GetBodyCenter() const;
 	bool HasLanded() const;
+	/** 몸 가운데가 물 위면 Scale 배율로 물보라를 터뜨린다(FknightRaidFinishSettings::WaterSplash). 방금(0.5초 안에) 터뜨렸으면 건너뛴다. */
+	void SplashOnWater(float Scale);
 	void PushSlowSound();
 	void PopSlowSound();
 	void RestoreInput();
@@ -77,6 +79,10 @@ private:
 	bool bHitStop = false;
 	bool bInputIgnored = false;
 	bool bSoundPushed = false;
+	/** 공중에서 떨어지는 중이었는지. 땅에 닿는 순간 물보라를 내고 false가 된다. */
+	bool bWasFalling = false;
+	/** 마지막으로 물보라를 낸 실제 시각. */
+	double LastWaterSplashTime = -1.0;
 
 	/** 몬스터가 죽은 게임 시각, 땅에 닿을 것으로 본 게임 시간(사망 뒤), 슬로모션 배율과 길이(실제 초). */
 	double DeathGameTime = 0.0;

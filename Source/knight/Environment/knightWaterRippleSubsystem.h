@@ -113,8 +113,8 @@ private:
 	void AddMovementImpulse(const FVector& Location, const FVector& Prev, float SurfaceZ, float Margin, float Radius, float MinSpeed, float Elapsed);
 	/** 내려오다 멈춘 순간이면 내려오던 최고 속도, 아니면 0. */
 	float DetectStrike(FBodyContact& Contact, float DownSpeed, double Now) const;
-	/** SizeScale = 바디 크기 / SplashReferenceBodySize x 세기. */
-	void SpawnSplash(const FVector& Location, float SizeScale) const;
+	/** SizeScale = 바디 크기 / SplashReferenceBodySize x 세기. HalfWidth는 SplashHeavyMinBodySize와 비교할 바디 반폭. */
+	void SpawnSplash(const FVector& Location, float SizeScale, float HalfWidth) const;
 	/** 같은 캐릭터가 방금 근처에서 첨벙했으면 false. 아니면 기록하고 true. */
 	bool ClaimSplash(FTrackedCharacter& Tracked, const FVector& Location, float Radius, double Now) const;
 	bool IsInsideSimulation(const FVector2D& Location, float Radius) const;

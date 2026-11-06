@@ -96,12 +96,29 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category="Splash")
 	TSoftObjectPtr<UNiagaraSystem> SplashSystem;
 
-	/** 최종 배율이 SplashHeavyScale 이상일 때(세게 디딤, 큰 몬스터) SplashSystem 대신 쓰는 이펙트. 내려찍기 노티파이의 WaterSplash가 비어 있을 때도 쓴다. */
+	/**
+	 * 최종 배율이 SplashHeavyScale 이상이고 바디 반폭이 SplashHeavyMinBodySize 이상일 때(큰 몬스터가 세게 디딤) SplashSystem 대신 쓰는 이펙트.
+	 * 내려찍기 노티파이의 WaterSplash가 비어 있을 때도 쓴다.
+	 */
 	UPROPERTY(EditAnywhere, Config, Category="Splash")
 	TSoftObjectPtr<UNiagaraSystem> SplashHeavySystem;
 
 	UPROPERTY(EditAnywhere, Config, Category="Splash", meta=(ClampMin=0))
 	float SplashHeavyScale = 1.5f;
+
+	/**
+	 * 반폭이 이보다 작은 바디(기사 발, 다리, 팔, 몸통)는 아무리 세게 부딪혀도 SplashSystem만 쓴다. 내려찍기 노티파이도 같다(기사 구르기).
+	 * 사람 크기 캐릭터의 점프 착지와 구르기가 몬스터 물보라처럼 커지지 않게 한다. 기사 바디 반폭은 5~21, 몬스터는 대부분 30 이상.
+	 */
+	UPROPERTY(EditAnywhere, Config, Category="Splash", meta=(ClampMin=0, Units="cm"))
+	float SplashHeavyMinBodySize = 25.f;
+
+	/**
+	 * SplashSystem(가벼운 물보라)의 최종 배율 상한. 기사가 걷고 뛸 때 0.3~0.9이고, 점프 착지(내려오는 속도 600 이상)와
+	 * 구르기 등 닿기(노티파이 포함)는 2~3까지 올라가므로 이 값에서 멈춘다.
+	 */
+	UPROPERTY(EditAnywhere, Config, Category="Splash", meta=(ClampMin=0.1))
+	float SplashLightMaxScale = 1.f;
 
 	/** 첨벙 소리. 비우면 소리 없이 이펙트만 낸다. */
 	UPROPERTY(EditAnywhere, Config, Category="Splash")
