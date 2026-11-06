@@ -76,6 +76,7 @@ class KNIGHT_API UKnightSettingsWidget : public UUserWidget
 
 public:
 	static constexpr int32 TabCount = 4;
+	friend class UknightSettingsCheckCommandlet;
 
 	UPROPERTY(BlueprintAssignable, Category="Knight|Settings")
 	FKnightSettingsClosed OnClosed;

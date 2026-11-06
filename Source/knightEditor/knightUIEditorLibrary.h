@@ -23,6 +23,9 @@ class UknightUIEditorLibrary : public UBlueprintFunctionLibrary
 	GENERATED_BODY()
 
 public:
+	/** Rebuild only the Settings designer tree. Kind: 0 screen, 1 tab, 2 section, 3/4/5 rotator/slider/key. */
+	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
+	static bool RestyleSettings(UWidgetBlueprint* Blueprint, int32 Kind);
 	/** 위젯 블루프린트의 레이아웃을 비운다. Build* 함수는 빈 블루프린트에만 만들므로, 다시 만들 때 먼저 부른다. */
 	UFUNCTION(BlueprintCallable, Category="Knight|UI Editor")
 	static bool ClearLayout(UWidgetBlueprint* WidgetBlueprint);

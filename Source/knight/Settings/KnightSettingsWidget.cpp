@@ -317,9 +317,9 @@ void UKnightSettingsWidget::GetTabSections(int32 Tab, TArray<FKnightSettingSecti
 
 	if (Tab == 0)
 	{
-		FKnightSettingSection& Display = AddSection(INVTEXT("DISPLAY"));
+		FKnightSettingSection& Display = AddSection(LOCTEXT("SectionDISPLAY", "디스플레이"));
 		Display.Items.Add(Rotator(TEXT("WindowMode"), LOCTEXT("WindowMode", "화면 모드"),
-			LOCTEXT("WindowModeDesc", "전체 화면: 화면을 독점해 지연이 가장 적습니다.\n창 모드: 다른 창과 함께 씁니다.\n테두리 없는 창: 데스크톱 해상도로 전환이 빠릅니다."),
+			LOCTEXT("WindowModeDesc", "전체 화면, 창 모드 또는 테두리 없는 창을 선택합니다. 테두리 없는 창에서는 모니터의 데스크톱 해상도를 사용합니다."),
 			{WindowModeText(EWindowMode::Fullscreen), WindowModeText(EWindowMode::Windowed), WindowModeText(EWindowMode::WindowedFullscreen)}));
 		TArray<FKnightDisplayInfo> Displays;
 		UknightGameUserSettings::GetConnectedDisplays(Displays);
@@ -341,7 +341,9 @@ void UKnightSettingsWidget::GetTabSections(int32 Tab, TArray<FKnightSettingSecti
 			{TEXT("30"), TEXT("60"), TEXT("90"), TEXT("120"), TEXT("144"), TEXT("165"), TEXT("240")}));
 		Display.Items.Add(Toggle(TEXT("VSync"), INVTEXT("V-Sync"), LOCTEXT("VSyncDesc", "화면 찢어짐을 막습니다. 입력 지연이 조금 늘어납니다.")));
 
-		FKnightSettingSection& Quality = AddSection(INVTEXT("QUALITY"));
+		Display.Note = FText::Format(LOCTEXT("DisplayNote", "화면 모드·표시 모니터·해상도는 적용 후 {0}초 안에 유지를 고르지 않으면 이전 값으로 돌아갑니다."),
+			FText::AsNumber(FMath::RoundToInt(DisplayConfirmSeconds)));
+		FKnightSettingSection& Quality = AddSection(LOCTEXT("SectionQUALITY", "그래픽 품질"));
 		Quality.Items.Add(Rotator(TEXT("Preset"), LOCTEXT("Preset", "전체 품질"), LOCTEXT("PresetDesc", "아래 품질 항목을 한 번에 바꿉니다."), QualityOptions(true)));
 		TArray<FString> DLSSOptions = {DLSSModeText(EknightDLSSMode::Off)};
 		for (const EknightDLSSMode Mode : {EknightDLSSMode::Quality, EknightDLSSMode::Balanced, EknightDLSSMode::Performance})
@@ -363,20 +365,19 @@ void UKnightSettingsWidget::GetTabSections(int32 Tab, TArray<FKnightSettingSecti
 			|| !UknightGameUserSettings::IsDLSSModeSupported(DraftGraphics.DLSSMode, DraftGraphics.Resolution);
 		Quality.Items.Add(Rotator(TEXT("Shadows"), LOCTEXT("Shadows", "그림자"), LOCTEXT("ShadowsDesc", "그림자의 선명도와 거리입니다. 성능 영향이 큽니다."), QualityOptions()));
 		Quality.Items.Add(Rotator(TEXT("Textures"), LOCTEXT("Textures", "텍스처"), LOCTEXT("TexturesDesc", "표면 이미지의 해상도입니다. 그래픽 메모리를 씁니다."), QualityOptions()));
-		Quality.Items.Add(Rotator(TEXT("Effects"), LOCTEXT("Effects", "이펙트"), FText::GetEmpty(), QualityOptions()));
+		Quality.Items.Add(Rotator(TEXT("Effects"), LOCTEXT("Effects", "이펙트"), LOCTEXT("EffectsExplanation", "이펙트 품질 단계를 설정합니다."), QualityOptions()));
 		Quality.Items.Add(Rotator(TEXT("PostProcess"), LOCTEXT("Post", "후처리"), LOCTEXT("PostDesc", "블룸, 피사계 심도 같은 화면 효과의 품질입니다."), QualityOptions()));
-		Quality.Items.Add(Rotator(TEXT("ViewDistance"), LOCTEXT("View", "시야 거리"), FText::GetEmpty(), QualityOptions()));
+		Quality.Items.Add(Rotator(TEXT("ViewDistance"), LOCTEXT("View", "시야 거리"), LOCTEXT("ViewExplanation", "물체를 표시하는 거리의 품질 단계를 설정합니다."), QualityOptions()));
 		Quality.Items.Add(Toggle(TEXT("MotionBlur"), LOCTEXT("Motion", "모션 블러"), LOCTEXT("MotionDesc", "빠르게 움직일 때 화면을 흐리게 합니다.")));
-		Display.Note = FText::Format(LOCTEXT("DisplayNote", "화면 모드·표시 모니터·해상도는 적용 후 {0}초 안에 유지를 고르지 않으면 이전 값으로 돌아갑니다."),
-			FText::AsNumber(FMath::RoundToInt(DisplayConfirmSeconds)));
+
 	}
 	else if (Tab == 1)
 	{
-		FKnightSettingSection& Mouse = AddSection(INVTEXT("MOUSE"));
+		FKnightSettingSection& Mouse = AddSection(LOCTEXT("SectionMOUSE", "마우스"));
 		Mouse.Items.Add(Slider(TEXT("MouseSensitivity"), LOCTEXT("Sensitivity", "마우스 감도"), LOCTEXT("SensitivityDesc", "시점이 도는 속도입니다. 100이 기본값입니다."), 10.f, 500.f));
 		Mouse.Items.Add(Toggle(TEXT("MouseAcceleration"), LOCTEXT("Acceleration", "마우스 가속"), LOCTEXT("AccelerationDesc", "마우스를 빠르게 움직일수록 시점이 더 많이 돕니다.")));
 
-		FKnightSettingSection& Keys = AddSection(INVTEXT("KEY BINDINGS"));
+		FKnightSettingSection& Keys = AddSection(LOCTEXT("SectionKEYBINDINGS", "키 설정"));
 		TArray<FName> Names;
 		DraftKeys.GetKeys(Names);
 		Names.Sort(FNameLexicalLess());
@@ -395,27 +396,27 @@ void UKnightSettingsWidget::GetTabSections(int32 Tab, TArray<FKnightSettingSecti
 	}
 	else if (Tab == 2)
 	{
-		FKnightSettingSection& Volume = AddSection(INVTEXT("VOLUME"));
-		Volume.Items.Add(Slider(TEXT("Master"), LOCTEXT("Master", "마스터"), FText::GetEmpty(), 0.f, 100.f));
-		Volume.Items.Add(Slider(TEXT("Music"), INVTEXT("BGM"), FText::GetEmpty(), 0.f, 100.f));
-		Volume.Items.Add(Slider(TEXT("SFX"), LOCTEXT("SFX", "효과음"), FText::GetEmpty(), 0.f, 100.f));
-		Volume.Items.Add(Slider(TEXT("Voice"), LOCTEXT("Voice", "음성"), FText::GetEmpty(), 0.f, 100.f));
+		FKnightSettingSection& Volume = AddSection(LOCTEXT("SectionVOLUME", "음량"));
+		Volume.Items.Add(Slider(TEXT("Master"), LOCTEXT("Master", "마스터"), LOCTEXT("MasterExplanation", "전체 소리의 크기를 조절합니다. 조절 중 미리 듣고, 적용하면 저장합니다."), 0.f, 100.f));
+		Volume.Items.Add(Slider(TEXT("Music"), INVTEXT("BGM"), LOCTEXT("MusicExplanation", "음악의 크기를 조절합니다."), 0.f, 100.f));
+		Volume.Items.Add(Slider(TEXT("SFX"), LOCTEXT("SFX", "효과음"), LOCTEXT("SFXExplanation", "효과음의 크기를 조절합니다."), 0.f, 100.f));
+		Volume.Items.Add(Slider(TEXT("Voice"), LOCTEXT("Voice", "음성"), LOCTEXT("VoiceExplanation", "음성의 크기를 조절합니다."), 0.f, 100.f));
 		Volume.Note = LOCTEXT("VolumeNote", "조절하는 동안 바로 들립니다. 적용을 눌러야 저장됩니다.");
 
-		FKnightSettingSection& Subtitle = AddSection(INVTEXT("SUBTITLE"));
+		FKnightSettingSection& Subtitle = AddSection(LOCTEXT("SectionSUBTITLE", "자막"));
 		Subtitle.Items.Add(Toggle(TEXT("Subtitles"), LOCTEXT("Subtitles", "자막"), LOCTEXT("SubtitlesDesc", "AI 음성 대사를 화면 아래 대화창에 글자로 표시합니다. 부위 파손 알림은 항상 표시됩니다.")));
 
-		FKnightSettingSection& Language = AddSection(INVTEXT("LANGUAGE"));
+		FKnightSettingSection& Language = AddSection(LOCTEXT("SectionLANGUAGE", "언어"));
 		TArray<FString> CultureOptions;
 		for (const TPair<const TCHAR*, const TCHAR*>& Culture : GameCultures) CultureOptions.Add(Culture.Key);
 		Language.Items.Add(Rotator(TEXT("Language"), LOCTEXT("Language", "언어"), LOCTEXT("LanguageDesc", "화면에 보이는 글자의 언어입니다. 적용하면 바로 바뀝니다."), CultureOptions));
 	}
 	else
 	{
-		FKnightSettingSection& View = AddSection(INVTEXT("VIEW"));
+		FKnightSettingSection& View = AddSection(LOCTEXT("SectionVIEW", "시야"));
 		View.Items.Add(Slider(TEXT("FOV"), LOCTEXT("FOV", "시야각"), LOCTEXT("FOVDesc", "카메라가 보여 주는 범위입니다. 넓을수록 주변이 잘 보이지만 멀미가 날 수 있습니다."), 60.f, 110.f));
 
-		FKnightSettingSection& Light = AddSection(INVTEXT("BRIGHTNESS"));
+		FKnightSettingSection& Light = AddSection(LOCTEXT("SectionBRIGHTNESS", "밝기 보정"));
 		Light.Items.Add(Slider(TEXT("Gamma"), LOCTEXT("Gamma", "감마"), LOCTEXT("GammaDesc", "게임 장면의 중간 밝기를 조절합니다. 100이 기본값입니다."), 80.f, 120.f));
 		Light.Items.Add(Slider(TEXT("Brightness"), LOCTEXT("Brightness", "밝기"), LOCTEXT("BrightnessDesc", "기존 장면에 밝기 보정을 적용합니다. 조명과 자동 노출 설정은 유지됩니다."), 80.f, 120.f));
 		Light.Note = LOCTEXT("CalibrationNote", "장면에 즉시 미리 적용됩니다. 적용하면 저장하고, 되돌리면 이전 값으로 복원합니다. UI와 타이틀 영상은 보정 대상이 아닙니다.");

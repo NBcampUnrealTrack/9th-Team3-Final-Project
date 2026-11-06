@@ -14,10 +14,7 @@ class USoundBase;
 class UknightSettingRow;
 class UImage;
 
-/**
- * Category button on the left of the settings screen: English caption over the label, marker when selected.
- * Label colors come from the button style's normal / selected text styles.
- */
+/** Horizontal category tab with a static cyan selected underline. */
 UCLASS(Abstract, Blueprintable, meta=(DisableNativeTick))
 class KNIGHTUI_API UknightSettingsTab : public UknightButtonBase
 {
@@ -31,7 +28,7 @@ public:
 
 	/** Keyboard or mouse focus arrived on the tab. */
 	FSimpleDelegate OnTabFocused;
-	/** Right arrow: go into the tab's rows (Enter and clicks arrive through OnClicked). */
+	/** Down arrow: go into the tab's rows (Enter and clicks arrive through OnClicked). */
 	FSimpleDelegate OnTabEntered;
 
 protected:
@@ -41,12 +38,12 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category="Knight|Settings", meta=(BindWidgetOptional))
 	TObjectPtr<UCommonTextBlock> Txt_Caption;
 
-	/** Orange bar and tint behind the selected tab. */
+	/** Thin cyan underline for the active category. */
 	UPROPERTY(BlueprintReadOnly, Category="Knight|Settings", meta=(BindWidgetOptional))
 	TObjectPtr<UWidget> Img_Selected;
 };
 
-/** Small caps band above a group of rows ("VOLUME"). */
+/** Localized section caption followed by a thin horizontal rule. */
 UCLASS(Abstract, Blueprintable, meta=(DisableNativeTick))
 class KNIGHTUI_API UknightSettingsSectionHeader : public UUserWidget
 {
@@ -61,20 +58,11 @@ protected:
 };
 
 /**
- * The settings screen (WBP_KnightSettings): categories on the left, the rows of the selected category in the middle,
- * the focused row's description on the right, apply / revert at the bottom. The values and saving live in the base
- * class (UKnightSettingsWidget, knight module), which title, lobby and raid open through GetSharedWidgetClass.
- *
- * Focus has two levels, like console settings menus. On the categories, up / down pick one (its rows show at once)
- * and Enter / right / a click go into its rows. In the rows, up / down move, left / right change the value, Esc goes
- * back to the categories. Q / E switch categories, R loads the defaults, F applies. Esc on the categories closes
- * (asks first when edits are not applied). Down from the last category reaches the footer buttons; up or Esc there
- * returns to the categories. The key hints at the bottom follow the level.
- *
- * Layout lives in the Widget Blueprint designer. Required: Box_Rows (panel the rows go into), Btn_Apply, Btn_Revert.
- * Optional: Tab_0 .. Tab_3, Scroll_Rows, Txt_DetailTitle, Txt_DetailBody, Txt_Status, Txt_DirtyCount,
- * Btn_Defaults, Panel_Prompt, Panel_Footer, Btn_PromptApply, Btn_PromptDiscard, Btn_PromptContinue,
- * Panel_HintsTabs, Panel_HintsRows.
+ * Shared Settings view: top category tabs, scrolling rows, description and fixed footer.
+ * Left/right on tabs changes category; Down/Enter enters rows. Row left/right edits;
+ * Up/down navigates. Esc returns to categories before the normal unsaved-close flow.
+ * Q/E or controller shoulders switches tabs. R defaults and F applies.
+ * Values, previews and persistence remain in UKnightSettingsWidget.
  */
 UCLASS(Abstract, Blueprintable, meta=(DisableNativeTick))
 class KNIGHTUI_API UknightSettingsScreen : public UKnightSettingsWidget
@@ -83,6 +71,7 @@ class KNIGHTUI_API UknightSettingsScreen : public UKnightSettingsWidget
 
 public:
 	virtual bool IsCapturingKey() const override;
+	friend class UknightSettingsCheckCommandlet;
 
 protected:
 	virtual void NativeOnInitialized() override;
@@ -130,6 +119,8 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, Category="Knight|Settings", meta=(BindWidgetOptional))
 	TObjectPtr<UknightButtonBase> Btn_Defaults;
+	UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UknightButtonBase> Btn_Back;
+	UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UWidget> Panel_Editor;
 
 	UPROPERTY(BlueprintReadOnly, Category="Knight|Settings", meta=(BindWidgetOptional))
 	TObjectPtr<UknightSettingsTab> Tab_0;
@@ -202,6 +193,8 @@ private:
 	void ShowPrompt(bool bShow, UknightButtonBase* FocusTarget);
 
 	bool bRowsLevel = false;
+	bool bPromptVisible = false;
+	TWeakObjectPtr<UknightSettingRow> DetailRow;
 	FText PromptApplyText;
 	FText PromptDiscardText;
 

@@ -6,7 +6,47 @@
 #include "CommonTextBlock.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/Image.h"
+#include "Components/Border.h"
+#include "Widgets/knightSettingsPresentation.h"
 #include "Framework/Application/SlateApplication.h"
+
+void UknightButtonBase::ConfigureSettingsButton(uint8 Kind)
+{
+	bSettingsPresentation=true; SettingsKind=Kind; bApplyAlphaOnDisable=false;
+	HoverScale=PressedScale=1.f; bFocusOnHover=false; FocusedTextStyle=nullptr;
+	SetIsSelectable(false); SetShouldSelectUponReceivingFocus(false);
+	SetStyle(UknightSettingsButtonStyle::StaticClass()); SetMinDimensions(0,0); RefreshTargets();
+}
+
+void UknightButtonBase::SetSettingsSelected(bool bInSelected)
+{
+	bSettingsSelected=bInSelected; RefreshSettingsVisual();
+}
+
+void UknightButtonBase::RefreshSettingsVisual()
+{
+	if (!bSettingsPresentation || !WidgetTree) return;
+	const bool Hot=GetIsEnabled() && (IsHovered() || bFocusedVisual);
+	const FLinearColor Ink(GetIsEnabled() ? (Hot || bSettingsSelected ? FColor(242,248,252) : FColor(189,208,220)) : FColor(220,231,239));
+	for (const FName Name : {FName("Txt_Label"),FName("Txt_Value")})
+		if (auto* Label=Cast<UCommonTextBlock>(WidgetTree->FindWidget(Name)))
+		{
+			Label->SetStyle(nullptr);
+			Label->SetColorAndOpacity(SettingsKind==1 && bSettingsSelected ? FLinearColor(FColor(81,210,241)) : Ink);
+		}
+	if (auto* State=Cast<UBorder>(WidgetTree->FindWidget(TEXT("Border_State"))))
+	{
+		FSlateBrush Brush; Brush.DrawAs=ESlateBrushDrawType::RoundedBox;
+		Brush.TintColor=FLinearColor(FColor(29,61,81)).CopyWithNewOpacity(SettingsKind==0 ? (bSettingsSelected?.64f:Hot?.2f:0.f) : 0.f);
+		const FLinearColor Edge(FColor(Hot ? 104 : 73,Hot ? 202 : 125,Hot ? 234 : 153));
+		Brush.OutlineSettings=FSlateBrushOutlineSettings(FVector4(0),FSlateColor(Edge.CopyWithNewOpacity(GetIsEnabled()?1.f:.48f)),SettingsKind==2?1.f:0.f);
+		Brush.OutlineSettings.RoundingType=ESlateBrushRoundingType::FixedRadius;
+		State->SetBrush(Brush);
+		State->SetBrushColor(FLinearColor::White);
+	}
+	if (UWidget* Accent=WidgetTree->FindWidget(TEXT("Img_Accent")))
+		Accent->SetVisibility(bSettingsSelected ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Hidden);
+}
 
 void UknightButtonBase::ConfigureOperationMapButton(bool bInSelectable)
 {
@@ -98,6 +138,7 @@ void UknightButtonBase::NativePreConstruct()
 	bPressedVisual = bFocusedVisual = false;
 	ApplyMotion();
 	RefreshLockVisual();
+	if (bSettingsPresentation) RefreshSettingsVisual();
 }
 
 void UknightButtonBase::NativeDestruct()
@@ -209,6 +250,12 @@ void UknightButtonBase::HandleLockClicked()
 
 void UknightButtonBase::RefreshTargets()
 {
+	if (bSettingsPresentation)
+	{
+		StopAnimating(); CurrentScale=TargetScale=1.f;
+		BracketAlpha=TargetBracketAlpha=ShakeTimeLeft=0.f;
+		ApplyMotion(); RefreshSettingsVisual(); return;
+	}
 	if (bOperationMapPresentation)
 	{
 		StopAnimating();
@@ -256,6 +303,7 @@ void UknightButtonBase::RefreshLockVisual()
 
 void UknightButtonBase::ApplyLabelStyle()
 {
+	if (bSettingsPresentation) { RefreshSettingsVisual(); return; }
 	if (!Txt_Label)
 	{
 		return;

@@ -25,6 +25,9 @@ class KNIGHTUI_API UknightButtonBase : public UCommonButtonBase
 	GENERATED_BODY()
 
 public:
+	/** Opt-in Settings-only static presentation: 0 row, 1 tab, 2 outlined action, 3 text Back. */
+	void ConfigureSettingsButton(uint8 Kind);
+	void SetSettingsSelected(bool bInSelected);
 	/** Owner-controlled tab/list selection; actions never latch. Opt-in so other screens retain their presentation. */
 	UFUNCTION(BlueprintCallable, Category="Knight|Button")
 	void ConfigureMaintenanceButton(bool bInSelectable, bool bMainTab = false);
@@ -114,6 +117,10 @@ protected:
 	TObjectPtr<UWidget> Bracket_R;
 
 private:
+	void RefreshSettingsVisual();
+	bool bSettingsPresentation = false;
+	bool bSettingsSelected = false;
+	uint8 SettingsKind = 0;
 	void HandleLockClicked();
 	void RefreshTargets();
 	void RefreshLockVisual();

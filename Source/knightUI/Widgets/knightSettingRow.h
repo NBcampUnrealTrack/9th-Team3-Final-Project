@@ -31,6 +31,7 @@ class KNIGHTUI_API UknightSettingRow : public UknightButtonBase
 	GENERATED_BODY()
 
 public:
+	friend class UknightSettingsCheckCommandlet;
 	UknightSettingRow(const FObjectInitializer& ObjectInitializer);
 
 	void Setup(const FKnightSettingItem& InItem);
