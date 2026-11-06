@@ -65,6 +65,11 @@ struct KNIGHT_API FKnightCodexBossEntry
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Boss")
 	TSoftObjectPtr<UTexture2D> ListIcon;
 
+	/** Optional non-destructive thumbnail crop: normalized left/top/right/bottom.
+	 * Portrait always displays the complete source image. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Boss")
+	FVector4 ListIconUV = FVector4(0, 0, 1, 1);
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Boss")
 	TSoftObjectPtr<UTexture2D> Portrait;
 

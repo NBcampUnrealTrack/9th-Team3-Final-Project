@@ -46,7 +46,8 @@ class KNIGHT_API UKnightCodexBossEntryWidget : public UUserWidget
 	GENERATED_BODY()
 public:
 	UPROPERTY(BlueprintAssignable, Category="Knight|Codex") FKnightCodexBossSelected OnSelected;
-	void Configure(FName InId, const FText& Name, UTexture2D* Icon, bool bUnlocked);
+	void Configure(FName InId, const FText& Name, UTexture2D* Icon, bool bUnlocked,
+		FVector4 IconUV = FVector4(0, 0, 1, 1), int32 Ordinal = 0);
 	void SetSelected(bool bSelected);
 	FName GetBossId() const { return BossId; }
 protected:
@@ -138,6 +139,7 @@ private:
 	TArray<TWeakObjectPtr<UKnightCodexSectionButton>> ReadingButtons[2];
 	TArray<int32> ReadingSectionIndices[2];
 	FText ReadingPageTitles[2];
+	int32 ReadingSelectedIndices[2] = {INDEX_NONE, INDEX_NONE};
 	FName SelectedBossId;
 	int32 ActiveCategory = 0;
 };

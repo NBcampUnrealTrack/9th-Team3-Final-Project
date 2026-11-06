@@ -80,6 +80,8 @@ struct FCodexCapture : TSharedFromThis<FCodexCapture>
 	}
 	void Capture(const TCHAR* Name)
 	{
+		Check(Menu.IsValid() && Menu->GetCurrentPage() == EKnightMainMenuPage::Codex,
+			TEXT("capture is the visible Codex page"));
 		if (FParse::Param(FCommandLine::Get(), TEXT("KnightSkipCodexCaptures"))) return;
 		FVector2D Pixels; World->GetGameViewport()->GetViewportSize(Pixels);
 		UE_LOG(LogTemp, Display, TEXT("CodexCapture IMAGE %s viewport=%.0fx%.0f title=%s"), Name, Pixels.X, Pixels.Y, *Text(TEXT("Text_WorldTitle")));
@@ -112,7 +114,7 @@ struct FCodexCapture : TSharedFromThis<FCodexCapture>
 			UWidgetBlueprintLibrary::GetAllWidgetsOfClass(World.Get(), Widgets, UKnightCodexWidget::StaticClass(), false);
 			if (Widgets.IsEmpty()) return true;
 			Codex = Cast<UKnightCodexWidget>(Widgets[0]);
-			World->GetFirstPlayerController()->ConsoleCommand(TEXT("r.SetRes 1914x1080w"), false);
+			World->GetFirstPlayerController()->ConsoleCommand(TEXT("r.SetRes 1920x1080w"), false);
 			Check(Cast<UPanelWidget>(Widget(TEXT("Box_WorldEntries")))->GetChildrenCount() == 12, TEXT("12 reader records; source notes excluded"));
 			Check(Cast<UPanelWidget>(Widget(TEXT("Box_MechEntries")))->GetChildrenCount() == 4, TEXT("4 mech records"));
 			Next = Now + 6.; ++Step; return true;
@@ -173,7 +175,10 @@ struct FCodexCapture : TSharedFromThis<FCodexCapture>
 		case 13:
 		{
 			Check(Menu->SelectQuest(TEXT("Quest_Janhyang_Hard")), TEXT("different quest selected on stage page"));
-			Menu->ShowPage(EKnightMainMenuPage::Codex); Codex->SelectCategory(2); Codex->SelectBoss(TEXT("Janyeol"));
+			// Wait for the existing operation-map entrance before opening another page.
+			AfterCapture = [this] {
+			Check(Menu->ShowPage(EKnightMainMenuPage::Codex), TEXT("Codex returns after quest navigation settles"));
+			Codex->SelectCategory(2); Codex->SelectBoss(TEXT("Janyeol"));
 			const FString JanyeolNames = DropText(TEXT("Text_Name"));
 			Check(Cast<UPanelWidget>(Widget(TEXT("Box_Drops")))->GetChildrenCount() == 8,
 				TEXT("selected Janhyang quest does not replace Janyeol drops"));
@@ -187,10 +192,17 @@ struct FCodexCapture : TSharedFromThis<FCodexCapture>
 				&& DropText(TEXT("Text_Details")).Contains(TEXT("부위 파괴: Tail")),
 				TEXT("Janhyang repeated items retain chest/tail and difficulty sources"));
 			Cast<UScrollBox>(Widget(TEXT("Scroll_BossDetail")))->ScrollToEnd();
+			};
 			break;
 		}
 		case 14: Capture(TEXT("11_janhyang_quest_drops_720")); break;
-		case 15: Codex->RequestClose(); break;
+		case 15:
+			World->GetFirstPlayerController()->ConsoleCommand(TEXT("r.SetRes 2560x1080w"), false);
+			Cast<UScrollBox>(Widget(TEXT("Scroll_BossDetail")))->ScrollToStart(); break;
+		case 16: Capture(TEXT("12_monster_ultrawide")); AfterCapture = [this] { Click(TEXT("Button_World")); }; break;
+		case 17: Capture(TEXT("13_world_ultrawide")); AfterCapture = [this] { Click(TEXT("Button_Mech")); }; break;
+		case 18: Capture(TEXT("14_mech_ultrawide")); break;
+		case 19: Codex->RequestClose(); break;
 		default:
 			UE_LOG(LogTemp, Display, TEXT("CodexCapture COMPLETE failures=%d; delegate/API checks, not physical input"), Failures);
 			FPlatformMisc::RequestExit(false); return false;

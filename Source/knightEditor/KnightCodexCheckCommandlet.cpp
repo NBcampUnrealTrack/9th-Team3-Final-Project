@@ -176,6 +176,19 @@ int32 UKnightCodexCheckCommandlet::Main(const FString& Params)
     auto* Focused=CastChecked<UKnightCodexArchiveButton>(Second->GetWidgetFromName(TEXT("Button_Select")));
     FSlateApplication::Get().SetKeyboardFocus(Focused->TakeWidget(),EFocusCause::Navigation); Draw();
     Check(Selected->IsRecordSelected()&&!Focused->IsRecordSelected()&&Focused->HasKeyboardFocus(),TEXT("input focus on another entry does not change selection")); Capture(TEXT("10_SelectedAndFocused"));
+    for(UWidget* Child:Bosses->GetAllChildren())
+    {
+        auto* Entry=CastChecked<UKnightCodexBossEntryWidget>(Child);
+        auto* Icon=CastChecked<UImage>(Entry->GetWidgetFromName(TEXT("Image_Icon")));
+        const auto* Record=Data->Bosses.FindByPredicate([&](const auto& B){return B.BossId==Entry->GetBossId();});
+        if(Record && Progress->IsQuestCompleted(Record->RequiredQuestId))
+        {
+            Check(Icon->GetBrush().GetResourceObject()==Record->ListIcon.Get(),TEXT("thumbnail has explicit matching monster texture"));
+            const FBox2f UV=Icon->GetBrush().GetUVRegion();
+            Check(UV.GetSize().X>0 && UV.GetSize().Y>0 && UV.GetSize().X<.30 && UV.GetSize().Y<.35,TEXT("thumbnail shows the head detail, not a shrunken dossier"));
+        }
+        else Check(!Icon->GetBrush().GetResourceObject(),TEXT("undiscovered thumbnail remains concealed"));
+    }
     FPointerEvent Pointer;
     Focused->TakeWidget()->OnMouseEnter(Focused->GetCachedGeometry(),Pointer); Capture(TEXT("11_Hover")); Focused->TakeWidget()->OnMouseLeave(Pointer);
     Check(!Focused->IsHovered()&&Selected->IsRecordSelected(),TEXT("hover clears without losing genuine selection"));
@@ -185,6 +198,51 @@ int32 UKnightCodexCheckCommandlet::Main(const FString& Params)
         Resize(FIntPoint(1280,720)); Capture(TEXT("12_LongName_720"));
         Check(First->GetCachedGeometry().GetLocalSize().X<=W(TEXT("Size_EntryList"))->GetCachedGeometry().GetLocalSize().X,TEXT("long Korean name stays within list column"));
     }
+    // Exercise real tab/record delegates, then preserve their independently scrolled content.
+    Codex->Open(); Codex->SelectCategory(2); Codex->SelectBoss(TEXT("Janhyang")); Draw();
+    Scroll->SetScrollOffset(90); Draw(); const float MonsterOffset=Scroll->GetScrollOffset();
+    FString Titles[2], Bodies[2]; float ReaderOffsets[2]={}, ListOffsets[2]={};
+    for(int32 Category=0; Category<2; ++Category)
+    {
+        CastChecked<UButton>(W(Category==0?TEXT("Button_World"):TEXT("Button_Mech")))->OnClicked.Broadcast(); Draw();
+        const auto& Sections=Category==0?Data->WorldSections:Data->MechSections;
+        auto* List=CastChecked<UPanelWidget>(W(Category==0?TEXT("Box_WorldEntries"):TEXT("Box_MechEntries")));
+        int32 ReaderIndex=0, LongestIndex=0, LongestLength=-1;
+        for(const auto& Section:Sections) if(Section.bShowInReader&&!Section.GetReaderBody().IsEmpty())
+        {
+            if(Section.GetReaderBody().ToString().Len()>LongestLength){LongestLength=Section.GetReaderBody().ToString().Len(); LongestIndex=ReaderIndex;}
+            ++ReaderIndex;
+        }
+        Check(List->GetChildrenCount()==ReaderIndex,TEXT("all existing public records retained in authored order"));
+        auto* Holder=CastChecked<UPanelWidget>(List->GetChildAt(LongestIndex));
+        CastChecked<UButton>(Holder->GetChildAt(0))->OnClicked.Broadcast(); Draw(); Draw();
+        Titles[Category]=Text(Category==0?TEXT("Text_WorldTitle"):TEXT("Text_MechTitle"));
+        Bodies[Category]=Text(Category==0?TEXT("Text_WorldBody"):TEXT("Text_MechBody"));
+        auto* Reader=CastChecked<UScrollBox>(W(Category==0?TEXT("Scroll_World"):TEXT("Scroll_Mech")));
+        auto* ListScroll=CastChecked<UScrollBox>(W(Category==0?TEXT("Scroll_WorldEntries"):TEXT("Scroll_MechEntries")));
+        Reader->SetScrollOffset(120); ListScroll->SetScrollOffset(60); Draw(); Draw();
+        ReaderOffsets[Category]=Reader->GetScrollOffset(); ListOffsets[Category]=ListScroll->GetScrollOffset();
+        Check(!Titles[Category].IsEmpty()&&Bodies[Category].Len()==LongestLength,TEXT("selected article shows complete existing Korean prose"));
+    }
+    for(const FIntPoint Size:{FIntPoint(1920,1080),FIntPoint(1280,720),FIntPoint(2560,1080)})
+    {
+        Resize(Size);
+        for(int32 Category=0;Category<2;++Category)
+        {
+            CastChecked<UButton>(W(Category==0?TEXT("Button_World"):TEXT("Button_Mech")))->OnClicked.Broadcast(); Draw(); Draw();
+            Check(Text(Category==0?TEXT("Text_WorldTitle"):TEXT("Text_MechTitle"))==Titles[Category]
+                && Text(Category==0?TEXT("Text_WorldBody"):TEXT("Text_MechBody"))==Bodies[Category],TEXT("tab return retains selected record and full contents"));
+            auto* Reader=CastChecked<UScrollBox>(W(Category==0?TEXT("Scroll_World"):TEXT("Scroll_Mech")));
+            auto* ListScroll=CastChecked<UScrollBox>(W(Category==0?TEXT("Scroll_WorldEntries"):TEXT("Scroll_MechEntries")));
+            Check(FMath::IsNearlyEqual(Reader->GetScrollOffset(),ReaderOffsets[Category],1.f)
+                && FMath::IsNearlyEqual(ListScroll->GetScrollOffset(),ListOffsets[Category],1.f),TEXT("category reader and list scroll offsets retained"));
+            Capture(FString::Printf(TEXT("%s_%dx%d"),Category==0?TEXT("World"):TEXT("Mech"),Size.X,Size.Y));
+        }
+    }
+    Codex->SelectCategory(2); Draw(); Draw();
+    Check(Portrait->GetBrush().GetResourceObject()->GetPathName()==Art.FindChecked(TEXT("Janhyang"))
+        && FMath::IsNearlyEqual(Scroll->GetScrollOffset(),MonsterOffset,1.f),TEXT("monster selection and materials scroll retained across other tabs"));
+    Check(!Codex->SelectBoss(TEXT("MissingRecord")),TEXT("invalid record rejected without stale content"));
     Check(Menu->RequestBack()&&Menu->GetCurrentPage()==EKnightMainMenuPage::Home,TEXT("shared Back/Esc route returns to menu"));
     Check(Menu->ShowPage(EKnightMainMenuPage::Codex),TEXT("Codex reopens through actual menu")); Draw();
     Check(Codex->GetFocusButton()->HasUserFocus(Player),TEXT("reentry restores category focus"));
