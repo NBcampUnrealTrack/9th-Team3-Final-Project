@@ -487,6 +487,13 @@ void UKnightStageMapWidget::NativeOnMouseLeave(const FPointerEvent& InMouseEvent
 	}
 }
 
+void UKnightStageMapWidget::SetTransitionReveal(float Progress, float Intensity, float Width, float GlowWidth, bool bActive, bool bRetreating)
+{
+	TransitionReveal = FMath::Clamp(Progress, 0.f, 1.f); TransitionScan = Intensity;
+	TransitionWidth = Width; TransitionGlow = GlowWidth; bTransitionReveal = bActive; bTransitionRetreating = bRetreating;
+	InvalidateLayoutAndVolatility();
+}
+
 int32 UKnightStageMapWidget::NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect,
 	FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const
 {
@@ -495,9 +502,12 @@ int32 UKnightStageMapWidget::NativePaint(const FPaintArgs& Args, const FGeometry
 	const FMapView View = MakeView(LocalSize);
 	const float Opacity = InWidgetStyle.GetColorAndOpacityTint().A;
 	const FSlateRect Bounds(FVector2D::ZeroVector, LocalSize);
+	if (bTransitionReveal && TransitionReveal <= 0.f) return LayerId;
 
 	// Everything but the leader line stays inside the map.
 	OutDrawElements.PushClip(FSlateClippingZone(AllottedGeometry));
+	if (bTransitionReveal)
+		OutDrawElements.PushClip(FSlateClippingZone(AllottedGeometry.MakeChild(FVector2D(LocalSize.X * TransitionReveal, LocalSize.Y), FSlateLayoutTransform())));
 	if (MapMID)
 	{
 		FSlateDrawElement::MakeBox(OutDrawElements, ++LayerId, AllottedGeometry.ToPaintGeometry(), &MapBrush, ESlateDrawEffect::None, FLinearColor(1.f, 1.f, 1.f, Opacity));
@@ -606,13 +616,38 @@ int32 UKnightStageMapWidget::NativePaint(const FPaintArgs& Args, const FGeometry
 		Points = { Corner + FVector2f(Inward.X * Tick, 0.f), Corner, Corner + FVector2f(0.f, Inward.Y * Tick) };
 		FSlateDrawElement::MakeLines(OutDrawElements, LayerId, AllottedGeometry.ToPaintGeometry(), Points, ESlateDrawEffect::None, WithAlpha(MapFrost, 0.9f * Opacity), true, 2.f);
 	}
+	if (bTransitionReveal)
+	{
+		OutDrawElements.PopClip();
+		// Lightweight, non-interactive Slate scan. Both halo and short tail remain
+		// clipped to the real map bounds; no render target or off-map overlay.
+		const float X = LocalSize.X * TransitionReveal;
+		const float Glow = FMath::Max(2.f, TransitionGlow);
+		const float Direction = bTransitionRetreating ? 1.f : -1.f;
+		const FSlateBrush* Brush = FCoreStyle::Get().GetBrush(TEXT("WhiteBrush"));
+		const FLinearColor Blue(FColor(102, 169, 211));
+		auto Strip = [&](float Offset, float Width, float Alpha)
+		{
+			FSlateDrawElement::MakeBox(OutDrawElements, ++LayerId,
+				AllottedGeometry.ToPaintGeometry(FVector2f(Width, LocalSize.Y), FSlateLayoutTransform(FVector2f(X + Offset - Width * .5f, 0))),
+				Brush, ESlateDrawEffect::None, WithAlpha(Blue, Alpha * TransitionScan * Opacity));
+		};
+		for (int32 I = -24; I <= 24; ++I)
+		{
+			const float Offset = I * Glow / 8.f;
+			const float Halo = .10f * FMath::Exp(-FMath::Square(Offset / Glow) * 2.f);
+			const float Tail = Offset * Direction > 0.f ? .12f * FMath::Exp(-FMath::Abs(Offset) / Glow) : 0.f;
+			Strip(Offset, Glow / 8.f, Halo + Tail);
+		}
+		Strip(0.f, TransitionWidth, .8f);
+	}
 	OutDrawElements.PopClip();
 
 	// Leader line: mark → diagonal → short shelf → panel edge (same shape as the lock-on marker).
 	// The panel rectangle must come from its paint-space geometry like AllottedGeometry; its tick-space (cached) geometry is in
 	// desktop coordinates and only lines up when the window sits at the desktop origin.
 	const UWidget* const Target = LeaderTarget.Get();
-	if (bSelectedVisible && Target && Target->IsVisible())
+	if (bSelectedVisible && Target && Target->IsVisible() && (!bTransitionReveal || TransitionReveal > .85f))
 	{
 		const FGeometry& TargetGeometry = Target->GetPaintSpaceGeometry();
 		const FVector2D TopLeft = AllottedGeometry.AbsoluteToLocal(TargetGeometry.GetAbsolutePosition());
@@ -624,7 +659,8 @@ int32 UKnightStageMapWidget::NativePaint(const FPaintArgs& Args, const FGeometry
 			const float EdgeX = static_cast<float>(bTargetOnRight ? TopLeft.X : BottomRight.X);
 			const float AnchorY = FMath::Clamp(static_cast<float>(SelectedPosition.Y), static_cast<float>(TopLeft.Y) + 24.f, static_cast<float>(BottomRight.Y) - 24.f);
 			Points = { FVector2f(SelectedPosition) + FVector2f(Side * 10.f, 0.f), FVector2f(EdgeX - Side * 36.f, AnchorY), FVector2f(EdgeX, AnchorY) };
-			FSlateDrawElement::MakeLines(OutDrawElements, ++LayerId, AllottedGeometry.ToPaintGeometry(), Points, ESlateDrawEffect::None, WithAlpha(MapBlue, 0.9f * Opacity), true, 1.5f);
+			const float LeaderAlpha = bTransitionReveal ? FMath::Clamp((TransitionReveal - .85f) / .15f, 0.f, 1.f) : 1.f;
+			FSlateDrawElement::MakeLines(OutDrawElements, ++LayerId, AllottedGeometry.ToPaintGeometry(), Points, ESlateDrawEffect::None, WithAlpha(MapBlue, .9f * Opacity * LeaderAlpha), true, 1.5f);
 		}
 	}
 	return LayerId;

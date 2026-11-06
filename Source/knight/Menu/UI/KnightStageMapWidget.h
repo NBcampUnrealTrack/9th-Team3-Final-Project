@@ -116,6 +116,8 @@ public:
 
 	/** The selected mark draws a leader line to the nearest side of this widget. */
 	void SetLeaderTarget(UWidget* InTarget) { LeaderTarget = InTarget; }
+	/** Presentation-only reveal; never changes map coordinates, selection or hit geometry. */
+	void SetTransitionReveal(float Progress, float Intensity, float Width, float GlowWidth, bool bActive, bool bRetreating);
 
 	UPROPERTY(BlueprintAssignable, Category="Knight|Map")
 	FKnightMapStageClicked OnStageClicked;
@@ -230,4 +232,6 @@ private:
 	TMap<FName, TArray<float>> ContourLengths;
 	float GetContourAngle(FName RegionId, float Phase) const;
 	float InitialVisibleLatitude = 110.f;
+	float TransitionReveal = 1.f, TransitionScan = 0.f, TransitionWidth = 1.5f, TransitionGlow = 16.f;
+	bool bTransitionReveal = false, bTransitionRetreating = false;
 };

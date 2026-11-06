@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "KnightMenuWidgetBase.h"
+#include "KnightOperationMapTransition.h"
 #include "KnightMainMenuWidget.generated.h"
 
 class UCommonButtonBase;
@@ -44,6 +45,7 @@ class KNIGHT_API UKnightMainMenuWidget : public UKnightMenuWidgetBase
 	friend class UknightEquipmentActionCheckCommandlet;
 	friend class UknightMaintenanceEntranceCheckCommandlet;
 	friend class UknightOperationMapCheckCommandlet;
+	friend class UKnightOperationMapTransition;
 
 public:
 	UFUNCTION(BlueprintPure, Category="Knight|Menu")
@@ -154,6 +156,8 @@ protected:
 	/** Gap between the map's edge and the info panel. Slate units. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Stage", meta=(ClampMin=0))
 	float StageInfoGap = 64.f;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Stage|Transition")
+	FKnightOperationMapTransitionSettings OperationMapTransitionSettings;
 
 	virtual void NativeDestruct() override;
 
@@ -213,6 +217,9 @@ private:
 	void LeaveMaintenance();
 	TSet<FKey> ReturnSuppressedKeys;
 	void EnsureQuestWidget();
+	bool IsOperationMapTransitionActive() const;
+	void CompleteOperationMapTransition(bool bExited);
+	UPROPERTY(Transient) TObjectPtr<UKnightOperationMapTransition> OperationMapTransition;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UKnightSettingsWidget> SettingsWidget;
