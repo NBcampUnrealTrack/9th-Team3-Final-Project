@@ -111,7 +111,7 @@ namespace CodexArchiveDesigner
 		Bar.HoveredThumbImage=FSlateColorBrush(Color(TEXT("80CEE8")));
 		Bar.DraggedThumbImage=FSlateColorBrush(Color(TEXT("A8E8F8")));
 		Bar.VerticalBackgroundImage=FSlateColorBrush(Color(TEXT("35556A"),.18f)); W->SetWidgetBarStyle(Bar);
-		W->SetAnimateWheelScrolling(true); W->SetWheelScrollMultiplier(1.3f);
+		W->SetAnimateWheelScrolling(false); W->SetWheelScrollMultiplier(1.3f);
 		return W;
 	}
 	UKnightCodexArchiveButton* Button(UWidgetBlueprint* BP,const TCHAR* Name,UWidget* Child,FMargin Padding)
@@ -135,7 +135,7 @@ namespace CodexArchiveDesigner
 	void BuildMain(UWidgetBlueprint* BP)
 	{
 		UCanvasPanel* Root=Make<UCanvasPanel>(BP,TEXT("Canvas_Root")); BP->WidgetTree->RootWidget=Root;
-		UBorder* Scrim=Make<UBorder>(BP,TEXT("Border_CodexScrim")); Scrim->SetBrushColor(Color(TEXT("02070C"),.48f));
+		UBorder* Scrim=Make<UBorder>(BP,TEXT("Border_CodexScrim")); Scrim->SetBrushColor(Color(TEXT("020B13"),.76f));
 		Scrim->SetVisibility(ESlateVisibility::HitTestInvisible);
 		UCanvasPanelSlot* ScrimSlot=Root->AddChildToCanvas(Scrim); ScrimSlot->SetAnchors(FAnchors(0,0,1,1)); ScrimSlot->SetOffsets(FMargin());
 		UVerticalBox* Shell=Make<UVerticalBox>(BP,TEXT("Column_CodexShell"));
@@ -146,30 +146,22 @@ namespace CodexArchiveDesigner
 		UVerticalBox* Heading=Make<UVerticalBox>(BP,TEXT("Column_ArchiveHeading")); Row(Header,Heading,1.f);
 		Col(Heading,Text(BP,TEXT("Label_Codex"),NSLOCTEXT("KnightCodexEditor", "Archive02", "도감"),28,true));
 		Col(Heading,Text(BP,TEXT("Label_ArchiveSubtitle"),NSLOCTEXT("KnightCodexEditor", "Archive03", "기체 내 기록 보관소"),13,false,true),false,FMargin(2,4,0,0));
-		UHorizontalBox* CloseContent=Make<UHorizontalBox>(BP,TEXT("Row_CloseContent"));
-		UTextBlock* CloseLabel=Text(BP,TEXT("Label_Button_Close"),NSLOCTEXT("KnightCodexEditor", "Archive04", "닫기"),16);
-		CloseLabel->SetJustification(ETextJustify::Center); Row(CloseContent,CloseLabel,1.f);
-		UKnightCodexArchiveButton* Close=Button(BP,TEXT("Button_Close"),CloseContent,FMargin(18,12));
-		USizeBox* CloseSize=Size(BP,TEXT("Size_Close"),Close,112,50); Row(Header,CloseSize);
-		CastChecked<UHorizontalBoxSlot>(CloseSize->Slot)->SetVerticalAlignment(VAlign_Center);
-		Col(Shell,Rule(BP,TEXT("Rule_Header")),false,FMargin(0,0,0,26));
-		UHorizontalBox* Body=Make<UHorizontalBox>(BP,TEXT("Row_Main")); Col(Shell,Body,true);
-		UVerticalBox* Rail=Make<UVerticalBox>(BP,TEXT("Column_Categories"));
+		UHorizontalBox* Rail=Make<UHorizontalBox>(BP,TEXT("Row_Categories")); Row(Header,Rail);
+		CastChecked<UHorizontalBoxSlot>(Rail->Slot)->SetVerticalAlignment(VAlign_Center);
 		const TCHAR* Names[]={TEXT("World"),TEXT("Mech"),TEXT("Monster")};
 		const FText Labels[]={NSLOCTEXT("KnightCodexEditor", "Archive05", "세계관"),NSLOCTEXT("KnightCodexEditor", "Archive06", "기체 설명"),NSLOCTEXT("KnightCodexEditor", "Archive07", "몬스터")};
 		for(int32 Index=0;Index<3;++Index)
 		{
 			UVerticalBox* Tile=Make<UVerticalBox>(BP,*FString::Printf(TEXT("Tile_%s"),Names[Index]));
-			Col(Tile,OptionalImage(BP,*FString::Printf(TEXT("Size_CategoryIcon_%s"),Names[Index]),
-				*FString::Printf(TEXT("Image_Category_%s"),Names[Index]),0,64),false,FMargin(0,0,0,10));
 			UTextBlock* Label=Text(BP,*FString::Printf(TEXT("Label_Button_%s"),Names[Index]),Labels[Index],15,true);
 			Label->SetJustification(ETextJustify::Center); Label->SetAutoWrapText(false); Col(Tile,Label);
-			UKnightCodexArchiveButton* B=Button(BP,*FString::Printf(TEXT("Button_%s"),Names[Index]),Tile,FMargin(14,18));
+			UKnightCodexArchiveButton* B=Button(BP,*FString::Printf(TEXT("Button_%s"),Names[Index]),Tile,FMargin(24,10));
 			B->bCategoryTile=true;
 			USizeBox* TileSize=Size(BP,*FString::Printf(TEXT("Size_Category_%s"),Names[Index]),B);
-			TileSize->SetMinDesiredHeight(72.f); Col(Rail,TileSize,false,FMargin(0,0,0,20));
+			TileSize->SetMinDesiredHeight(46.f); Row(Rail,TileSize,0,FMargin(12,0,0,0));
 		}
-		Row(Body,Rail,.11f,FMargin(0,0,28,0));
+		Col(Shell,Rule(BP,TEXT("Rule_Header")),false,FMargin(0,0,0,24));
+		UHorizontalBox* Body=Make<UHorizontalBox>(BP,TEXT("Row_Main")); Col(Shell,Body,true);
 		UVerticalBox* EntryColumn=Make<UVerticalBox>(BP,TEXT("Column_CodexEntries"));
 		Col(EntryColumn,Text(BP,TEXT("Label_CodexEntries"),NSLOCTEXT("KnightCodexEditor", "Archive08", "세계관 기록"),17,true,false,true),false,FMargin(3,0,0,16));
 		UWidgetSwitcher* Entries=Make<UWidgetSwitcher>(BP,TEXT("Switcher_Entries"),true); Col(EntryColumn,Entries,true);
@@ -179,29 +171,46 @@ namespace CodexArchiveDesigner
 		Col(BossList,Text(BP,TEXT("Text_NoBosses"),NSLOCTEXT("KnightCodexEditor", "Archive09", "등록된 몬스터가 없습니다."),16,false,true,true));
 		Col(BossList,Make<UVerticalBox>(BP,TEXT("Box_Bosses"),true));
 		Entries->AddChild(Scroll(BP,TEXT("Scroll_BossList"),BossList));
-		Row(Body,Panel(BP,TEXT("Panel_EntryList"),EntryColumn,.55f,FMargin(18,20,16,18)),.34f,FMargin(0,0,28,0));
+		Row(Body,Size(BP,TEXT("Size_EntryList"),Panel(BP,TEXT("Panel_EntryList"),EntryColumn,.78f,FMargin(14,20,14,18)),220),0,FMargin(0,0,24,0));
 		UWidgetSwitcher* Content=Make<UWidgetSwitcher>(BP,TEXT("Switcher_Content"),true);
-		Content->AddChild(TextPage(BP,TEXT("World"),NSLOCTEXT("KnightCodexEditor", "Archive10", "세계관")));
-		Content->AddChild(TextPage(BP,TEXT("Mech"),NSLOCTEXT("KnightCodexEditor", "Archive11", "기체 설명")));
-		UVerticalBox* MonsterPage=Make<UVerticalBox>(BP,TEXT("Column_MonsterPage")); Content->AddChild(MonsterPage);
-		Col(MonsterPage,Text(BP,TEXT("Text_BossName"),NSLOCTEXT("KnightCodexEditor", "Archive12", "몬스터 기록"),23,true,false,true),false,FMargin(0,0,0,18));
-		Col(MonsterPage,Rule(BP,TEXT("Rule_MonsterTitle")),false,FMargin(0,0,0,24));
+		Content->AddChild(Panel(BP,TEXT("Panel_WorldReader"),TextPage(BP,TEXT("World"),NSLOCTEXT("KnightCodexEditor", "Archive10", "세계관")),.87f,FMargin(32,24)));
+		Content->AddChild(Panel(BP,TEXT("Panel_MechReader"),TextPage(BP,TEXT("Mech"),NSLOCTEXT("KnightCodexEditor", "Archive11", "기체 설명")),.87f,FMargin(32,24)));
+		UHorizontalBox* MonsterPage=Make<UHorizontalBox>(BP,TEXT("Row_MonsterPage")); Content->AddChild(MonsterPage);
+		// The full illustration owns its column, outside the independently scrolling information.
+		// Its baked-in frame and labels need neither an additional frame nor overlay text.
+		UOverlay* Art=Make<UOverlay>(BP,TEXT("Panel_Illustration"));
+		UBorder* ArtSurface=Make<UBorder>(BP,TEXT("Surface_Illustration"));
+		ArtSurface->SetBrushColor(Color(TEXT("030D16"))); ArtSurface->SetVisibility(ESlateVisibility::HitTestInvisible);
+		Overlay(Art,ArtSurface);
+		Overlay(Art,OptionalImage(BP,TEXT("Size_Portrait"),TEXT("Image_Portrait"),0,0));
+		UTextBlock* NoArt=Text(BP,TEXT("Text_NoPortrait"),NSLOCTEXT("KnightCodexEditor","NoIllustration","미해금 기록"),18,false,true,true);
+		UOverlaySlot* NoArtSlot=Art->AddChildToOverlay(NoArt);
+		NoArtSlot->SetHorizontalAlignment(HAlign_Center); NoArtSlot->SetVerticalAlignment(VAlign_Center);
+		Row(MonsterPage,Art,1.f,FMargin(0,0,24,0));
+		UVerticalBox* Info=Make<UVerticalBox>(BP,TEXT("Column_MonsterInfo"));
+		Col(Info,Text(BP,TEXT("Text_BossName"),NSLOCTEXT("KnightCodexEditor", "Archive12", "몬스터 기록"),23,true,false,true),false,FMargin(0,0,0,14));
+		Col(Info,Rule(BP,TEXT("Rule_MonsterTitle")),false,FMargin(0,0,0,20));
 		UVerticalBox* MonsterBody=Make<UVerticalBox>(BP,TEXT("Column_BossDetail"));
-		Col(MonsterBody,OptionalImage(BP,TEXT("Size_Portrait"),TEXT("Image_Portrait"),0,220),false,FMargin(0,0,0,10));
-		Col(MonsterBody,Text(BP,TEXT("Text_BossDescription"),NSLOCTEXT("KnightCodexEditor", "Archive13", "설명 준비 중"),18,false,false,true),false,FMargin(0,0,16,22));
-		Col(MonsterBody,Text(BP,TEXT("Text_BossExtra"),FText::GetEmpty(),17,false,true,true),false,FMargin(0,0,16,22));
-		Col(MonsterBody,Text(BP,TEXT("Label_Drops"),NSLOCTEXT("KnightCodexEditor", "Archive14", "드랍 아이템"),18,true),false,FMargin(0,12,0,14));
+		Col(MonsterBody,Text(BP,TEXT("Text_BossDescription"),NSLOCTEXT("KnightCodexEditor", "Archive13", "설명 준비 중"),16,false,false,true),false,FMargin(0,0,6,22));
+		Col(MonsterBody,Text(BP,TEXT("Text_BossExtra"),FText::GetEmpty(),16,false,true,true),false,FMargin(0,0,6,22));
+		Col(MonsterBody,Text(BP,TEXT("Label_Drops"),NSLOCTEXT("KnightCodexEditor", "ObtainableRewards", "획득 소재 · 보상"),18,true),false,FMargin(0,12,0,14));
 		Col(MonsterBody,Make<UVerticalBox>(BP,TEXT("Box_Drops"),true));
 		Col(MonsterBody,Text(BP,TEXT("Text_NoDrops"),NSLOCTEXT("KnightCodexEditor", "Archive15", "등록된 드랍 정보가 없습니다."),15,false,true,true));
-		Col(MonsterPage,Scroll(BP,TEXT("Scroll_BossDetail"),MonsterBody),true);
-		Row(Body,Panel(BP,TEXT("Panel_Reader"),Content,.73f,FMargin(34,28,28,24),true),.55f);
+		Col(Info,Scroll(BP,TEXT("Scroll_BossDetail"),MonsterBody),true);
+		Row(MonsterPage,Size(BP,TEXT("Size_MonsterInfo"),Panel(BP,TEXT("Panel_Reader"),Info,.92f,FMargin(20,24,16,20)),376));
+		Row(Body,Content,1.f);
 		UHorizontalBox* Footer=Make<UHorizontalBox>(BP,TEXT("Row_ArchiveFooter")); Col(Shell,Footer,false,FMargin(4,22,4,0));
 		Row(Footer,Text(BP,TEXT("Label_CodexHints"),NSLOCTEXT("KnightCodexEditor", "Archive16", "항목을 선택하여 기록을 열람하세요."),14,false,true),1.f);
-		Row(Footer,Text(BP,TEXT("Label_CodexControls"),NSLOCTEXT("KnightCodexEditor", "Archive17", "마우스 휠  스크롤     Esc  뒤로"),14,false,true));
+		UTextBlock* ScrollHint=Text(BP,TEXT("Label_CodexControls"),NSLOCTEXT("KnightCodexEditor", "ScrollHint", "마우스 휠  스크롤"),14,false,true);
+		ScrollHint->SetAutoWrapText(false); Row(Footer,ScrollHint,0,FMargin(0,0,24,0));
+		UTextBlock* CloseLabel=Text(BP,TEXT("Label_Button_Close"),NSLOCTEXT("KnightCodexEditor", "FooterBack", "Esc  돌아가기"),16);
+		CloseLabel->SetJustification(ETextJustify::Center);
+		CloseLabel->SetAutoWrapText(false);
+		Row(Footer,Size(BP,TEXT("Size_Close"),Button(BP,TEXT("Button_Close"),CloseLabel,FMargin(18,10)),172,46));
 	}
 	void BuildBoss(UWidgetBlueprint* BP)
 	{
-		USizeBox* Root=Size(BP,TEXT("Size_BossRecord"),nullptr,0,100); BP->WidgetTree->RootWidget=Root;
+		USizeBox* Root=Size(BP,TEXT("Size_BossRecord"),nullptr); Root->SetMinDesiredHeight(86); BP->WidgetTree->RootWidget=Root;
 		UHorizontalBox* RowWidget=Make<UHorizontalBox>(BP,TEXT("Row_BossRecord"));
 		Root->AddChild(Button(BP,TEXT("Button_Select"),RowWidget,FMargin(18,11,12,11)));
 		Row(RowWidget,OptionalImage(BP,TEXT("Size_Icon"),TEXT("Image_Icon"),48,48),0,FMargin(0,0,14,0));
@@ -213,7 +222,9 @@ namespace CodexArchiveDesigner
 	void BuildDrop(UWidgetBlueprint* BP)
 	{
 		UHorizontalBox* RowWidget=Make<UHorizontalBox>(BP,TEXT("Row_Drop"));
-		BP->WidgetTree->RootWidget=Panel(BP,TEXT("Panel_DropRow"),RowWidget,.36f,FMargin(12,10));
+		UVerticalBox* Root=Make<UVerticalBox>(BP,TEXT("Column_DropRow")); BP->WidgetTree->RootWidget=Root;
+		Col(Root,Rule(BP,TEXT("Rule_Drop")),false,FMargin(0,0,0,12));
+		Col(Root,RowWidget,false,FMargin(0,0,0,16));
 		Row(RowWidget,OptionalImage(BP,TEXT("Size_ItemIcon"),TEXT("Image_Icon"),42,42),0,FMargin(0,0,14,0));
 		UVerticalBox* Labels=Make<UVerticalBox>(BP,TEXT("Column_DropLabels")); Row(RowWidget,Labels,1.f);
 		Col(Labels,Text(BP,TEXT("Text_Name"),NSLOCTEXT("KnightCodexEditor", "Archive20", "아이템"),16,true,false,true));

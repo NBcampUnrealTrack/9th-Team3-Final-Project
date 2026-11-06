@@ -147,24 +147,23 @@ void UKnightOperationMapTransition::Tick(float DeltaTime)
 	if (!IsExiting() && Elapsed == 0.f)
 		for (const auto& Track : Tracks)
 			if (Track.SlideFraction != 0.f && Track.Widget->GetCachedGeometry().GetLocalSize().X <= 0.f) return;
-	using namespace KnightOperationMapMotion;
 	Elapsed += FMath::Max(0.f, DeltaTime);
 	const float T = FMath::Clamp(Elapsed / FMath::Max(.01f, IsExiting() ? Settings.ExitDuration : Settings.EnterDuration), 0.f, 1.f);
 	if (!IsExiting())
 	{
 		const float R = FMath::Clamp((Elapsed - Settings.RewardDelay) / FMath::Max(.01f, Settings.EnterDuration - Settings.RewardDelay), 0.f, 1.f);
-		MapOffset = 1.f - Out(T); RewardOffset = 1.f - Out(R);
-		MapAlpha = Smooth(T / .65f); RewardAlpha = Smooth(R);
-		HomeAlpha = 1.f - Smooth(T / .55f); Reveal = Out(T);
-		Scan = Settings.ScanIntensity * Smooth(T / .12f) * (1.f - Smooth((T - .65f) / .35f));
+		MapOffset = 1.f - KnightOperationMapMotion::Out(T); RewardOffset = 1.f - KnightOperationMapMotion::Out(R);
+		MapAlpha = KnightOperationMapMotion::Smooth(T / .65f); RewardAlpha = KnightOperationMapMotion::Smooth(R);
+		HomeAlpha = 1.f - KnightOperationMapMotion::Smooth(T / .55f); Reveal = KnightOperationMapMotion::Out(T);
+		Scan = Settings.ScanIntensity * KnightOperationMapMotion::Smooth(T / .12f) * (1.f - KnightOperationMapMotion::Smooth((T - .65f) / .35f));
 	}
 	else
 	{
-		const float Move = InOut(T), Fade = 1.f - Smooth(T / .92f);
+		const float Move = KnightOperationMapMotion::InOut(T), Fade = 1.f - KnightOperationMapMotion::Smooth(T / .92f);
 		MapOffset = FMath::Lerp(StartMapOffset, 1.f, Move); RewardOffset = FMath::Lerp(StartRewardOffset, 1.f, Move);
 		MapAlpha = StartMapAlpha * Fade; RewardAlpha = StartRewardAlpha * Fade; Reveal = StartReveal * (1.f - Move);
-		HomeAlpha = FMath::Lerp(StartHomeAlpha, 1.f, Out((T - .25f * StartMapAlpha) / (1.f - .25f * StartMapAlpha)));
-		Scan = (StartScan * (1.f - Smooth(T / .35f)) + Settings.ScanIntensity * .55f * Smooth(T / .18f)) * Fade;
+		HomeAlpha = FMath::Lerp(StartHomeAlpha, 1.f, KnightOperationMapMotion::Out((T - .25f * StartMapAlpha) / (1.f - .25f * StartMapAlpha)));
+		Scan = (StartScan * (1.f - KnightOperationMapMotion::Smooth(T / .35f)) + Settings.ScanIntensity * .55f * KnightOperationMapMotion::Smooth(T / .18f)) * Fade;
 	}
 	Apply();
 	if (T >= 1.f)

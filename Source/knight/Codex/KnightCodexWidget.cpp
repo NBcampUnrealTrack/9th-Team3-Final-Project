@@ -30,12 +30,13 @@ namespace
 	const FLinearColor NormalColor(FColor(0x1B, 0x2B, 0x3A));
 	const FLinearColor LockedColor(FColor(0x15, 0x22, 0x2C));
 	FText OrPending(const FText& Value) { return Value.IsEmpty() ? LOCTEXT("Pending", "설명 준비 중") : Value; }
-	void SetImage(UImage* Image, UTexture2D* Texture, UWidget* Container = nullptr)
+	void SetImage(UImage* Image, UTexture2D* Texture, UWidget* Container = nullptr, bool bReserveSpace = false)
 	{
 		if (!Image) return;
 		Image->SetVisibility(Texture ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 		if (Texture) Image->SetBrushFromTexture(Texture, true);
-		if (Container) Container->SetVisibility(Texture ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
+		else Image->SetBrush(FSlateBrush());
+		if (Container) Container->SetVisibility(Texture || bReserveSpace ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
 	}
 	struct FQuestDropGroup
 	{
@@ -104,7 +105,7 @@ void UKnightCodexDropEntryWidget::Configure(const FknightRaidReward& Reward)
 {
 	const UknightItemDefinition* Item = Reward.Item;
 	if (Text_Name) Text_Name->SetText(Item && !Item->DisplayName.IsEmpty() ? Item->DisplayName : LOCTEXT("UnknownItem", "아이템 정보 없음"));
-	SetImage(Image_Icon, Item ? Item->Icon.LoadSynchronous() : nullptr, GetWidgetFromName(TEXT("Size_ItemIcon")));
+	SetImage(Image_Icon, Item ? Item->Icon.LoadSynchronous() : nullptr, GetWidgetFromName(TEXT("Size_ItemIcon")), true);
 	TArray<FText> Details;
 	if (Reward.MinCount == Reward.MaxCount)
 	{
@@ -125,7 +126,7 @@ void UKnightCodexDropEntryWidget::Configure(const FknightRaidReward& Reward)
 void UKnightCodexDropEntryWidget::ConfigureQuestDrop(const UknightItemDefinition* Item, const TArray<FText>& Sources)
 {
 	if (Text_Name) Text_Name->SetText(Item && !Item->DisplayName.IsEmpty() ? Item->DisplayName : LOCTEXT("UnknownItem", "아이템 정보 없음"));
-	SetImage(Image_Icon, Item ? Item->Icon.LoadSynchronous() : nullptr, GetWidgetFromName(TEXT("Size_ItemIcon")));
+	SetImage(Image_Icon, Item ? Item->Icon.LoadSynchronous() : nullptr, GetWidgetFromName(TEXT("Size_ItemIcon")), true);
 	if (Text_Details) Text_Details->SetText(FText::Join(FText::FromString(TEXT("\n")), Sources));
 }
 
@@ -468,7 +469,11 @@ void UKnightCodexWidget::RefreshBoss()
 		if (Text_BossDescription) Text_BossDescription->SetText(LOCTEXT("QuestLocked", "관련 퀘스트 완료 시 공개됩니다."));
 		if (Text_BossExtra) Text_BossExtra->SetVisibility(ESlateVisibility::Collapsed);
 		SetImage(Image_Portrait, nullptr, GetWidgetFromName(TEXT("Size_Portrait")));
-		if (Text_NoPortrait) Text_NoPortrait->SetVisibility(ESlateVisibility::Collapsed);
+		if (Text_NoPortrait)
+		{
+			Text_NoPortrait->SetText(LOCTEXT("IllustrationLocked", "미해금 기록"));
+			Text_NoPortrait->SetVisibility(ESlateVisibility::HitTestInvisible);
+		}
 		if (Box_Drops) Box_Drops->ClearChildren();
 		if (Text_NoDrops) Text_NoDrops->SetVisibility(ESlateVisibility::Collapsed);
 		return;
@@ -482,7 +487,11 @@ void UKnightCodexWidget::RefreshBoss()
 	}
 	UTexture2D* Portrait = Boss->Portrait.LoadSynchronous();
 	SetImage(Image_Portrait, Portrait, GetWidgetFromName(TEXT("Size_Portrait")));
-	if (Text_NoPortrait) Text_NoPortrait->SetVisibility(ESlateVisibility::Collapsed);
+	if (Text_NoPortrait)
+	{
+		Text_NoPortrait->SetText(LOCTEXT("IllustrationUnavailable", "등록된 이미지가 없습니다."));
+		Text_NoPortrait->SetVisibility(Portrait ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+	}
 	if (Box_Drops) Box_Drops->ClearChildren();
 	bool bDataUnavailable = false;
 	bool bFoundQuest = false;

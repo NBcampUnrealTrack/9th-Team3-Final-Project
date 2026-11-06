@@ -1,0 +1,202 @@
+#include "KnightCodexCheckCommandlet.h"
+#include "Codex/KnightCodexWidget.h"
+#include "Menu/UI/KnightMainMenuWidget.h"
+#include "Menu/KnightMenuGameMode.h"
+#include "Progression/knightSaveSubsystem.h"
+#include "Progression/knightProgressionSubsystem.h"
+#include "Quest/KnightQuestData.h"
+#include "Raid/knightRaidDefinition.h"
+#include "CommonGameViewportClient.h"
+#include "Components/Image.h"
+#include "Components/ScrollBox.h"
+#include "Components/TextBlock.h"
+#include "Engine/GameInstance.h"
+#include "Engine/LocalPlayer.h"
+#include "Engine/World.h"
+#include "Engine/Engine.h"
+#include "Engine/Texture2D.h"
+#include "Engine/TextureRenderTarget2D.h"
+#include "Engine/UserInterfaceSettings.h"
+#include "GameFramework/PlayerController.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Interfaces/ISlateRHIRendererModule.h"
+#include "Widgets/SVirtualWindow.h"
+#include "Slate/WidgetRenderer.h"
+#include "Input/HittestGrid.h"
+#include "ImageUtils.h"
+#include "Misc/FileHelper.h"
+#include "TextureCompiler.h"
+#include "UObject/UObjectIterator.h"
+#include "RenderingThread.h"
+#include "Async/TaskGraphInterfaces.h"
+
+int32 UKnightCodexCheckCommandlet::Main(const FString& Params)
+{
+    FString Namespace, Out, UserDir;
+    if (!FParse::Value(FCommandLine::Get(), TEXT("KnightSaveTestNamespace="), Namespace) || !Namespace.StartsWith(TEXT("Codex"))
+        || !FParse::Value(FCommandLine::Get(), TEXT("UserDir="), UserDir) || UserDir.IsEmpty()
+        || !FParse::Value(*Params, TEXT("Out="), Out) || !FParse::Param(FCommandLine::Get(), TEXT("AllowCommandletRendering"))) return 1;
+    IFileManager::Get().MakeDirectory(*Out,true);
+    if (!FSlateApplication::IsInitialized())
+    {
+        FSlateApplication::Create();
+        FSlateApplication::Get().InitializeRenderer(FModuleManager::LoadModuleChecked<ISlateRHIRendererModule>(TEXT("SlateRHIRenderer")).CreateSlateRHIRenderer());
+    }
+    int32 Checks=0, Failures=0;
+    auto Check=[&](bool Pass,const TCHAR* What)
+    { ++Checks; Failures+=!Pass; UE_LOG(LogTemp,Display,TEXT("CodexStatic %s %s"),Pass?TEXT("PASS"):TEXT("FAIL"),What); };
+    auto* GI=NewObject<UGameInstance>(GEngine); GI->AddToRoot(); GI->InitializeStandalone();
+    UWorld* World=GI->GetWorld();
+    TGuardValue<TSubclassOf<UGameViewportClient>> ViewportClass(GEngine->GameViewportClientClass,UCommonGameViewportClient::StaticClass());
+    auto* Settings=GetMutableDefault<UUserInterfaceSettings>();
+    TGuardValue<decltype(Settings->HardwareCursors)> CursorGuard(Settings->HardwareCursors,{});
+    auto* Viewport=NewObject<UCommonGameViewportClient>(GEngine);
+    GI->GetWorldContext()->GameViewport=Viewport; Viewport->Init(*GI->GetWorldContext(),GI,false);
+    auto* Local=NewObject<ULocalPlayer>(GEngine); GI->AddLocalPlayer(Local,FPlatformUserId::CreateFromInternalId(0));
+    auto* Player=World->SpawnActor<APlayerController>(); World->AddController(Player); Player->SetPlayer(Local);
+    auto* Save=GI->GetSubsystem<UknightSaveSubsystem>(); auto* Progress=GI->GetSubsystem<UknightProgressionSubsystem>();
+    const FString Profile=TEXT("Art")+FGuid::NewGuid().ToString(EGuidFormats::Digits).Left(10);
+    if (!Save || !Progress || !Save->SelectSlot(Profile)) return 1;
+    auto DrainSave=[&]()
+    {
+        const double Deadline=FPlatformTime::Seconds()+15.;
+        while (!Save->CanStartAtomicTransaction() && FPlatformTime::Seconds()<Deadline)
+        { FTaskGraphInterface::Get().ProcessThreadUntilIdle(ENamedThreads::GameThread); FTSTicker::GetCoreTicker().Tick(.01f); FPlatformProcess::Sleep(.01f); }
+        Check(Save->CanStartAtomicTransaction(),TEXT("isolated async save completed"));
+    };
+    auto ModeClass=LoadClass<AKnightMenuGameMode>(nullptr,TEXT("/Game/Knight/Blueprints/BP_GM_MainMenu.BP_GM_MainMenu_C"));
+    auto* Mode=ModeClass?World->SpawnActor<AKnightMenuGameMode>(ModeClass):nullptr; if(!Mode)return 1;
+    FString Error; Mode->InitGame(TEXT("CodexFixture"),FString(),Error);
+    auto MenuClass=LoadClass<UKnightMainMenuWidget>(nullptr,TEXT("/Game/Knight/UI/Menu/WBP_KnightMainMenu.WBP_KnightMainMenu_C"));
+    auto* Menu=MenuClass?CreateWidget<UKnightMainMenuWidget>(Player,MenuClass):nullptr; if(!Menu)return 1;
+    Menu->AddToRoot();
+    TSharedRef<SVirtualWindow> Window=SNew(SVirtualWindow); Window->SetContent(Menu->TakeWidget()); FSlateApplication::Get().RegisterVirtualWindow(Window);
+    auto* Renderer=new FWidgetRenderer(true); FHittestGrid Grid;
+    UTextureRenderTarget2D* Target=nullptr; FIntPoint Extent; float Scale=1.f;
+    auto Draw=[&](float Dt=0.f) { ++GFrameCounter; Renderer->DrawWindow(Target,Grid,Window,Scale,FVector2D(Extent),Dt); FlushRenderingCommands(); };
+    auto Resize=[&](FIntPoint Size)
+    {
+        if(Target)Target->RemoveFromRoot(); Extent=Size; Scale=Settings->GetDPIScaleBasedOnSize(Size); Window->Resize(FVector2D(Size));
+        Target=NewObject<UTextureRenderTarget2D>(); Target->AddToRoot(); Target->ClearColor=FLinearColor::Transparent;
+        Target->TargetGamma=1.f; Target->InitCustomFormat(Size.X,Size.Y,PF_FloatRGBA,true); Target->UpdateResourceImmediate(true); Draw(); Draw();
+    };
+    Resize(FIntPoint(1920,1080)); Check(Menu->ShowPage(EKnightMainMenuPage::Codex),TEXT("actual menu opens Codex")); Draw();
+    auto* Host=Cast<UPanelWidget>(Menu->GetWidgetFromName(TEXT("Panel_Codex")));
+    auto* Codex=Host?Cast<UKnightCodexWidget>(Host->GetChildAt(0)):nullptr; if(!Codex)return 1;
+    auto W=[&](const TCHAR* Name){return Codex->GetWidgetFromName(Name);};
+    auto Text=[&](const TCHAR* Name){const auto* T=Cast<UTextBlock>(W(Name));return T?T->GetText().ToString():FString();};
+    auto* Data=LoadObject<UKnightCodexData>(nullptr,TEXT("/Game/Knight/Data/DA_Codex.DA_Codex")); if(!Data)return 1;
+    auto* Portrait=CastChecked<UImage>(W(TEXT("Image_Portrait")));
+    auto* Drops=CastChecked<UPanelWidget>(W(TEXT("Box_Drops")));
+    auto* Scroll=CastChecked<UScrollBox>(W(TEXT("Scroll_BossDetail")));
+    auto* Bosses=CastChecked<UPanelWidget>(W(TEXT("Box_Bosses")));
+    auto DropText=[&]()
+    {
+        FString Result;
+        for(UWidget* Child:Drops->GetAllChildren()) if(auto* Row=Cast<UUserWidget>(Child))
+            for(const TCHAR* Name:{TEXT("Text_Name"),TEXT("Text_Details")})
+                if(auto* T=Cast<UTextBlock>(Row->GetWidgetFromName(Name)))Result+=T->GetText().ToString()+TEXT("\n");
+        return Result;
+    };
+    TSet<UTexture2D*> Prepared;
+    auto Capture=[&](const FString& Name)
+    {
+        Check(Menu->GetCurrentPage()==EKnightMainMenuPage::Codex,TEXT("capture is the visible Codex, not a hidden widget"));
+        FTextureCompilingManager::Get().FinishAllCompilation();
+        for(TObjectIterator<UTexture2D> It;It;++It) if(It->GetPathName().StartsWith(TEXT("/Game/Knight/"))&&!Prepared.Contains(*It))
+        { It->SetForceMipLevelsToBeResident(300); It->WaitForStreaming(); Prepared.Add(*It); }
+        Draw(); Draw(); TArray<FLinearColor> Linear; TArray<FColor> Pixels;
+        Check(Target->GameThread_GetRenderTargetResource()->ReadLinearColorPixels(Linear,FReadSurfaceDataFlags(RCM_MinMax)),TEXT("real Slate RHI readback"));
+        for(const auto& Pixel:Linear)Pixels.Add(Pixel.ToFColor(false));
+        TArray64<uint8> PNG; FImageUtils::PNGCompressImageArray(Extent.X,Extent.Y,Pixels,PNG);
+        Check(FFileHelper::SaveArrayToFile(PNG,*(Out/(Name+TEXT(".png")))),TEXT("capture saved"));
+    };
+    Codex->SelectCategory(2); Draw(); Check(Bosses->GetChildrenCount()==Data->Bosses.Num(),TEXT("catalog order and entry count preserved"));
+    Check(!Portrait->GetBrush().GetResourceObject()&&Drops->GetChildrenCount()==0,TEXT("fresh profile conceals illustration and rewards")); Capture(TEXT("01_Locked_1080"));
+    const int64 Money=Progress->GetMoney(); TArray<FknightItemStack> InitialItems; Progress->GetOwnedItems(InitialItems);
+    Check(Progress->RecordQuestCompleted(TEXT("Quest_0001")),TEXT("normal quest unlocks Janyeol through existing event")); DrainSave(); Draw();
+    const TMap<FName,FString> Art={{TEXT("Janyeol"),TEXT("/Game/Knight/UI/Book/Janyeol2.Janyeol2")},{TEXT("Janhyang"),TEXT("/Game/Knight/UI/Book/janhyang3.janhyang3")},{TEXT("Heukgwan"),TEXT("/Game/Knight/UI/Book/heukgwan1.heukgwan1")}};
+    for(const auto& Boss:Data->Bosses)Check(Boss.Portrait.ToSoftObjectPath().ToString()==Art.FindRef(Boss.BossId),TEXT("stable ID has approved explicit artwork reference"));
+    Codex->SelectBoss(TEXT("Janyeol")); Draw();
+    Check(Portrait->GetBrush().GetResourceObject()&&Drops->GetChildrenCount()==8,TEXT("unowned quest reward items and artwork shown for unlocked Janyeol"));
+    const FString JanyeolRewards=DropText();
+    Check(JanyeolRewards.Contains(TEXT("보통 · 완료"))&&JanyeolRewards.Contains(TEXT("어려움 · 완료"))&&JanyeolRewards.Contains(TEXT("부위 파괴: Head")),TEXT("difficulty and conditional sources remain separate"));
+    Capture(TEXT("02_Janyeol_1080"));
+    auto CheckLayout=[&]()
+    {
+        const auto& G=Portrait->GetCachedGeometry(); const auto S=G.GetLocalSize(); const auto A=G.LocalToAbsolute(FVector2D::ZeroVector); const auto B=G.LocalToAbsolute(S);
+        Check(FMath::IsNearlyEqual(S.X/S.Y,1.5f,.001f)&&A.X>=0&&A.Y>=0&&B.X<=Extent.X+1&&B.Y<=Extent.Y+1,TEXT("whole 3:2 illustration fits viewport"));
+        Check(W(TEXT("Panel_Illustration"))->GetCachedGeometry().GetLocalSize().X>W(TEXT("Panel_Reader"))->GetCachedGeometry().GetLocalSize().X,TEXT("illustration is largest column"));
+        UE_LOG(LogTemp,Display,TEXT("CodexStatic GEOMETRY %dx%d dpi=%.3f art=(%.1f,%.1f)-(%.1f,%.1f)"),Extent.X,Extent.Y,Scale,A.X,A.Y,B.X,B.Y);
+    };
+    CheckLayout(); const FVector2D BeforeScroll=Portrait->GetCachedGeometry().LocalToAbsolute(FVector2D::ZeroVector);
+    Scroll->ScrollToEnd(); Capture(TEXT("03_Janyeol_Rewards_1080"));
+    Check(Scroll->GetScrollOffset()>0&&Portrait->GetCachedGeometry().LocalToAbsolute(FVector2D::ZeroVector).Equals(BeforeScroll,.1f),TEXT("information scroll leaves illustration stationary"));
+    for(UWidget* Child:Drops->GetAllChildren())
+    { auto* Row=CastChecked<UUserWidget>(Child); Check(CastChecked<UImage>(Row->GetWidgetFromName(TEXT("Image_Icon")))->GetBrush().GetResourceObject()!=nullptr,TEXT("configured reward uses actual material icon")); }
+    Check(Menu->SelectQuest(TEXT("Quest_Janhyang_Hard")),TEXT("different quest can be selected independently"));
+    // SelectQuest navigates to the map. Complete that existing transition before
+    // returning to Codex so subsequent captures cannot paint the wrong screen.
+    Draw(); Draw(.5f); Draw();
+    Check(Menu->ShowPage(EKnightMainMenuPage::Codex),TEXT("return from quest selection to visible Codex"));
+    Draw(); Codex->SelectCategory(2);
+    Codex->SelectBoss(TEXT("Janyeol")); Check(DropText()==JanyeolRewards,TEXT("selected quest cannot change another monster's drops"));
+    Check(Progress->RecordQuestCompleted(TEXT("Quest_0002")),TEXT("normal quest unlocks Janhyang")); DrainSave();
+    Codex->SelectBoss(TEXT("Janhyang")); Draw();
+    Check(Drops->GetChildrenCount()==8&&DropText()!=JanyeolRewards&&DropText().Contains(TEXT("부위 파괴: Chest"))&&DropText().Contains(TEXT("부위 파괴: Tail")),TEXT("switch updates matching Janhyang quest rewards and actual tags"));
+    Check(Portrait->GetBrush().GetResourceObject()->GetPathName()==Art.FindChecked(TEXT("Janhyang")),TEXT("switch updates artwork without stale Janyeol image"));
+    Capture(TEXT("04_Janhyang_1080"));
+    Resize(FIntPoint(1280,720)); Capture(TEXT("05_Janhyang_720")); CheckLayout();
+    Scroll->ScrollToEnd(); Capture(TEXT("06_Janhyang_Rewards_720"));
+    Resize(FIntPoint(2560,1080)); Capture(TEXT("07_Janhyang_Ultrawide")); CheckLayout();
+    Codex->SelectBoss(TEXT("Heukgwan")); Check(!Portrait->GetBrush().GetResourceObject()&&Drops->GetChildrenCount()==0,TEXT("Heukgwan remains locked; old artwork and drops cleared"));
+    Capture(TEXT("08_Heukgwan_Locked_Ultrawide"));
+    // Presentation-only fixture: temporarily borrow an already completed quest in memory.
+    // Never save the asset or introduce a new quest/progression route for the unfinished monster.
+    auto* Heukgwan=Data->Bosses.FindByPredicate([](const auto& B){return B.BossId==TEXT("Heukgwan");});
+    if(Heukgwan)
+    {
+        TGuardValue<FName> UnlockFixture(Heukgwan->RequiredQuestId,TEXT("Quest_0002"));
+        Codex->Open(); Codex->SelectCategory(2);
+        Codex->SelectBoss(TEXT("Heukgwan")); Resize(FIntPoint(1920,1080)); Capture(TEXT("09_Heukgwan_ArtworkFixture")); CheckLayout();
+        Check(Drops->GetChildrenCount()==0,TEXT("artwork fixture fabricates no rewards or monster data"));
+        TGuardValue<TSoftObjectPtr<UTexture2D>> MissingArt(Heukgwan->Portrait,{});
+        Codex->SelectBoss(TEXT("Heukgwan")); Check(!Portrait->GetBrush().GetResourceObject()&&W(TEXT("Text_NoPortrait"))->IsVisible(),TEXT("missing artwork clears old resource and has safe fallback"));
+    }
+    Codex->Open(); Codex->SelectCategory(2); Codex->SelectBoss(TEXT("Janyeol"));
+    {
+        auto* Row=CastChecked<UKnightCodexDropEntryWidget>(Drops->GetChildAt(0));
+        Row->ConfigureQuestDrop(nullptr,{});
+        Check(!CastChecked<UImage>(Row->GetWidgetFromName(TEXT("Image_Icon")))->GetBrush().GetResourceObject()
+            && Row->GetWidgetFromName(TEXT("Size_ItemIcon"))->IsVisible(),TEXT("missing icon clears stale image while preserving material alignment"));
+        Codex->SelectBoss(TEXT("Janyeol"));
+    }
+    auto* First=CastChecked<UUserWidget>(Bosses->GetChildAt(0)); auto* Second=CastChecked<UUserWidget>(Bosses->GetChildAt(1));
+    auto* Selected=CastChecked<UKnightCodexArchiveButton>(First->GetWidgetFromName(TEXT("Button_Select")));
+    auto* Focused=CastChecked<UKnightCodexArchiveButton>(Second->GetWidgetFromName(TEXT("Button_Select")));
+    FSlateApplication::Get().SetKeyboardFocus(Focused->TakeWidget(),EFocusCause::Navigation); Draw();
+    Check(Selected->IsRecordSelected()&&!Focused->IsRecordSelected()&&Focused->HasKeyboardFocus(),TEXT("input focus on another entry does not change selection")); Capture(TEXT("10_SelectedAndFocused"));
+    FPointerEvent Pointer;
+    Focused->TakeWidget()->OnMouseEnter(Focused->GetCachedGeometry(),Pointer); Capture(TEXT("11_Hover")); Focused->TakeWidget()->OnMouseLeave(Pointer);
+    Check(!Focused->IsHovered()&&Selected->IsRecordSelected(),TEXT("hover clears without losing genuine selection"));
+    {
+        auto* Entry=CastChecked<UKnightCodexBossEntryWidget>(First);
+        Entry->Configure(TEXT("Janyeol"),FText::FromString(TEXT("아주 긴 한국어 몬스터 이름 줄바꿈 확인")),nullptr,true);
+        Resize(FIntPoint(1280,720)); Capture(TEXT("12_LongName_720"));
+        Check(First->GetCachedGeometry().GetLocalSize().X<=W(TEXT("Size_EntryList"))->GetCachedGeometry().GetLocalSize().X,TEXT("long Korean name stays within list column"));
+    }
+    Check(Menu->RequestBack()&&Menu->GetCurrentPage()==EKnightMainMenuPage::Home,TEXT("shared Back/Esc route returns to menu"));
+    Check(Menu->ShowPage(EKnightMainMenuPage::Codex),TEXT("Codex reopens through actual menu")); Draw();
+    Check(Codex->GetFocusButton()->HasUserFocus(Player),TEXT("reentry restores category focus"));
+    CastChecked<UButton>(W(TEXT("Button_Close")))->OnClicked.Broadcast(); Check(Menu->GetCurrentPage()==EKnightMainMenuPage::Home,TEXT("footer button returns to menu"));
+    Menu->ShowPage(EKnightMainMenuPage::Codex); Codex->SelectCategory(2); Codex->SelectBoss(TEXT("Janhyang")); DrainSave();
+    Check(Save->SelectSlot(Profile+TEXT("B")),TEXT("switch to independent empty profile")); Draw();
+    Check(!Portrait->GetBrush().GetResourceObject()&&Drops->GetChildrenCount()==0,TEXT("profile switch clears unlocked artwork and rewards"));
+    Check(Save->SelectSlot(Profile),TEXT("restore isolated profile")); Draw();
+    TArray<FknightItemStack> FinalItems; Progress->GetOwnedItems(FinalItems);
+    Check(Progress->GetMoney()==Money&&InitialItems.Num()==FinalItems.Num(),TEXT("read-only Codex grants no money or inventory")); DrainSave();
+    FSlateApplication::Get().UnregisterVirtualWindow(Window); BeginCleanup(Renderer); FlushRenderingCommands();
+    Target->RemoveFromRoot(); Menu->RemoveFromRoot(); GI->Shutdown(); GEngine->DestroyWorldContext(World); World->DestroyWorld(false); GI->RemoveFromRoot();
+    UE_LOG(LogTemp,Display,TEXT("CodexStatic COMPLETE checks=%d failures=%d output=%s"),Checks,Failures,*Out);
+    return Failures?1:0;
+}

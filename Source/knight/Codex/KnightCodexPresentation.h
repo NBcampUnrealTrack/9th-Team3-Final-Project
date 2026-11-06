@@ -30,7 +30,7 @@ private:
 	TSharedPtr<SWidget> SymbolSlate;
 };
 
-/** Codex-only button chrome: thin accent border and 140 ms state transitions. */
+/** Codex-only static button chrome. Selection and input focus have distinct edges. */
 UCLASS()
 class KNIGHT_API UKnightCodexArchiveButton : public UButton
 {

@@ -96,17 +96,20 @@ namespace
 		{
 			Owner = InOwner; SButton::Construct(Args); SetCanTick(false);
 		}
+		// This control paints focus on its existing outer edge; suppress only its
+		// default Slate focus brush, keeping keyboard/controller focus functional.
+		virtual const FSlateBrush* GetFocusBrush() const override { return nullptr; }
 		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& G, const FSlateRect& Clip,
 			FSlateWindowElementList& Out, int32 Layer, const FWidgetStyle& PaintStyle, bool ParentEnabled) const override
 		{
 			const bool Enabled = ParentEnabled && IsEnabled();
 			const bool Locked = Owner.IsValid() && Owner->IsRecordLocked();
 			const float Selected = Owner.IsValid() && Owner->IsRecordSelected() ? 1.f : 0.f;
-			const float Hover = Enabled && !Locked && (IsHovered() || HasKeyboardFocus()) ? 1.f : 0.f;
+			const float Hover = Enabled && IsHovered() ? 1.f : 0.f;
 			const FVector2D S = G.GetLocalSize();
 			const float X = S.X - 1.f, Y = S.Y - 1.f, C = 9.f;
 			FLinearColor Base = Color(TEXT("071018"), Locked ? .60f : .72f);
-			FLinearColor Active = Color(TEXT("075DB7"), .88f);
+			FLinearColor Active = Color(TEXT("163548"), .92f);
 			FLinearColor Background = FMath::Lerp(Base, Active, Selected);
 			Background = FMath::Lerp(Background, Color(TEXT("163246"), .87f), Hover * (1.f - Selected) * .8f);
 			if (!Enabled) Background.A *= .55f;
@@ -120,8 +123,6 @@ namespace
 				FLinearColor Marker = Color(TEXT("7ADFFF"), Selected);
 				Line(Out, Layer+3, G, {{3,5},{3,Y-5}}, Marker, 3.f);
 			}
-			if (HasKeyboardFocus())
-				Line(Out, Layer+3, G, {{5,15},{5,5},{25,5}}, Edge, 2.f);
 			return SButton::OnPaint(Args, G, Clip, Out, Layer+4, PaintStyle, ParentEnabled);
 		}
 	private:
