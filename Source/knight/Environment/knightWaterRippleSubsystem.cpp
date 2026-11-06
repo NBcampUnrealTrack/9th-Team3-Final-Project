@@ -497,7 +497,13 @@ void UknightWaterRippleSubsystem::UpdateContact(FTrackedCharacter& Tracked, FBod
 	if (StrikeSpeed > 0.f && bSubmerged && ClaimSplash(Tracked, Surface, MergeRadius, Now))
 	{
 		const float SpeedScale = FMath::Clamp(StrikeSpeed / Settings->SplashReferenceDownSpeed, Settings->SplashSpeedScaleRange.X, Settings->SplashSpeedScaleRange.Y);
-		SpawnSplash(Surface, SizeRatio * SpeedScale);
+#if !UE_BUILD_SHIPPING
+		if (knightWaterRipple::CVarDebug.GetValueOnGameThread() >= 2)
+		{
+			UE_LOG(Logknight, Log, TEXT("Water splash strike: %s %s width %.0f down %.0f"), *GetNameSafe(Tracked.Character.Get()), *Setup->BoneName.ToString(), HalfWidth, StrikeSpeed);
+		}
+#endif
+		SpawnSplash(Surface, SizeRatio * SpeedScale, HalfWidth);
 		return;
 	}
 
@@ -508,7 +514,13 @@ void UknightWaterRippleSubsystem::UpdateContact(FTrackedCharacter& Tracked, FBod
 	{
 		Contact.NextWakeTime = Now + Settings->SplashWakeInterval;
 		const float SpeedScale = FMath::Clamp(SideSpeed / (WakeSpeed * 2.f), Settings->SplashSpeedScaleRange.X, Settings->SplashSpeedScaleRange.Y);
-		SpawnSplash(Surface, SizeRatio * SpeedScale);
+#if !UE_BUILD_SHIPPING
+		if (knightWaterRipple::CVarDebug.GetValueOnGameThread() >= 2)
+		{
+			UE_LOG(Logknight, Log, TEXT("Water splash wake: %s %s width %.0f side %.0f"), *GetNameSafe(Tracked.Character.Get()), *Setup->BoneName.ToString(), HalfWidth, SideSpeed);
+		}
+#endif
+		SpawnSplash(Surface, SizeRatio * SpeedScale, HalfWidth);
 	}
 }
 
@@ -553,14 +565,19 @@ float UknightWaterRippleSubsystem::DetectStrike(FBodyContact& Contact, float Dow
 	return StrikeSpeed;
 }
 
-void UknightWaterRippleSubsystem::SpawnSplash(const FVector& Location, float SizeScale) const
+void UknightWaterRippleSubsystem::SpawnSplash(const FVector& Location, float SizeScale, float HalfWidth) const
 {
 	UWorld* const World = GetWorld();
 	const UknightWaterRippleSettings* const Settings = GetDefault<UknightWaterRippleSettings>();
-	UNiagaraSystem* const System = SizeScale >= Settings->SplashHeavyScale && SplashHeavySystem ? SplashHeavySystem.Get() : SplashSystem.Get();
+	const bool bHeavy = SizeScale >= Settings->SplashHeavyScale && HalfWidth >= Settings->SplashHeavyMinBodySize && SplashHeavySystem;
+	UNiagaraSystem* const System = bHeavy ? SplashHeavySystem.Get() : SplashSystem.Get();
+	float Scale = Settings->SplashScale * FMath::Min(SizeScale, Settings->SplashMaxScale);
+	if (!bHeavy)
+	{
+		Scale = FMath::Min(Scale, Settings->SplashLightMaxScale);
+	}
 	if (System)
 	{
-		const float Scale = Settings->SplashScale * FMath::Min(SizeScale, Settings->SplashMaxScale);
 		UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, System, Location, FRotator::ZeroRotator, FVector(Scale), true, true, ENCPoolMethod::AutoRelease);
 	}
 	if (SplashSound)
@@ -575,7 +592,8 @@ void UknightWaterRippleSubsystem::SpawnSplash(const FVector& Location, float Siz
 	}
 	if (DebugMode >= 2)
 	{
-		UE_LOG(Logknight, Log, TEXT("Water splash at (%.0f, %.0f, %.0f) scale %.2f"), Location.X, Location.Y, Location.Z, SizeScale);
+		UE_LOG(Logknight, Log, TEXT("Water splash at (%.0f, %.0f, %.0f) scale %.2f -> %s x%.2f"), Location.X, Location.Y, Location.Z, SizeScale,
+			bHeavy ? TEXT("Heavy") : TEXT("Light"), Scale);
 	}
 #endif
 }

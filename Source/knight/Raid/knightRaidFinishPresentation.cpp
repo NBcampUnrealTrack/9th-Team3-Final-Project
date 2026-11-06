@@ -6,6 +6,7 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
+#include "Environment/knightWaterRippleSubsystem.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "Monster/knightMonsterCharacterBase.h"
@@ -14,6 +15,7 @@
 #include "Raid/knightRaidGameState.h"
 #include "Sound/SoundClass.h"
 #include "Sound/SoundMix.h"
+#include "TimerManager.h"
 #include "knight.h"
 
 namespace knightRaidFinish
@@ -78,6 +80,8 @@ bool UknightRaidFinishPresentation::Start(AknightMonsterCharacterBase& InMonster
 	InPlayerController.SetIgnoreLookInput(true);
 	bInputIgnored = true;
 
+	bWasFalling = !HasLanded();
+	LastWaterSplashTime = -1.0;
 	TickHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateUObject(this, &ThisClass::Tick));
 	SetStage(EknightRaidFinishStage::Slow);
 	UE_LOG(Logknight, Log, TEXT("Finish presentation: %s down, impact expected %.2fs after death, slow x%.2f for %.1fs, body radius %.0f."),
@@ -110,6 +114,12 @@ bool UknightRaidFinishPresentation::Tick(float DeltaTime)
 	}
 	StageTime += DeltaTime;
 	const float SinceDeath = static_cast<float>(World->GetTimeSeconds() - DeathGameTime);
+	// 공중에서 떨어진 몸이 물에 닿는 순간. 쿵(사망 몽타주의 쓰러짐)은 따로 BeginImpact에서 낸다.
+	if (bWasFalling && HasLanded())
+	{
+		bWasFalling = false;
+		SplashOnWater(Settings.FallWaterSplashScale);
+	}
 
 	switch (Stage)
 	{
@@ -271,6 +281,7 @@ void UknightRaidFinishPresentation::BeginImpact()
 		const UCapsuleComponent* const Capsule = Target->GetCapsuleComponent();
 		const FVector Feet = Target->GetActorLocation() - FVector(0.f, 0.f, Capsule ? Capsule->GetScaledCapsuleHalfHeight() : 0.f);
 		const FVector Ground(GetBodyCenter().X, GetBodyCenter().Y, Feet.Z);
+		SplashOnWater(Settings.ImpactWaterSplashScale);
 		if (UNiagaraSystem* const Effect = Settings.ImpactEffect.LoadSynchronous())
 		{
 			UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, Effect, Ground, FRotator::ZeroRotator, FVector(Settings.ImpactEffectScale), true, true,
@@ -286,6 +297,44 @@ void UknightRaidFinishPresentation::BeginImpact()
 	{
 		OnImpact();
 	}
+}
+
+void UknightRaidFinishPresentation::SplashOnWater(float Scale)
+{
+	const AknightMonsterCharacterBase* const Target = Monster.Get();
+	UWorld* const World = Target ? Target->GetWorld() : nullptr;
+	UNiagaraSystem* const Splash = Scale > 0.f ? Settings.WaterSplash.LoadSynchronous() : nullptr;
+	// 떨어져 닿자마자 쿵이 오면 같은 물보라가 겹친다.
+	if (!World || !Splash || (LastWaterSplashTime >= 0.0 && World->GetRealTimeSeconds() - LastWaterSplashTime < 0.5))
+	{
+		return;
+	}
+	const FVector Center = GetBodyCenter();
+	float SurfaceZ = 0.f;
+	const UCapsuleComponent* const Capsule = Target->GetCapsuleComponent();
+	const float FeetZ = Target->GetActorLocation().Z - (Capsule ? Capsule->GetScaledCapsuleHalfHeight() : 0.f);
+	// 수면이 발보다 한참 아래면(물 위 다리, 높은 지형) 물에 쓰러진 게 아니다.
+	if (!UknightWaterRippleSubsystem::FindWaterSurface(World, Center, SurfaceZ) || FeetZ > SurfaceZ + 100.f)
+	{
+		return;
+	}
+	const FVector Location(Center.X, Center.Y, SurfaceZ);
+	UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, Splash, Location, FRotator::ZeroRotator, FVector(Scale), true, true, ENCPoolMethod::AutoRelease);
+	if (UNiagaraSystem* const Fall = Settings.WaterSplashFall.LoadSynchronous())
+	{
+		// 솟구친 물이 쏟아지는 때. 슬로모션이면 같이 늦어지게 게임 시간 타이머로 건다.
+		FTimerHandle Handle;
+		World->GetTimerManager().SetTimer(Handle, FTimerDelegate::CreateWeakLambda(World, [World, Fall, Location, Scale]
+		{
+			UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, Fall, Location, FRotator::ZeroRotator, FVector(Scale), true, true, ENCPoolMethod::AutoRelease);
+		}), FMath::Max(Settings.WaterSplashFallDelay, 0.01f), false);
+	}
+	if (UknightWaterRippleSubsystem* const Ripples = World->GetSubsystem<UknightWaterRippleSubsystem>(); Ripples && Settings.WaterRippleDepth > 0.f)
+	{
+		Ripples->AddImpulse(Location, Settings.WaterRippleRadius * Scale, Settings.WaterRippleDepth);
+	}
+	LastWaterSplashTime = World->GetRealTimeSeconds();
+	UE_LOG(Logknight, Log, TEXT("Finish presentation: %s water splash x%.2f (stage %s)."), *Target->GetName(), Scale, *UEnum::GetValueAsString(Stage));
 }
 
 FVector UknightRaidFinishPresentation::GetBodyCenter() const
