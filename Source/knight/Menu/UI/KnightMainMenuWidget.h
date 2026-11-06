@@ -43,6 +43,7 @@ class KNIGHT_API UKnightMainMenuWidget : public UKnightMenuWidgetBase
 	GENERATED_BODY()
 	friend class UknightEquipmentActionCheckCommandlet;
 	friend class UknightMaintenanceEntranceCheckCommandlet;
+	friend class UknightOperationMapCheckCommandlet;
 
 public:
 	UFUNCTION(BlueprintPure, Category="Knight|Menu")
@@ -69,6 +70,8 @@ protected:
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 	virtual FReply NativeOnPreviewKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
 	virtual FReply NativeOnKeyUp(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
+	virtual bool NativeSupportsCustomNavigation() const override;
+	virtual FNavigationReply NativeOnNavigation(const FGeometry& Geometry, const FNavigationEvent& Event, const FNavigationReply& DefaultReply) override;
 	virtual EKnightFlowState GetExpectedFlowState() const override { return EKnightFlowState::MainMenu; }
 	virtual bool HandleBackRequested() override;
 	virtual bool ShouldAllowEscapeToChild() const override;
@@ -188,7 +191,10 @@ private:
 	bool ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDuringTravel);
 	bool OpenMaterialsShortcut();
 	bool RebuildMapMarkers();
-	void ShowSelectedRegionQuests();
+	void ShowSelectedRegionQuests(bool bAnimate = true);
+	void SaveOperationMapContext();
+	void RestoreOperationMapContext();
+	FString OperationMapProfile;
 	void PlaceQuestPanel();
 	void RefreshStageDetails();
 	void RefreshRaidDetails();

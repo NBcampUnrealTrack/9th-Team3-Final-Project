@@ -28,6 +28,9 @@ public:
 	/** Owner-controlled tab/list selection; actions never latch. Opt-in so other screens retain their presentation. */
 	UFUNCTION(BlueprintCallable, Category="Knight|Button")
 	void ConfigureMaintenanceButton(bool bInSelectable, bool bMainTab = false);
+	/** Static blue feedback, scoped to the operation-map information panel. */
+	UFUNCTION(BlueprintCallable, Category="Knight|Button")
+	void ConfigureOperationMapButton(bool bInSelectable);
 	UFUNCTION(BlueprintCallable, Category="Knight|Button")
 	void SetButtonText(const FText& InText);
 
@@ -128,6 +131,7 @@ private:
 	bool bPressedVisual = false;
 	bool bFocusedVisual = false;
 	bool bMaintenancePresentation = false;
+	bool bOperationMapPresentation = false;
 
 	FTSTicker::FDelegateHandle MotionTicker;
 };

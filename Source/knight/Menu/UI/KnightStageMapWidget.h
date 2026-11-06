@@ -32,6 +32,12 @@ struct KNIGHT_API FKnightMapMarker
 	/** Drawn grey; still selectable so the panel can explain why it is locked. */
 	UPROPERTY(BlueprintReadWrite, Category="Knight|Map")
 	bool bLocked = false;
+
+	UPROPERTY(BlueprintReadWrite, Category="Knight|Map")
+	FText Availability;
+
+	UPROPERTY(BlueprintReadWrite, Category="Knight|Map")
+	FText ClearHistory;
 };
 
 /** Quest pin placed relative to a painted map region, independently from the raid StageId. */
@@ -55,6 +61,9 @@ struct KNIGHT_API FKnightMapQuestMarker
 
 	UPROPERTY(BlueprintReadWrite, Category="Knight|Map")
 	bool bLocked = false;
+
+	UPROPERTY(BlueprintReadWrite, Category="Knight|Map")
+	bool bCompleted = false;
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FKnightMapStageClicked, FName, StageId);
@@ -64,8 +73,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FKnightMapQuestClicked, FName, Quest
  * Stage-select map: a flat (equirectangular) dot map larger than the widget, panned by dragging and stopped at its edges.
  * Each stage is a soft-edged region around its location; clicking anywhere in a region selects the stage.
  *
- * The material paints the dots, grid and regions. This class paints the region names and marks, the sonar rings that
- * keep spreading from the selected stage, and a leader line from the selected mark to LeaderTarget (the info panel).
+ * The material paints the dots, grid, regions and a continuous silhouette sweep. This class paints region names,
+ * progression marks and a leader line from the selected mark to LeaderTarget (the info panel).
  *
  * Regions reach the material as vector parameters Region0 .. Region7 = (u, v, radius in map pixels, state),
  * state 0 = unused, 1 normal, 2 hovered, 3 selected, +3 when locked. Stages past the eighth have no painted region.
@@ -87,10 +96,16 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category="Knight|Map")
 	void SetSelectedQuest(FName QuestId);
+	bool CycleQuestMarker(int32 Direction);
 
 	/** NAME_None clears the selection. Does not broadcast OnStageClicked. */
 	UFUNCTION(BlueprintCallable, Category="Knight|Map")
 	void SetSelectedStage(FName StageId);
+	void RestoreSelection(FName StageId);
+	void ResetView();
+	void RestoreView(FVector2D InCenter, float Latitude);
+	FVector2D GetViewCenter() const { return Center; }
+	float GetVisibleLatitude() const { return VisibleLatitude; }
 
 	UFUNCTION(BlueprintPure, Category="Knight|Map")
 	FName GetSelectedStage() const { return SelectedStageId; }
@@ -109,6 +124,7 @@ public:
 	FKnightMapQuestClicked OnQuestClicked;
 
 protected:
+	friend class UknightOperationMapCheckCommandlet;
 	virtual void NativeOnInitialized() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 	virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect,
@@ -119,7 +135,7 @@ protected:
 	virtual FReply NativeOnMouseWheel(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual void NativeOnMouseLeave(const FPointerEvent& InMouseEvent) override;
 
-	/** UI-domain material with vector parameters ViewRect (u, v, width, height of the visible part), MapPixels, Region0..7 and scalar Blink. */
+	/** UI-domain material: ViewRect, MapPixels, Region0..7, RegionEffect0..7 and SelectionTuning. */
 	UPROPERTY(EditAnywhere, Category="Knight|Map")
 	TObjectPtr<UMaterialInterface> MapMaterial;
 
@@ -131,14 +147,27 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Knight|Map", meta=(ClampMin=30, ClampMax=90, Units="deg"))
 	float LatitudeLimit = 75.f;
 
-	/** Sonar ring around the selected stage: a new ring every PingInterval seconds, each living PingLifetime. */
+	UPROPERTY(EditAnywhere, Category="Knight|Map|Selection", meta=(ClampMin="0.25", ClampMax="0.4"))
+	float SweepDuration = .34f; // Legacy serialized one-shot tuning, retained for compatibility.
+	UPROPERTY(EditAnywhere, Category="Knight|Map|Selection", meta=(ClampMin="2.5", ClampMax="3.5"))
+	float LoopDuration = 3.f;
+	UPROPERTY(EditAnywhere, Category="Knight|Map|Selection", meta=(ClampMin="0.05", ClampMax="0.3"))
+	float SelectionFadeDuration = .12f;
+	UPROPERTY(EditAnywhere, Category="Knight|Map|Selection", meta=(ClampMin="0.1", ClampMax="1"))
+	float OutlineBrightness = .58f;
+	UPROPERTY(EditAnywhere, Category="Knight|Map|Selection", meta=(ClampMin="1", ClampMax="20"))
+	float SelectionGlowWidth = 7.f;
+	UPROPERTY(EditAnywhere, Category="Knight|Map|Selection", meta=(ClampMin="0", ClampMax="0.4"))
+	float InteriorOpacity = .13f;
+
+	/** Legacy serialized sonar tuning, retained for asset compatibility; no longer used. */
 	UPROPERTY(EditAnywhere, Category="Knight|Map", meta=(ClampMin=0.1))
 	float PingInterval = 1.1f;
 
 	UPROPERTY(EditAnywhere, Category="Knight|Map", meta=(ClampMin=0.1))
 	float PingLifetime = 1.4f;
 
-	/** How far a ring spreads before it fades out. Slate units. */
+	/** Legacy serialized sonar radius; no longer used. */
 	UPROPERTY(EditAnywhere, Category="Knight|Map", meta=(ClampMin=0))
 	float PingRadius = 220.f;
 
@@ -195,6 +224,10 @@ private:
 	FVector2D FocusCenter = FVector2D::ZeroVector;
 
 	float Time = 0.f;
-	/** Time when the current stage was selected; rings and the blink count from here. */
+	/** Session clock and selection origin. Hidden widgets do not advance their loop. */
 	float SelectTime = 0.f;
+	TMap<FName, float> SelectionWeights;
+	TMap<FName, TArray<float>> ContourLengths;
+	float GetContourAngle(FName RegionId, float Phase) const;
+	float InitialVisibleLatitude = 110.f;
 };

@@ -13,7 +13,7 @@ namespace
 	const FLinearColor MapFrost(FColor(0xA8, 0xC8, 0xF0));
 	const FLinearColor FrostDim(FColor(0x5F, 0x7F, 0xA8));
 	const FLinearColor MapWhite(FColor(0xF4, 0xF8, 0xFC));
-	const FLinearColor MapEmber(FColor(0xFF, 0x7A, 0x1A));
+	const FLinearColor MapBlue(FColor(0x77, 0xC5, 0xFF));
 	const FLinearColor LockedGrey(FColor(0x7A, 0x84, 0x90));
 
 	/** Clicks that move less than this are clicks, not drags. Slate units. */
@@ -21,10 +21,6 @@ namespace
 	/** Clicks this close to a region's mark or name also count. */
 	constexpr float MarkerHitRadius = 22.f;
 	constexpr int32 MaxRegions = 8;
-	/** The selected region flashes on and off this many seconds after it is picked, switching every BlinkStep. */
-	constexpr float BlinkDuration = 0.6f;
-	constexpr float BlinkStep = 0.15f;
-	constexpr int32 RingSegments = 64;
 
 	FLinearColor WithAlpha(const FLinearColor& Color, float Alpha)
 	{
@@ -73,6 +69,7 @@ UKnightStageMapWidget::UKnightStageMapWidget(const FObjectInitializer& ObjectIni
 void UKnightStageMapWidget::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
+	InitialVisibleLatitude = VisibleLatitude;
 	if (MapMaterial)
 	{
 		MapMID = UMaterialInstanceDynamic::Create(MapMaterial, this);
@@ -84,6 +81,23 @@ void UKnightStageMapWidget::NativeOnInitialized()
 void UKnightStageMapWidget::SetMarkers(const TArray<FKnightMapMarker>& InMarkers)
 {
 	Markers = InMarkers;
+    // Arc-length lookup is geometry-only. Refreshes rebuild it without restarting the clock.
+    ContourLengths.Reset();
+    for (const auto& Marker : Markers)
+    {
+        auto& Lengths = ContourLengths.Add(Marker.StageId); Lengths.Add(0.f);
+        const auto UV = ToUV(Marker.Location);
+        FVector2D Previous(-RegionWobble(-PI,UV),0);
+        for (int32 I=1; I<=256; ++I)
+        {
+            const float A = -PI + 2.f * PI * I / 256.f;
+            const FVector2D Point = FVector2D(FMath::Cos(A),FMath::Sin(A)) * RegionWobble(A,UV);
+            Lengths.Add(Lengths.Last() + FVector2D::Distance(Previous,Point)); Previous = Point;
+        }
+        const float Total = Lengths.Last(); for (float& Length : Lengths) Length /= Total;
+    }
+	for (auto It = SelectionWeights.CreateIterator(); It; ++It)
+		if (!Markers.ContainsByPredicate([&](const FKnightMapMarker& M) { return M.StageId == It.Key(); })) It.RemoveCurrent();
 	HoveredIndex = INDEX_NONE;
 	if (!Markers.ContainsByPredicate([this](const FKnightMapMarker& Marker) { return Marker.StageId == SelectedStageId; }))
 	{
@@ -116,6 +130,27 @@ void UKnightStageMapWidget::SetSelectedQuest(FName QuestId)
 	SelectedQuestId = QuestId;
 }
 
+bool UKnightStageMapWidget::CycleQuestMarker(int32 Direction)
+{
+    TArray<FName> Ids;
+    for (const auto& Pin : QuestMarkers) if (Pin.RegionId == SelectedStageId) Ids.Add(Pin.QuestId);
+    if (Ids.IsEmpty()) return false;
+    const int32 Current = Ids.IndexOfByKey(SelectedQuestId);
+    const int32 Next = Current == INDEX_NONE ? (Direction >= 0 ? 0 : Ids.Num()-1)
+        : (Current + (Direction >= 0 ? 1 : -1) + Ids.Num()) % Ids.Num();
+    OnQuestClicked.Broadcast(Ids[Next]);
+    return true;
+}
+
+float UKnightStageMapWidget::GetContourAngle(FName RegionId, float Phase) const
+{
+    const TArray<float>* Lengths = ContourLengths.Find(RegionId);
+    if (!Lengths || Lengths->Num()<2) return Phase;
+    int32 Index=1; while (Index<Lengths->Num()-1 && (*Lengths)[Index]<Phase) ++Index;
+    const float T = (Phase-(*Lengths)[Index-1]) / FMath::Max(SMALL_NUMBER,(*Lengths)[Index]-(*Lengths)[Index-1]);
+    return (Index-1+T) / (Lengths->Num()-1);
+}
+
 void UKnightStageMapWidget::SetSelectedStage(FName StageId)
 {
 	if (StageId != SelectedStageId)
@@ -123,6 +158,32 @@ void UKnightStageMapWidget::SetSelectedStage(FName StageId)
 		SelectTime = Time;
 	}
 	SelectedStageId = StageId;
+}
+
+void UKnightStageMapWidget::RestoreSelection(FName StageId)
+{
+	SelectedStageId = StageId;
+	SelectTime = Time;
+	SelectionWeights.Reset();
+	if (!StageId.IsNone()) SelectionWeights.Add(StageId, 1.f);
+}
+
+void UKnightStageMapWidget::ResetView()
+{
+	RestoreSelection(NAME_None); SelectedQuestId = NAME_None;
+	VisibleLatitude = InitialVisibleLatitude; bUserTouched = false;
+	bDragging = bDragMoved = bFocusing = false; Velocity = FVector2D::ZeroVector;
+	SetHovered(INDEX_NONE); SetHoveredQuest(INDEX_NONE);
+	Center = FVector2D::ZeroVector;
+	for (const auto& M : Markers) Center += M.Location;
+	if (!Markers.IsEmpty()) Center /= Markers.Num();
+}
+
+void UKnightStageMapWidget::RestoreView(FVector2D InCenter, float Latitude)
+{
+	Center = InCenter; VisibleLatitude = FMath::Clamp(Latitude, 35.f, 150.f);
+	bUserTouched = true; bDragging = bDragMoved = bFocusing = false; Velocity = FVector2D::ZeroVector;
+	SetHovered(INDEX_NONE); SetHoveredQuest(INDEX_NONE);
 }
 
 void UKnightStageMapWidget::FocusStage(FName StageId)
@@ -175,9 +236,10 @@ void UKnightStageMapWidget::ApplyToMaterial(const FVector2D& LocalSize)
 	MapMID->SetVectorParameterValue(TEXT("ViewRect"), FLinearColor(TopLeftUV.X, TopLeftUV.Y, SizeUV.X, SizeUV.Y));
 	MapMID->SetVectorParameterValue(TEXT("MapPixels"), FLinearColor(360.f * View.PixelsPerDegree, 180.f * View.PixelsPerDegree, 0.f, 0.f));
 
-	const float SinceSelect = Time - SelectTime;
-	const bool bBlinking = !SelectedStageId.IsNone() && SinceSelect < BlinkDuration;
-	MapMID->SetScalarParameterValue(TEXT("Blink"), bBlinking ? (FMath::FloorToInt(SinceSelect / BlinkStep) % 2 == 0 ? 1.f : -1.f) : 0.f);
+	const float Phase = FMath::Fmod(FMath::Max(0.f, Time - SelectTime) / FMath::Max(.1f, LoopDuration), 1.f);
+    const float Sweep = GetContourAngle(SelectedStageId, Phase);
+	MapMID->SetScalarParameterValue(TEXT("Blink"), 0.f);
+	MapMID->SetVectorParameterValue(TEXT("SelectionTuning"), FLinearColor(OutlineBrightness, SelectionGlowWidth, InteriorOpacity, 0.f));
 
 	for (int32 Index = 0; Index < MaxRegions; ++Index)
 	{
@@ -192,13 +254,22 @@ void UKnightStageMapWidget::ApplyToMaterial(const FVector2D& LocalSize)
 		static const FName RegionNames[MaxRegions] = { TEXT("Region0"), TEXT("Region1"), TEXT("Region2"), TEXT("Region3"),
 			TEXT("Region4"), TEXT("Region5"), TEXT("Region6"), TEXT("Region7") };
 		MapMID->SetVectorParameterValue(RegionNames[Index], Region);
+		const FName Id = Markers.IsValidIndex(Index) ? Markers[Index].StageId : NAME_None;
+		MapMID->SetVectorParameterValue(FName(*FString::Printf(TEXT("RegionEffect%d"), Index)),
+			FLinearColor(SelectionWeights.FindRef(Id), Sweep, !SelectedStageId.IsNone() && Id == SelectedStageId ? SelectionWeights.FindRef(Id) : 0.f, Index == HoveredIndex ? 1.f : 0.f));
 	}
 }
 
 void UKnightStageMapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
-	Time += InDeltaTime;
+	if (!SelectedStageId.IsNone()) Time += FMath::Max(0.f, InDeltaTime);
+	for (const auto& Marker : Markers)
+	{
+		float& Weight = SelectionWeights.FindOrAdd(Marker.StageId);
+		Weight = FMath::FInterpConstantTo(Weight, Marker.StageId == SelectedStageId ? 1.f : 0.f,
+			InDeltaTime, 1.f / FMath::Max(.01f, SelectionFadeDuration));
+	}
 	const FVector2D LocalSize = MyGeometry.GetLocalSize();
 	const FMapView View = MakeView(LocalSize);
 
@@ -372,9 +443,10 @@ FReply UKnightStageMapWidget::NativeOnMouseButtonUp(const FGeometry& InGeometry,
 		if (QuestIndex != INDEX_NONE)
 		{
 			const FKnightMapQuestMarker& Quest = QuestMarkers[QuestIndex];
+			const bool bNewRegion = SelectedStageId != Quest.RegionId;
 			SetSelectedStage(Quest.RegionId);
 			SetSelectedQuest(Quest.QuestId);
-			FocusStage(Quest.RegionId);
+			if (bNewRegion) FocusStage(Quest.RegionId);
 			if (FSlateApplication::IsInitialized()) FSlateApplication::Get().PlaySound(SelectSound);
 			OnQuestClicked.Broadcast(Quest.QuestId);
 			return FReply::Handled().ReleaseMouseCapture();
@@ -382,8 +454,9 @@ FReply UKnightStageMapWidget::NativeOnMouseButtonUp(const FGeometry& InGeometry,
 		const int32 Index = FindMarkerAt(Local, InGeometry.GetLocalSize());
 		if (Index != INDEX_NONE)
 		{
+			const bool bNewRegion = SelectedStageId != Markers[Index].StageId;
 			SetSelectedStage(Markers[Index].StageId);
-			FocusStage(SelectedStageId);
+			if (bNewRegion) FocusStage(SelectedStageId);
 			if (FSlateApplication::IsInitialized())
 			{
 				FSlateApplication::Get().PlaySound(SelectSound);
@@ -451,30 +524,9 @@ int32 UKnightStageMapWidget::NativePaint(const FPaintArgs& Args, const FGeometry
 		const bool bHovered = Index == HoveredIndex;
 		const float RegionPixels = Marker.RegionRadius * View.PixelsPerDegree;
 
-		// Sonar rings keep spreading from the selected stage: a new one every PingInterval, thinning and fading as they grow.
-		if (bSelected && PingLifetime > 0.f && PingInterval > 0.f)
-		{
-			const float SinceSelect = Time - SelectTime;
-			const FLinearColor RingColor = Marker.bLocked ? LockedGrey : MapEmber;
-			const float RingAlpha = Marker.bLocked ? 0.45f : 0.9f;
-			const int32 Newest = FMath::FloorToInt(SinceSelect / PingInterval);
-			for (int32 Ring = Newest; Ring >= 0 && SinceSelect - Ring * PingInterval < PingLifetime; --Ring)
-			{
-				const float Age = (SinceSelect - Ring * PingInterval) / PingLifetime;
-				const float Radius = 6.f + Age * PingRadius;
-				Points.Reset(RingSegments + 1);
-				for (int32 Segment = 0; Segment <= RingSegments; ++Segment)
-				{
-					const float Angle = UE_TWO_PI * Segment / RingSegments;
-					Points.Add(FVector2f(Position) + FVector2f(FMath::Cos(Angle), FMath::Sin(Angle)) * Radius);
-				}
-				FSlateDrawElement::MakeLines(OutDrawElements, LayerId, AllottedGeometry.ToPaintGeometry(), Points, ESlateDrawEffect::None,
-					WithAlpha(RingColor, FMath::Pow(1.f - Age, 1.5f) * RingAlpha * Opacity), true, 1.5f + (1.f - Age) * 1.5f);
-			}
-		}
 
 		// Diamond mark on the centre.
-		const FLinearColor MarkColor = Marker.bLocked ? LockedGrey : (bSelected ? MapEmber : (bHovered ? MapWhite : MapFrost));
+		const FLinearColor MarkColor = bSelected ? MapBlue : (Marker.bLocked ? LockedGrey : (bHovered ? MapWhite : MapFrost));
 		constexpr float Mark = 6.f;
 		Points = { FVector2f(Position) + FVector2f(0.f, -Mark), FVector2f(Position) + FVector2f(Mark, 0.f), FVector2f(Position) + FVector2f(0.f, Mark),
 			FVector2f(Position) + FVector2f(-Mark, 0.f), FVector2f(Position) + FVector2f(0.f, -Mark) };
@@ -489,12 +541,31 @@ int32 UKnightStageMapWidget::NativePaint(const FPaintArgs& Args, const FGeometry
 		{
 			// The name sits under the region, past the widest wobble (about 1.2x the radius).
 			const FVector2D TextSize = Measure->Measure(Marker.Label, Font);
-			const FVector2f TextPosition(Position + FVector2D(-TextSize.X * 0.5, RegionPixels * 1.2 + 4.0));
-			const FLinearColor TextColor = Marker.bLocked ? FrostDim : (bSelected ? MapEmber : (bHovered ? MapWhite : LabelColor));
+			FSlateFontInfo StatusFont = Font; StatusFont.Size = FMath::Min(Font.Size, 16);
+			double BlockHeight = TextSize.Y + 3.f;
+			for (const FText& State : { Marker.Availability, Marker.ClearHistory })
+				if (!State.IsEmpty()) BlockHeight += Measure->Measure(State, StatusFont).Y + 2.f;
+			// Keep authored region/pin locations unchanged. When the block cannot fit below
+			// a visible southern region, put it above the silhouette instead of clipping it.
+			double LabelY = Position.Y + RegionPixels * 1.2 + 4.0;
+			if (Bounds.ContainsPoint(Position) && LabelY + BlockHeight > LocalSize.Y - 10.f)
+				LabelY = FMath::Max(10.0, Position.Y - RegionPixels * 1.2 - BlockHeight - 4.0);
+			const FVector2f TextPosition(Position.X - TextSize.X * 0.5, LabelY);
+			const FLinearColor TextColor = bSelected ? MapWhite : (Marker.bLocked ? FrostDim : (bHovered ? MapWhite : LabelColor));
 			FSlateDrawElement::MakeText(OutDrawElements, LayerId, AllottedGeometry.ToPaintGeometry(FVector2f(TextSize), FSlateLayoutTransform(TextPosition + FVector2f(1.f, 1.f))),
 				Marker.Label, Font, ESlateDrawEffect::None, FLinearColor(0.f, 0.01f, 0.03f, 0.85f * Opacity));
 			FSlateDrawElement::MakeText(OutDrawElements, LayerId, AllottedGeometry.ToPaintGeometry(FVector2f(TextSize), FSlateLayoutTransform(TextPosition)),
 				Marker.Label, Font, ESlateDrawEffect::None, WithAlpha(TextColor, Opacity));
+			double StatusY = TextPosition.Y + TextSize.Y + 3.f;
+			for (const FText& State : { Marker.Availability, Marker.ClearHistory })
+			{
+				if (State.IsEmpty()) continue;
+				const FVector2D StateSize = Measure->Measure(State, StatusFont);
+				FSlateDrawElement::MakeText(OutDrawElements, LayerId, AllottedGeometry.ToPaintGeometry(FVector2f(StateSize),
+					FSlateLayoutTransform(FVector2f(Position.X - StateSize.X * .5, StatusY))), State, StatusFont,
+					ESlateDrawEffect::None, WithAlpha(bSelected ? MapBlue : MapFrost, .86f * Opacity));
+				StatusY += StateSize.Y + 2.f;
+			}
 		}
 	}
 
@@ -510,7 +581,7 @@ int32 UKnightStageMapWidget::NativePaint(const FPaintArgs& Args, const FGeometry
 		if (!Bounds.ContainsPoint(Position)) continue;
 		const bool bSelected = Marker.QuestId == SelectedQuestId;
 		const bool bHovered = Index == HoveredQuestIndex;
-		const FLinearColor Edge = bSelected ? MapEmber : (Marker.bLocked ? LockedGrey : (bHovered ? MapWhite : MapFrost));
+		const FLinearColor Edge = bSelected ? MapBlue : (Marker.bLocked ? LockedGrey : (bHovered ? MapWhite : MapFrost));
 		FSlateDrawElement::MakeBox(OutDrawElements, ++LayerId,
 			AllottedGeometry.ToPaintGeometry(FVector2f(PinSize), FSlateLayoutTransform(FVector2f(TopLeft))),
 			PinBrush, ESlateDrawEffect::None, WithAlpha(Edge, Opacity));
@@ -521,7 +592,7 @@ int32 UKnightStageMapWidget::NativePaint(const FPaintArgs& Args, const FGeometry
 		const FVector2D TextPosition = Position - TextSize * 0.5;
 		FSlateDrawElement::MakeText(OutDrawElements, ++LayerId,
 			AllottedGeometry.ToPaintGeometry(FVector2f(TextSize), FSlateLayoutTransform(FVector2f(TextPosition))),
-			Marker.Label, PinFont, ESlateDrawEffect::None, WithAlpha(Marker.bLocked ? FrostDim : (bSelected ? MapEmber : MapWhite), Opacity));
+			Marker.Label, PinFont, ESlateDrawEffect::None, WithAlpha(Marker.bLocked ? FrostDim : (bSelected ? MapBlue : MapWhite), Opacity));
 	}
 
 	// Thin frame with brighter corner ticks.
@@ -553,7 +624,7 @@ int32 UKnightStageMapWidget::NativePaint(const FPaintArgs& Args, const FGeometry
 			const float EdgeX = static_cast<float>(bTargetOnRight ? TopLeft.X : BottomRight.X);
 			const float AnchorY = FMath::Clamp(static_cast<float>(SelectedPosition.Y), static_cast<float>(TopLeft.Y) + 24.f, static_cast<float>(BottomRight.Y) - 24.f);
 			Points = { FVector2f(SelectedPosition) + FVector2f(Side * 10.f, 0.f), FVector2f(EdgeX - Side * 36.f, AnchorY), FVector2f(EdgeX, AnchorY) };
-			FSlateDrawElement::MakeLines(OutDrawElements, ++LayerId, AllottedGeometry.ToPaintGeometry(), Points, ESlateDrawEffect::None, WithAlpha(MapEmber, 0.9f * Opacity), true, 1.5f);
+			FSlateDrawElement::MakeLines(OutDrawElements, ++LayerId, AllottedGeometry.ToPaintGeometry(), Points, ESlateDrawEffect::None, WithAlpha(MapBlue, 0.9f * Opacity), true, 1.5f);
 		}
 	}
 	return LayerId;

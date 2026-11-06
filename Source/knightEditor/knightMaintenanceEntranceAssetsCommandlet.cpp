@@ -19,7 +19,7 @@
 
 namespace
 {
-	bool Save(UObject* Asset)
+	bool SaveEntranceAsset(UObject* Asset)
 	{
 		UPackage* Package = Asset->GetOutermost(); Package->MarkPackageDirty();
 		FSavePackageArgs Args; Args.TopLevelFlags = RF_Public | RF_Standalone; Args.SaveFlags = SAVE_NoError;
@@ -134,7 +134,7 @@ return edge * Intensity * (float3(1.0, 0.56, 0.09) * (core + trails * TrailStren
 			if (Resource) for (const FString& Error : Resource->GetCompileErrors()) UE_LOG(LogTemp, Error, TEXT("%s"), *Error);
 			return 1;
 		}
-		if (!Save(M)) return 1;
+		if (!SaveEntranceAsset(M)) return 1;
 	}
 	UWidgetBlueprint* BP = LoadObject<UWidgetBlueprint>(nullptr, TEXT("/Game/Knight/UI/Menu/Maintenance/WBP_KnightMaintenance"));
 	if (!BP || !BP->GeneratedClass) return 1;
@@ -160,7 +160,7 @@ return edge * Intensity * (float3(1.0, 0.56, 0.09) * (core + trails * TrailStren
 	FCompilerResultsLog Results;
 	FKismetEditorUtilities::CompileBlueprint(BP, EBlueprintCompileOptions::SkipGarbageCollection, &Results);
 	UE_LOG(LogTemp, Display, TEXT("MaintenanceEntrance assets compile errors=%d warnings=%d"), Results.NumErrors, Results.NumWarnings);
-	if (Results.NumErrors || !Save(BP)) return 1;
+	if (Results.NumErrors || !SaveEntranceAsset(BP)) return 1;
 	UE_LOG(LogTemp, Display, TEXT("MaintenanceEntrance assets COMPLETE: two UI materials and widget hard references"));
 	return 0;
 }
