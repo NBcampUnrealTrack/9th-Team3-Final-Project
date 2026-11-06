@@ -1,5 +1,6 @@
 #include "Menu/UI/KnightMaintenanceEntryWidget.h"
 #include "Menu/UI/KnightMaintenancePresentation.h"
+#include "Menu/UI/KnightMaintenanceStateExtension.h"
 #include "CommonTextBlock.h"
 #include "Components/Border.h"
 #include "Components/Image.h"
@@ -18,6 +19,7 @@ TSubclassOf<UKnightMaintenanceEntryWidget> UKnightMaintenanceEntryWidget::GetSha
 void UKnightMaintenanceEntryWidget::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
+	UKnightMaintenanceStateExtension::Enable(this);
 	SetIsSelectable(true);
 	SetIsInteractableWhenSelected(true);
 	bTriggerClickedAfterSelection = true;
@@ -29,6 +31,7 @@ void UKnightMaintenanceEntryWidget::NativeOnInitialized()
 void UKnightMaintenanceEntryWidget::NativeOnAddedToFocusPath(const FFocusEvent& InFocusEvent)
 {
 	Super::NativeOnAddedToFocusPath(InFocusEvent);
+	if (InFocusEvent.GetCause() == EFocusCause::Navigation) UKnightMaintenanceStateExtension::NavigationFocus(this);
 	OnEntryFocused.ExecuteIfBound(this);
 }
 

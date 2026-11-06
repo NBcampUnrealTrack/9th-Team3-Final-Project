@@ -132,6 +132,7 @@ void UKnightMainMenuWidget::NativeConstruct()
 
 void UKnightMainMenuWidget::NativeDestruct()
 {
+	ReturnSuppressedKeys.Reset();
 	if (UGameInstance* GI = GetGameInstance())
 	{
 		if (UknightProgressionSubsystem* Progress = GI->GetSubsystem<UknightProgressionSubsystem>())
@@ -214,13 +215,14 @@ bool UKnightMainMenuWidget::OpenMaterialsShortcut()
 bool UKnightMainMenuWidget::ToggleMaterialsShortcut()
 {
 	if (IsTravelPending()) return false;
+	if (MaintenanceWidget && MaintenanceWidget->IsTransitionActive()) return true;
 	if (CurrentPage == EKnightMainMenuPage::Home) return OpenMaterialsShortcut();
 	if (CurrentPage != EKnightMainMenuPage::Maintenance || !IsMaintenanceDestinationOpen()
 		|| !MaintenanceWidget || !MaintenanceWidget->IsMaterialsViewOpen()
 		|| MaintenanceWidget->IsMaterialQuantityInputFocused()) return false;
 	if (MaintenanceWidget->HandleBack()) return true;
 	bRestoreMaterialsShortcutFocus = true;
-	return ShowPage(EKnightMainMenuPage::Home);
+	LeaveMaintenance(); return true;
 }
 
 bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDuringTravel)
@@ -229,6 +231,7 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 	{
 		return false;
 	}
+	if (NewPage != EKnightMainMenuPage::Maintenance && MaintenanceWidget) MaintenanceWidget->CancelTransition();
 	UPanelWidget* Page = nullptr;
 	switch (NewPage)
 	{
@@ -340,13 +343,22 @@ bool UKnightMainMenuWidget::HandleBackRequested()
 	if (CurrentPage == EKnightMainMenuPage::Codex) { HandleCodexClosed(); return true; }
 	if (CurrentPage == EKnightMainMenuPage::Maintenance)
 	{
+		if (MaintenanceWidget && MaintenanceWidget->IsTransitionExiting()) return true;
 		if (IsMaintenanceDestinationOpen() && MaintenanceWidget && MaintenanceWidget->HandleBack()) return true;
+		if (bReturnToWeaponEquipment && IsMaintenanceDestinationOpen() && MaintenanceWidget
+			&& MaintenanceWidget->GetDestination() == EKnightMaintenanceDestination::Enhancement)
+		{
+			if (MaintenanceWidget->IsEnhancementNavigationBlocked()) return true;
+			OpenMaintenanceDestination(EKnightMaintenanceDestination::Crafting);
+			MaintenanceWidget->RestoreWeaponEquipmentSelection();
+			return true;
+		}
 		if (bMaterialsShortcutEntry)
 		{
 			bRestoreMaterialsShortcutFocus = true;
-			return ShowPage(EKnightMainMenuPage::Home);
+			LeaveMaintenance(); return true;
 		}
-		ShowMaintenanceSelection();
+		LeaveMaintenance();
 		return true;
 	}
 	if (CurrentPage == EKnightMainMenuPage::Home && MaintenanceSubmenu && (MaintenanceSubmenu->GetVisibility() == ESlateVisibility::Visible))
@@ -367,6 +379,26 @@ bool UKnightMainMenuWidget::HandleBackRequested()
 
 FReply UKnightMainMenuWidget::NativeOnPreviewKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
 {
+	if (ReturnSuppressedKeys.Contains(InKeyEvent.GetKey()))
+	{
+		if (InKeyEvent.IsRepeat()) return FReply::Handled();
+		// A fresh press also recovers if application focus loss swallowed key-up.
+		ReturnSuppressedKeys.Remove(InKeyEvent.GetKey());
+	}
+	if (IsMaintenanceDestinationOpen() && MaintenanceWidget && MaintenanceWidget->IsTransitionActive())
+	{
+		if (InKeyEvent.GetKey() == EKeys::Escape || InKeyEvent.GetKey() == EKeys::Gamepad_FaceButton_Right) RequestBack();
+		if (MaintenanceWidget->IsTransitionExiting()) ReturnSuppressedKeys.Add(InKeyEvent.GetKey());
+		return FReply::Handled();
+	}
+	if (IsMaintenanceDestinationOpen() && (InKeyEvent.GetKey() == EKeys::Escape || InKeyEvent.GetKey() == EKeys::Gamepad_FaceButton_Right))
+	{
+		RequestBack();
+		if (MaintenanceWidget && MaintenanceWidget->IsTransitionExiting()) ReturnSuppressedKeys.Add(InKeyEvent.GetKey());
+		return FReply::Handled();
+	}
+	if (IsMaintenanceDestinationOpen() && MaintenanceWidget && MaintenanceWidget->IsCraftResultOpen())
+		return MaintenanceWidget->HandleCraftResultKey(InKeyEvent);
 	if (InKeyEvent.GetKey() == EKeys::I && !InKeyEvent.IsRepeat() && !IsTravelPending())
 	{
 		// Preview handlers run before an editable quantity field receives its typed character.
@@ -402,6 +434,12 @@ FReply UKnightMainMenuWidget::NativeOnPreviewKeyDown(const FGeometry& InGeometry
 		}
 	}
 	return Super::NativeOnPreviewKeyDown(InGeometry, InKeyEvent);
+}
+
+FReply UKnightMainMenuWidget::NativeOnKeyUp(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
+{
+	if (ReturnSuppressedKeys.Remove(InKeyEvent.GetKey()) > 0) return FReply::Handled();
+	return Super::NativeOnKeyUp(InGeometry, InKeyEvent);
 }
 
 bool UKnightMainMenuWidget::ShouldAllowEscapeToChild() const
@@ -553,6 +591,9 @@ void UKnightMainMenuWidget::EnsureMaintenanceWidget()
 		// Navigation actions are not a persistent selection group.
 		Button->SetIsSelectable(false);
 		KnightMaintenancePresentation::ConfigureButton(Button, false);
+		// These compact navigation choices keep their authored frame. Focus brightens
+		// the text instead of adding the maintenance list's second, inset outline.
+		UKnightMaintenanceStateExtension::SetFocusOutlineEnabled(Button, false);
 		USizeBox* const Height = WidgetTree->ConstructWidget<USizeBox>();
 		Height->SetHeightOverride(60.f);
 		Height->AddChild(Button);
@@ -579,6 +620,13 @@ void UKnightMainMenuWidget::EnsureMaintenanceWidget()
 	MaintenanceWidget->OnSlotFocused.BindWeakLambda(this, [this](FGameplayTag FocusedSlot)
 	{
 		if (MaintenanceCameraRig.IsValid()) MaintenanceCameraRig->FocusSlot(FocusedSlot);
+	});
+	MaintenanceWidget->OnEnhancementShortcutRequested.BindWeakLambda(this, [this](FPrimaryAssetId WeaponId)
+	{
+		if (!IsMaintenanceDestinationOpen() || MaintenanceWidget->GetDestination() != EKnightMaintenanceDestination::Crafting) return;
+		OpenMaintenanceDestination(EKnightMaintenanceDestination::Enhancement);
+		if (IsMaintenanceDestinationOpen() && MaintenanceWidget->OpenEnhancementWeapon(WeaponId))
+			bReturnToWeaponEquipment = true;
 	});
 }
 
@@ -611,6 +659,7 @@ void UKnightMainMenuWidget::SetMaintenanceSubmenuOpen(bool bOpen)
 void UKnightMainMenuWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
+	if (MaintenanceWidget) MaintenanceWidget->TickExit(InDeltaTime);
 	if (CurrentPage == EKnightMainMenuPage::Home && MaintenanceSubmenu && (MaintenanceSubmenu->GetVisibility() == ESlateVisibility::Visible))
 		PlaceMaintenanceSubmenu();
 }
@@ -633,8 +682,11 @@ void UKnightMainMenuWidget::PlaceMaintenanceSubmenu()
 void UKnightMainMenuWidget::OpenMaintenanceDestination(EKnightMaintenanceDestination Destination, bool bStartInMaterials)
 {
 	if (IsTravelPending() || !MaintenanceSwitcher || !MaintenanceWidget) return;
+	if (MaintenanceWidget->IsTransitionActive()) return;
+	const bool bEntranceFromHome = CurrentPage == EKnightMainMenuPage::Home;
 	if (CurrentPage != EKnightMainMenuPage::Home && CurrentPage != EKnightMainMenuPage::Maintenance) return;
 	if (!ApplyPage(EKnightMainMenuPage::Maintenance, false)) return;
+	bReturnToWeaponEquipment = false;
 	bMaterialsShortcutEntry = bStartInMaterials;
 	MaintenanceWidget->Open(Destination, bStartInMaterials);
 	ApplyMaintenanceBackPresentation(true);
@@ -642,6 +694,31 @@ void UKnightMainMenuWidget::OpenMaintenanceDestination(EKnightMaintenanceDestina
 	if (MaintenanceCameraRig.IsValid()) MaintenanceCameraRig->FocusSlot(
 		Destination == EKnightMaintenanceDestination::Enhancement ? knightGameplayTags::Equipment_Slot_Weapon : FGameplayTag());
 	FocusCurrentPage();
+	if (bEntranceFromHome)
+	{
+		SetFocus();
+		MaintenanceWidget->BeginEntrance(Button_Back, FSimpleDelegate::CreateWeakLambda(this, [this]()
+		{
+			if (IsMaintenanceDestinationOpen() && MaintenanceWidget && !MaintenanceWidget->IsTransitionActive())
+				if (UWidget* Focus = MaintenanceWidget->GetFocusButton()) Focus->SetFocus();
+		}));
+	}
+}
+
+void UKnightMainMenuWidget::LeaveMaintenance()
+{
+	if (!MaintenanceWidget || MaintenanceWidget->IsTransitionExiting()) return;
+	// Start the existing camera return concurrently; its path/target are unchanged.
+	if (MaintenanceCameraRig.IsValid()) MaintenanceCameraRig->SetMaintenanceView(false);
+	SetFocus();
+	SetMaintenanceSubmenuOpen(false);
+	MaintenanceWidget->BeginExit(Button_Back, Cast<UCanvasPanel>(Panel_Home), FSimpleDelegate::CreateWeakLambda(this, [this]()
+	{
+		if (CurrentPage != EKnightMainMenuPage::Maintenance) return;
+		bRestoreMaterialsShortcutFocus = false; FocusBeforeMaterialsShortcut.Reset();
+		ShowPage(EKnightMainMenuPage::Home);
+		if (Button_Maintenance) Button_Maintenance->SetUserFocus(GetOwningPlayer());
+	}));
 }
 
 void UKnightMainMenuWidget::EnsureQuestWidget()

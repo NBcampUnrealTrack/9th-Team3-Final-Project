@@ -217,7 +217,7 @@ void UKnightMaintenanceWidget::BuildEnhancementPresentation()
 	EnhancementReadoutBackdropLayer->AddChildToCanvas(EnhancementReadoutBackdrop);
 	UVerticalBox* ReadoutContent = WidgetTree->ConstructWidget<UVerticalBox>(); Readout->SetContent(ReadoutContent);
 	Add(UpgradePanel, Readout, 4.f);
-	Add(ReadoutContent, Text(TEXT("EnhancementChanceLabel"), LOCTEXT("Probability", "이번 시도 성공률"), 22, Secondary, ETextJustify::Center), 4.f);
+	Add(ReadoutContent, Text(TEXT("EnhancementChanceLabel"), LOCTEXT("Probability", "성공률"), 22, Secondary, ETextJustify::Center), 4.f);
 	UpgradeChance = Text(TEXT("EnhancementChance"), FText::GetEmpty(), 36, Secondary, ETextJustify::Center);
 	Add(ReadoutContent, UpgradeChance, 12.f);
 	Add(ReadoutContent, Text(TEXT("EnhancementMaterialTitle"), LOCTEXT("Materials", "필요 재료"), 24, Secondary), 8.f);
