@@ -112,10 +112,31 @@ void UknightMonsterPartShellComponent::SetLockedPart(FGameplayTag PartTag)
 	}
 	const bool bHasShell = PartTag.IsValid() && EnsureBuilt()
 		&& Parts.ContainsByPredicate([&PartTag](const FShellPart& Each) { return Each.Tag == PartTag; });
-	LockedPart = bHasShell ? PartTag : FGameplayTag();
-	if (bBuilt)
+	// 락온을 옮기거나 풀면 이전 부위는 바로 옅어지기 시작한다.
+	for (FShellPart& Part : Parts)
 	{
-		SetComponentTickEnabled(true);
+		if (Part.Tag == LockedPart)
+		{
+			Part.ShowRemaining = FMath::Min(Part.ShowRemaining, FadeOutTime);
+		}
+	}
+	LockedPart = bHasShell ? PartTag : FGameplayTag();
+	ShowPart(LockedPart, LockShowTime);
+}
+
+void UknightMonsterPartShellComponent::ShowPart(FGameplayTag Tag, float Duration)
+{
+	if (!Tag.IsValid() || Duration <= 0.f)
+	{
+		return;
+	}
+	for (FShellPart& Part : Parts)
+	{
+		if (Part.Tag == Tag)
+		{
+			Part.ShowRemaining = FMath::Max(Part.ShowRemaining, Duration);
+			SetComponentTickEnabled(true);
+		}
 	}
 }
 
@@ -233,14 +254,20 @@ UMaterialInstanceDynamic* UknightMonsterPartShellComponent::GetActiveMaterial() 
 
 void UknightMonsterPartShellComponent::HandlePartConditionChanged(FGameplayTag PartTag, EknightPartCondition NewCondition)
 {
+	bool bChanged = false;
 	for (FShellPart& Part : Parts)
 	{
-		if (Part.Tag == PartTag)
+		if (Part.Tag == PartTag && Part.Condition != NewCondition)
 		{
 			Part.Condition = NewCondition;
+			bChanged = true;
 		}
 	}
-	ApplyColors();
+	if (bChanged)
+	{
+		ApplyColors();
+		ShowPart(PartTag, StateChangeShowTime);
+	}
 }
 
 void UknightMonsterPartShellComponent::ApplyColors()
@@ -290,10 +317,16 @@ void UknightMonsterPartShellComponent::TickComponent(float DeltaTime, ELevelTick
 
 	float Opacities[MaxShellParts] = {};
 	bool bAnyVisible = false;
+	bool bAnyShowing = false;
 	for (int32 Index = 0; Index < Parts.Num(); ++Index)
 	{
 		FShellPart& Part = Parts[Index];
-		const float Target = Part.Tag == LockedPart ? 1.f : RevealOpacity;
+		// 락온·상태 변화 표시도 남은 시간의 마지막 FadeOutTime 동안 옅어진다.
+		const bool bShowing = Part.ShowRemaining > 0.f;
+		Part.ShowRemaining = FMath::Max(Part.ShowRemaining - DeltaTime, 0.f);
+		bAnyShowing |= bShowing;
+		const float ShowOpacity = bShowing ? FMath::Clamp(Part.ShowRemaining / FadeOutTime, 0.f, 1.f) : 0.f;
+		const float Target = FMath::Max(ShowOpacity, RevealOpacity);
 		Part.Opacity = Target > Part.Opacity
 			? FMath::Min(Target, Part.Opacity + DeltaTime / FadeInTime)
 			: FMath::Max(Target, Part.Opacity - DeltaTime / FadeOutTime);
@@ -317,7 +350,7 @@ void UknightMonsterPartShellComponent::TickComponent(float DeltaTime, ELevelTick
 	{
 		ShellMesh->SetVisibility(bAnyVisible);
 	}
-	if (!bAnyVisible && RevealRemaining <= 0.f && !LockedPart.IsValid())
+	if (!bAnyVisible && RevealRemaining <= 0.f && !bAnyShowing)
 	{
 		SetComponentTickEnabled(false);
 	}
