@@ -1,6 +1,7 @@
 // Opt-in engine-render capture. No desktop input and no normal profile writes.
 #if WITH_EDITOR
 #include "Codex/KnightCodexWidget.h"
+#include "Codex/KnightCodexReveal.h"
 #include "Menu/UI/KnightMainMenuWidget.h"
 #include "Progression/knightProgressionSubsystem.h"
 #include "Progression/knightSaveSubsystem.h"
@@ -19,6 +20,7 @@
 #include "HAL/IConsoleManager.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Paths.h"
+#include "Misc/App.h"
 #include "UnrealClient.h"
 
 namespace
@@ -31,6 +33,7 @@ struct FCodexCapture : TSharedFromThis<FCodexCapture>
 	FString Directory;
 	double Next = 0, Deadline = 0;
 	int32 Step = 0, Failures = 0;
+	int32 MotionFrame = INDEX_NONE;
 	TFunction<void()> AfterCapture;
 	void Check(bool Passed, const TCHAR* What)
 	{
@@ -95,6 +98,33 @@ struct FCodexCapture : TSharedFromThis<FCodexCapture>
 			UE_LOG(LogTemp, Error, TEXT("CodexCapture TIMEOUT step=%d"), Step);
 			FPlatformMisc::RequestExit(false); return false;
 		}
+		if (MotionFrame >= 0)
+		{
+			if (FScreenshotRequest::IsScreenshotRequested()) return true;
+			// Window painting uses wall-clock DeltaTime even with Slate.UseFixedDeltaTime.
+			// Advance the actual menu's Slate tick explicitly for deterministic readback frames.
+			const TSharedRef<SWidget> MenuSlate=Menu->TakeWidget();
+			MenuSlate->SetCanTick(false);
+			MenuSlate->Tick(Menu->GetCachedGeometry(),FPlatformTime::Seconds(),1.f/60.f);
+			if (MotionFrame == 45) Check(Menu->ShowPage(EKnightMainMenuPage::Codex), TEXT("motion capture opens through Home"));
+			if (MotionFrame == 85) Check(Menu->RequestBack(), TEXT("motion capture closes through existing Back route"));
+			if (MotionFrame >= 45 && MotionFrame < 129)
+			{
+				const FString Name=FString::Printf(TEXT("MotionFrame_%03d.png"),MotionFrame-45);
+				FScreenshotRequest::RequestScreenshot(FPaths::Combine(Directory,Name),true,false);
+				const auto* Mask=Cast<UKnightCodexReveal>(Widget(TEXT("Reveal_Monster")));
+				UE_LOG(LogTemp,Display,TEXT("CodexMotion FRAME %d dt=%.4f page=%d reveal=%.3f opacity=%.3f scan=%.3f active=%d"),
+					MotionFrame-45,FApp::GetDeltaTime(),int32(Menu->GetCurrentPage()),Mask?Mask->Progress:-1,Mask?Mask->Alpha:-1,Mask?Mask->Glow:-1,Mask?Mask->bActive:false);
+			}
+			if (++MotionFrame >= 130)
+			{
+				MenuSlate->SetCanTick(true);
+				Check(Menu->GetCurrentPage()==EKnightMainMenuPage::Home,TEXT("recorded cycle finishes on Home"));
+				UE_LOG(LogTemp,Display,TEXT("CodexCapture COMPLETE failures=%d; fixed-step real hangar sequence, no physical input"),Failures);
+				FPlatformMisc::RequestExit(false); return false;
+			}
+			return true;
+		}
 		if (Now < Next) return true;
 		if (AfterCapture)
 		{
@@ -117,6 +147,12 @@ struct FCodexCapture : TSharedFromThis<FCodexCapture>
 			World->GetFirstPlayerController()->ConsoleCommand(TEXT("r.SetRes 1920x1080w"), false);
 			Check(Cast<UPanelWidget>(Widget(TEXT("Box_WorldEntries")))->GetChildrenCount() == 12, TEXT("12 reader records; source notes excluded"));
 			Check(Cast<UPanelWidget>(Widget(TEXT("Box_MechEntries")))->GetChildrenCount() == 4, TEXT("4 mech records"));
+			if (FParse::Param(FCommandLine::Get(),TEXT("KnightCodexMotionOnly")))
+			{
+				World->GetGameInstance()->GetSubsystem<UknightProgressionSubsystem>()->RecordQuestCompleted(TEXT("Quest_Janyeol_Normal"));
+				Codex->SelectCategory(2); Codex->SelectBoss(TEXT("Janyeol"));
+				Step=19; Next=Now+6.; return true;
+			}
 			Next = Now + 6.; ++Step; return true;
 		}
 		switch (Step)
@@ -166,14 +202,16 @@ struct FCodexCapture : TSharedFromThis<FCodexCapture>
 			Capture(TEXT("10_mech_720"));
 			AfterCapture = [this] {
 			Check(Menu->RequestBack(), TEXT("shared Back handler accepted"));
-			Check(Menu->GetCurrentPage() == EKnightMainMenuPage::Home, TEXT("Back restores menu home")); }; break;
+			}; break;
 		case 12:
+			Check(Menu->GetCurrentPage() == EKnightMainMenuPage::Home, TEXT("animated Back restores menu home"));
 			Check(Menu->ShowPage(EKnightMainMenuPage::Codex), TEXT("codex reopens"));
-			Check(Cast<UWidgetSwitcher>(Widget(TEXT("Switcher_Content")))->GetActiveWidgetIndex() == 0, TEXT("reentry starts world"));
+			Check(Cast<UWidgetSwitcher>(Widget(TEXT("Switcher_Content")))->GetActiveWidgetIndex() == 1, TEXT("reentry retains mech category"));
 			Click(TEXT("Button_Close"));
-			Check(Menu->GetCurrentPage() == EKnightMainMenuPage::Home, TEXT("close button delegate restores home")); break;
+			break;
 		case 13:
 		{
+			Check(Menu->GetCurrentPage() == EKnightMainMenuPage::Home, TEXT("close button during entry restores home"));
 			Check(Menu->SelectQuest(TEXT("Quest_Janhyang_Hard")), TEXT("different quest selected on stage page"));
 			// Wait for the existing operation-map entrance before opening another page.
 			AfterCapture = [this] {
@@ -202,7 +240,15 @@ struct FCodexCapture : TSharedFromThis<FCodexCapture>
 		case 16: Capture(TEXT("12_monster_ultrawide")); AfterCapture = [this] { Click(TEXT("Button_World")); }; break;
 		case 17: Capture(TEXT("13_world_ultrawide")); AfterCapture = [this] { Click(TEXT("Button_Mech")); }; break;
 		case 18: Capture(TEXT("14_mech_ultrawide")); break;
-		case 19: Codex->RequestClose(); break;
+		case 19:
+			if (FParse::Param(FCommandLine::Get(),TEXT("KnightCodexMotionCapture")))
+			{
+				Check(FApp::UseFixedTimeStep(),TEXT("motion sequence uses deterministic 60 Hz game ticks"));
+				World->GetFirstPlayerController()->ConsoleCommand(TEXT("r.SetRes 1920x1080w"),false);
+				Codex->SelectCategory(2); Codex->SelectBoss(TEXT("Janyeol")); MotionFrame=0;
+				Menu->TakeWidget()->SetCanTick(false);
+			}
+			Codex->RequestClose(); break;
 		default:
 			UE_LOG(LogTemp, Display, TEXT("CodexCapture COMPLETE failures=%d; delegate/API checks, not physical input"), Failures);
 			FPlatformMisc::RequestExit(false); return false;

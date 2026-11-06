@@ -1,6 +1,7 @@
 #include "KnightCodexEditorLibrary.h"
 
 #include "Codex/KnightCodexPresentation.h"
+#include "Codex/KnightCodexReveal.h"
 #include "Blueprint/WidgetTree.h"
 #include "Brushes/SlateColorBrush.h"
 #include "Brushes/SlateNoResource.h"
@@ -101,9 +102,13 @@ namespace CodexArchiveDesigner
 	UWidget* SectionHeading(UWidgetBlueprint* BP,const TCHAR* Name,const FText& Value)
 	{
 		UHorizontalBox* R=Make<UHorizontalBox>(BP,*FString::Printf(TEXT("Row_%s"),Name));
-		Row(R,Symbol(BP,*FString::Printf(TEXT("Accent_%s"),Name),EKnightCodexSymbol::Accent,22),0,FMargin(0,0,12,0));
 		Row(R,Text(BP,Name,Value,21,true,false,true),1.f);
 		return R;
+	}
+	UWidget* Reveal(UWidgetBlueprint* BP,const TCHAR* Name,UWidget* Content)
+	{
+		UKnightCodexReveal* Mask=Make<UKnightCodexReveal>(BP,Name);
+		Mask->AddChild(Content); return Mask;
 	}
 	UScrollBox* Scroll(UWidgetBlueprint* BP,const TCHAR* Name,UWidget* Child)
 	{
@@ -155,7 +160,6 @@ namespace CodexArchiveDesigner
 		ShellSlot->SetOffsets(FMargin(32.f,24.f,32.f,28.f));
 		UHorizontalBox* Header=Make<UHorizontalBox>(BP,TEXT("Row_CodexHeader")); Col(Shell,Header,false,FMargin(4,0,4,18));
 		UHorizontalBox* Brand=Make<UHorizontalBox>(BP,TEXT("Row_Brand")); Row(Header,Size(BP,TEXT("Size_Brand"),Brand,460));
-		Row(Brand,Size(BP,TEXT("Size_BrandAccent"),Symbol(BP,TEXT("Brand_Accent"),EKnightCodexSymbol::Accent),64),0,FMargin(0,0,28,0));
 		UVerticalBox* Heading=Make<UVerticalBox>(BP,TEXT("Column_ArchiveHeading")); Row(Brand,Heading,1.f);
 		UTextBlock* CodexLabel=Text(BP,TEXT("Label_ArchiveSubtitle"),FText::FromString(TEXT("CODEX")),17,false,true);
 		FSlateFontInfo BrandFont=CodexLabel->GetFont(); BrandFont.LetterSpacing=300; CodexLabel->SetFont(BrandFont); Col(Heading,CodexLabel);
@@ -195,8 +199,8 @@ namespace CodexArchiveDesigner
 		Entries->AddChild(Scroll(BP,TEXT("Scroll_BossList"),BossList));
 		Row(Body,Size(BP,TEXT("Size_EntryList"),Panel(BP,TEXT("Panel_EntryList"),EntryColumn,.12f,FMargin(0,0,0,12)),292),0,FMargin(0,0,20,0));
 		UWidgetSwitcher* Content=Make<UWidgetSwitcher>(BP,TEXT("Switcher_Content"),true);
-		Content->AddChild(Panel(BP,TEXT("Panel_WorldReader"),TextPage(BP,TEXT("World"),NSLOCTEXT("KnightCodexEditor", "Archive10", "세계관")),.28f,FMargin(36,12,36,20)));
-		Content->AddChild(Panel(BP,TEXT("Panel_MechReader"),TextPage(BP,TEXT("Mech"),NSLOCTEXT("KnightCodexEditor", "Archive11", "기체 설명")),.28f,FMargin(36,12,36,20)));
+		Content->AddChild(Reveal(BP,TEXT("Reveal_World"),Panel(BP,TEXT("Panel_WorldReader"),TextPage(BP,TEXT("World"),NSLOCTEXT("KnightCodexEditor", "Archive10", "세계관")),.28f,FMargin(36,12,36,20))));
+		Content->AddChild(Reveal(BP,TEXT("Reveal_Mech"),Panel(BP,TEXT("Panel_MechReader"),TextPage(BP,TEXT("Mech"),NSLOCTEXT("KnightCodexEditor", "Archive11", "기체 설명")),.28f,FMargin(36,12,36,20))));
 		UHorizontalBox* MonsterPage=Make<UHorizontalBox>(BP,TEXT("Row_MonsterPage")); Content->AddChild(MonsterPage);
 		// The full illustration owns its column, outside the independently scrolling information.
 		// Its baked-in frame and labels need neither an additional frame nor overlay text.
@@ -208,7 +212,7 @@ namespace CodexArchiveDesigner
 		UTextBlock* NoArt=Text(BP,TEXT("Text_NoPortrait"),NSLOCTEXT("KnightCodexEditor","NoIllustration","미해금 기록"),18,false,true,true);
 		UOverlaySlot* NoArtSlot=Art->AddChildToOverlay(NoArt);
 		NoArtSlot->SetHorizontalAlignment(HAlign_Center); NoArtSlot->SetVerticalAlignment(VAlign_Center);
-		Row(MonsterPage,Art,1.f,FMargin(0,0,24,0));
+		Row(MonsterPage,Reveal(BP,TEXT("Reveal_Monster"),Art),1.f,FMargin(0,0,24,0));
 		UVerticalBox* Info=Make<UVerticalBox>(BP,TEXT("Column_MonsterInfo"));
 		UTextBlock* AccessibleName=Text(BP,TEXT("Text_BossName"),FText::GetEmpty(),18,true,false,true);
 		AccessibleName->SetVisibility(ESlateVisibility::Collapsed); Col(Info,AccessibleName);

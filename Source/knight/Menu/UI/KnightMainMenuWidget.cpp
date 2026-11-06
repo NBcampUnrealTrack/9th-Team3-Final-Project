@@ -135,6 +135,7 @@ void UKnightMainMenuWidget::NativeConstruct()
 void UKnightMainMenuWidget::NativeDestruct()
 {
 	if (OperationMapTransition) OperationMapTransition->Cancel();
+	if (CodexTransition) CodexTransition->Cancel();
 	SaveOperationMapContext();
 	ReturnSuppressedKeys.Reset();
 	if (UGameInstance* GI = GetGameInstance())
@@ -191,6 +192,19 @@ void UKnightMainMenuWidget::HandleQuestProfileChanged(const FString& SlotId)
 bool UKnightMainMenuWidget::ShowPage(EKnightMainMenuPage NewPage)
 {
 	if (IsTravelPending()) return false;
+	if (NewPage == EKnightMainMenuPage::Home && CurrentPage == EKnightMainMenuPage::Codex)
+	{
+		if (!CodexTransition) CodexTransition = NewObject<UKnightCodexTransition>(this);
+		CodexTransition->Exit(this); return true;
+	}
+	if (IsCodexTransitionActive()) return NewPage == CurrentPage;
+	if (NewPage == EKnightMainMenuPage::Codex && CurrentPage == EKnightMainMenuPage::Codex) return true;
+	if (NewPage == EKnightMainMenuPage::Codex && CurrentPage == EKnightMainMenuPage::Home && !IsOperationMapTransitionActive())
+	{
+		if (!ApplyPage(NewPage, false)) return false;
+		if (!CodexTransition) CodexTransition = NewObject<UKnightCodexTransition>(this);
+		CodexTransition->Enter(this); return true;
+	}
 	if (NewPage == EKnightMainMenuPage::Home && CurrentPage == EKnightMainMenuPage::Stage)
 	{
 		if (!OperationMapTransition) OperationMapTransition = NewObject<UKnightOperationMapTransition>(this);
@@ -216,6 +230,24 @@ bool UKnightMainMenuWidget::ShowPage(EKnightMainMenuPage NewPage)
 bool UKnightMainMenuWidget::IsOperationMapTransitionActive() const
 {
 	return OperationMapTransition && OperationMapTransition->IsActive();
+}
+
+bool UKnightMainMenuWidget::IsCodexTransitionActive() const
+{
+	return CodexTransition && CodexTransition->IsActive();
+}
+
+void UKnightMainMenuWidget::CompleteCodexTransition(bool bExited)
+{
+	if (bExited)
+	{
+		bRestoreCodexFocus = true;
+		ApplyPage(EKnightMainMenuPage::Home, false);
+		if (Panel_Codex) Panel_Codex->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+		if (Button_Codex) Button_Codex->SetUserFocus(GetOwningPlayer());
+	}
+	else if (CurrentPage == EKnightMainMenuPage::Codex && CodexWidget && CodexWidget->GetFocusButton())
+		CodexWidget->GetFocusButton()->SetUserFocus(GetOwningPlayer());
 }
 
 void UKnightMainMenuWidget::CompleteOperationMapTransition(bool bExited)
@@ -270,6 +302,7 @@ bool UKnightMainMenuWidget::ApplyPage(EKnightMainMenuPage NewPage, bool bAllowDu
 		return false;
 	}
 	if (NewPage != EKnightMainMenuPage::Stage && OperationMapTransition) OperationMapTransition->Cancel();
+	if (NewPage != EKnightMainMenuPage::Codex && CodexTransition) CodexTransition->Cancel();
 	if (CurrentPage == EKnightMainMenuPage::Stage && NewPage != EKnightMainMenuPage::Stage)
 	{
 		SaveOperationMapContext();
@@ -421,13 +454,13 @@ FReply UKnightMainMenuWidget::NativeOnPreviewKeyDown(const FGeometry& InGeometry
 		// A fresh press also recovers if application focus loss swallowed key-up.
 		ReturnSuppressedKeys.Remove(InKeyEvent.GetKey());
 	}
-	if (IsOperationMapTransitionActive())
+	if (IsOperationMapTransitionActive() || IsCodexTransitionActive())
 	{
 		const FKey Key = InKeyEvent.GetKey();
 		if (Key == EKeys::Escape || Key == EKeys::Gamepad_FaceButton_Right) RequestBack();
 		ReturnSuppressedKeys.Add(Key); return FReply::Handled();
 	}
-	if (CurrentPage == EKnightMainMenuPage::Stage
+	if ((CurrentPage == EKnightMainMenuPage::Stage || CurrentPage == EKnightMainMenuPage::Codex)
 		&& (InKeyEvent.GetKey() == EKeys::Escape || InKeyEvent.GetKey() == EKeys::Gamepad_FaceButton_Right))
 	{
 		RequestBack(); ReturnSuppressedKeys.Add(InKeyEvent.GetKey()); return FReply::Handled();
@@ -726,6 +759,7 @@ void UKnightMainMenuWidget::NativeTick(const FGeometry& MyGeometry, float InDelt
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
 	if (OperationMapTransition) OperationMapTransition->Tick(InDeltaTime);
+	if (CodexTransition) CodexTransition->Tick(InDeltaTime);
 	if (MaintenanceWidget) MaintenanceWidget->TickExit(InDeltaTime);
 	if (CurrentPage == EKnightMainMenuPage::Home && MaintenanceSubmenu && (MaintenanceSubmenu->GetVisibility() == ESlateVisibility::Visible))
 		PlaceMaintenanceSubmenu();
@@ -820,7 +854,7 @@ void UKnightMainMenuWidget::HandleCodexClosed()
 
 UWidget* UKnightMainMenuWidget::GetPreferredFocusTarget() const
 {
-	if (IsOperationMapTransitionActive()) return const_cast<UKnightMainMenuWidget*>(this);
+	if (IsOperationMapTransitionActive() || IsCodexTransitionActive()) return const_cast<UKnightMainMenuWidget*>(this);
 	if (CurrentPage == EKnightMainMenuPage::Home && MaintenanceSubmenu && (MaintenanceSubmenu->GetVisibility() == ESlateVisibility::Visible))
 		return MaintenanceCraftingButton;
 	if (CurrentPage == EKnightMainMenuPage::Home && bRestoreMaterialsShortcutFocus && FocusBeforeMaterialsShortcut.IsValid())

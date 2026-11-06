@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "KnightMenuWidgetBase.h"
 #include "KnightOperationMapTransition.h"
+#include "Codex/KnightCodexTransition.h"
 #include "KnightMainMenuWidget.generated.h"
 
 class UCommonButtonBase;
@@ -46,6 +47,8 @@ class KNIGHT_API UKnightMainMenuWidget : public UKnightMenuWidgetBase
 	friend class UknightMaintenanceEntranceCheckCommandlet;
 	friend class UknightOperationMapCheckCommandlet;
 	friend class UKnightOperationMapTransition;
+	friend class UKnightCodexTransition;
+	friend class UKnightCodexCheckCommandlet;
 
 public:
 	UFUNCTION(BlueprintPure, Category="Knight|Menu")
@@ -158,6 +161,8 @@ protected:
 	float StageInfoGap = 64.f;
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Stage|Transition")
 	FKnightOperationMapTransitionSettings OperationMapTransitionSettings;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Codex|Transition")
+	FKnightCodexTransitionSettings CodexTransitionSettings;
 
 	virtual void NativeDestruct() override;
 
@@ -220,6 +225,9 @@ private:
 	bool IsOperationMapTransitionActive() const;
 	void CompleteOperationMapTransition(bool bExited);
 	UPROPERTY(Transient) TObjectPtr<UKnightOperationMapTransition> OperationMapTransition;
+	bool IsCodexTransitionActive() const;
+	void CompleteCodexTransition(bool bExited);
+	UPROPERTY(Transient) TObjectPtr<UKnightCodexTransition> CodexTransition;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UKnightSettingsWidget> SettingsWidget;

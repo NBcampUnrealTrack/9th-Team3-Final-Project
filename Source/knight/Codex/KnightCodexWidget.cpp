@@ -207,6 +207,15 @@ void UKnightCodexWidget::NativeDestruct()
 
 void UKnightCodexWidget::Open()
 {
+	// Reopening the same reader retains category, record and valid scroll positions.
+	// Data loads are synchronous; progression events only refresh content, never motion.
+	if (LoadedData && (!ReadingButtons[0].IsEmpty() || !ReadingButtons[1].IsEmpty() || !GeneratedEntries.IsEmpty()))
+	{
+		RefreshUnlockStates();
+		if (!SelectedBossId.IsNone() && !FindBoss(SelectedBossId)) SelectedBossId = NAME_None;
+		SelectCategory(ActiveCategory);
+		return;
+	}
 	LoadedData = CodexData.LoadSynchronous();
 	if (!LoadedData)
 	{

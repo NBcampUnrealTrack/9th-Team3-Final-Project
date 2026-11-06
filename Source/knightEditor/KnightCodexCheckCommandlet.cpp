@@ -1,5 +1,7 @@
 #include "KnightCodexCheckCommandlet.h"
 #include "Codex/KnightCodexWidget.h"
+#include "Codex/KnightCodexReveal.h"
+#include "CommonButtonBase.h"
 #include "Menu/UI/KnightMainMenuWidget.h"
 #include "Menu/KnightMenuGameMode.h"
 #include "Progression/knightSaveSubsystem.h"
@@ -80,7 +82,7 @@ int32 UKnightCodexCheckCommandlet::Main(const FString& Params)
         Target=NewObject<UTextureRenderTarget2D>(); Target->AddToRoot(); Target->ClearColor=FLinearColor::Transparent;
         Target->TargetGamma=1.f; Target->InitCustomFormat(Size.X,Size.Y,PF_FloatRGBA,true); Target->UpdateResourceImmediate(true); Draw(); Draw();
     };
-    Resize(FIntPoint(1920,1080)); Check(Menu->ShowPage(EKnightMainMenuPage::Codex),TEXT("actual menu opens Codex")); Draw();
+    Resize(FIntPoint(1920,1080)); Check(Menu->ShowPage(EKnightMainMenuPage::Codex),TEXT("actual menu opens Codex")); Draw(.5f); Draw();
     auto* Host=Cast<UPanelWidget>(Menu->GetWidgetFromName(TEXT("Panel_Codex")));
     auto* Codex=Host?Cast<UKnightCodexWidget>(Host->GetChildAt(0)):nullptr; if(!Codex)return 1;
     auto W=[&](const TCHAR* Name){return Codex->GetWidgetFromName(Name);};
@@ -99,9 +101,9 @@ int32 UKnightCodexCheckCommandlet::Main(const FString& Params)
         return Result;
     };
     TSet<UTexture2D*> Prepared;
-    auto Capture=[&](const FString& Name)
+    auto Capture=[&](const FString& Name,bool bRequireCodex=true)
     {
-        Check(Menu->GetCurrentPage()==EKnightMainMenuPage::Codex,TEXT("capture is the visible Codex, not a hidden widget"));
+        Check(!bRequireCodex||Menu->GetCurrentPage()==EKnightMainMenuPage::Codex,TEXT("capture is the expected visible page"));
         FTextureCompilingManager::Get().FinishAllCompilation();
         for(TObjectIterator<UTexture2D> It;It;++It) if(It->GetPathName().StartsWith(TEXT("/Game/Knight/"))&&!Prepared.Contains(*It))
         { It->SetForceMipLevelsToBeResident(300); It->WaitForStreaming(); Prepared.Add(*It); }
@@ -243,16 +245,96 @@ int32 UKnightCodexCheckCommandlet::Main(const FString& Params)
     Check(Portrait->GetBrush().GetResourceObject()->GetPathName()==Art.FindChecked(TEXT("Janhyang"))
         && FMath::IsNearlyEqual(Scroll->GetScrollOffset(),MonsterOffset,1.f),TEXT("monster selection and materials scroll retained across other tabs"));
     Check(!Codex->SelectBoss(TEXT("MissingRecord")),TEXT("invalid record rejected without stale content"));
-    Check(Menu->RequestBack()&&Menu->GetCurrentPage()==EKnightMainMenuPage::Home,TEXT("shared Back/Esc route returns to menu"));
-    Check(Menu->ShowPage(EKnightMainMenuPage::Codex),TEXT("Codex reopens through actual menu")); Draw();
+    Check(Menu->RequestBack(),TEXT("shared Back/Esc route accepts animated return")); Draw(.5f); Draw();
+    Check(Menu->GetCurrentPage()==EKnightMainMenuPage::Home,TEXT("shared Back/Esc route returns to menu"));
+    Check(Menu->ShowPage(EKnightMainMenuPage::Codex),TEXT("Codex reopens through actual menu")); Draw(.5f); Draw();
     Check(Codex->GetFocusButton()->HasUserFocus(Player),TEXT("reentry restores category focus"));
-    CastChecked<UButton>(W(TEXT("Button_Close")))->OnClicked.Broadcast(); Check(Menu->GetCurrentPage()==EKnightMainMenuPage::Home,TEXT("footer button returns to menu"));
-    Menu->ShowPage(EKnightMainMenuPage::Codex); Codex->SelectCategory(2); Codex->SelectBoss(TEXT("Janhyang")); DrainSave();
+    CastChecked<UButton>(W(TEXT("Button_Close")))->OnClicked.Broadcast(); Draw(.5f); Draw(); Check(Menu->GetCurrentPage()==EKnightMainMenuPage::Home,TEXT("footer button returns to menu"));
+    Menu->ShowPage(EKnightMainMenuPage::Codex); Draw(.5f); Draw(); Codex->SelectCategory(2); Codex->SelectBoss(TEXT("Janhyang")); DrainSave();
     Check(Save->SelectSlot(Profile+TEXT("B")),TEXT("switch to independent empty profile")); Draw();
     Check(!Portrait->GetBrush().GetResourceObject()&&Drops->GetChildrenCount()==0,TEXT("profile switch clears unlocked artwork and rewards"));
     Check(Save->SelectSlot(Profile),TEXT("restore isolated profile")); Draw();
     TArray<FknightItemStack> FinalItems; Progress->GetOwnedItems(FinalItems);
     Check(Progress->GetMoney()==Money&&InitialItems.Num()==FinalItems.Num(),TEXT("read-only Codex grants no money or inventory")); DrainSave();
+    if(FParse::Param(*Params,TEXT("Motion")))
+    {
+        Check(!W(TEXT("Brand_Accent"))&&!W(TEXT("Accent_Label_CodexEntries"))&&!W(TEXT("Accent_Label_Observation"))&&!W(TEXT("Accent_Label_Drops")),TEXT("standalone slashes and their layout widgets removed"));
+        auto* Motion=Menu->CodexTransition.Get();
+        auto* ImageMask=CastChecked<UKnightCodexReveal>(W(TEXT("Reveal_Monster")));
+        const FWidgetTransform IdleIcon=Portrait->GetRenderTransform();
+        const FWidgetTransform IdleList=W(TEXT("Size_EntryList"))->GetRenderTransform();
+        auto Frame=[&](const FString& Name,float Dt) { Draw(Dt); Capture(Name); };
+        auto Phase=[&](EKnightCodexPhase Expected){return Motion->GetPhase()==Expected;};
+        auto PointerBlocked=[&]()
+        {
+            const auto Path=Grid.GetBubblePath(FVector2D(Extent.X*.5f,Extent.Y*.5f),0,false);
+            return Motion->Shield && !Path.IsEmpty() && Path.Last().Widget==Motion->Shield->TakeWidget();
+        };
+        for(const FIntPoint Size:{FIntPoint(1920,1080),FIntPoint(1280,720),FIntPoint(2560,1080)})
+        {
+            Resize(Size);
+            for(int32 Category=0;Category<3;++Category)
+            {
+                Codex->SelectCategory(Category); Draw();
+                const FString Prefix=FString::Printf(TEXT("Motion_%dx%d_C%d"),Size.X,Size.Y,Category);
+                const FString Record=Text(Category==0?TEXT("Text_WorldTitle"):Category==1?TEXT("Text_MechTitle"):TEXT("Text_BossName"));
+                auto* ReaderScroll=CastChecked<UScrollBox>(W(Category==0?TEXT("Scroll_World"):Category==1?TEXT("Scroll_Mech"):TEXT("Scroll_BossDetail")));
+                const float ReaderOffset=ReaderScroll->GetScrollOffset();
+                Menu->RequestBack(); Draw(.5f); Draw();
+                Check(Menu->ShowPage(EKnightMainMenuPage::Codex),TEXT("open selected category through actual Home route")); Draw();
+                Check(Phase(EKnightCodexPhase::Entering)&&ImageMask->Progress==0&&ImageMask->Alpha==0,TEXT("initialized invisible before first visible frame"));
+                Check(PointerBlocked(),TEXT("transition hit grid routes pointer to shield, not underlying controls"));
+                Frame(Prefix+TEXT("_01_early"),.04f); Frame(Prefix+TEXT("_02_scan"),.08f); Frame(Prefix+TEXT("_03_visible"),.32f);
+                Check(Phase(EKnightCodexPhase::Visible)&&!ImageMask->bActive&&!Motion->Shield,TEXT("visible state removes mask, glow and input shield"));
+                Check(W(TEXT("Size_EntryList"))->GetRenderTransform()==IdleList&&Portrait->GetRenderTransform()==IdleIcon,TEXT("exact idle transforms restored; illustration never rotated or scaled"));
+                Check(Text(Category==0?TEXT("Text_WorldTitle"):Category==1?TEXT("Text_MechTitle"):TEXT("Text_BossName"))==Record,TEXT("category and record retained after close/reopen"));
+                Check(FMath::IsNearlyEqual(ReaderScroll->GetScrollOffset(),ReaderOffset,1.f),TEXT("valid reader scroll retained after animated close/reopen"));
+                CastChecked<UButton>(W(TEXT("Button_Close")))->OnClicked.Broadcast();
+                Frame(Prefix+TEXT("_04_exit"),.14f);
+                const float Before=Motion->GetReveal();
+                for(int32 I=0;I<12;++I) Menu->RequestBack();
+                Check(Motion->GetReveal()==Before&&Phase(EKnightCodexPhase::Exiting)&&Menu->GetCurrentPage()==EKnightMainMenuPage::Codex,TEXT("repeated Back neither restarts exit nor navigates early"));
+                Check(PointerBlocked(),TEXT("closing page cannot click through to Home"));
+                Draw(.18f); Draw();
+                // CommonButtonBase forwards focus to its inner Slate button in NativeOnFocusReceived.
+                const bool bHomeCodexFocused=Menu->Button_Codex->HasUserFocus(Player)||Menu->Button_Codex->HasUserFocusedDescendants(Player);
+                UE_LOG(LogTemp,Display,TEXT("CodexMotion focus self=%d descendant=%d preferred=%d"),Menu->Button_Codex->HasUserFocus(Player),Menu->Button_Codex->HasUserFocusedDescendants(Player),Menu->GetPreferredFocusTarget()==Menu->Button_Codex);
+                Check(Phase(EKnightCodexPhase::Hidden)&&Menu->GetCurrentPage()==EKnightMainMenuPage::Home&&bHomeCodexFocused&&Menu->GetPreferredFocusTarget()==Menu->Button_Codex&&!Motion->Shield,TEXT("one completed return restores Codex Home focus and normal input"));
+                Menu->ShowPage(EKnightMainMenuPage::Codex); Draw(.5f); Draw();
+            }
+        }
+        Resize(FIntPoint(1920,1080)); Codex->SelectCategory(2); Codex->SelectBoss(TEXT("Janyeol")); Draw();
+        Menu->RequestBack(); Draw(.5f); Draw(); Menu->ShowPage(EKnightMainMenuPage::Codex); Draw();
+        // Complete 60 Hz rendered sequence, including fully transparent initial/final frames.
+        for(int32 I=0;I<=27;++I) Frame(FString::Printf(TEXT("Sequence_%03d"),I),I?1.f/60.f:0.f);
+        for(int32 I=28;I<40;++I) Frame(FString::Printf(TEXT("Sequence_%03d"),I),1.f/60.f);
+        Menu->RequestBack();
+        for(int32 I=40;I<58;++I) Frame(FString::Printf(TEXT("Sequence_%03d"),I),1.f/60.f);
+        // Capture() requires the Codex page; last outgoing frame is still transparent before navigation.
+        Draw(.02f); Draw(); Capture(TEXT("Sequence_058"),false);
+        for(int32 I=59;I<70;++I) { Draw(1.f/60.f); Capture(FString::Printf(TEXT("Sequence_%03d"),I),false); }
+        Menu->ShowPage(EKnightMainMenuPage::Codex); Draw(.09f); Draw();
+        const float EntryReveal=Motion->GetReveal(),EntryAlpha=Motion->GetOpacity();
+        FKeyEvent Escape(EKeys::Escape,FModifierKeysState(),0,false,0,0);
+        Check(Menu->NativeOnPreviewKeyDown(Menu->GetCachedGeometry(),Escape).IsEventHandled(),TEXT("Escape during entry handled by real preview-key route"));
+        Check(Phase(EKnightCodexPhase::Exiting)&&Motion->GetReveal()==EntryReveal&&Motion->GetOpacity()==EntryAlpha,TEXT("interrupted entry reverses from current values without snap"));
+        Frame(TEXT("Motion_InterruptedExit"),.06f);
+        FKeyEvent RepeatEscape(EKeys::Escape,FModifierKeysState(),0,true,0,0);
+        Menu->NativeOnPreviewKeyDown(Menu->GetCachedGeometry(),RepeatEscape); Draw(.3f); Draw();
+        Check(Menu->NativeOnPreviewKeyDown(Menu->GetCachedGeometry(),RepeatEscape).IsEventHandled()&&Menu->GetCurrentPage()==EKnightMainMenuPage::Home,TEXT("held Back does not activate Home settings after return"));
+        Menu->NativeOnKeyUp(Menu->GetCachedGeometry(),Escape);
+        Menu->ShowPage(EKnightMainMenuPage::Codex); Draw(.5f); Draw();
+        Codex->SelectCategory(1); Draw(); Codex->SelectCategory(2); Draw();
+        Check(Phase(EKnightCodexPhase::Visible)&&!ImageMask->bActive,TEXT("tab switching and scrolling never replay entrance"));
+        Codex->SelectBoss(TEXT("Heukgwan")); Menu->RequestBack(); Draw(.5f); Draw();
+        Menu->ShowPage(EKnightMainMenuPage::Codex); Frame(TEXT("Motion_LockedMonster"),.12f);
+        Check(!Portrait->GetBrush().GetResourceObject()&&Drops->GetChildrenCount()==0,TEXT("scan cannot expose locked artwork or rewards"));
+        FKeyEvent ControllerBack(EKeys::Gamepad_FaceButton_Right,FModifierKeysState(),0,false,0,0);
+        Check(Menu->NativeOnPreviewKeyDown(Menu->GetCachedGeometry(),ControllerBack).IsEventHandled(),TEXT("controller Back shares animated return route")); Draw(.5f); Draw();
+        Menu->NativeOnKeyUp(Menu->GetCachedGeometry(),ControllerBack);
+        Menu->ShowPage(EKnightMainMenuPage::Codex); Draw(.04f); Draw(); Motion->Cancel();
+        Check(Phase(EKnightCodexPhase::Hidden)&&!Motion->Shield&&!ImageMask->bActive,TEXT("cancellation releases temporary visual and input state"));
+    }
     FSlateApplication::Get().UnregisterVirtualWindow(Window); BeginCleanup(Renderer); FlushRenderingCommands();
     Target->RemoveFromRoot(); Menu->RemoveFromRoot(); GI->Shutdown(); GEngine->DestroyWorldContext(World); World->DestroyWorld(false); GI->RemoveFromRoot();
     UE_LOG(LogTemp,Display,TEXT("CodexStatic COMPLETE checks=%d failures=%d output=%s"),Checks,Failures,*Out);
