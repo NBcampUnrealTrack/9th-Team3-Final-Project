@@ -3,6 +3,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
+#include "Monster/knightMonsterCharacterBase.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 
@@ -16,7 +17,13 @@ void UknightAnimNotify_SpawnGroundFX::Notify(USkeletalMeshComponent* MeshComp, U
 	{
 		return;
 	}
-	const FRotator Facing(0.f, Owner->GetActorRotation().Yaw, 0.f);
+	// 공격이 고개를 돌려 쓸고 있으면(브레스) 몸이 아니라 고개 방향 앞에 남긴다.
+	float AimYaw = 0.f;
+	if (const AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(Owner))
+	{
+		Monster->GetHeadAimYaw(AimYaw);
+	}
+	const FRotator Facing(0.f, Owner->GetActorRotation().Yaw + AimYaw, 0.f);
 	const FVector Source = Owner->GetActorLocation() + Facing.RotateVector(FVector(Offset.X, Offset.Y, 0.0));
 
 	// 앞쪽 지형이 높거나 낮을 수 있어 위아래로 넉넉히 찾는다.

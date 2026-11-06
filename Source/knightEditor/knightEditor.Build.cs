@@ -25,6 +25,7 @@ public class knightEditor : ModuleRules
 			"UMG",
 			"UMGEditor",
 			"CommonUI",
+			"InputCore", // Isolated crafting dialog key-routing checks.
 			"knightUI",
 			"Slate",
 			"SlateCore",

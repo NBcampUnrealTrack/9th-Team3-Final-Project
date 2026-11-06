@@ -63,6 +63,9 @@ void UknightGameplayAbility_MonsterAreaAttack::ActivateAbility(const FGameplayAb
 	Knockback.Reset();
 	bHitAreaEffectsPlayed = false;
 	bWindupEffectStarted = false;
+	AimYaw = 0.f;
+	LastGroundFXYaw = 0.f;
+	bAimSweeping = false;
 
 	const FVector Center = GetAreaCenter();
 	if (TelegraphCue.IsValid())
@@ -108,7 +111,14 @@ void UknightGameplayAbility_MonsterAreaAttack::HandleClockTick(int32 ActionNumbe
 	{
 		return;
 	}
-	Elapsed += knightMonsterAreaAttack::ClockInterval * FMath::Max(Avatar->CustomTimeDilation, 0.f);
+	const float Step = knightMonsterAreaAttack::ClockInterval * FMath::Max(Avatar->CustomTimeDilation, 0.f);
+	Elapsed += Step;
+
+	// 판정보다 먼저 돌려서, 이번 판정이 지금 고개 방향으로 나가게 한다.
+	if (bAimSweep && Impacts.IsEmpty() && RecoveryStart < 0.f && Elapsed >= WindupTime)
+	{
+		UpdateAimSweep(Step);
+	}
 
 	if (!bLungeStarted && LungeMaxDistance > 0.f && LungeEndTime > LungeStartTime && Elapsed >= LungeStartTime)
 	{
@@ -154,6 +164,7 @@ void UknightGameplayAbility_MonsterAreaAttack::HandleClockTick(int32 ActionNumbe
 			if (Elapsed >= ActiveEnd)
 			{
 				RecoveryStart = Elapsed;
+				StopAimSweep();
 			}
 		}
 	}
@@ -266,6 +277,7 @@ void UknightGameplayAbility_MonsterAreaAttack::EndAbility(const FGameplayAbility
 	const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
 	StopWindupEffect();
+	StopAimSweep();
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
 
@@ -280,7 +292,7 @@ void UknightGameplayAbility_MonsterAreaAttack::PlayHitAreaEffects(const FVector&
 	// 몬스터 발밑 높이(이동 캡슐 바닥)에 놓는다. 낮게 떠 있는 날짐승도 바닥에서 퍼져 나가게.
 	const UCapsuleComponent* const Capsule = Character->GetCapsuleComponent();
 	const FVector Ground(Center.X, Center.Y, Capsule ? Capsule->GetComponentLocation().Z - Capsule->GetScaledCapsuleHalfHeight() : Center.Z);
-	const FRotator Facing(0.f, Character->GetActorRotation().Yaw, 0.f);
+	const FRotator Facing(0.f, Character->GetActorRotation().Yaw + AimYaw, 0.f);
 	for (UNiagaraSystem* const Effect : HitAreaEffects)
 	{
 		if (Effect)
@@ -355,9 +367,10 @@ void UknightGameplayAbility_MonsterAreaAttack::HitArea(const FVector& Center, fl
 			ActiveTime > 0.f ? knightMonsterAreaAttack::ActiveCheckInterval : 0.5f, 0, 3.f);
 		if (ConeHalfAngle > 0.f)
 		{
-			const FVector Origin = Avatar->GetActorTransform().TransformPosition(ConeOrigin);
+			const FTransform Aim = GetAimTransform(*Avatar);
+			const FVector Origin = Aim.TransformPosition(ConeOrigin);
 			const float Length = FVector::Dist(Origin, Center) + Radius;
-			DrawDebugCone(World, Origin, Avatar->GetActorForwardVector(), Length, FMath::DegreesToRadians(ConeHalfAngle),
+			DrawDebugCone(World, Origin, Aim.GetUnitAxis(EAxis::X), Length, FMath::DegreesToRadians(ConeHalfAngle),
 				FMath::DegreesToRadians(5.f), 12, FColor::Yellow, false, ActiveTime > 0.f ? knightMonsterAreaAttack::ActiveCheckInterval : 0.5f);
 		}
 	}
@@ -372,9 +385,10 @@ bool UknightGameplayAbility_MonsterAreaAttack::IsInsideCone(const AActor& Avatar
 		return true;
 	}
 	// 높이는 보지 않는다. 브레스가 아래로 기울어도 같은 좌우 폭으로 판정한다.
-	const FVector Origin = Avatar.GetActorTransform().TransformPosition(ConeOrigin);
+	const FTransform Aim = GetAimTransform(Avatar);
+	const FVector Origin = Aim.TransformPosition(ConeOrigin);
 	const FVector ToPoint = (Point - Origin).GetSafeNormal2D();
-	const FVector Forward = Avatar.GetActorForwardVector().GetSafeNormal2D();
+	const FVector Forward = Aim.GetUnitAxis(EAxis::X).GetSafeNormal2D();
 	return !ToPoint.IsNearlyZero() && FVector::DotProduct(ToPoint, Forward) >= FMath::Cos(FMath::DegreesToRadians(ConeHalfAngle));
 }
 
@@ -389,9 +403,81 @@ FVector UknightGameplayAbility_MonsterAreaAttack::GetAreaCenter() const
 	const USkeletalMeshComponent* const Mesh = Character ? Character->GetMesh() : nullptr;
 	if (!AreaSocket.IsNone() && Mesh && Mesh->DoesSocketExist(AreaSocket))
 	{
-		return Mesh->GetSocketLocation(AreaSocket) + Avatar->GetActorQuat().RotateVector(AreaOffset);
+		return Mesh->GetSocketLocation(AreaSocket) + GetAimTransform(*Avatar).GetRotation().RotateVector(AreaOffset);
 	}
-	return Avatar->GetActorTransform().TransformPosition(AreaOffset);
+	return GetAimTransform(*Avatar).TransformPosition(AreaOffset);
+}
+
+FTransform UknightGameplayAbility_MonsterAreaAttack::GetAimTransform(const AActor& Avatar) const
+{
+	FTransform Transform = Avatar.GetActorTransform();
+	if (!FMath::IsNearlyZero(AimYaw))
+	{
+		Transform.SetRotation(Transform.GetRotation() * FQuat(FVector::UpVector, FMath::DegreesToRadians(AimYaw)));
+	}
+	return Transform;
+}
+
+void UknightGameplayAbility_MonsterAreaAttack::UpdateAimSweep(float DeltaTime)
+{
+	AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetAvatarActorFromActorInfo());
+	const UknightMonsterTargetingComponent* const Targeting = Monster ? Monster->GetTargetingComponent() : nullptr;
+	const AActor* const Target = Targeting ? Targeting->GetCurrentTarget() : nullptr;
+	if (!Monster)
+	{
+		return;
+	}
+	bAimSweeping = true;
+	if (Target)
+	{
+		// 입(원뿔 꼭짓점)에서 본 타깃 방향. 몸 정면 기준 좌우 각도로 바꿔 한계 안에서 천천히 따라간다.
+		const FVector Mouth = Monster->GetActorTransform().TransformPosition(ConeOrigin);
+		const FVector ToTarget = Monster->GetActorQuat().UnrotateVector(Target->GetActorLocation() - Mouth);
+		if (!ToTarget.IsNearlyZero())
+		{
+			const float Desired = FMath::Clamp(FMath::RadiansToDegrees(FMath::Atan2(ToTarget.Y, ToTarget.X)), -AimSweepMaxYaw, AimSweepMaxYaw);
+			AimYaw = FMath::FixedTurn(AimYaw, Desired, AimSweepRate * DeltaTime);
+		}
+	}
+	Monster->SetHeadAimYaw(AimYaw);
+	if (AimSweepGroundFX && FMath::Abs(AimYaw - LastGroundFXYaw) >= AimSweepGroundFXStep)
+	{
+		LastGroundFXYaw = AimYaw;
+		SpawnAimGroundFX();
+	}
+}
+
+void UknightGameplayAbility_MonsterAreaAttack::StopAimSweep()
+{
+	if (!bAimSweeping)
+	{
+		return;
+	}
+	bAimSweeping = false;
+	if (AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetAvatarActorFromActorInfo()))
+	{
+		Monster->ClearHeadAimYaw();
+	}
+}
+
+void UknightGameplayAbility_MonsterAreaAttack::SpawnAimGroundFX() const
+{
+	const AActor* const Avatar = GetAvatarActorFromActorInfo();
+	UWorld* const World = GetWorld();
+	if (!Avatar || !World)
+	{
+		return;
+	}
+	// 몸이 아니라 고개 방향 앞 바닥. 바닥을 못 찾으면(낭떠러지) 남기지 않는다.
+	const FRotator Facing(0.f, Avatar->GetActorRotation().Yaw + AimYaw, 0.f);
+	const FVector Source = Avatar->GetActorLocation() + Facing.Vector() * AimSweepGroundFXDistance;
+	FHitResult Hit;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(knightAimGroundFX), false, Avatar);
+	if (World->LineTraceSingleByObjectType(Hit, Source + FVector(0.f, 0.f, 3000.f), Source - FVector(0.f, 0.f, 3000.f),
+		FCollisionObjectQueryParams(ECC_WorldStatic), Params))
+	{
+		UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, AimSweepGroundFX, Hit.ImpactPoint, Facing, FVector(1.f), true, true, ENCPoolMethod::AutoRelease);
+	}
 }
 
 #if WITH_EDITOR

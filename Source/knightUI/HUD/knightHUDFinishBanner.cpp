@@ -5,6 +5,7 @@
 #include "Rendering/DrawElements.h"
 #include "Rendering/SlateRenderer.h"
 #include "Styling/CoreStyle.h"
+#include "UObject/ConstructorHelpers.h"
 
 #define LOCTEXT_NAMESPACE "knightHUDFinishBanner"
 
@@ -21,10 +22,7 @@ namespace knightFinishBanner
 	constexpr float SignalLostTime = 1.15f;
 	constexpr float ConfirmTime = 1.3f;
 	constexpr float ConfirmGlitchTime = 0.35f;
-	constexpr float SubLabelTime = 1.45f;
-	constexpr float StatsTime = 1.7f;
-	constexpr float SubtitleStart = 0.35f;
-	constexpr float SubtitleInterval = 0.045f;
+	constexpr float StatsTime = 1.6f;
 	constexpr float DimTime = 0.5f;
 	constexpr float DimOpacity = 0.55f;
 
@@ -53,22 +51,62 @@ UknightHUDFinishBanner::UknightHUDFinishBanner(const FObjectInitializer& ObjectI
 	: Super(ObjectInitializer)
 {
 	ConfirmLabel = LOCTEXT("Confirm", "토벌 확인");
-	ConfirmSubLabel = LOCTEXT("ConfirmSub", "HUNT CONFIRMED");
-	VoiceSubtitle = LOCTEXT("Voice", "[AI] 목표 생명 반응 소실 확인. 토벌 성공입니다.");
-	ConfirmFont = FCoreStyle::GetDefaultFontStyle("Bold", 44);
-	ConfirmFont.LetterSpacing = 250;
-	LabelFont = FCoreStyle::GetDefaultFontStyle("Mono", 11);
-	LabelFont.LetterSpacing = 200;
-	SubtitleFont = FCoreStyle::GetDefaultFontStyle("Regular", 15);
+	FailLabel = LOCTEXT("Fail", "임무 실패");
+	// 프로젝트 UI 폰트(IBM Plex Sans KR). 못 찾으면 엔진 기본 폰트로 그린다.
+	static ConstructorHelpers::FObjectFinder<UObject> PlexFont(TEXT("/Game/Knight/UI/Style/Fonts/F_Knight_PlexKR.F_Knight_PlexKR"));
+	const auto MakeFont = [](UObject* Font, const FName Typeface, int32 Size, int32 LetterSpacing)
+	{
+		FSlateFontInfo Info = Font ? FSlateFontInfo(Font, Size, Typeface) : FCoreStyle::GetDefaultFontStyle(Typeface, Size);
+		Info.LetterSpacing = LetterSpacing;
+		return Info;
+	};
+	ConfirmFont = MakeFont(PlexFont.Object, TEXT("Bold"), 34, 250);
+	LabelFont = MakeFont(PlexFont.Object, TEXT("Medium"), 11, 200);
+	TimeFont = MakeFont(PlexFont.Object, TEXT("SemiBold"), 20, 80);
 	SetVisibility(ESlateVisibility::HitTestInvisible);
 }
 
-void UknightHUDFinishBanner::Setup(const FText& InTargetName, float InClearTime, int32 InBrokenParts, float InBannerTime)
+void UknightHUDFinishBanner::Setup(const FText& InTargetName, float InClearTime, float InBannerTime, bool bInFailure, const FText& InFailStatus)
 {
 	TargetName = InTargetName;
 	ClearTime = InClearTime;
-	BrokenParts = InBrokenParts;
 	BannerTime = InBannerTime;
+	bFailure = bInFailure;
+	FailStatus = InFailStatus;
+}
+
+void UknightHUDFinishBanner::BeginRise()
+{
+	if (RiseStartTime <= 0.0)
+	{
+		RiseStartTime = FPlatformTime::Seconds();
+	}
+}
+
+float UknightHUDFinishBanner::GetRiseAlpha() const
+{
+	return RiseStartTime > 0.0 ? knightHUDDraw::EaseOut(static_cast<float>(FPlatformTime::Seconds() - RiseStartTime) / RiseTime) : 0.f;
+}
+
+void UknightHUDFinishBanner::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+	// 창 가운데를 축으로 줄이고, 창 위 끝이 RisenTop에 오도록 올린다. 그리는 좌표는 그대로 두고 위젯 전체를 옮긴다.
+	const float Rise = GetRiseAlpha();
+	if (Rise <= 0.f)
+	{
+		return;
+	}
+	const float ScreenHeight = MyGeometry.GetLocalSize().Y;
+	if (ScreenHeight <= 0.f)
+	{
+		return;
+	}
+	const float Scale = FMath::Lerp(1.f, RisenScale, Rise);
+	const float FromCenter = ScreenHeight * PanelCenterY;
+	const float ToCenter = RisenTop + PanelSize.Y * RisenScale * 0.5f;
+	SetRenderTransformPivot(FVector2D(0.5f, PanelCenterY));
+	SetRenderTransform(FWidgetTransform(FVector2D(0.f, (ToCenter - FromCenter) * Rise), FVector2D(Scale), FVector2D::ZeroVector, 0.f));
 }
 
 void UknightHUDFinishBanner::NativeConstruct()
@@ -107,17 +145,16 @@ int32 UknightHUDFinishBanner::NativePaint(const FPaintArgs& Args, const FGeometr
 	const float E = GetElapsed();
 	const FVector2D Screen = AllottedGeometry.GetLocalSize();
 	const FVector2D Center(Screen.X * 0.5, Screen.Y * PanelCenterY);
-	// 배너 시간이 지나면 옅어진 채 결과 화면이 열릴 때까지 남는다.
+	// 배너 시간이 지나면 옅어진 채 결과 화면이 열릴 때까지 남고, 올라가면서 다시 선명해진다.
 	const float Dim = E > BannerTime ? FMath::Lerp(1.f, DimOpacity, FMath::Clamp((E - BannerTime) / DimTime, 0.f, 1.f)) : 1.f;
-	const float Opacity = Dim * knightHUDDraw::BootFlicker(E, 0.25f);
-	const FLinearColor Accent = knightHUDDraw::WithOpacity(AccentColor, Opacity);
+	const float Opacity = FMath::Lerp(Dim, 1.f, GetRiseAlpha()) * knightHUDDraw::BootFlicker(E, 0.25f);
+	// 실패 판독은 창 전체가 빨간 톤이다.
+	const FLinearColor BaseAccent = bFailure ? SignalLostColor : AccentColor;
+	const FLinearColor Accent = knightHUDDraw::WithOpacity(BaseAccent, Opacity);
 
 	knightHUDDraw::FScreenLook Look;
 	Look.GhostColor = GhostColor;
 	Look.GhostOffset = 1.5f;
-	Look.ScanlineSpacing = 3.f;
-	Look.ScanlineOpacity = 0.18f;
-	Look.SweepPeriod = 1.6f;
 
 	// 1. 가운데 가로선이 펼쳐지고, 판독 창이 위아래로 열린다.
 	const float LineWidth = PanelSize.X * knightHUDDraw::EaseOut(E / LineTime);
@@ -131,7 +168,6 @@ int32 UknightHUDFinishBanner::NativePaint(const FPaintArgs& Args, const FGeometr
 	if (Height > 1.f)
 	{
 		knightHUDDraw::Box(OutDrawElements, Layer + 1, AllottedGeometry, TL, FVector2D(PanelSize.X, Height), knightHUDDraw::WithOpacity(PlateColor, Opacity));
-		knightHUDDraw::Scanlines(Look, OutDrawElements, Layer + 2, AllottedGeometry, TL, FVector2D(PanelSize.X, Height), AccentColor, Opacity, E);
 		const float Arm = 28.f;
 		const FVector2D BR = TL + FVector2D(PanelSize.X, Height);
 		for (const FVector2D& Corner : { TL, FVector2D(BR.X, TL.Y), BR, FVector2D(TL.X, BR.Y) })
@@ -147,20 +183,20 @@ int32 UknightHUDFinishBanner::NativePaint(const FPaintArgs& Args, const FGeometr
 		return Layer + 4;
 	}
 
-	// 2. 대상 이름과 생체 신호. 파형이 뛰다가 평평해지면 SIGNAL LOST.
+	// 2. 대상 이름과 생체 신호. 성공이면 파형이 뛰다가 평평해지며 SIGNAL LOST, 실패면 대상은 살아 있으니 계속 뛰고 실패 사유 코드.
 	const FString Target = FString::Printf(TEXT("TARGET  >  %s"), *TargetName.ToString());
 	const int32 Typed = FMath::Min(Target.Len(), FMath::FloorToInt32((E - ContentStart) / TypeInterval));
 	DrawText(OutDrawElements, Layer + 4, AllottedGeometry, TL + FVector2D(26.f, 18.f), FText::FromString(Target.Left(Typed)), LabelFont, Accent, 1.5f, false);
 
 	const bool bLost = E >= SignalLostTime;
-	const FText Status = bLost ? LOCTEXT("SignalLost", "SIGNAL LOST") : LOCTEXT("Scanning", "VITAL SCAN");
+	const FText Status = !bLost ? LOCTEXT("Scanning", "VITAL SCAN") : bFailure ? FailStatus : LOCTEXT("SignalLost", "SIGNAL LOST");
 	const float StatusBlink = bLost || FMath::Frac(E * 3.f) < 0.6f ? 1.f : 0.35f;
 	const FVector2D StatusSize = FSlateApplication::Get().GetRenderer()->GetFontMeasureService()->Measure(Status, LabelFont);
 	DrawText(OutDrawElements, Layer + 4, AllottedGeometry, FVector2D(TL.X + PanelSize.X - 26.f - StatusSize.X, TL.Y + 18.f), Status, LabelFont,
 		knightHUDDraw::WithOpacity(bLost ? SignalLostColor : AccentColor, Opacity * StatusBlink), 1.5f, false);
 
-	const float Flat = FMath::SmoothStep(0.f, 1.f, FMath::Clamp((E - FlatlineStart) / FlatlineTime, 0.f, 1.f));
-	const FLinearColor WaveColor = knightHUDDraw::WithOpacity(FMath::Lerp(AccentColor, SignalLostColor, Flat), Opacity * FMath::Lerp(1.f, 0.7f, Flat));
+	const float Flat = bFailure ? 0.f : FMath::SmoothStep(0.f, 1.f, FMath::Clamp((E - FlatlineStart) / FlatlineTime, 0.f, 1.f));
+	const FLinearColor WaveColor = knightHUDDraw::WithOpacity(FMath::Lerp(BaseAccent, SignalLostColor, Flat), Opacity * FMath::Lerp(1.f, 0.7f, Flat));
 	TArray<FVector2f> Wave;
 	const float WaveY = TL.Y + 66.f;
 	for (float X = TL.X + 26.f; X <= TL.X + PanelSize.X - 26.f; X += 4.f)
@@ -169,7 +205,7 @@ int32 UknightHUDFinishBanner::NativePaint(const FPaintArgs& Args, const FGeometr
 	}
 	knightHUDDraw::ScreenLines(Look, OutDrawElements, Layer + 4, AllottedGeometry, Wave, WaveColor, 1.5f);
 
-	// 3. 토벌 확인. 처음 잠깐 지직거리며 찍힌다.
+	// 3. 토벌 확인(실패는 임무 실패). 처음 잠깐 지직거리며 찍힌다.
 	if (E >= ConfirmTime)
 	{
 		const float Since = E - ConfirmTime;
@@ -177,31 +213,27 @@ int32 UknightHUDFinishBanner::NativePaint(const FPaintArgs& Args, const FGeometr
 		const float Ghost = bGlitch ? 10.f * FrameNoise(E, 1) : 2.f;
 		const FVector2D Jitter = bGlitch ? FVector2D(4.f * FrameNoise(E, 2), 0.f) : FVector2D::ZeroVector;
 		const float Flicker = knightHUDDraw::BootFlicker(Since, 0.2f);
-		DrawText(OutDrawElements, Layer + 5, AllottedGeometry, FVector2D(Center.X, TL.Y + 128.f) + Jitter, ConfirmLabel, ConfirmFont,
+		DrawText(OutDrawElements, Layer + 5, AllottedGeometry, FVector2D(Center.X, TL.Y + 116.f) + Jitter, bFailure ? FailLabel : ConfirmLabel, ConfirmFont,
 			knightHUDDraw::WithOpacity(FLinearColor::White, Opacity * Flicker), Ghost, true);
 	}
-	if (E >= SubLabelTime)
-	{
-		DrawText(OutDrawElements, Layer + 5, AllottedGeometry, FVector2D(Center.X, TL.Y + 172.f), ConfirmSubLabel, LabelFont, Accent, 1.5f, true);
-	}
+	// 4. 소요 시간. 라벨은 작게, 숫자는 크게 한 줄로 가운데에 놓는다.
 	if (E >= StatsTime)
 	{
 		const int32 Minutes = FMath::FloorToInt32(ClearTime / 60.f);
 		const float Seconds = ClearTime - Minutes * 60.f;
-		const FText Stats = FText::FromString(FString::Printf(TEXT("CLEAR TIME %02d:%04.1f     PARTS BROKEN %d"), Minutes, Seconds, BrokenParts));
-		DrawText(OutDrawElements, Layer + 5, AllottedGeometry, FVector2D(Center.X, TL.Y + PanelSize.Y - 22.f), Stats, LabelFont,
-			knightHUDDraw::WithOpacity(SubLabelColor, Opacity), 0.f, true);
-	}
-
-	// 4. [AI] 음성 자막. 가운데 맞춤은 전체 문장 폭으로 정해 두고 한 글자씩 찍는다.
-	if (E >= SubtitleStart)
-	{
-		const FString Line = VoiceSubtitle.ToString();
-		const int32 Shown = FMath::Min(Line.Len(), FMath::FloorToInt32((E - SubtitleStart) / SubtitleInterval));
-		const FVector2D Full = FSlateApplication::Get().GetRenderer()->GetFontMeasureService()->Measure(VoiceSubtitle, SubtitleFont);
-		const FVector2D At(Center.X - Full.X * 0.5, Center.Y + PanelSize.Y * 0.5 + 22.f);
-		DrawText(OutDrawElements, Layer + 5, AllottedGeometry, At, FText::FromString(Line.Left(Shown)), SubtitleFont,
-			knightHUDDraw::WithOpacity(FLinearColor::White, Opacity * 0.92f), 0.f, false);
+		const FText Label = bFailure ? LOCTEXT("ElapsedLabel", "ELAPSED") : LOCTEXT("ClearTimeLabel", "CLEAR TIME");
+		const FText Value = FText::FromString(FString::Printf(TEXT("%02d:%05.2f"), Minutes, Seconds));
+		const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+		const FVector2D LabelSize = Measure->Measure(Label, LabelFont);
+		const FVector2D ValueSize = Measure->Measure(Value, TimeFont);
+		const float Gap = 16.f;
+		const float Left = Center.X - (LabelSize.X + Gap + ValueSize.X) * 0.5f;
+		const float RowY = TL.Y + PanelSize.Y - 34.f;
+		const float Flicker = knightHUDDraw::BootFlicker(E - StatsTime, 0.2f);
+		DrawText(OutDrawElements, Layer + 5, AllottedGeometry, FVector2D(Left, RowY - LabelSize.Y * 0.5f), Label, LabelFont,
+			knightHUDDraw::WithOpacity(SubLabelColor, Opacity * Flicker), 0.f, false);
+		DrawText(OutDrawElements, Layer + 5, AllottedGeometry, FVector2D(Left + LabelSize.X + Gap, RowY - ValueSize.Y * 0.5f), Value, TimeFont,
+			knightHUDDraw::WithOpacity(BaseAccent, Opacity * Flicker), 1.5f, false);
 	}
 	return Layer + 6;
 }

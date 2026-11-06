@@ -3,7 +3,7 @@
 //
 // 구간은 몽타주의 첫 근접 판정(Knight Melee Trace)에서 자동으로 잡는다. 몽타주마다 노티파이를 따로 넣지 않는다.
 //   준비(Windup)  : 몽타주 시작 ~ 판정 LockLeadTime 전      → 배속 x WindupRate (조금 느리게, 무게감)
-//   락(Lock)      : 위 지점에서 LockTime(실제 초) 동안       → 배속 x LockRate (거의 정지, 모터가 힘을 모음)
+//   락(Lock)      : 위 지점에서 LockTime(실제 초) 동안       → 배속 x LockRate (거의 정지, 모터가 힘을 모음). LockTime 0이면 없음(기본)
 //   버스트(Burst) : 락이 끝난 뒤 ~ 판정 끝                    → 배속 x BurstRate (빠르게) + 추진기 분사·작은 흔들림
 //   스톱(Stop)    : 판정 끝에서 StopTime(실제 초) 동안        → 배속 x StopRate (뚝 멈춤) + 증기 배출
 //   후딜(Recovery): 그 뒤                                     → 원래 배속
@@ -43,9 +43,12 @@ struct KNIGHT_API FknightMechTimingSettings
 	UPROPERTY(EditAnywhere, Category="Mech Timing", meta=(ClampMin=0, Units="s"))
 	float LockLeadTime = 0.12f;
 
-	/** 락 길이(실제 초). 한손 기준, 양손은 TwoHandedLockScale을 곱한다. */
+	/**
+	 * 락 길이(실제 초). 한손 기준, 양손은 TwoHandedLockScale을 곱한다. 0이면 락 없이 준비에서 바로 버스트로 넘어간다.
+	 * 0.07(BP_Knight는 0.1) → 0: 돌진하는 공격에서 칼을 내지르기 직전에 멈췄다가 나가는 것처럼 보여 껐다(BP_Knight도 0). 바뀔 수 있는 값.
+	 */
 	UPROPERTY(EditAnywhere, Category="Mech Timing", meta=(ClampMin=0, Units="s"))
-	float LockTime = 0.07f;
+	float LockTime = 0.f;
 
 	/**
 	 * 락 구간 배속(원래 배속에 곱함). 0.06(BP_Knight는 0.1) → 0.3: 휘두르기 직전에 거의 멈췄다가

@@ -41,6 +41,8 @@ UCLASS()
 class KNIGHT_API UKnightMainMenuWidget : public UKnightMenuWidgetBase
 {
 	GENERATED_BODY()
+	friend class UknightEquipmentActionCheckCommandlet;
+	friend class UknightMaintenanceEntranceCheckCommandlet;
 
 public:
 	UFUNCTION(BlueprintPure, Category="Knight|Menu")
@@ -66,6 +68,7 @@ protected:
 	virtual void NativeConstruct() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 	virtual FReply NativeOnPreviewKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
+	virtual FReply NativeOnKeyUp(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
 	virtual EKnightFlowState GetExpectedFlowState() const override { return EKnightFlowState::MainMenu; }
 	virtual bool HandleBackRequested() override;
 	virtual bool ShouldAllowEscapeToChild() const override;
@@ -201,6 +204,8 @@ private:
 	void PlaceMaintenanceSubmenu();
 	void OpenMaintenanceDestination(EKnightMaintenanceDestination Destination, bool bStartInMaterials = false);
 	bool IsMaintenanceDestinationOpen() const;
+	void LeaveMaintenance();
+	TSet<FKey> ReturnSuppressedKeys;
 	void EnsureQuestWidget();
 
 	UPROPERTY(Transient)
@@ -234,6 +239,7 @@ private:
 	TWeakObjectPtr<UWidget> FocusBeforeMaterialsShortcut;
 	bool bRestoreMaterialsShortcutFocus = false;
 	bool bMaterialsShortcutEntry = false;
+	bool bReturnToWeaponEquipment = false;
 	TWeakObjectPtr<AKnightMaintenanceCameraRig> MaintenanceCameraRig;
 	bool bRestoreMaintenanceFocus = false;
 	bool bRestoreCodexFocus = false;

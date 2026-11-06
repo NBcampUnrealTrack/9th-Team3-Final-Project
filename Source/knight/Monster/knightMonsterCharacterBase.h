@@ -98,6 +98,14 @@ public:
 	UknightMonsterMovementComponent* GetMonsterMovementComponent() const;
 	const UknightMonsterDefinition* GetMonsterDefinition() const { return MonsterDefinition; }
 
+	/**
+	 * 공격이 머리 방향을 직접 정할 때(브레스로 타깃을 쓸며 따라가기) 몸 정면 기준 yaw(도)를 넣는다. 켜져 있으면
+	 * Look At 노드가 공격 중에도 이 각도로 머리를 돌린다. 공격이 끝나면 ClearHeadAimYaw로 끈다.
+	 */
+	void SetHeadAimYaw(float Yaw) { bHeadAimActive = true; HeadAimYaw = Yaw; }
+	void ClearHeadAimYaw() { bHeadAimActive = false; HeadAimYaw = 0.f; }
+	bool GetHeadAimYaw(float& OutYaw) const { OutYaw = HeadAimYaw; return bHeadAimActive; }
+
 	/** 지금 얹을 덧셈 피격. Knight Hit Flinch 애님 노드가 게임 스레드(PreUpdate)에서 읽는다. */
 	const FknightHitFlinchState& GetHitFlinch() const { return HitFlinchState; }
 
@@ -173,6 +181,9 @@ private:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UknightHitStopComponent> HitStop;
+
+	float HeadAimYaw = 0.f;
+	bool bHeadAimActive = false;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UknightHitReactionComponent> HitReaction;

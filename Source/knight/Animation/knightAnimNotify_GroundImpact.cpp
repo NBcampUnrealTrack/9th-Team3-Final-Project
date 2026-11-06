@@ -39,10 +39,11 @@ void UknightAnimNotify_GroundImpact::Notify(USkeletalMeshComponent* MeshComp, UA
 		{
 			UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, WaterSplash, Epicenter, FRotator::ZeroRotator, FVector(WaterSplashScale), true, true, ENCPoolMethod::AutoRelease);
 		}
-		else if (UNiagaraSystem* const Heavy = GetDefault<UknightWaterRippleSettings>()->SplashHeavySystem.LoadSynchronous())
+		else
 		{
 			// 발 첨벙과 같은 이펙트를 찍은 부위 크기에 맞춰, 가장 세게 부딪힌 배율에 WaterSplashScale을 곱해 쓴다.
 			// 내려찍기는 큰 동작이라 움직임 첨벙을 줄이는 SplashScale은 곱하지 않는다.
+			// 단, 사람 크기 부위(SplashHeavyMinBodySize 미만, 기사 구르기)는 발 첨벙처럼 SplashSystem에 SplashScale을 곱하고 SplashLightMaxScale에서 멈춘다.
 			// 부위에 바디가 없으면 캡슐 반지름의 1/3 정도를 부위 크기로 본다.
 			const UknightWaterRippleSettings* const Settings = GetDefault<UknightWaterRippleSettings>();
 			float Size = UknightWaterRippleSubsystem::GetBodyHalfWidth(MeshComp, Bone);
@@ -51,12 +52,21 @@ void UknightAnimNotify_GroundImpact::Notify(USkeletalMeshComponent* MeshComp, UA
 				const ACharacter* const Character = Cast<ACharacter>(MeshComp->GetOwner());
 				Size = Character ? Character->GetCapsuleComponent()->GetScaledCapsuleRadius() * 0.35f : Settings->SplashReferenceBodySize;
 			}
-			const float Scale = FMath::Min(Size / Settings->SplashReferenceBodySize * Settings->SplashSpeedScaleRange.Y, Settings->SplashMaxScale) * WaterSplashScale;
-			UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, Heavy, Epicenter, FRotator::ZeroRotator, FVector(Scale), true, true, ENCPoolMethod::AutoRelease);
-		}
-		else if (Dust)
-		{
-			UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, Dust, Epicenter, FRotator::ZeroRotator, FVector(DustScale), true, true, ENCPoolMethod::AutoRelease);
+			const bool bLight = Size < Settings->SplashHeavyMinBodySize;
+			UNiagaraSystem* const Splash = (bLight ? Settings->SplashSystem : Settings->SplashHeavySystem).LoadSynchronous();
+			if (Splash)
+			{
+				float Scale = FMath::Min(Size / Settings->SplashReferenceBodySize * Settings->SplashSpeedScaleRange.Y, Settings->SplashMaxScale) * WaterSplashScale;
+				if (bLight)
+				{
+					Scale = FMath::Min(Scale * Settings->SplashScale, Settings->SplashLightMaxScale);
+				}
+				UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, Splash, Epicenter, FRotator::ZeroRotator, FVector(Scale), true, true, ENCPoolMethod::AutoRelease);
+			}
+			else if (Dust)
+			{
+				UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, Dust, Epicenter, FRotator::ZeroRotator, FVector(DustScale), true, true, ENCPoolMethod::AutoRelease);
+			}
 		}
 		if (UknightWaterRippleSubsystem* const Ripples = World->GetSubsystem<UknightWaterRippleSubsystem>())
 		{

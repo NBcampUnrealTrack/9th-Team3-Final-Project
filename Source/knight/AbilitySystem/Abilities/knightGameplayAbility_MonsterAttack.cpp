@@ -243,7 +243,7 @@ void UknightGameplayAbility_MonsterAttack::ActivateAbility(const FGameplayAbilit
 	}
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
 
-	if ((bStartTurnToTarget || !FMath::IsNearlyZero(StartTurnYaw)) && StartTurnMaxTime > 0.f)
+	if ((bStartTurnToTarget || !FMath::IsNearlyZero(StartTurnYaw) || ShouldAutoFaceTarget()) && StartTurnMaxTime > 0.f)
 	{
 		const int32 Steps = FMath::Max(1, FMath::CeilToInt(StartTurnMaxTime / knightMonsterAttack::StartTurnInterval));
 		UAbilityTask_Repeat* const TurnTask = UAbilityTask_Repeat::RepeatAction(this, knightMonsterAttack::StartTurnInterval, Steps);
@@ -251,6 +251,28 @@ void UknightGameplayAbility_MonsterAttack::ActivateAbility(const FGameplayAbilit
 		StartTurnTask = TurnTask;
 		TurnTask->ReadyForActivation();
 	}
+}
+
+bool UknightGameplayAbility_MonsterAttack::ShouldAutoFaceTarget() const
+{
+	// 옆·뒤 전용 공격, 둘레 전체를 덮는 공격, 이동 행동(옆걸음, 물러나기)은 몸을 돌리면 안 된다.
+	if (!bAutoFaceTarget || Selection.TargetSide != EknightTargetSide::Any || Selection.MinAngle > 0.f || Selection.MaxAngle >= 180.f
+		|| GetAssetTags().HasTag(knightGameplayTags::Ability_Move))
+	{
+		return false;
+	}
+	const AknightMonsterCharacterBase* const Monster = Cast<AknightMonsterCharacterBase>(GetAvatarActorFromActorInfo());
+	const UAbilitySystemComponent* const ASC = Monster ? Monster->GetAbilitySystemComponent() : nullptr;
+	const UknightMonsterTargetingComponent* const Targeting = Monster ? Monster->GetTargetingComponent() : nullptr;
+	const AActor* const Target = Targeting ? Targeting->GetCurrentTarget() : nullptr;
+	if (!Target || (ASC && ASC->HasMatchingGameplayTag(knightGameplayTags::State_Monster_Airborne)))
+	{
+		return false;
+	}
+	const FVector Forward = Monster->GetActorForwardVector().GetSafeNormal2D();
+	const FVector ToTarget = (Target->GetActorLocation() - Monster->GetActorLocation()).GetSafeNormal2D();
+	const float CosAngle = FVector::DotProduct(Forward, ToTarget);
+	return CosAngle < FMath::Cos(FMath::DegreesToRadians(AutoFaceMinAngle));
 }
 
 void UknightGameplayAbility_MonsterAttack::HandleStartTurnTick(int32 ActionNumber)

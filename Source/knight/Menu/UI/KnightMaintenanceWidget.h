@@ -5,6 +5,7 @@
 #include "GameplayTagContainer.h"
 #include "UObject/PrimaryAssetId.h"
 #include "Types/SlateEnums.h"
+#include "Menu/UI/KnightMaintenanceTransition.h"
 #include "KnightMaintenanceWidget.generated.h"
 
 class UCommonButtonBase;
@@ -51,12 +52,23 @@ UCLASS()
 class KNIGHT_API UKnightMaintenanceWidget : public UUserWidget
 {
 	GENERATED_BODY()
+	friend class UKnightMaintenanceTransition;
+	friend class UknightMaintenanceEntranceCheckCommandlet;
 public:
 	static TSubclassOf<UKnightMaintenanceWidget> GetSharedWidgetClass();
 	void Open(EKnightMaintenanceDestination InDestination, bool bStartInMaterials = false);
+	bool OpenEnhancementWeapon(FPrimaryAssetId WeaponId);
+	void RestoreWeaponEquipmentSelection();
+	bool IsEnhancementNavigationBlocked() const;
 	bool IsMaterialsViewOpen() const { return Destination == EKnightMaintenanceDestination::Crafting && Category == 4; }
 	bool IsMaterialQuantityInputFocused() const;
 	void Close();
+	void BeginEntrance(UWidget* Footer, FSimpleDelegate Finished);
+	void BeginExit(UWidget* Footer, UCanvasPanel* Home, FSimpleDelegate Finished);
+	void TickExit(float DeltaTime);
+	void CancelTransition();
+	bool IsTransitionActive() const { return EntranceTransition && EntranceTransition->IsActive(); }
+	bool IsTransitionExiting() const { return EntranceTransition && EntranceTransition->IsExiting(); }
 	EKnightMaintenanceDestination GetDestination() const { return Destination; }
 	/** Q/E, LB/RB. 제작이 아니면 재료 탭 건너뜀. */
 	void CycleInfoTab(int32 Direction);
@@ -64,15 +76,29 @@ public:
 	bool HandleConfirmKey();
 	/** Esc: 제작 확인 창 먼저 닫기. 닫을 게 없으면 false. */
 	bool HandleBack();
+	bool IsCraftResultOpen() const { return CraftedPart != nullptr; }
+	FReply HandleCraftResultKey(const FKeyEvent& KeyEvent);
 	UWidget* GetFocusButton() const;
+	bool UsesNavigationFeedback() const { return bNavigationFeedback; }
+	void NotifyNavigationInput() { bNavigationFeedback = true; }
 
 	/** 탭·부위 선택 시 카메라 이동용. Open에서는 안 보냄(전신 시작). */
 	FKnightMaintenanceSlotFocused OnSlotFocused;
+	DECLARE_DELEGATE_OneParam(FEnhancementShortcutRequested, FPrimaryAssetId);
+	FEnhancementShortcutRequested OnEnhancementShortcutRequested;
 
 protected:
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Entrance") FKnightMaintenanceEntranceSettings EntranceSettings;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Entrance") TObjectPtr<UMaterialInterface> EntranceRevealMaterial;
+	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Entrance") TObjectPtr<UMaterialInterface> EntranceScanMaterial;
+	UPROPERTY(Transient) TObjectPtr<UKnightMaintenanceTransition> EntranceTransition;
 	virtual void NativeOnInitialized() override;
 	virtual void NativeDestruct() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+	virtual FReply NativeOnPreviewKeyDown(const FGeometry& Geometry, const FKeyEvent& KeyEvent) override;
+	virtual FReply NativeOnMouseMove(const FGeometry& Geometry, const FPointerEvent& MouseEvent) override;
+	virtual FReply NativeOnPreviewMouseButtonDown(const FGeometry& Geometry, const FPointerEvent& MouseEvent) override;
+	bool bNavigationFeedback = true;
 
 	/** Cooked artwork references, used only by the Enhancement destination. */
 	UPROPERTY(EditDefaultsOnly, Category="Knight|Maintenance|Enhancement Presentation")
@@ -155,6 +181,23 @@ protected:
 
 private:
 	friend class UknightEnhancementPreviewCheckCommandlet;
+	friend class UknightCraftResultCheckCommandlet;
+	friend class UknightEquipmentActionCheckCommandlet;
+	void BuildCraftResultDialog();
+	void OpenCraftResult(const UknightPartItemDefinition* Part);
+	void CloseCraftResult(bool bRestoreFocus);
+	void EquipCraftResult();
+	void RefreshCraftingAfterTransaction();
+	bool TryEquipOwnedPart(const UknightPartItemDefinition* Part, FText& FailureReason);
+	UPROPERTY(Transient) TObjectPtr<UWidget> CraftResultPanel;
+	UPROPERTY(Transient) TObjectPtr<UImage> CraftResultIcon;
+	UPROPERTY(Transient) TObjectPtr<UTextBlock> CraftResultName;
+	UPROPERTY(Transient) TObjectPtr<UTextBlock> CraftResultError;
+	UPROPERTY(Transient) TObjectPtr<UCommonButtonBase> CraftResultEquip;
+	UPROPERTY(Transient) TObjectPtr<UCommonButtonBase> CraftResultBack;
+	UPROPERTY(Transient) TObjectPtr<const UknightPartItemDefinition> CraftedPart;
+	FString CraftedProfileId;
+	TMap<TWeakObjectPtr<UWidget>, bool> CraftResultBlockedWidgets;
 	void ApplyCraftingPresentation();
 	void StyleCraftingEntry(UKnightMaintenanceEntryWidget* Entry);
 	void ApplyDestinationLayout();
@@ -198,6 +241,11 @@ private:
 	void RequestWeaponUpgrade();
 	void RefreshTabButtons();
 	void RebuildEquipmentSlots(bool bRestoreFocus);
+	void RefreshNearbyEquipmentAction(bool bOccupied);
+	void ResetNearbyEquipmentAction();
+	void UpdateNearbyEquipmentActionLayout();
+	void RequestNearbyEquipmentReplacement();
+	void RequestNearbyWeaponEnhancement();
 	void SelectEquipmentSlot(FGameplayTag SlotTag);
 	void RefreshEquipmentDetails();
 	void OpenEquipmentPicker();
@@ -312,6 +360,11 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> PreviewStatusText;
 	UPROPERTY(Transient) TObjectPtr<UCommonTextBlock> SelectedSetFooterText;
 	UPROPERTY(Transient) TArray<TObjectPtr<UCommonButtonBase>> EquipmentSlotButtons;
+	UPROPERTY(Transient) TObjectPtr<UCommonButtonBase> EquipmentReplaceButton;
+	UPROPERTY(Transient) TObjectPtr<UCommonButtonBase> EquipmentEnhanceButton;
+	FGameplayTag EquipmentReplaceTarget;
+	FString EquipmentReplaceProfile;
+	FPrimaryAssetId EquipmentEnhanceWeaponId;
 	UPROPERTY(Transient) TArray<TObjectPtr<UCommonButtonBase>> EquipmentPickerButtons;
 	UPROPERTY(Transient) TArray<TObjectPtr<const UknightPartItemDefinition>> EquipmentPickerParts;
 	UPROPERTY(Transient) TObjectPtr<UScrollBox> EquipmentPickerList;
